@@ -5,8 +5,77 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-24 — Backup = v2.19.0
+- Commit: `0bc2c56` | Auteur: Bart Witte
+
+## 2026-10-23 — Release v2.21.0: planning met filterbalk, planblokpaneel, Bord en tijdlijn over alle projecten; Financien met Facturatie verwacht en Factuurplanning; eerlijke Larry met bouwwachtrij (claude-haiku-5-5); calculatie met versiepaneel, behouden voorbeeld en standaardwaarden; laadtest ruimt Chrome op; backup = v2.20.0
+- Commit: `a208a4e` | Auteur: Bart Witte
+
 ## 2026-10-23 — Backup = v2.20.0
 - Commit: `31c397f` | Auteur: Bart Witte
+
+## 2026-10-23 — Tijdlijn: datums buiten 2000-2099 tellen als geen datum (kapotte datum maakte de tijdas onbegrensd breed); cache-versie
+- Commit: `21399a3` | Auteur: Bart Witte
+
+## 2026-10-23 — v2.21.0: Tijdlijn in updates-item en cache-versie mt-planfilter
+- Commit: `116d842` | Auteur: Bart Witte
+
+## 2026-10-23 — Merge planning-p4a in integratie-v2210
+- Commit: `ed8e245` | Auteur: Bart Witte
+
+## 2026-10-23 — Wachtrij (verbeterpunten/feedback) schrijft niet over een bestand met onverwachte vorm; cache-versie mt-verbeter
+- Commit: `afcb4f5` | Auteur: Bart Witte
+
+## 2026-10-23 — Planning P4a: team-tijdlijn (Gantt over alle projecten, alleen lezen)
+- Commit: `99d4696` | Auteur: Bart Witte
+
+## 2026-10-23 — Release-voorbereiding v2.21.0: versielabel, cache-versie mt-inbox en updates-item
+- Commit: `91b645d` | Auteur: Bart Witte
+
+## 2026-10-23 — Merge planning-p3 in integratie-v2210
+- Commit: `86257e5` | Auteur: Bart Witte
+
+## 2026-10-23 — Merge larry-upgrade in integratie-v2210
+- Commit: `c0e39f4` | Auteur: Bart Witte
+
+## 2026-10-23 — Merge financien-forecast in integratie-v2210
+- Commit: `46097f6` | Auteur: Bart Witte
+
+## 2026-10-23 — Merge calc-k5 in integratie-v2210
+- Commit: `e051317` | Auteur: Bart Witte
+
+## 2026-10-23 — Merge laadtest-opruim in integratie-v2210
+- Commit: `0a2561a` | Auteur: Bart Witte
+
+## 2026-10-23 — K-5: paneel "Versies" per offerte: eerdere versies bekijken, vergelijken en veilig terugzetten
+- Commit: `5af0fb1` | Auteur: Bart Witte
+
+## 2026-10-23 — Larry op Haiku 5.5 met actuele stand
+- Commit: `a06af30` | Auteur: Bart Witte
+
+## 2026-10-23 — Laadtest: ruimt zijn eigen Chrome echt op en meldt een pagina die nog laadt
+- Commit: `1ec58ff` | Auteur: Bart Witte
+
+## 2026-10-23 — Planning P3: het Bord (Status, Stroom, Fase) in Agenda
+- Commit: `32a4201` | Auteur: Bart Witte
+
+## 2026-10-23 — Financien: het scherm Geld heet overal Financien; nieuwe Factuurplanning met maandtotalen en blokje Facturatie verwacht in de offerte
+- Commit: `760f2ee` | Auteur: Bart Witte
+
+## 2026-10-23 — K-6: aanpassingen in de calculatie gaan niet meer stil verloren (offerte-preview, standaardwaarden, browserdialogen)
+- Commit: `a8a7ce3` | Auteur: Bart Witte
+
+## 2026-10-23 — Planning P1a: klik op een planblok opent het objectpaneel (alleen lezen) + inventaris van het oude Rooster
+- Commit: `91f25a8` | Auteur: Bart Witte
+
+## 2026-10-23 — Eerlijke Larry en bouwwachtrij voor verbeterpunten en feedback
+- Commit: `c7844e1` | Auteur: Bart Witte
+
+## 2026-10-23 — Merge main (v2.20.0) in planning-p0-schil
+- Commit: `36e8988` | Auteur: Bart Witte
+
+## 2026-10-23 — Planning P0: een gedeelde filterbalk voor alle planningsweergaven
+- Commit: `12d2ebb` | Auteur: Bart Witte
 
 ## 2026-10-23 — Release v2.20.0: veilig opslaan van offertes (vers lezen, per offerte samenvoegen, ETag, status en conflictmelding), getallen als 1.234,56, offerte altijd vindbaar bij het project, taakpaneel; backup = v2.19.0
 - Commit: `fb5fdfd` | Auteur: Bart Witte

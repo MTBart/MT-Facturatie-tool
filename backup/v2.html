@@ -21,7 +21,7 @@
 </script>
 <meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BACKUP v2.20.0 — M&T Bedrijfstool v2 bèta</title>
+<title>BACKUP v2.21.0 — M&T Bedrijfstool v2 bèta</title>
 <!-- msal-browser lokaal gevendord (was jsdelivr @2 = 2.39.0, laatste v2-release).
      Bron: https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.39.0/lib/msal-browser.min.js
      sha256: c933092555a52d4ded0196d16578406dcb5d25dfdf987bf3e27606653e99f1d6
@@ -42,6 +42,7 @@
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-10-11b"></script>
+<script src="mt-verbeter.js?v=2026-10-23b"></script>
 <script src="mt-toggl.js?v=2026-10-15z"></script>
 <script src="mt-koppel.js?v=2026-10-13p"></script>
 <script src="mt-mailactie.js?v=2026-10-13c"></script>
@@ -50,18 +51,22 @@
 <script src="mt-zoek.js?v=2026-10-12n"></script>
 <script src="mt-zoek-extern.js?v=2026-10-11d"></script>
 <script src="mt-zoekbalk.js?v=2026-10-11h"></script>
-<script src="mt-inbox.js?v=2026-10-15b"></script>
+<script src="mt-inbox.js?v=2026-10-23a"></script>
 <script src="mt-rollen.js?v=2026-10-09a"></script>
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
+<script src="mt-planfilter.js?v=2026-10-23b"></script>
 <script src="mt-planning.js?v=2026-10-17n"></script>
-<script src="mt-mijnwerk.js?v=2026-10-21u"></script>
+<script src="mt-mijnwerk.js?v=2026-10-23b"></script>
 <script src="mt-capaciteit.js?v=2026-10-17c"></script>
 <script src="mt-planverplaats.js?v=2026-10-21v"></script>
-<script src="mt-capaciteit-nieuw.js?v=2026-10-21v"></script>
-<script src="mt-objectpaneel.js?v=2026-10-22a"></script>
+<script src="mt-capaciteit-nieuw.js?v=2026-10-23b"></script>
+<script src="mt-objectpaneel.js?v=2026-10-23a"></script>
 <script src="mt-taakpaneel.js?v=2026-10-21v"></script>
+<script src="mt-planblokpaneel.js?v=2026-10-23b"></script>
+<script src="mt-bord.js?v=2026-10-23c"></script>
+<script src="mt-tijdlijn.js?v=2026-10-23e"></script>
 <script src="mt-personen.js?v=2026-10-17e"></script>
 <script src="mt-werktijden.js?v=2026-10-15t"></script>
 <script src="mt-uren-nieuw.js?v=2026-10-15z"></script>
@@ -69,15 +74,15 @@
 <script src="mt-vandaag-desk.js?v=2026-10-21u"></script>
 <script src="mt-startvenster.js?v=2026-10-15b"></script>
 <!-- Zijbalk van de nieuwe stijl (alleen actief met data-stijl="nieuw"); bouwt op de bestaande .tab-btn-knoppen -->
-<script src="mt-zijbalk.js?v=2026-10-16c" defer></script>
-<script src="mt-geld.js?v=2026-10-12c"></script>
-<script src="mt-koers.js?v=2026-10-12c"></script>
+<script src="mt-zijbalk.js?v=2026-10-23a" defer></script>
+<script src="mt-geld.js?v=2026-10-23a"></script>
+<script src="mt-koers.js?v=2026-10-23a"></script>
 <script src="mt-schulden.js?v=2026-10-12a"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
-<script src="mt-verhuis.js?v=2026-10-21a"></script>
+<script src="mt-verhuis.js?v=2026-10-23a"></script>
 <script src="mt-cijfers.js?v=2026-10-09h"></script>
 <script src="mt-rapport.js?v=2026-10-09a"></script>
-<script src="mt-calcopslag.js?v=2026-10-22a"></script>
+<script src="mt-calcopslag.js?v=2026-10-23a"></script>
 <script src="calc-engine.js"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
      fonts-CSS binnen is; preconnect scheelt de dubbele DNS/TLS-roundtrip. -->
@@ -860,7 +865,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-17k">
 </head>
 <body>
-<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.20.0, 2026-10-23). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
+<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.21.0, 2026-10-24). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
 
 <!-- ═══ LOGIN SCHERM ═══ -->
 <div id="login-screen">
@@ -881,7 +886,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1>Mortise <span>&amp;</span> Tenon</h1>
-    <span class="header-version">v2.20.0</span>
+    <span class="header-version">v2.21.0</span>
     <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
@@ -908,7 +913,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <script>(function(){ var b=document.getElementById('stijl-terug'); if(b) b.addEventListener('click',function(){ if(window.mtStijl) mtStijl.zet(true); }); })();</script>
 
 <div class="tabs-wrap">
-  <button class="tab-btn" id="tab-btn-geld" style="display:none" onclick="showTab('geld',this)">Dashboard</button>
+  <button class="tab-btn" id="tab-btn-geld" style="display:none" onclick="showTab('geld',this)">Financiën</button>
   <button class="tab-btn active" id="tab-btn-dashboard-oud" style="display:none" data-recht="moneybird" onclick="showTab('dashboard',this)">Oud dashboard</button>
   <button class="tab-btn" id="tab-btn-rapporten" style="display:none" onclick="showTab('rapporten',this)">Rapporten<span id="rapport-badge" hidden style="margin-left:6px;background:#B4412F;color:#fff;border-radius:10px;padding:0 7px;font-size:11px;font-weight:600"></span></button>
   <button class="tab-btn" data-recht="inbox" onclick="showTab('inbox',this)">Inbox</button>
@@ -1464,7 +1469,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
     <div style="max-width:800px">
       <div class="card">
         <div class="card-title">&#128161; Verbeterpunt indienen</div>
-        <p style="font-size:12px;color:var(--text-dim);margin-bottom:1rem">Draag een verbetering aan voor de cockpit of app, spar er eventueel met Larry over, en stuur het als belangrijk punt naar Bart zodat jullie het samen kunnen oppakken.</p>
+        <p style="font-size:12px;color:var(--text-dim);margin-bottom:1rem">Draag een verbetering aan voor de cockpit of app en spar er eventueel met Larry over. Larry kan niets toezeggen: Bart beoordeelt elk punt, en de status (te beoordelen, goedgekeurd, in bouw, live of afgewezen) zie je hieronder terug.</p>
         <div class="field">
           <label>Titel <span style="color:var(--gold)">*</span></label>
           <input type="text" id="vb-titel" placeholder="Kort en concreet — bv. 'Bestellijst exporteren naar Excel'" maxlength="120">
@@ -1508,7 +1513,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 
       <!-- Lijst van ingediende verbeterpunten -->
       <div class="card">
-        <div class="card-title">Ingediende verbeterpunten</div>
+        <div class="card-title">Bouwwachtrij</div>
         <div id="vb-lijst"><div style="padding:.75rem;text-align:center;color:var(--text-faint);font-size:13px">Laden&#8230;</div></div>
       </div>
     </div>
@@ -1754,6 +1759,8 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
           <div class="ag-viewtog" style="display:inline-flex;border:1px solid var(--border,#ddd);border-radius:7px;overflow:hidden">
             <button class="btn btn-sm" id="agenda-view-mijnwerk" onclick="agendaZetView('mijnwerk')" title="Mijn werk: taken en planblokken per persoon in groepen (Nieuw, Te laat, Vandaag, …)" style="border:0;border-radius:0;padding:5px 10px">✅ Mijn werk</button>
             <button class="btn btn-sm" id="agenda-view-capaciteit" onclick="agendaZetView('capaciteit')" title="Capaciteitsplanning voor het team: per persoon per dag gepland tegenover beschikbaar, met vrije dagen en verlof" style="border:0;border-radius:0;padding:5px 10px">👥 Capaciteit</button>
+            <button class="btn btn-sm" id="agenda-view-bord" onclick="agendaZetView('bord')" title="Bord: de taken als kolommen op status, per fase, of de stroom van de projecten door de stations" style="border:0;border-radius:0;padding:5px 10px">▥ Bord</button>
+            <button class="btn btn-sm" id="agenda-view-tijdlijn" onclick="agendaZetView('tijdlijn')" title="Tijdlijn: alle projecten op een tijdas, met fasen, afhankelijkheden en het kritieke pad (alleen lezen)" style="border:0;border-radius:0;padding:5px 10px">▤ Tijdlijn</button>
             <button class="btn btn-sm" id="agenda-view-grid" onclick="agendaZetView('grid')" title="Week-rooster" style="border:0;border-radius:0;padding:5px 10px">▦ Rooster</button>
             <button class="btn btn-sm" id="agenda-view-lijst" onclick="agendaZetView('lijst')" title="Timer-lijst (zoals Toggl)" style="border:0;border-radius:0;padding:5px 10px">≣ Lijst</button>
             <button class="btn btn-sm" id="agenda-view-plan" onclick="agendaZetView('plan')" title="Planning-blokken" style="border:0;border-radius:0;padding:5px 10px">📋 Planning</button>
@@ -1767,7 +1774,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
           <button class="btn btn-sm btn-secondary" onclick="focusOpen()" title="Toggl Focus aansturen">🎯 Focus</button>
         </div>
       </div>
-      <div class="flex" style="gap:10px;margin-top:10px;flex-wrap:wrap;align-items:center">
+      <div class="flex" id="ag-oudfilter" style="gap:10px;margin-top:10px;flex-wrap:wrap;align-items:center">
         <span style="font-size:11px;color:var(--text-faint)">Filter:</span>
         <div class="ag-drop" id="ag-drop-proj">
           <button class="btn btn-sm btn-secondary ag-dropbtn" onclick="agDrop('proj')"><span id="ag-drop-proj-lbl">Projecten (alle)</span> ▾</button>
@@ -1787,6 +1794,8 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
     <div id="agenda-totalen" style="margin-bottom:1rem"></div>
     <div id="agenda-mijnwerk" style="display:none"></div>
     <div id="agenda-capaciteit" style="display:none"></div>
+    <div id="agenda-bord" style="display:none"></div>
+    <div id="agenda-tijdlijn" style="display:none"></div>
     <div class="card" id="agenda-gridkaart" style="padding:0;overflow:auto;max-height:74vh">
       <div id="agenda-grid"></div>
     </div>
@@ -3327,14 +3336,21 @@ function mbControleerHtml(res,soortNaam,opnieuwOnclick){
       :'. Nog geen concept gevonden; probeer het over een minuut opnieuw (dezelfde knop maakt hem niet dubbel aan).')
     +(opnieuwOnclick&&!k.length?' <button class="btn btn-xs btn-secondary" onclick="'+opnieuwOnclick+'">Echt niets in Moneybird? Toch aanmaken</button>':'');
 }
-async function claudeCall(messages,maxTokens=1800){
+// Elke Larry-aanroep krijgt de vaste eerlijkheidsregel (MTVerbeter.EERLIJK, mt-verbeter.js) als `system`; opts.system is de
+// rol-/taakprompt van de aanroeper. Ontbreekt de module, dan gaat er geen aanroep uit (liever geen Larry dan een Larry die iets belooft).
+async function claudeCall(messages,maxTokens=1800,opts){
+  if(!(window.MTVerbeter&&MTVerbeter.systeem)) throw new Error('Larry is nu niet beschikbaar (herlaad de pagina)');
+  // Actuele stand (laatste 5 live-items uit data/updates.json, voor deze gebruiker zichtbaar) vooraan; lukt het laden niet, dan geen stand.
+  let stand=''; try{ const u=(await updLaad()).filter(_updVoorMij).sort((a,b)=>_updCmp(b.versie,a.versie)); stand=MTVerbeter.stand(u,opts&&opts.stand); }catch(e){ stand=MTVerbeter.stand([],opts&&opts.stand); }
+  const system=MTVerbeter.systeem(opts&&opts.system,stand);
   const h=await authHeader();
+  // Model, max_tokens (thinking telt mee) en effort komen uit MTVerbeter.verzoek; geen temperature of budget_tokens (400 bij Haiku 5.5).
   const resp=await fetch(`${WORKER}?target=claude`,{method:'POST',headers:{...h,'Content-Type':'application/json'},
-    body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:maxTokens,messages})});
+    body:JSON.stringify(MTVerbeter.verzoek(messages,maxTokens,system,opts&&opts.effort))});
   const raw=await resp.text();
   // De Worker stuurt het Claude-antwoord als SSE-stream (text/event-stream).
   // Bouw daaruit het normale non-stream antwoord-object terug op, zodat alle
-  // callers gewoon r.content[0].text kunnen blijven lezen. Valt terug op JSON
+  // callers het antwoord met MTVerbeter.tekst(r) / MTVerbeter.antwoord(r) lezen (thinking-blokken staan soms voor de tekst). Valt terug op JSON
   // als de Worker ooit weer een gebufferd antwoord stuurt.
   if(raw.trimStart().startsWith('{')){ try{ return JSON.parse(raw); }catch(e){} }
   return _claudeFromSSE(raw);
@@ -3456,7 +3472,35 @@ function showTab(name,btn){
     const code=(name==='projecten'&&huidigProject&&pd&&pd.dataset.code===huidigProject.code)?huidigProject.code:null;
     const sec=(code&&typeof projSectieHuidig==='function')?projSectieHuidig():'overzicht';
     if(name==='projecten'&&pd&&pd.dataset.klant&&typeof _klantRoute==='function'&&_klantHuidig) mtRoute.zet(_klantRoute(),false);
-    else mtRoute.zet(code?{tab:'projecten',code,sectie:sec!=='overzicht'?sec:undefined}:{tab:name==='admin'?admRouteNaam():name},false);
+    else mtRoute.zet(code?{tab:'projecten',code,sectie:sec!=='overzicht'?sec:undefined,filter:planfilterProjLink(sec)}:(name==='agenda'?agendaRoute():{tab:name==='admin'?admRouteNaam():name}),false);
+  }
+}
+// De Agenda in de link: de weergave en (voor Mijn werk en Capaciteit) de gedeelde planningsfilters, zodat een gekopieerde link dezelfde stand toont (mt-planfilter.js)
+function agendaRoute(){
+  const r={tab:'agenda'};
+  let view; try{ view=_agenda.view; }catch(e){ return r; }   // _agenda staat verderop (let): vóór die regel geen weergave in de link
+  if(typeof MTPlanFilter==='undefined'||!view) return r;
+  r.weergave=view;
+  if(view==='mijnwerk'||view==='capaciteit'||view==='bord'||view==='tijdlijn'){ const g=MTPlanFilter.get(); r.planfilter={project:g.project,persoon:g.persoon,status:g.status,van:g.van,zoom:g.zoom,bord:view==='bord'?g.bord:''}; }
+  return r;
+}
+// De sleutels wie en status van de planningsfilters in een projectlink (#projecten/<code>/planning?status=…&wie=…)
+function planfilterProjLink(sec){ try{ return (sec==='planning'&&typeof MTPlanFilter!=='undefined')?MTPlanFilter.projectFilter():undefined; }catch(e){ return undefined; } }
+// Een link met weergave/filters toepassen (mtRoute.toepassen): de stand overnemen en de Agenda zo nodig opnieuw tekenen
+function agendaRouteToepas(r){
+  let veranderd=false;
+  if(r.weergave&&r.weergave!==_agenda.view){ _agenda.view=r.weergave; veranderd=true; }
+  if(typeof MTPlanFilter!=='undefined'&&(r.weergave==='mijnwerk'||r.weergave==='capaciteit'||r.weergave==='bord'||r.weergave==='tijdlijn'||(!r.weergave&&r.planfilter))) { if(MTPlanFilter.zetUitLink(r.planfilter||{})) veranderd=true; }
+  const t=document.getElementById('tab-agenda');
+  if(veranderd&&t&&t.classList.contains('active')) renderAgenda();
+}
+// Het filter is gewijzigd (balk of weergave): de link bijwerken voor wat nu in beeld is (de Agenda of de Planning van een project)
+function planfilterRoute(){
+  const a=document.getElementById('tab-agenda'), p=document.getElementById('tab-projecten');
+  if(a&&a.classList.contains('active')) mtRoute.zet(agendaRoute(),false);
+  else if(p&&p.classList.contains('active')&&huidigProject&&typeof projSectieHuidig==='function'&&projSectieHuidig()==='planning'){
+    const pd=document.getElementById('project-detail');
+    if(pd&&pd.dataset.code===huidigProject.code) mtRoute.zet({tab:'projecten',code:huidigProject.code,sectie:'planning',filter:planfilterProjLink('planning')},false);
   }
 }
 // Multi-monitor: open de (huidige) tab in een nieuw browservenster met dezelfde deeplink.
@@ -3491,7 +3535,12 @@ const mtRoute={
     // Gearchiveerde tabs (Geschiedenis): geen knop meer; een oude link/bladwijzer telt als "geen route" → de standaard-starttab.
     const weg=t=>mtRoute.GEARCHIVEERD.includes(t)?null:t;
     const m=h.match(/(?:^|&)tab=([a-z]+)/i);
-    if(m) return {tab:weg(m[1].toLowerCase())};
+    if(m){
+      const r={tab:weg(m[1].toLowerCase())};
+      // De Agenda kent een weergave en de gedeelde planningsfilters in de link (#tab=agenda&weergave=capaciteit&project=…&wie=…&status=…&van=…&zoom=…); zonder die delen is het de oude korte link
+      if(r.tab==='agenda'&&typeof MTPlanFilter!=='undefined'){ const x=MTPlanFilter.leesLink(h); if(x){ if(x.weergave) r.weergave=x.weergave; if(x.filter) r.planfilter=x.filter; } }
+      return r;
+    }
     const delen=h.split('/').filter(x=>x!=='').map(dec);
     if(!delen.length) return {tab:null};
     const eerste=delen[0].toLowerCase();
@@ -3529,6 +3578,7 @@ const mtRoute={
       const delen=(r.sectie?['sectie='+enc(r.sectie)]:[]).concat(r.sectie?ks.map(k=>enc(k)+'='+enc(f[k])):[]);
       return '#klant/'+enc(r.klant)+(r.loc?'/'+enc(r.loc):'')+(delen.length?'?'+delen.join('&'):'');
     }
+    if(r.tab==='agenda'&&(r.weergave||r.planfilter)&&typeof MTPlanFilter!=='undefined') return '#tab=agenda'+MTPlanFilter.linkStaart(r.weergave,r.planfilter);
     return r.tab?'#tab='+r.tab:'';
   },
   // Alleen de URL bijwerken (push = nieuwe history-entry). Geen dubbele entry voor dezelfde route.
@@ -3565,6 +3615,7 @@ const mtRoute={
         }
       }
       if(!document.getElementById('tab-'+r.tab)) return;
+      if(r.tab==='agenda'&&(r.weergave||r.planfilter)){ try{ agendaRouteToepas(r); }catch(e){ console.warn('Agenda-link:',e); } }   // de weergave en de planningsfilters uit de link, vóór de tab getekend wordt
       if(r.tab==='dashboard'&&!_oudDashboardAan()) return;   // oud dashboard is gearchiveerd: een oude link/bladwijzer laat de startpagina haar werk doen
       const tabEl=document.getElementById('tab-'+r.tab);
       if(!tabEl.classList.contains('active')){
@@ -3598,7 +3649,10 @@ const mtRoute={
         const p=projVind(r.code)||PROJECT_CODES.find(x=>String(x.code).toUpperCase()===String(r.code).toUpperCase());
         if(!p){ projNietGevonden(r.code); return; }
         // Zonder sectie in de URL = Overzicht (een gedeelde link toont dus altijd hetzelfde).
-        openProject(p.code,{sectie:r.sectie||'overzicht',filter:r.filter||null,onthoud:false});
+        // Planning: de sleutels wie en status zijn de gedeelde planningsfilters (geen dossierfilter)
+        let dosFilter=r.filter||null;
+        if(r.sectie==='planning'&&typeof MTPlanFilter!=='undefined'){ if(dosFilter) MTPlanFilter.zetUitLink(dosFilter,{alleen:['persoon','status']}); dosFilter=null; }
+        openProject(p.code,{sectie:r.sectie||'overzicht',filter:dosFilter,onthoud:false});
       } else if(_projKlantFilter){ projKlantFilterZet(null); }
     } finally { this._stil=false; }
   }
@@ -3804,16 +3858,28 @@ function renderAgenda(){
   const planBar=document.getElementById('agenda-plan-toolbar'), capBalk=document.getElementById('agenda-cap-balk');
   if(planBar) planBar.style.display=_agenda.view==='plan'?'block':'none';
   if(capBalk) capBalk.style.display=_agenda.view==='plan'?'block':'none';
-  { const mw=_agenda.view==='mijnwerk', cp=_agenda.view==='capaciteit', eigen=mw||cp;   // Mijn werk en Capaciteit (stap 2): een eigen vlak in plaats van het rooster
-    [['agenda-view-mijnwerk',mw],['agenda-view-capaciteit',cp]].forEach(([id,aan])=>{ const b=document.getElementById(id); if(b) b.classList.toggle('btn-gold',aan), b.classList.toggle('btn-secondary',!aan); });
-    const m=document.getElementById('agenda-mijnwerk'), c=document.getElementById('agenda-capaciteit'), gk=document.getElementById('agenda-gridkaart'), tot=document.getElementById('agenda-totalen');
-    if(m) m.style.display=mw?'block':'none'; if(c) c.style.display=cp?'block':'none'; if(gk) gk.style.display=eigen?'none':''; if(tot&&eigen) tot.style.display='none'; else if(tot) tot.style.display='';
+  { const mw=_agenda.view==='mijnwerk', cp=_agenda.view==='capaciteit', bd=_agenda.view==='bord', tj=_agenda.view==='tijdlijn', eigen=mw||cp||bd||tj;   // Mijn werk en Capaciteit (stap 2): een eigen vlak in plaats van het rooster
+    [['agenda-view-mijnwerk',mw],['agenda-view-capaciteit',cp],['agenda-view-bord',bd],['agenda-view-tijdlijn',tj]].forEach(([id,aan])=>{ const b=document.getElementById(id); if(b) b.classList.toggle('btn-gold',aan), b.classList.toggle('btn-secondary',!aan); });
+    const m=document.getElementById('agenda-mijnwerk'), c=document.getElementById('agenda-capaciteit'), bdEl=document.getElementById('agenda-bord'), tjEl=document.getElementById('agenda-tijdlijn'), gk=document.getElementById('agenda-gridkaart'), tot=document.getElementById('agenda-totalen');
+    { const of=document.getElementById('ag-oudfilter'); if(of&&typeof MTPlanFilter!=='undefined') of.style.display=eigen?'none':''; }   // Mijn werk en Capaciteit hebben de gedeelde filterbalk in beeld; de oude Projecten/Personen-keuze hoort alleen bij Rooster, Lijst en Planning
+    if(m) m.style.display=mw?'block':'none'; if(c) c.style.display=cp?'block':'none'; if(bdEl) bdEl.style.display=bd?'block':'none'; if(tjEl) tjEl.style.display=tj?'block':'none'; if(gk) gk.style.display=eigen?'none':''; if(tot&&eigen) tot.style.display='none'; else if(tot) tot.style.display='';
     if(mw){ agRenderFilters(); try{ MTMijnWerk.teken(); }catch(e){ console.warn('Mijn werk:',e); } return; }
-    if(cp){ agRenderFilters(); try{ MTCapaciteit.teken(); }catch(e){ console.warn('Capaciteit:',e); } return; } }
+    if(cp){ agRenderFilters(); try{ MTCapaciteit.teken(); }catch(e){ console.warn('Capaciteit:',e); } return; }
+    if(bd){ try{ MTBord.teken(); }catch(e){ console.warn('Bord:',e); } return; }
+    if(tj){ try{ MTTijdlijn.teken(); }catch(e){ console.warn('Tijdlijn:',e); } return; } }
   agRenderFilters();
   if(_agenda.view==='lijst') agRenderLijst(); else if(_agenda.view==='plan') agPlanRender(); else agRenderGrid();
 }
-function agendaZetView(v){_agenda.view=v;renderAgenda();}
+function agendaZetView(v){_agenda.view=v;renderAgenda();try{ if(window.MTPlanFilter) MTPlanFilter.routeZet(); }catch(e){}}   // de weergave staat in de link (niet zolang een paneel open staat: dat heeft de adresbalk)
+// De gedeelde filterbalk van alle planningsweergaven (planning brok P0, mt-planfilter.js): project, persoon, status, periode en de geselecteerde taak; staat in de link en wordt per gebruiker onthouden.
+// Alleen schermstand: niets hiervan gaat naar SharePoint.
+try{ MTPlanFilter.init({ doc:document, storage:localStorage, ik:()=>mtMijEmail(), team:()=>MT_TEAM,
+  projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code).map(p=>({code:p.code,label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code})),
+  taakNaam:(code,id)=>{ const t=(projTaken(code)||[]).find(x=>x&&String(x.id)===String(id)); return t?t.naam:''; },
+  paneelOpen:()=>!!(window.MTObjectPaneel&&MTObjectPaneel.isOpen()),
+  mijnSlug:()=>{ const ik=String(mtMijEmail()||'').toLowerCase(), m=(MT_TEAM||[]).find(x=>String(x.email||'').toLowerCase()===ik); return m?m.slug:ik.split('@')[0]; },
+  zelfdePersoon:(a,b)=>MTPlanning.zelfdePersoon(a,b,MT_TEAM),
+  route:()=>planfilterRoute() }); }catch(e){ console.warn('Planningsfilter init:',e); }
 // Mijn werk (stap 2c): de aansluiting tussen mt-mijnwerk.js en de cockpit (taken, afhankelijkheden, planblokken, team, projecten). De rekenregels staan in mt-planning.js.
 try{ MTMijnWerk.init({ doc:document, planning:MTPlanning, storage:localStorage, team:()=>MT_TEAM, ik:()=>mtMijEmail(), nu:()=>Date.now(),
   werktijden:()=>werktijdenVoorWeergave(), voorstellen:true, magBeslissen:()=>rolMag(ROL_TAAK_ALLES), neemOver:(c,i)=>voorstelTaakOvernemen(c,i), wijsAf:(c,i)=>voorstelTaakAfwijzen(c,i),
@@ -3822,6 +3888,7 @@ try{ MTMijnWerk.init({ doc:document, planning:MTPlanning, storage:localStorage, 
   project:code=>{ const p=projVind(code); return p?{code:p.code,naam:projNaamVol(p),label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code}:null; },
   projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code).map(p=>({code:p.code,label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code})),
   openTaak:(code,id,el)=>MTTaakPaneel.open(code,id,{terug:el}),   // een taak = het taakpaneel (mt-taakpaneel.js)
+  openBlok:(id,el)=>MTPlanblokPaneel.open(id,{terug:el}),   // een planblok zonder taak = het planblokpaneel (mt-planblokpaneel.js)
   openProject:code=>openProject(code,{sectie:'planning'}) }); }catch(e){ console.warn('Mijn werk init:',e); }
 // Startvenster (stap 3): "X taken wachten op je" bij het openen van Agenda/Planning, alleen zonder lopende Toggl-timer en niet voor de rol "lezen" (zie mt-startvenster.js).
 try{ MTStartvenster.init({ doc:document, storage:(function(){ try{ return sessionStorage; }catch(e){ return null; } })(), dialog:()=>window.mtDialog, toast:m=>{ if(typeof planToast==='function') planToast(m); },
@@ -3844,7 +3911,7 @@ try{ MTCapaciteitNieuw.init({ doc:document, planning:MTPlanning, storage:localSt
   nummer:code=>{ const p=projVind(code); return p?(projLabelCode(p)||code):String(code||''); },
   projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code).map(p=>({code:p.code,label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code})),
   magSlepen:()=>capMagSlepen(), magTaken:()=>rolMag(ROL_TAAK_ALLES), verplaats:(spec,opt)=>capVerplaats(spec,opt), herstel:(w,opt)=>capHerstel(w,opt), omzetten:(spec,opt)=>capOmzetten(spec,opt), opruimen:(spec,opt)=>capOpruimen(spec,opt), taakBezig:(code,id)=>MTPlanVerplaats.taakBezig(code,id), controleer:spec=>MTPlanVerplaats.controle(spec,_capCtx()), get dialoog(){ return window.mtDialog; },
-  openTaak:(code,id,el)=>MTTaakPaneel.open(code,id,{terug:el}), naHerstel:()=>MTTaakPaneel.ververs(),   // klik op een taak = het taakpaneel (mt-taakpaneel.js)
+  openTaak:(code,id,el)=>MTTaakPaneel.open(code,id,{terug:el}), openBlok:(id,el)=>MTPlanblokPaneel.open(id,{terug:el}), naHerstel:()=>MTTaakPaneel.ververs(),   // klik op een taak = het taakpaneel (mt-taakpaneel.js)
   openProject:code=>openProject(code,{sectie:'planning'}) }); }catch(e){ console.warn('Capaciteit (nieuw) init:',e); }
 window.addEventListener('mt-stijl',()=>{ try{ const u=document.getElementById('tab-toggl'); if(u&&u.classList.contains('active')&&window.MTUrenNieuw){ if(MTUrenNieuw.actief()) MTUrenNieuw.laad(); else MTUrenNieuw.teken(); } }catch(e){} const t=document.getElementById('tab-agenda'); if(t&&t.classList.contains('active')&&typeof renderAgenda==='function') renderAgenda(); });   // de weergave volgt de stijlwissel
 // Vandaag op de desktop (restyling brok 5, alleen in de nieuwe stijl): dezelfde bronnen als Mijn werk en Capaciteit, alleen lezen (zie mt-vandaag-desk.js).
@@ -3879,6 +3946,40 @@ try{ MTTaakPaneel.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, nu
   verwijder:(c,i)=>projTaakVerwijder(c,i), togglSync:(c,i)=>projTaakTogglSync(c,i), conflict:(c,i)=>projTaakConflict(c,i), neemOver:(c,i)=>voorstelTaakOvernemen(c,i), wijsAf:(c,i)=>voorstelTaakAfwijzen(c,i),
   bordKlik:true,
   naWijziging:()=>{ try{ const a=document.getElementById('tab-agenda'); if(a&&a.classList.contains('active')) renderAgenda(); }catch(e){} _ptHertekenen(); try{ if(window.MTVandaagDesk) MTVandaagDesk.teken(); }catch(e){} } }); }catch(e){ console.warn('Taakpaneel init:',e); }
+// Het planblokpaneel (planning brok P1a, mt-planblokpaneel.js): een klik op een planblok toont persoon, dag, tijd, duur, taak en project als links. Alleen lezen; het oude menu (verwijderen, voorstel beslissen) staat als knop in het paneel.
+try{ const _pbDag=(slug,datum)=>({tab:'agenda',weergave:'capaciteit',planfilter:Object.assign({van:datum,zoom:'dag'},slug?{persoon:slug}:{})});
+  MTPlanblokPaneel.init({ planning:MTPlanning, team:()=>MT_TEAM, taken:()=>projTakenAll(), blokken:()=>agPlanActief(),
+  blokkenKlaar:()=>{ if(_planblokken===null&&!window._pbLaadt){ window._pbLaadt=true; try{ agPlanLoad().catch(()=>{}); }catch(e){} } return _planblokken!==null; },
+  ruw:()=>localStorage.getItem('mt_planblokken')||'',
+  project:code=>{ const p=projVind(code); return p?{code:p.code,project_id:p.project_id||'',naam:projNaamVol(p),nummer:projLabelCode(p)||'',klant:String(p.klant||'').toUpperCase(),klantNaam:projKlantNaam(p),loc:String(p.loc||'').toUpperCase(),locNaam:projLocLabel(p)}:null; },
+  taakHref:(code,id)=>MTTaakPaneel.href(code,id),
+  href:{ project:(code,sectie)=>mtRoute.format({tab:'projecten',code,sectie:sectie||'planning'}), klant:(kl,loc)=>mtRoute.format({tab:'projecten',klant:kl,loc:loc||undefined}), dag:(slug,datum)=>mtRoute.format(_pbDag(slug,datum)) },
+  ga:{ project:(code,sectie)=>mtRoute.go({tab:'projecten',code,sectie:sectie||'planning'}), klant:(kl,loc)=>mtRoute.go({tab:'projecten',klant:kl,loc:loc||undefined}), dag:(slug,datum)=>mtRoute.go(_pbDag(slug,datum)) },
+  oudeActies:id=>agPlanBlokMenu(null,id) }); }catch(e){ console.warn('Planblokpaneel init:',e); }
+// Het Bord (planning brok P3, mt-bord.js): kolommen op status, per fase, en de stroom van de projecten. Slepen schrijft via dezelfde route als het taakpaneel (tpWijzig: takenSchrijf met ETag, slot per taak, stempels) met Ongedaan maken.
+// Toggl wordt hier nooit aangeraakt (de bestaande knoppen in het taakpaneel en de takenlijst blijven de enige route). Een nieuwe taak komt als Open in de takenlijst, zoals "+ Taak" in het project.
+async function bordNieuweTaak(o){
+  if(_ptBlok(o.code,ROL_TAAK_STATUS,'Een taak toevoegen')) return null;
+  const arr=projTaken(o.code), t={id:_ptId(),naam:o.naam,omschrijving:'',duur_uur:0,prioriteit:'',afhankelijk_van:[],status:'todo',tg_task_id:null,bron:'handmatig',activiteit:MTPlanning.activiteitUitNaam(o.naam)||undefined};
+  if(o.fase) t.fase=o.fase;
+  arr.push(t); if(projTakenZet(o.code,arr)!==true) return null;   // niet opgeslagen: de melding staat er al
+  try{ if(window.track) track('taken','taak_handmatig',{detail:o.code,ok:true}); }catch(e){}
+  return t;
+}
+try{ MTBord.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, taken:()=>projTakenAll(), afhank:()=>projAfhRuw(), takenKlaar:()=>projTakenKlaar(), takenStatusTekst:()=>projTakenStatusTekst(),
+  vrij:()=>(typeof MTPlanning.vrijeDagenBron==='function'?MTPlanning.vrijeDagenBron():null),
+  projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code).map(p=>({code:p.code,label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code})),
+  projectenVol:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code), bestel:()=>_blActief(),
+  mag:{ status:()=>rolMag(ROL_TAAK_STATUS)&&projTakenKlaar(), alles:()=>rolMag(ROL_TAAK_ALLES)&&projTakenKlaar() },
+  wijzig:(s,o)=>tpWijzig(s,o), wijzigHerstel:(w,o)=>tpWijzigHerstel(w,o), nieuweTaak:bordNieuweTaak,
+  toast:(t,o,l,lb)=>MTCapaciteitNieuw.toast(t,o,l,lb), get dialoog(){ return window.mtDialog; },
+  openTaak:(code,id,el)=>MTTaakPaneel.open(code,id,{terug:el}), openProject:code=>openProject(code,{sectie:'planning'}),
+  naWijziging:()=>{ try{ MTTaakPaneel.ververs(); }catch(e){} try{ if(window.MTVandaagDesk) MTVandaagDesk.teken(); }catch(e){} } }); }catch(e){ console.warn('Bord init:',e); }
+// De team-tijdlijn (planning brok P4a, mt-tijdlijn.js): Gantt over alle projecten, alleen lezen. Een klik op een taakbalk opent het taakpaneel, op een projectbalk het project; er wordt niets geschreven.
+try{ MTTijdlijn.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, taken:()=>projTakenAll(), afhank:()=>projAfhRuw(), takenKlaar:()=>projTakenKlaar(), takenStatusTekst:()=>projTakenStatusTekst(),
+  vrij:()=>(typeof MTPlanning.vrijeDagenBron==='function'?MTPlanning.vrijeDagenBron():null),
+  projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code).map(p=>({code:p.code,label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code,gegevens:p.gegevens})),
+  openTaak:(code,id,el)=>MTTaakPaneel.open(code,id,{terug:el}), openProject:code=>openProject(code,{sectie:'planning'}) }); }catch(e){ console.warn('Tijdlijn init:',e); }
 // Werktijden per medewerker (restyling brok 9, Admin ▸ Team en werktijden): een gedeeld bestand mt_werktijden.json met een record per medewerker.
 // Wijzigen mag alleen een teamadmin (eigenaar/beheer) met een geladen rol (fail-closed); lezen iedereen: de planning van het hele team rekent ermee.
 // Zonder record van een persoon geldt alles als voorheen (werkuren per week / 5, ma-vr). Zie mt-werktijden.js en MTPlanning.werktijden*.
@@ -4810,7 +4911,7 @@ Regels voor factuurregels:
 - Controleer: som van (aantal × stukprijs) per regel moet kloppen met totaal_excl_btw
 Projectcodes: ${PROJECT_CODES.map(p=>p.code).join(', ')}. BTW: 21, 9 of 0.`}
     ]}]);
-    const rawText=data.content?.[0]?.text||'{}';
+    const rawText=MTVerbeter.tekst(data)||'{}';
     const jsonMatch=rawText.match(/\{[\s\S]*\}/);
     const parsed=JSON.parse(jsonMatch?jsonMatch[0]:'{}');
     window._factuurTotalen={excl:parsed.totaal_excl_btw||null,btw:parsed.totaal_btw||null,incl:parsed.totaal_incl_btw||null};
@@ -5388,9 +5489,9 @@ ${fact?`Gekoppelde factuur: ${fact.contact?.company_name||''} ${fact.date||''} (
   const tmp=document.createElement('div');tmp.style.cssText='align-self:flex-start;background:var(--surface);border:1px solid var(--border);padding:5px 9px;border-radius:9px;max-width:90%';tmp.textContent='…';log.appendChild(tmp);log.scrollTop=log.scrollHeight;
   try{
     const r=await claudeCall([
-      {role:'user',content:`Je bent Larry, de M&T-assistent. Bart bekijkt de voorraad en wil iets aan dit materiaal aanpassen of checken. Antwoord kort en concreet in het Nederlands. Als hij een wijziging vraagt (naam, prijs, aantal, categorie), zeg precies wat je zou aanpassen en waarom; hij past het zelf aan met de ✏-knop.\n\n${ctx}\n\nVraag: ${q}`}
-    ],600);
-    const txt=(r&&r.content&&r.content[0]&&r.content[0].text)||(r&&r.error&&('fout: '+(r.error.message||r.error)))||'(geen antwoord)';
+      {role:'user',content:`${ctx}\n\nVraag: ${q}`}
+    ],600,{system:'Je bent Larry, de M&T-assistent. Bart bekijkt de voorraad en wil iets aan dit materiaal aanpassen of checken. Antwoord kort en concreet in het Nederlands. Als hij een wijziging vraagt (naam, prijs, aantal, categorie), zeg precies wat je zou aanpassen en waarom; hij past het zelf aan met de ✏-knop.'});
+    const txt=MTVerbeter.antwoord(r);
     tmp.textContent=txt;
     if(window._LOG)_LOG.add('voorraad-chat','voorraad',`[${mat}] ${q}`,txt);
   }catch(e){tmp.textContent='fout: '+e.message;}
@@ -6234,6 +6335,7 @@ function openProject(code,{scroll=true,geschiedenis='push',sectie=null,filter=nu
   if(geschiedenis!=='geen'&&typeof mtRoute!=='undefined'){
     const sec=(typeof projSectieHuidig==='function')?projSectieHuidig():'overzicht', fl={};
     if(sec==='dossier'&&typeof _dosStand==='function'){ const f=_dosStand('proj:'+proj.code); Object.keys(f).forEach(k=>{ if(f[k]) fl[k]=f[k]; }); }
+    Object.assign(fl,planfilterProjLink(sec)||{});   // Planning: de gedeelde filters wie en status
     mtRoute.zet({tab:'projecten',code:proj.code,sectie:sec!=='overzicht'?sec:undefined,filter:fl},geschiedenis==='push');
   }
   setTimeout(()=>{ try{ projOfferteVerstuurdCheck(proj.code); }catch(e){ console.warn('offerte-check faalde:',e); } },400);
@@ -6548,7 +6650,7 @@ function _projSectieRender(proj){
   }
   if(_projSectie==='productie'){ try{ projBestelTeken(proj.code); }catch(e){ console.warn('te bestellen:',e); } }
   _p2RolPas(pan);   // ronde 8: knoppen en velden die de rol niet toestaat
-  if(_projSectie==='planning'){ planVandaagLijnen(pan); _ptOnafgerondTeken(proj.code); _ptVerweesdKnopTeken(pan); _voorstelTekenTaken(proj.code); try{ MTTaakPaneel.verrijkTaken(proj.code,pan); }catch(e){} }   // de taaknaam opent het taakpaneel   // ronde 8: een Toggl-actie die niet is afgerond; de export van een verweesde kopie
+  if(_projSectie==='planning'){ try{ MTPlanFilter.monteerProject(document.getElementById('pf-proj-'+String(proj.code).replace(/-/g,'')),'pt-tbl-'+String(proj.code).replace(/-/g,'')); }catch(e){ console.warn('Planningsfilter:',e); } planVandaagLijnen(pan); _ptOnafgerondTeken(proj.code); _ptVerweesdKnopTeken(pan); _voorstelTekenTaken(proj.code); try{ MTTaakPaneel.verrijkTaken(proj.code,pan); }catch(e){} }   // de taaknaam opent het taakpaneel   // ronde 8: een Toggl-actie die niet is afgerond; de export van een verweesde kopie
   if(_projSectie==='calculatie'){
     nacalcLaadOfferte(proj.code,c.effectiveMb);
     if(typeof window.calcProjectTonen==='function') window.calcProjectTonen(proj); else if(typeof renderOfferteCalc==='function') renderOfferteCalc(proj.code);
@@ -6565,6 +6667,7 @@ function projSectieKies(s,{filter=null,geschiedenis='replace'}={}){
   if(geschiedenis!=='geen'&&typeof mtRoute!=='undefined'){
     const f=(_projSectie==='dossier')?_dosStand('proj:'+huidigProject.code):null, fl={};
     if(f) Object.keys(f).forEach(x=>{ if(f[x]) fl[x]=f[x]; });
+    Object.assign(fl,planfilterProjLink(_projSectie)||{});   // Planning: de gedeelde filters wie en status
     mtRoute.zet({tab:'projecten',code:huidigProject.code,sectie:_projSectie==='overzicht'?undefined:_projSectie,filter:fl},geschiedenis==='push');
   }
   // Ver naar beneden gescrold? Dan naar het begin van de sectie, net onder de sticky balken.
@@ -7863,7 +7966,7 @@ function projectTakenHtml(proj){
     const pr=_PT_PRIO[t.prioriteit], stt=MTPlanning.taakStatusEff(t,arr,ruwA)==='wachten'?{l:'Wacht',c:'#B8962E'}:(_PT_STAT[t.status]||_PT_STAT.todo);   // "Wacht" = een voorganger is nog niet klaar
     const deps=MTPlanning.depsEffectief(arr,ruwA).filter(e=>e.naar===t.id&&!e.inactief).map(e=>naamById[e.van]).filter(Boolean);
     const planLink=inPlan.has(t.id)?` <a href="#" onclick="event.preventDefault();taakNaarPlan(${jsArg(proj.code)},${jsArg(t.id)})" title="Toon in de planning hierboven" style="text-decoration:none">📅</a>`:'';
-    return `<tr id="pt-row-${esc(sid)}-${esc(t.id)}">
+    return `<tr id="pt-row-${esc(sid)}-${esc(t.id)}" data-pf-code="${esc(proj.code)}" data-pf-taak="${esc(t.id)}" data-pf-st="${esc(t.status||'todo')}" data-pf-wie="${esc(MTPlanning.taakMensen(t).join(' '))}">
       <td style="width:24px;text-align:center"><input type="checkbox" class="pt-check" value="${esc(t.id)}" title="Selecteer om in één keer te verwijderen"></td>
       <td><span class="badge" style="background:${esc(stt.c)}22;color:${esc(stt.c)}">${esc(stt.l)}</span></td>
       <td style="font-size:13px">${esc(t.naam)}${planLink}${t.omschrijving?`<div style="font-size:11px;color:var(--text-faint)">${esc(t.omschrijving)}</div>`:''}${deps.length?`<div style="font-size:11px;color:var(--gold-text)">⟶ na: ${deps.map(esc).join(', ')}</div>`:''}${t.bron==='ai'?' <span class="badge" style="font-size:9px;background:var(--gold-50);color:var(--gold-text)">AI</span>':''}</td>
@@ -7905,6 +8008,7 @@ function projectTakenHtml(proj){
       <button class="btn btn-danger btn-sm" onclick="projTakenVerwijderSelectie(${jsArg(proj.code)})" title="Aangevinkte taken verwijderen (ook in Toggl)">🗑 Verwijder selectie</button>`:''}
       <span id="pt-status-${esc(sid)}" style="font-size:12px;color:var(--text-dim)"></span>
     </div>
+    <div id="pf-proj-${esc(sid)}" style="margin:0 0 .6rem"></div>
     <table class="materiaal-lijst" id="pt-tbl-${esc(sid)}"><tbody>${rows}</tbody></table>`;
 }
 function _ptStatus(code,msg,kleur){const el=document.getElementById('pt-status-'+code.replace(/-/g,''));if(el){el.textContent=msg;el.style.color=kleur||'var(--text-dim)';}}
@@ -9083,7 +9187,7 @@ async function _projTaakVerwijder(code,id){
 async function projTakenVerwijderSelectie(code){
   if(_ptBlok(code,ROL_TAAK_ALLES,'Taken verwijderen')) return false;   // takenlijst niet klaar of geen recht: geen Toggl-actie en geen planningsmutatie
   const sid=code.replace(/-/g,'');
-  const ids=Array.from(document.querySelectorAll('#pt-tbl-'+sid+' .pt-check:checked')).map(b=>b.value);
+  const ids=Array.from(document.querySelectorAll('#pt-tbl-'+sid+' .pt-check:checked')).filter(b=>{ const tr=b.closest('tr'); return !(tr&&tr.hidden); }).map(b=>b.value);   // een door het planningsfilter verborgen taak wordt nooit mee-verwijderd
   if(!ids.length){ _ptStatus(code,'Geen taken aangevinkt.','#c0392b'); return; }
   const teVerw=projTaken(code).filter(t=>ids.includes(t.id));
   const inToggl=teVerw.filter(t=>t.tg_task_id).length;
@@ -9116,7 +9220,7 @@ async function projTakenVerwijderSelectie(code){
 }
 function projTakenSelectAll(code,on){
   const sid=code.replace(/-/g,'');
-  document.querySelectorAll('#pt-tbl-'+sid+' .pt-check').forEach(b=>{b.checked=on;});
+  document.querySelectorAll('#pt-tbl-'+sid+' .pt-check').forEach(b=>{ const tr=b.closest('tr'); b.checked=on&&!(tr&&tr.hidden); });   // alleen de zichtbare taken (het planningsfilter kan er verbergen)
 }
 // ── Standaard taak-templates (snelstart naast AI). na = 0-based index in eigen lijst. ──
 const _PT_TEMPLATES={
@@ -9692,7 +9796,7 @@ Project: code ${mt.code}, naam "${mt.naam||''}", product "${mt.product_naam||mt.
   try{
     const r=await claudeCall([{role:'user',content:vraag}],1500);
     if(_ptBlok(code,ROL_TAAK_ALLES,'Een AI-takenlijst toevoegen')) return;   // na de AI-aanroep opnieuw
-    let txt=(r&&r.content&&r.content[0]&&r.content[0].text)||(r&&r.error&&('fout: '+(r.error.message||r.error)))||'';
+    let txt=MTVerbeter.tekst(r)||(r&&r.error&&('fout: '+(r.error.message||r.error)))||'';
     const m=txt.match(/\[[\s\S]*\]/);
     if(!m) throw new Error('geen bruikbaar AI-antwoord');
     const voorstel=JSON.parse(m[0]);
@@ -10039,7 +10143,7 @@ async function nacalcMaakFactuur(code,opts){
   const opnieuw=!!(opts&&opts.opnieuw), opnieuwKnop=`nacalcMaakFactuur('${_jsCode(code)}',{opnieuw:true})`;
   const st=document.getElementById('nacalc-status-'+code.replace(/-/g,''));
   const mbId=proj.mb_nr||resolveMbContact(proj);
-  if(!mbId){alert('Geen Moneybird-contact gekoppeld aan dit project.\nKoppel eerst een contact via ✏ bij "Moneybird-contact".');return;}
+  if(!mbId){await mtDialog.alert({title:'Nacalculatie',message:'Geen Moneybird-contact gekoppeld aan dit project.\nKoppel eerst een contact via ✏ bij "Moneybird-contact".'});return;}
   const off=_nacalcOfferte[code];
   if(off){
     const bev=await mbBevestig({wat:`Offerte ${off.estimate_id||off.id} (${off.state}) omzetten naar een CONCEPT-factuur`,contact:resolveKlantNaam(proj)||('Moneybird-contact '+mbId),ref:off.reference||code,
@@ -10057,10 +10161,10 @@ async function nacalcMaakFactuur(code,opts){
     return;
   }
   // Geen offerte → concept-factuur met de nacalculatieregels zelf
-  if(!uurtarievenMag('lezen')){ alert('Een nacalculatiefactuur maken kan alleen met het geld-recht (de tarieven).'); return; }
+  if(!uurtarievenMag('lezen')){ await mtDialog.alert({title:'Nacalculatie',message:'Een nacalculatiefactuur maken kan alleen met het geld-recht (de tarieven).'}); return; }
   const nc=nacalcData(proj);
   const mat=nacalcMatTotaal(code);
-  if(!nc.rijen.length&&!(mat>0)){alert('Geen uren en geen materiaal gevonden — niets om te factureren.');return;}
+  if(!nc.rijen.length&&!(mat>0)){await mtDialog.alert({title:'Nacalculatie',message:'Geen uren en geen materiaal gevonden — niets om te factureren.'});return;}
   const cap=s=>s?s.charAt(0).toUpperCase()+s.slice(1):s;
   const details=nc.rijen.filter(r=>r.uren>0.01).map(r=>({description:`Arbeid ${cap(r.naam)} — nacalculatie ${projKort(code)}`,amount:`${r.uren.toFixed(2)} x`,price:r.tarief.toFixed(2)}));
   if(mat>0)details.push({description:`Materiaal — nacalculatie ${projKort(code)}`,amount:'1 x',price:mat.toFixed(2)});
@@ -12162,7 +12266,7 @@ async function laadCashflowDashboard(){
     if(cfRoot) cfRoot.style.display='none'; const cs=document.querySelector('#tab-dashboard > .cf-section'); if(cs) cs.style.display='none';
     const dash=document.getElementById('tab-dashboard');
     if(dash&&!document.getElementById('cf-naar-geld')){ const d=document.createElement('div'); d.id='cf-naar-geld'; d.className='card'; d.style.cssText='margin-bottom:1rem;font-size:13px';
-      d.innerHTML='Cashflow en saldo staan nu op het tabblad <b>Dashboard</b>: lopende rekening, potjes, wat er de komende tijd binnenkomt en uitgaat. <button class="btn btn-sm" onclick="const b=document.getElementById(\'tab-btn-geld\'); if(b) b.click();">Naar Dashboard →</button>';
+      d.innerHTML='Cashflow en saldo staan nu op het tabblad <b>Financiën</b>: lopende rekening, potjes, wat er de komende tijd binnenkomt en uitgaat. <button class="btn btn-sm" onclick="const b=document.getElementById(\'tab-btn-geld\'); if(b) b.click();">Naar Dashboard →</button>';
       dash.insertBefore(d,dash.firstElementChild); }
     return;
   }
@@ -13022,7 +13126,7 @@ async function analyseerdControleFactuur(){
       messages=[{role:'user',content:`Analyseer deze inkoopfactuur van ${f.contact?.company_name||'onbekend'}:\n${rt}\n\n${jsonInstructie}`}];
     }
     const data=await claudeCall(messages,1800);
-    const rawText=data.content?.[0]?.text||'{}';
+    const rawText=MTVerbeter.tekst(data)||'{}';
     // Extraheer JSON uit de response (ook als er toch tekst omheen staat)
     const jsonMatch=rawText.match(/\{[\s\S]*\}/);
     const parsed=JSON.parse(jsonMatch?jsonMatch[0]:'{}');
@@ -13291,6 +13395,10 @@ const _SP = Object.assign(window.MTCore.makeSP({
       const per = new Map(); [...R, ...L].forEach(x => { if (x && x.id && !per.has(x.id)) per.set(x.id, x); });
       return [...per.values()].sort((a, b) => String(a.tijd).localeCompare(String(b.tijd))).slice(-2000);
     },
+    // Verbeterpunten en feedback (mt-verbeter.js): per id wint de nieuwste `_gewijzigd`; een record dat aan één kant bestaat blijft staan.
+    // Geschreven via vbSchrijfRecord (vers lezen → record vervangen → schrijven met ETag, bij 412 deze samenvoeger).
+    mt_verbeterpunten(lokaal, spData) { return MTVerbeter.samen(lokaal, spData); },
+    mt_feedback(lokaal, spData) { return MTVerbeter.samen(lokaal, spData); },
     // Taken-journaal: alleen toevoegen. Vereniging op id, gesorteerd op tijd, laatste 1000.
     mt_taken_journaal(lokaal, spData) { return MTPlanning.journaalSamen(lokaal, spData, 1000); },   // dezelfde samenvoeger als de telefoon (mt-planning.js)
     // Mail↔project-koppelingen: { code: [koppeling…] }. Per code en per mail
@@ -13311,6 +13419,22 @@ const _SP = Object.assign(window.MTCore.makeSP({
       const L = isObj(lees(lokaal)) ? lees(lokaal) : {}, R = isObj(lees(spData)) ? lees(spData) : {}, uit = {};
       for (const k of new Set([...Object.keys(R), ...Object.keys(L)])) { const l = L[k], r = R[k]; uit[k] = !isObj(l) ? r : !isObj(r) ? l : (((Number(l.gewijzigd) || 0) !== (Number(r.gewijzigd) || 0) ? (Number(l.gewijzigd) || 0) > (Number(r.gewijzigd) || 0) : String(l.door || '') !== String(r.door || '') ? String(l.door || '') > String(r.door || '') : JSON.stringify(l) >= JSON.stringify(r)) ? l : r); }
       return uit;
+    },
+    // Standaardwaarden van de calculatie (uurregels, marge): één klein document, dus als geheel samenvoegen op de stempel
+    // `_gewijzigd` (gezet bij "Opslaan als standaard"). Nieuwste stempel wint; geen stempel aan beide kanten = SharePoint (zoals
+    // voorheen). De verliezende versie gaat nooit stil weg: _calcDefVerlies bewaart haar en meldt het (alleen als het ertoe doet).
+    mt_calc_defaults(lokaal, spData) {
+      const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
+      const isD = v => v && typeof v === 'object' && !Array.isArray(v) && (Array.isArray(v.uren) || v.materiaal_marge != null);
+      const L = lees(lokaal), R = lees(spData);
+      if (!isD(L)) return isD(R) ? R : L;
+      if (!isD(R)) return L;
+      const inh = d => JSON.stringify([d.materiaal_marge, d.marge_ondergrens, (d.uren || []).map(u => [u.omschrijving, u.uurtarief, u.marge])]);
+      const tl = Date.parse(L._gewijzigd || '') || 0, tr = Date.parse(R._gewijzigd || '') || 0;
+      if (inh(L) === inh(R)) return tl > tr ? L : R;
+      const lokaalWint = tl > tr, win = lokaalWint ? L : R, verlies = lokaalWint ? R : L;
+      try { if (typeof window._calcDefVerlies === 'function') window._calcDefVerlies(verlies, win, lokaalWint); } catch(e) {}
+      return win;
     },
     mt_calc_offertes(lokaal, spData) {
       const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
@@ -13393,6 +13517,7 @@ const _SP = Object.assign(window.MTCore.makeSP({
         // (per offerte wint de nieuwste _gewijzigd-stempel).
         try { if (key === 'mt_calc_offertes' && window.CALC && samen && samen.offertes)
           window.CALC.offertes = mg(JSON.stringify({ versie: 2, offertes: window.CALC.offertes }), samen).offertes; } catch(e) {}
+        try { if (key === 'mt_calc_defaults' && typeof window._calcDefToepassen === 'function') window._calcDefToepassen(samen); } catch(e) {}
         // Projecten: binnengekomen/bijgewerkte records meteen in PROJECT_CODES (en de lijst) zetten.
         if (key === 'mt_projecten') setTimeout(() => { try { slaProjectenOp();
           if (typeof renderProjectLijst === 'function' && !window._calcMailPaneelActief) renderProjectLijst(); } catch(e) {} }, 0);
@@ -14738,11 +14863,14 @@ window.initStorage = async function() {
         try { samen = merger(localStorage.getItem(key), spData); }
         catch(e) { console.error('samenvoegen faalde voor', key, e); _SP.blockedKeys.add(key); return; }
         _lsSet(key, JSON.stringify(samen));
+        try { if (key === 'mt_calc_defaults' && typeof window._calcDefToepassen === 'function') window._calcDefToepassen(samen); } catch(e) {}
         // Ook hier bij een 412 de samenvoeger gebruiken (de generieke merge kan geen
         // projecten/planning aan en zou de write overslaan).
         const opnieuw = (remote, local) => {
           if (projSchemaSleutel(key) && typeof projSchemaGeblokkeerd === 'function' && projSchemaGeblokkeerd()) { projSchemaBlok(); return null; }
-          const s2 = merger(JSON.stringify(local), remote); _lsSet(key, JSON.stringify(s2)); return s2;
+          const s2 = merger(JSON.stringify(local), remote); _lsSet(key, JSON.stringify(s2));
+          try { if (key === 'mt_calc_defaults' && typeof window._calcDefToepassen === 'function') window._calcDefToepassen(s2); } catch(e) {}
+          return s2;
         };
         try { await _SP.write(key + '.json', samen, opnieuw); }
         catch(e) { console.warn('terugschrijven na samenvoegen faalde voor', key, ':', e.message); }
@@ -14916,11 +15044,11 @@ Beschikbare acties:
 - [[ACTIE:refresh]] herlaad de hele pagina.
 - [[ACTIE:nieuw-project]] open de projectaanmaker (nieuw project starten).
 Gebruik een actie ALLEEN als de gebruiker iets wil openen of doen. Benoem in gewone taal wat je doet; de directives zelf ziet de gebruiker niet.
-HARDE GRENS: je kunt NIETS wijzigen aan de tool zelf, aan data, bestanden of mappen — geen facturen boeken, niets verwijderen, niets hernoemen. Je acties zijn uitsluitend navigatie/verversen plus het openen van de projectaanmaker (het aanmaken doet de gebruiker daar zelf). Als iemand iets anders vraagt: leg uit dat dat via Bart/Larry in de terminal loopt.`;
+HARDE GRENS: je kunt NIETS wijzigen aan de tool zelf, aan data, bestanden of mappen — geen facturen boeken, niets verwijderen, niets hernoemen. Je acties zijn uitsluitend navigatie/verversen plus het openen van de projectaanmaker (het aanmaken doet de gebruiker daar zelf). Als iemand iets anders vraagt: leg uit dat je dat niet kunt; een wens voor de tool kan als verbeterpunt worden ingediend (tabblad Verbeterpunten), waarna Bart beslist.`;
   try{
     const conv=_tbHist.slice(-8).map(m=>(m.role==='user'?'Gebruiker: ':'Larry: ')+m.content).join('\n');
-    const r=await claudeCall([{role:'user',content:sys+'\n\n— Gesprek —\n'+conv+'\n\nLarry:'}],700);
-    let txt=(r&&r.content&&r.content[0]&&r.content[0].text)||(r&&r.error&&('fout: '+(r.error.message||r.error)))||'(geen antwoord)';
+    const r=await claudeCall([{role:'user',content:'— Gesprek —\n'+conv+'\n\nLarry:'}],700,{system:sys});
+    let txt=MTVerbeter.antwoord(r);
     const acts=[...txt.matchAll(/\[\[ACTIE:([a-z-]+)(?:=([^\]]+))?\]\]/gi)];
     const clean=txt.replace(/\[\[ACTIE:[^\]]*\]\]/gi,'').trim();
     wait.textContent=clean||'(klaar)';_tbHist.push({role:'assistant',content:clean});
@@ -15495,7 +15623,7 @@ async function agPlanRender(){
       const isVs=blok.status==='voorstel';
       html+=`<div class="ag-blok${isVs?' pv-voorstel':''}" data-planid="${esc(blok.id)}"
         style="top:${esc(topPx)}px;height:${Math.max(hPx,18)}px;left:4px;right:4px;background:${esc(kleur)};z-index:6;cursor:pointer"
-        onclick="event.stopPropagation();agPlanBlokMenu(event,${jsArg(blok.id)})"
+        onclick="event.stopPropagation();agPlanBlokOpen(event,${jsArg(blok.id)})"
         ${isVs?`title="Voorstel van ${esc((blok.voorstel&&blok.voorstel.doorNaam)||'')} — nog niet goedgekeurd"`:''}
         draggable="${isVs?'false':'true'}" ondragstart="agPlanDragStart(event,${jsArg(blok.id)})"
         ondragend="agPlanDragEnd(event)">
@@ -15661,6 +15789,8 @@ function agPlanNieuwFormulier(datum,start){
 }
 
 // ── Blok-menu (bewerken / verwijderen) ──
+// Klik op een planblok in de Planning-weergave: het planblokpaneel (alleen lezen, mt-planblokpaneel.js); zonder paneel het oude menu. Het oude menu blijft bereikbaar via een knop in het paneel.
+function agPlanBlokOpen(evt,id){ try{ if(window.MTPlanblokPaneel&&MTPlanblokPaneel.open(id,{terug:evt&&evt.currentTarget})) return; }catch(e){ console.warn('Planblokpaneel:',e); } agPlanBlokMenu(evt,id); }
 function agPlanBlokMenu(evt,id){
   const blok=agPlanActief().find(b=>b.id===id), PV=window.MTPlanVoorstel;
   if(blok&&blok.status==='voorstel'&&PV){
@@ -15976,12 +16106,13 @@ function helpOpen(){
     ov.innerHTML=`<div class="modal help-modal">
       <div class="help-modal-head"><span class="t" id="help-titel"></span><button class="tbchat-x" onclick="helpClose()">✕</button></div>
       <div class="help-modal-uitleg" id="help-uitleg"></div>
-      <div class="help-chat-label">Feedback of vraag — Larry legt het vast voor het verbeterplan</div>
+      <div class="help-chat-label">Feedback of vraag — Larry denkt mee; met "Leg vast voor Bart" komt het in de wachtrij van Bart</div>
       <div class="help-chatlog" id="help-chatlog"></div>
       <div class="help-chatin">
         <textarea id="help-chatq" rows="1" placeholder="Wat kan hier beter? Of stel een vraag…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();helpChatSend();}"></textarea>
         <button onclick="helpChatSend()">➤</button>
-      </div></div>`;
+      </div>
+      <div style="padding:0 14px 12px"><button class="btn btn-secondary btn-sm" id="help-legvast" onclick="helpLegVast()">Leg vast voor Bart</button></div></div>`;
     document.body.appendChild(ov);
   }
   document.getElementById('help-titel').textContent='ⓘ '+info.naam+' — wat is dit?';
@@ -15993,6 +16124,15 @@ function helpOpen(){
   try{ if(window.track) track('chat','help_open',{detail:tab}); }catch(e){}
 }
 function helpClose(){const ov=document.getElementById('help-overlay');if(ov)ov.style.display='none';}
+// Het ⓘ-gesprek als verbeterpunt in de wachtrij van Bart zetten (alleen wat de gebruiker zelf schreef; Larry's antwoorden niet).
+async function helpLegVast(){
+  const ov=document.getElementById('help-overlay');const tab=(ov&&ov.dataset.tab)||helpActieveTab();
+  const info=TAB_HELP[tab]||{naam:tab};
+  const eigen=_helpHist.filter(m=>m.role==='user').map(m=>m.content);
+  if(!eigen.length){ planToast('Schrijf eerst wat je kwijt wilt'); return; }
+  const r=await vbLegVast({titel:eigen[0].replace(/\s+/g,' ').slice(0,80),betreft:'Tabblad '+info.naam,omschrijving:eigen.join('\n\n'),bron:'help-chat'});
+  if(r&&r.ok){ _helpHist=[]; helpBubble('b',VB_BEVESTIGING.replace('hier terug','terug in het tabblad Verbeterpunten')); } else planToast('⚠ Vastleggen mislukte: '+((r&&r.reden)||'SharePoint niet bereikbaar')+'. Er is niets vastgelegd.');
+}
 function helpBubble(cls,txt){const log=document.getElementById('help-chatlog');const d=document.createElement('div');d.className=cls;d.textContent=txt;log.appendChild(d);log.scrollTop=log.scrollHeight;return d;}
 async function helpChatSend(){
   const inp=document.getElementById('help-chatq');const q=(inp.value||'').trim();if(!q)return;
@@ -16002,12 +16142,12 @@ async function helpChatSend(){
   const wait=helpBubble('b','…');
   const sys=`Je bent Larry in uitleg- en feedback-modus voor het tabblad "${info.naam}" van de M&T-cockpit. Antwoord kort en concreet in het Nederlands.
 Uitleg van dit tabblad: ${info.uitleg}
-Je taken: (1) vragen over dit tabblad beantwoorden, (2) feedback en verbeterwensen in ontvangst nemen — vat die kort samen en bevestig dat het is vastgelegd voor het verbeterplan.
-HARDE GRENS: je kunt hier NIETS uitvoeren of wijzigen — geen acties, geen data, geen bestanden of mappen. Wil de gebruiker een nieuw project? Verwijs naar de projectaanmaker (tabblad Projecten → "+ Nieuw project"). Al het andere doe-werk loopt via Larry in de terminal.`;
+Je taken: (1) vragen over dit tabblad beantwoorden, (2) feedback en verbeterwensen aanhoren en kort samenvatten. Je legt zelf niets vast: de gebruiker legt het gesprek vast met de knop "Leg vast voor Bart" onder het gesprek; zeg dat erbij en bevestig nooit dat het al vastgelegd is.
+HARDE GRENS: je kunt hier NIETS uitvoeren of wijzigen — geen acties, geen data, geen bestanden of mappen. Wil de gebruiker een nieuw project? Verwijs naar de projectaanmaker (tabblad Projecten → "+ Nieuw project"). Voor al het andere kan de gebruiker een verbeterpunt indienen; Bart beslist.`;
   try{
     const conv=_helpHist.slice(-8).map(m=>(m.role==='user'?'Gebruiker: ':'Larry: ')+m.content).join('\n');
-    const r=await claudeCall([{role:'user',content:sys+'\n\n— Gesprek —\n'+conv+'\n\nLarry:'}],600);
-    let txt=(r&&r.content&&r.content[0]&&r.content[0].text)||(r&&r.error&&('fout: '+(r.error.message||r.error)))||'(geen antwoord)';
+    const r=await claudeCall([{role:'user',content:'— Gesprek —\n'+conv+'\n\nLarry:'}],600,{system:sys});
+    let txt=MTVerbeter.antwoord(r);
     txt=txt.replace(/\[\[ACTIE:[^\]]*\]\]/gi,'').trim(); // dubbele borging: hier nooit acties
     wait.textContent=txt;_helpHist.push({role:'assistant',content:txt});
     _LOG.add('help-feedback',tab,q,txt);
@@ -16267,7 +16407,7 @@ async function geldHaal(pad,opt){
 function geldOpen(){
   const el=document.getElementById('geld-root'); if(!el||!window.MTGeld) return;
   if(!window.MTRol||!MTRol.me){ if(!geldOpen._wacht){ geldOpen._wacht=true; window.addEventListener('mt-rol',()=>{ geldOpen._wacht=false; geldTabZet(); },{once:true}); } el.innerHTML='<div class="dos-meta">Laden…</div>'; return; }
-  if(!geldNieuw()||!MTRol.magGeld()){ el.innerHTML='<div class="card">Het geldscherm is alleen voor eigenaren en de administratie.</div>'; return; }
+  if(!geldNieuw()||!MTRol.magGeld()){ el.innerHTML='<div class="card">Financiën is alleen voor eigenaren en de administratie.</div>'; return; }
   if(el.dataset.gestart){ MTGeld.laad(); return; }
   el.dataset.gestart='1';
   Promise.resolve(MTGeld.start(el,{bron:{haal:geldHaal},magWijzigen:MTRol.magGeld('wijzigen'),wie:(typeof mtMijEmail==='function'&&mtMijEmail())||'',
@@ -16294,6 +16434,22 @@ function geldPrognoseOpen(code){
   const p=projVind(code); if(!p) return;
   const b=document.getElementById('tab-btn-geld'); if(!b||b.style.display==='none') return;
   const open=()=>{ const x=geldProjecten().find(q=>q.project_id===p.project_id); MTGeld.prognoseBewerk('p:'+p.project_id,x||null); };
+  const el=document.getElementById('geld-root');
+  if(el&&el.dataset.gestart&&MTGeld._st&&MTGeld._st.data){ b.click(); setTimeout(open,50); } else { geldOpen._na=open; b.click(); }
+}
+// Offerte-weergave van een project: compact blokje "Facturatie verwacht" (termijnen + verwachte factuurmaand, wijzigbaar met het recht
+// geld/wijzigen). Dezelfde component en dezelfde opslag als de Factuurplanning in Financiën; een klik op het blokje opent Financiën op dit project.
+function geldFactuurBlokVul(proj,id){
+  const el=document.getElementById(id); if(!el) return;
+  if(!proj||!proj.project_id||proj.soort==='intern'||typeof geldNieuw!=='function'||!geldNieuw()||!window.MTRol||!MTRol.magGeld()||!window.MTGeld||!MTGeld.projectBlok) return;
+  MTGeld.projectBlok(el,{bron:{haal:geldHaal},sleutel:'p:'+proj.project_id,mag:!!MTRol.magGeld('wijzigen'),
+    naar:()=>geldFactuurplanningOpen(proj.code),instellen:()=>geldPrognoseOpen(proj.code)});
+}
+// Naar Financiën, de Factuurplanning gefilterd op dit project en in beeld.
+function geldFactuurplanningOpen(code){
+  const p=projVind(code); if(!p) return;
+  const b=document.getElementById('tab-btn-geld'); if(!b||b.style.display==='none') return;
+  const open=()=>MTGeld.planFocus('p:'+p.project_id);
   const el=document.getElementById('geld-root');
   if(el&&el.dataset.gestart&&MTGeld._st&&MTGeld._st.data){ b.click(); setTimeout(open,50); } else { geldOpen._na=open; b.click(); }
 }
@@ -16346,7 +16502,7 @@ async function updKaartTeken(){
   kaart.style.display='';
   if(!l.length){ el.innerHTML='<div class="dos-meta">Nog geen overzicht beschikbaar.</div>'; return; }
   el.innerHTML=l.map((u,i)=>`<details class="upd-versie"${i===0?' open':''}><summary><b>v${esc(u.versie)}</b> — ${esc(u.titel)}
-      <span class="dos-meta">${i===0?'live sinds ':''}${esc(_updDatum(u.datum))}${esc(u.voor==='beheer'?' · voor beheer':u.voor==='geld'?' · voor Geld':u.voor==='zonder-geld'?' · zonder Geld-recht':'')}</span></summary>
+      <span class="dos-meta">${i===0?'live sinds ':''}${esc(_updDatum(u.datum))}${esc(u.voor==='beheer'?' · voor beheer':u.voor==='geld'?' · voor Financiën':u.voor==='zonder-geld'?' · zonder Financiën-recht':'')}</span></summary>
     <ul>${u.punten.map(p=>`<li>${esc(p)}</li>`).join('')}</ul></details>`).join('');
 }
 // ── Werkcodes en centrale instellingen (projectnummering) ──
@@ -17850,6 +18006,7 @@ function activiteitOpen(force){
     const mg=_SP.mergers&&_SP.mergers[key];
     const cm=mg?((remote,local)=>{ const samen=mg(typeof local==='string'?local:JSON.stringify(local),remote);
       lsSave(key,samen); if(which==='off'&&samen&&samen.offertes) CALC.offertes=mg(JSON.stringify({versie:2,offertes:CALC.offertes}),samen).offertes;
+      if(which==='def') _defToepassen(samen);
       return samen; }):undefined;
     try{ const ok=await _SP.write(SP[which],payloadFor(which),cm);
       if(ok===false){ const ls=_SP.lastSync; return {ok:false,reden:(ls&&ls.error)||'SharePoint weigerde de schrijfactie'}; }
@@ -17956,6 +18113,8 @@ function activiteitOpen(force){
     else regel('✓ Opgeslagen op SharePoint'+(s.tijd?' '+tijd(s.tijd):''),'ok');
     if(_calcLaterTekenen.has(basis)) regel('Er is een nieuwere versie van SharePoint binnen — die verschijnt zodra je het veld verlaat.','info');
     if(_calcSync.conflictOpen(basis)){ d=regel('⚠ Deze offerte is ook elders gewijzigd — controleer. De andere versie is bewaard.','conflict'); knop(d,'Bekijk',()=>calcConflictBekijk(basis)); }
+    // Altijd bereikbaar: eerdere versies van deze offerte bekijken, vergelijken en (met bevestiging) terugzetten.
+    d=document.createElement('div'); d.className='calc-opslag-r calc-opslag-versies'; knop(d,'Versies',()=>window.calcVersies(basis)); el.appendChild(d);
   }
   // Bewaarde versies bekijken: één terugzetten (de huidige stand gaat dan eerst zelf in de versies) of "gezien".
   async function calcConflictBekijk(basis){
@@ -17980,6 +18139,126 @@ function activiteitOpen(force){
     calcStatus(r.ok?'✓ Versie teruggezet en opgeslagen op SharePoint':'⚠ Teruggezet op deze pc, maar nog niet op SharePoint: '+(r.reden||'onbekend'),r.ok?'ok':'fout',basis);
   }
   window.calcConflictBekijk=calcConflictBekijk;
+
+  // ---- Versies van één offerte: herstelpunten van deze pc + bewaarde kopieën (_conflicten) + SharePoint-versiegeschiedenis ----
+  // Bekijken en vergelijken mag iedereen; terugzetten niet met de rol "lezen" (fail-closed: zonder geladen rol ook niet). Terugzetten
+  // vervangt alleen DEZE offerte, via de gewone schrijfrij (vers lezen, per offerte samenvoegen, ETag), nadat de huidige stand als
+  // kopie bewaard is; "Ongedaan maken" zet die kopie terug. De SharePoint-versies komen via _SP._driveBase (dezelfde token als de
+  // rest van de calculatie): /versions en /versions/<id>/content van mt_calc_offertes.json; alleen lezen.
+  const VERSIES_SP_MAX=15;
+  const REDEN_V={gelijktijdig:'tegelijk gewijzigd',ingekort:'daarna elders sterk ingekort','oudere versie':'elders terug naar een oudere versie','voor terugzetten':'stand vóór terugzetten','eerste keer':'oudere kopie van deze pc','ander tabblad':'ander tabblad'};
+  const _versieWanneer=t=>{ const d=new Date(t); return isNaN(d)?'onbekend moment':d.toLocaleString('nl-NL',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}); };
+  function _versieTotaal(o){ try{ const t=_offRegels({meta:o.meta||{},materiaal:Array.isArray(o.materiaal)?o.materiaal:[],uren:Array.isArray(o.uren)?o.uren:[]}).total; return isFinite(t)?t:null; }catch(e){ return null; } }
+  function _calcMagTerugzetten(){ try{ return !!(window.MTRol&&MTRol.me)&&String(MTRol.me.rol||'').toLowerCase()!=='lezen'; }catch(e){ return false; } }
+  function _versiesLokaal(basis){
+    const uit=[];
+    (lsLoad(HERSTEL_KEY,[])||[]).forEach((p,i)=>{ try{ const o=((JSON.parse(p.data)||{}).offertes||{})[basis]; if(o&&typeof o==='object') uit.push({id:'h'+i+'|'+p.tijd,bron:'herstelpunt',soort:'Herstelpunt op deze pc',tijd:p.tijd,wie:'deze pc',offerte:o}); }catch(e){} });
+    if(_calcSync) _calcSync.conflicten(basis).forEach(c=>uit.push({id:'k|'+c.id,bron:'bewaard',soort:'Bewaarde versie'+(REDEN_V[c.reden]?' ('+REDEN_V[c.reden]+')':''),tijd:c.tijd,wie:c.door||(c.bron==='elders'?'elders':'deze pc'),offerte:c.offerte}));
+    return uit;
+  }
+  async function _versiesSp(basis,voortgang){
+    if(typeof _SP==='undefined'||typeof _SP._driveBase!=='function') throw new Error('niet ingelogd op SharePoint');
+    const {base,token}=await _SP._driveBase();
+    const pad=`${base}/root:/${_SP.FOLDER}/${SP.off}:/versions`, kop={'Authorization':`Bearer ${token}`};
+    const r=await _calcFetch(pad,{headers:kop,cache:'no-store'});
+    if(!r.ok) throw new Error('de versiegeschiedenis lezen lukte niet (HTTP '+r.status+')');
+    const lijst=(((await r.json())||{}).value||[]).slice(0,VERSIES_SP_MAX), uit=[]; let klaar=0, nietLeesbaar=0, zonder=0;
+    const werk=async v=>{
+      try{ const c=await _calcFetch(pad+'/'+encodeURIComponent(v.id)+'/content',{headers:kop,cache:'no-store'}); if(!c.ok) throw new Error('HTTP '+c.status);
+        const o=(((await c.json())||{}).offertes||{})[basis];
+        if(o&&typeof o==='object') uit.push({id:'s|'+v.id,bron:'sharepoint',soort:'SharePoint-versie',tijd:v.lastModifiedDateTime,wie:(v.lastModifiedBy&&v.lastModifiedBy.user&&v.lastModifiedBy.user.displayName)||'onbekend',offerte:o}); else zonder++;
+      }catch(e){ nietLeesbaar++; }
+      klaar++; voortgang(klaar,lijst.length);
+    };
+    const rij=lijst.slice();
+    await Promise.all([0,1,2].map(async()=>{ for(let v;(v=rij.shift());) await werk(v); }));
+    return {versies:uit,nietLeesbaar,zonder,totaal:lijst.length};
+  }
+  async function calcVersies(basis){
+    if(!CALC.loaded||!CALC.offertes[basis]){ calcStatus('De calculaties zijn nog niet geladen.','fout',basis); return; }
+    const oud=document.querySelector('dialog.calc-versies'); if(oud) oud.remove();
+    const mk=(tag,cls,tekst,stijl)=>{ const e=document.createElement(tag); if(cls) e.className=cls; if(tekst!=null) e.textContent=tekst; if(stijl) e.style.cssText=stijl; return e; };
+    const knop=(tekst,fn,uit)=>{ const b=mk('button','btn btn-xs btn-secondary',tekst); b.type='button'; if(uit) b.disabled=true; b.addEventListener('click',fn); return b; };
+    const dlg=mk('dialog','calc-versies',null,'border:none;border-radius:12px;padding:0;max-width:780px;width:calc(100vw - 40px);box-shadow:0 12px 40px rgba(0,0,0,.28);background:var(--surface-overlay,#fff);color:var(--text,#1a1a1a);font-size:13px');
+    const kopEl=mk('div',null,null,'padding:16px 20px 4px'), titel=mk('div',null,'Versies van deze offerte','font-size:16px;font-weight:600;color:var(--green,#2A4A38)'), nu=mk('div',null,null,'color:var(--text-dim);margin-top:2px');
+    const noot=mk('div','calc-versies-noot',null,'padding:0 20px;color:var(--text-dim)'), banner=mk('div','calc-versies-banner',null,'margin:6px 20px;font-weight:500'), lijstEl=mk('div',null,null,'padding:6px 20px;max-height:42vh;overflow:auto'), diffEl=mk('div',null,null,'padding:0 20px;max-height:24vh;overflow:auto');
+    const voet=mk('div',null,null,'display:flex;gap:8px;align-items:center;padding:12px 20px 16px'), spStatus=mk('span','calc-versies-sp','','flex:1;color:var(--text-dim);font-size:12px');
+    kopEl.append(titel,nu); dlg.append(kopEl,noot,banner,lijstEl,diffEl,voet);
+    const mag=_calcMagTerugzetten();
+    noot.textContent=mag?'Kies een versie om te vergelijken met de huidige. Terugzetten vervangt alleen deze offerte; de huidige stand wordt eerst bewaard en je kunt het ongedaan maken.'
+      :'Je kunt de versies bekijken en vergelijken. Terugzetten kan met jouw rol niet'+((window.MTRol&&MTRol.me)?'.':' (je rol is nog niet geladen).');
+    let sp=null, gekozen=null, spBezig=false;
+    const huidig=()=>CALC.offertes[basis];
+    const teken=()=>{
+      const h=huidig(), hh=MTCalcOpslag.hash(h), tot=_versieTotaal(h);
+      nu.textContent='Nu: '+MTCalcOpslag.gevuld(h)+' gevulde regels'+(tot!=null?' · '+eur(tot)+' ex btw':'');
+      const alle=_versiesLokaal(basis).concat(sp?sp.versies:[]).sort((a,b)=>String(b.tijd).localeCompare(String(a.tijd)));
+      const gezien=new Set(), lijst=[]; let gelijkNu=0;
+      alle.forEach(e=>{ const x=MTCalcOpslag.hash(e.offerte); if(x===hh){ gelijkNu++; return; } if(gezien.has(x)) return; gezien.add(x); lijst.push(e); });
+      lijstEl.textContent='';
+      if(!lijst.length) lijstEl.appendChild(mk('div',null,'Nog geen afwijkende eerdere versies gevonden op deze pc. Laad de SharePoint-geschiedenis voor meer.','padding:8px 0;color:var(--text-dim)'));
+      lijst.forEach(e=>{
+        const rij=mk('div','calc-versies-rij',null,'display:flex;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--border,#ddd)'+(gekozen===e.id?';background:var(--gold-50,#FBF5E0)':''));
+        const tekst=mk('div',null,null,'flex:1;min-width:0'), t2=e.offerte&&_versieTotaal(e.offerte);
+        tekst.append(mk('div',null,_versieWanneer(e.tijd)+' · '+e.wie,'font-weight:600'),
+          mk('div',null,e.soort+' · '+MTCalcOpslag.gevuld(e.offerte)+' gevulde regels'+(t2!=null?' · '+eur(t2):''),'color:var(--text-dim);font-size:12px'));
+        const vk=knop('Vergelijk',()=>{ gekozen=(gekozen===e.id?null:e.id); teken(); }), tk=knop('Terugzetten',()=>terugzetten(e),!mag);
+        vk.classList.add('calc-versies-vergelijk'); tk.classList.add('calc-versies-terug');
+        rij.append(tekst,vk,tk);
+        lijstEl.appendChild(rij);
+      });
+      if(gelijkNu) lijstEl.appendChild(mk('div',null,gelijkNu+' versie(s) zijn gelijk aan de huidige en niet getoond.','padding:6px 0;color:var(--text-faint,#888);font-size:12px'));
+      diffEl.textContent='';
+      const e=lijst.find(x=>x.id===gekozen);
+      if(e){
+        const v=MTCalcOpslag.verschil(h,e.offerte), SOORT={materiaal:'Materiaal',uren:'Uren',kop:'Gegevens'};
+        diffEl.appendChild(mk('div',null,'Verschil met de versie van '+_versieWanneer(e.tijd)+' ('+v.length+')','font-weight:600;margin:8px 0 4px'));
+        if(!v.length) diffEl.appendChild(mk('div',null,'Geen verschil in de regels.'));
+        v.forEach(r=>{
+          const wat=r.soort==='kop'?'Gegevens · '+r.veld:SOORT[r.soort]+' "'+r.naam+'"';
+          const t=r.type==='alleen-nu'?wat+': staat nu wel, niet in deze versie (verdwijnt bij terugzetten)'
+            :r.type==='alleen-versie'?wat+': staat in deze versie, nu niet (komt terug bij terugzetten)'
+            :wat+(r.soort==='kop'?'':' · '+r.veld)+': nu "'+r.nu+'", in deze versie "'+r.versie+'"';
+          diffEl.appendChild(mk('div','calc-versies-verschil','• '+t,'padding:1px 0'));
+        });
+      }
+    };
+    const terugzetten=async e=>{
+      if(!_calcMagTerugzetten()){ banner.textContent='Terugzetten kan met jouw rol niet.'; banner.style.color='#c0392b'; return; }
+      const n=MTCalcOpslag.verschil(huidig(),e.offerte).length;
+      const ja=await mtDialog.confirm({title:'Deze versie terugzetten?',okLabel:'Terugzetten',
+        message:'Deze offerte wordt de versie van '+_versieWanneer(e.tijd)+' ('+MTCalcOpslag.gevuld(e.offerte)+' gevulde regels, '+n+' verschil'+(n===1?'':'len')+' met nu). De andere offertes veranderen niet. De huidige stand wordt eerst bewaard; je kunt het meteen ongedaan maken.'});
+      if(!ja||!_calcMagTerugzetten()||!_calcSync) return;
+      banner.textContent='Terugzetten…'; banner.style.color='var(--text-dim)';
+      const r=await _calcSync.zetTerugVan(basis,e.offerte,{bron:e.bron});
+      await window.renderOfferteCalc(basis);
+      const bleef=!!huidig()&&MTCalcOpslag.hash(huidig())===r.hash;
+      gekozen=null;
+      if(!bleef){ banner.textContent='⚠ De offerte was intussen ook elders gewijzigd; die stand is behouden en jouw teruggezette versie staat bij de bewaarde versies.'; banner.style.color='#c0392b'; }
+      else {
+        banner.textContent=r.ok?'✓ Teruggezet en opgeslagen op SharePoint. ':'⚠ Teruggezet op deze pc, maar nog niet op SharePoint ('+(r.reden||'onbekend')+'). ';
+        banner.style.color=r.ok?'var(--green)':'#c0392b';
+        if(r.ongedaanId){ const ub=knop('Ongedaan maken',async()=>{
+          banner.textContent='Ongedaan maken…'; const u=await _calcSync.zetTerug(basis,r.ongedaanId); await window.renderOfferteCalc(basis);
+          banner.textContent=u.ok?'✓ Teruggezet naar de stand van vóór het terugzetten.':'⚠ Ongedaan gemaakt op deze pc, maar nog niet op SharePoint ('+(u.reden||'onbekend')+').'; banner.style.color=u.ok?'var(--green)':'#c0392b'; teken();
+        }); ub.classList.add('calc-versies-ongedaan'); banner.appendChild(ub); }
+      }
+      teken();
+    };
+    const laad=knop('SharePoint-geschiedenis laden',async()=>{
+      if(spBezig) return; spBezig=true; laad.disabled=true; spStatus.textContent='Versies ophalen…';
+      try{ sp=await _versiesSp(basis,(k,t)=>{ spStatus.textContent='Versies lezen '+k+'/'+t+'…'; });
+        spStatus.textContent=sp.totaal+' SharePoint-versies bekeken'+(sp.nietLeesbaar?', '+sp.nietLeesbaar+' niet leesbaar':'')+(sp.zonder?', '+sp.zonder+' zonder deze offerte':'')+'.'; }
+      catch(e){ spStatus.textContent='⚠ SharePoint-versies niet beschikbaar: '+(e.message||e); laad.disabled=false; }
+      spBezig=false; teken();
+    });
+    laad.classList.add('calc-versies-laad');
+    const sluit=knop('Sluiten',()=>{ dlg.close(); });
+    voet.append(laad,spStatus,sluit);
+    dlg.addEventListener('close',()=>dlg.remove());
+    document.body.appendChild(dlg); teken(); dlg.showModal();
+  }
+  window.calcVersies=calcVersies;
 
   // ---- bewaren tijdens het typen: alleen geheugen + localStorage (geen SharePoint, geen hertekening) ----
   const _typT={};
@@ -18042,10 +18321,11 @@ function activiteitOpen(force){
       if(_calcSync){
         _calcSync.laad(localStorage.getItem(SYNC_KEY));
         if(typeof _SP!=='undefined'&&typeof _SP.read==='function'){
-          try{ const sd=await Promise.race([_SP.read(SP.def),new Promise((_,nee)=>setTimeout(()=>nee(new Error('time-out')),CALC_TIMEOUT))]);
-            if(sd){CALC.defaults=mergeDefaults(sd); lsSave(LS.def,CALC.defaults);} }
-          catch(e){ console.warn('standaardwaarden ophalen van SharePoint mislukt:',e); }
-        }
+          let sd=null;
+          try{ sd=await Promise.race([_SP.read(SP.def),new Promise((_,nee)=>setTimeout(()=>nee(new Error('time-out')),CALC_TIMEOUT))]); }
+          catch(e){ console.warn('standaardwaarden ophalen van SharePoint mislukt:',e); sd=null; }
+          _defHydrate(sd);
+        } else _defHydrate(null);
         // Vers lezen → samenvoegen met wat hier staat → zo nodig schrijven. Mislukt het lezen, dan staat de
         // calculatie op "alleen op deze pc" (vaste balk) en gaat er niets naar SharePoint tot een lezing lukt.
         const r=await _calcSync.schrijf();
@@ -18058,7 +18338,7 @@ function activiteitOpen(force){
       if(typeof _SP!=='undefined'&&typeof _SP.read==='function'){
         try{
           const [sd,so]=await Promise.all([_SP.read(SP.def),_SP.read(SP.off)]);
-          if(sd){CALC.defaults=mergeDefaults(sd); lsSave(LS.def,CALC.defaults);}
+          _defHydrate(sd);
           if(so&&so.offertes){
             // Samenvoegen, niet overschrijven. Hiervóór won de SharePoint-versie
             // altijd — waardoor de ene PC het werk van de andere kon wissen.
@@ -18081,8 +18361,119 @@ function activiteitOpen(force){
     if(d&&d.materiaal_marge!=null&&d.materiaal_marge!=='') out.materiaal_marge=d.materiaal_marge;
     if(d&&d.marge_ondergrens!=null&&d.marge_ondergrens!=='') out.marge_ondergrens=d.marge_ondergrens;
     if(d&&Array.isArray(d.uren)&&d.uren.length) out.uren=d.uren.map(u=>({omschrijving:u.omschrijving||'',uurtarief:u.uurtarief,marge:u.marge}));
+    if(d&&typeof d._gewijzigd==='string'&&d._gewijzigd) out._gewijzigd=d._gewijzigd;   // stempel van "Opslaan als standaard" (samenvoeger)
     return out;
   }
+
+  // ---- standaardwaarden: geen stil verlies, samenvoegen met SharePoint, eerlijke status ----
+  // Wijzigingen in het paneel staan meteen als concept in deze browser (DEF_CONCEPT) en komen na herladen terug met een
+  // melding; pas "Opslaan als standaard" zet ze in de echte standaardwaarden en schrijft ze (stempel, ETag-veilige samenvoeger
+  // _SP.mergers.mt_calc_defaults) naar SharePoint. Is dat niet gelukt, dan staat DEF_VUIL aan en probeert de tool het opnieuw.
+  const DEF_CONCEPT='mt_calc_defaults_concept', DEF_VUIL='mt_calc_defaults_vuil', DEF_CONFLICT='mt_calc_defaults_conflict';
+  let _defStaat={t:'schoon'};            // schoon | open | bezig | ok | fout
+  const _defInhoud=d=>{ const m=mergeDefaults(d); return JSON.stringify([m.materiaal_marge,m.marge_ondergrens,m.uren.map(u=>[u.omschrijving,u.uurtarief,u.marge])]); };
+  const _defTijd=()=>new Date().toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'});
+  function _defLsLees(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+  function _defLsZet(k,v){ try{ localStorage.setItem(k,v); return true; }catch(e){ return false; } }
+  function _defLsWis(k){ try{ localStorage.removeItem(k); }catch(e){} }
+  function _defStatusTekst(){
+    const s=_defStaat;
+    if(s.t==='open') return {tekst:'● Wijzigingen nog niet opgeslagen — klik op "Opslaan als standaard"',kleur:'var(--gold)'};
+    if(s.t==='bezig') return {tekst:'Opslaan…',kleur:'var(--text-dim)'};
+    if(s.t==='ok') return {tekst:'✓ Opgeslagen als standaard'+(s.tijd?' '+s.tijd:''),kleur:'var(--green)'};
+    if(s.t==='fout') return {tekst:'⚠ Staat veilig op deze pc, maar nog niet op SharePoint: '+(s.reden||'onbekende fout')+'. De tool probeert het elke minuut opnieuw.',kleur:'#c0392b'};
+    return {tekst:'',kleur:'var(--text-dim)'};
+  }
+  function _defStatusZet(s){
+    _defStaat=s; const t=_defStatusTekst();
+    document.querySelectorAll('.calc-defstatus').forEach(el=>{ el.textContent=t.tekst; el.style.color=t.kleur; });
+  }
+  function _defConceptBewaar(){
+    const ok=_defLsZet(DEF_CONCEPT,JSON.stringify({tijd:new Date().toISOString(),defaults:CALC.defaults}));
+    if(!ok) calcStatus('⚠ Je wijzigingen aan de standaardwaarden konden niet in deze browser bewaard worden (opslag vol of geblokkeerd). Klik direct op "Opslaan als standaard".','fout');
+    _defStatusZet({t:'open'});
+  }
+  // Na (her)laden: niet-opgeslagen wijzigingen uit een vorige sessie terugzetten in het paneel, met een melding.
+  function _defConceptHerstel(){
+    let c=null; try{ c=JSON.parse(_defLsLees(DEF_CONCEPT)||'null'); }catch(e){}
+    if(!c||!c.defaults) return;
+    const cd=mergeDefaults(c.defaults);
+    if(_defInhoud(cd)===_defInhoud(CALC.defaults)){ _defLsWis(DEF_CONCEPT); return; }
+    CALC.defaults=cd; _defStatusZet({t:'open'});
+    calcStatus('⚠ Je niet-opgeslagen wijzigingen aan de standaardwaarden zijn hersteld. Klik bij "Standaardwaarden" op "Opslaan als standaard" om ze te bewaren.','fout');
+  }
+  // Samengevoegd resultaat (van SharePoint of na een 412) overnemen — behalve als je zelf net iets aan het wijzigen bent.
+  function _defToepassen(samen){
+    if(!samen||_defStaat.t==='open') return;
+    const nieuw=mergeDefaults(samen);
+    if(_defInhoud(nieuw)===_defInhoud(CALC.defaults)) { if(nieuw._gewijzigd) CALC.defaults._gewijzigd=nieuw._gewijzigd; return; }
+    CALC.defaults=nieuw;
+    [..._calcOpen].forEach(k=>{ const host=document.getElementById('offerte-calc-'+cid(k)); if(!host) return; if(calcFocusBinnen(host)) _calcLaterTekenen.add(k); else _calcHerteken(k); });
+  }
+  window._calcDefToepassen=_defToepassen;
+  // De verliezer van een samenvoeging bewaren en melden: alleen als dat ertoe doet (jouw opslag ging voor, of jouw
+  // niet-gedeelde opslag moest wijken). Een verouderde, nooit gewijzigde kopie in deze browser is geen verlies.
+  window._calcDefVerlies=function(verlies,win,lokaalWint){
+    const vuil=!!_defLsLees(DEF_VUIL);
+    if(!lokaalWint&&!vuil) return;
+    try{ const lijst=JSON.parse(_defLsLees(DEF_CONFLICT)||'[]'); lijst.unshift({tijd:new Date().toISOString(),bron:lokaalWint?'sharepoint':'deze pc',defaults:verlies});
+      _defLsZet(DEF_CONFLICT,JSON.stringify(lijst.slice(0,5))); }catch(e){}
+    calcStatus(lokaalWint
+      ? '⚠ De standaardwaarden waren intussen ook elders gewijzigd. Jouw versie is opgeslagen; de andere versie is bewaard (bij Standaardwaarden: "Bekijk").'
+      : '⚠ De standaardwaarden zijn elders gewijzigd. Die versie is overgenomen; jouw eigen versie is bewaard (bij Standaardwaarden: "Bekijk").','fout');
+  };
+  // Na het tekenen van de calculatie: de melding "andere versie bewaard" in de lege plek van het paneel zetten (DOM, geen HTML-tekst).
+  function _defConflictTeken(host,key){
+    const plek=host&&host.querySelector('.calc-defconflict'); if(!plek) return;
+    let l=[]; try{ l=JSON.parse(_defLsLees(DEF_CONFLICT)||'[]'); }catch(e){}
+    plek.textContent=''; if(!Array.isArray(l)||!l.length) return;
+    plek.style.cssText='margin:0.4rem 0;padding:6px 10px;border:1px dashed var(--gold);border-radius:6px;font-size:12px';
+    plek.appendChild(document.createTextNode('⚠ Er is een andere versie van de standaardwaarden bewaard ('+l.length+'). '));
+    const b=document.createElement('button'); b.type='button'; b.className='btn btn-xs btn-secondary'; b.textContent='Bekijk';
+    b.addEventListener('click',()=>window.calcDefConflictBekijk(key)); plek.appendChild(b);
+  }
+  window.calcDefConflictBekijk=async function(key){
+    let l=[]; try{ l=JSON.parse(_defLsLees(DEF_CONFLICT)||'[]'); }catch(e){}
+    const c=Array.isArray(l)&&l[0]; if(!c||!c.defaults){ _defLsWis(DEF_CONFLICT); renderOfferteCalc(key); return; }
+    const d=mergeDefaults(c.defaults);
+    const tekst='Bewaard op '+new Date(c.tijd).toLocaleString('nl-NL')+' ('+(c.bron==='sharepoint'?'de versie van SharePoint':'jouw eigen versie')+'):\n\n'
+      +'Materiaal-marge ×'+inval(d.materiaal_marge)+'\n'+d.uren.map(u=>'• '+(u.omschrijving||'(zonder naam)')+': € '+inval(u.uurtarief)+', marge ×'+inval(u.marge)).join('\n');
+    const k=await mtDialog.choose({title:'Andere versie van de standaardwaarden',message:tekst,
+      choices:[{label:'Deze versie overnemen',sublabel:'Je huidige waarden gaan eerst zelf in de bewaarde versies; daarna klik je op "Opslaan als standaard".'},
+               {label:'Gezien — deze versie niet meer tonen'}]});
+    if(k===0){
+      const nu=mergeDefaults(CALC.defaults); nu._gewijzigd=undefined;
+      l.splice(0,1,{tijd:new Date().toISOString(),bron:'deze pc',defaults:nu});
+      _defLsZet(DEF_CONFLICT,JSON.stringify(l.slice(0,5)));
+      CALC.defaults=d; _defConceptBewaar(); renderOfferteCalc(key);
+    } else if(k===1){ l.shift(); if(l.length) _defLsZet(DEF_CONFLICT,JSON.stringify(l)); else _defLsWis(DEF_CONFLICT); renderOfferteCalc(key); }
+  };
+  // Na het lezen van SharePoint: samenvoegen met wat hier staat, concept terugzetten, en een eerder mislukte opslag opnieuw proberen.
+  function _defHydrate(sd){
+    if(sd){
+      let samen=sd;
+      try{ const lok=_defLsLees(LS.def); if(lok&&_SP.mergers&&_SP.mergers.mt_calc_defaults) samen=_SP.mergers.mt_calc_defaults(lok,sd)||sd; }
+      catch(e){ console.warn('standaardwaarden samenvoegen mislukt:',e); }
+      CALC.defaults=mergeDefaults(samen); lsSave(LS.def,CALC.defaults);
+    }
+    _defConceptHerstel();
+    _defOpnieuw();
+  }
+  function _defOpnieuw(){ if(_defLsLees(DEF_VUIL)&&_defStaat.t!=='bezig'&&_defStaat.t!=='open') _defSchrijf(null); }
+  async function _defSchrijf(key){
+    _defStatusZet({t:'bezig'});
+    let r; try{ r=await syncNu('def'); }catch(e){ r={ok:false,reden:e.message||String(e)}; }
+    if(r.ok){
+      _defLsWis(DEF_VUIL); _defLsWis(DEF_CONCEPT);
+      _defStatusZet({t:'ok',tijd:_defTijd()});
+      calcStatus('✓ Opgeslagen als standaard '+_defTijd()+' — nieuwe offertes starten hiermee','ok',key||undefined);
+    } else {
+      _defStatusZet({t:'fout',reden:r.reden});
+      calcStatus('⚠ Staat veilig op deze pc, maar niet op SharePoint: '+(r.reden||'onbekende fout')+'. De tool probeert het elke minuut opnieuw.','fout',key||undefined);
+    }
+    return r;
+  }
+  setInterval(()=>{ if(CALC.loaded) _defOpnieuw(); },60000);
 
   // ---- model ----------------------------------------------------------------
   function defMateriaalRows(){
@@ -18232,10 +18623,11 @@ function activiteitOpen(force){
   // Vectorworks/interiorcad materiaallijst → tabelregels voor-invullen + echte inkoop opzoeken.
   // Plak-import (geen vaste bestandslocatie): één regel per materiaal, "omschrijving" of
   // "omschrijving <tab/;/,> aantal". Per regel proberen we de echte voorraadprijs te vinden.
-  window.calcImportVW=function(key){
-    const o=getOfferte(key);
-    const raw=prompt('Plak hier de Vectorworks/interiorcad materiaallijst.\n\nEén regel per materiaal — "omschrijving" of "omschrijving <tab/;/,> aantal".\nIk vul de regels in en zoek meteen je echte inkoopprijs uit voorraad/facturen.');
+  window.calcImportVW=async function(key){
+    const raw=await mtDialog.prompt({title:'VW-lijst importeren',multiline:true,okLabel:'Importeren',
+      message:'Plak hier de Vectorworks/interiorcad materiaallijst.\n\nEén regel per materiaal — "omschrijving" of "omschrijving <tab/;/,> aantal".\nIk vul de regels in en zoek meteen je echte inkoopprijs uit voorraad/facturen.'});
     if(raw===null) return;
+    const o=getOfferte(key);   // pas na de dialoog: een samenvoeging van elders kan het object intussen vervangen hebben
     const lines=raw.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
     if(!lines.length){ flash(key,'geen regels geplakt'); return; }
     let added=0, prijsHits=0;
@@ -18624,6 +19016,7 @@ function activiteitOpen(force){
     let regels=getweakt
       ? _normRegels(o._mbPreview.regels.map(l=>({description:l.description,price:l.price})),total)
       : _normRegels(lijnen.map(l=>({description:l.description,price:l.price})),total);
+    let larryOk=false;
     if(typeof claudeCall==='function'){
       const wat=((o.meta&&o.meta.offerte_tekst)||'').trim();
       const matLijst=o.materiaal.filter(m=>(m.omschrijving||'').trim()).map(m=>'- '+m.omschrijving+(m.aantal?(' ×'+m.aantal):'')).join('\n');
@@ -18640,13 +19033,16 @@ function activiteitOpen(force){
         +(instructie?('\n\nAanpassing gevraagd door Bart: '+instructie):'')
         +'\n\nGeef de verbeterde JSON.';
       try{
-        const r=await claudeCall([{role:'user',content:sys+'\n\n'+usr}],1500);
-        const txt=(r&&r.content&&r.content[0]&&r.content[0].text)||'';
+        const r=await claudeCall([{role:'user',content:usr}],1500,{system:sys});
+        const txt=MTVerbeter.tekst(r);
         const m=txt.match(/\{[\s\S]*\}/);
-        if(m){ const j=JSON.parse(m[0]); if(j.tekst) tekst=String(j.tekst).trim(); if(Array.isArray(j.regels)&&j.regels.length) regels=_normRegels(j.regels,total); }
+        if(m){ const j=JSON.parse(m[0]); if(j.tekst) tekst=String(j.tekst).trim(); if(Array.isArray(j.regels)&&j.regels.length){ regels=_normRegels(j.regels,total); larryOk=true; } }
       }catch(e){ /* val stil terug op de deterministische regels */ }
     }
-    o._mbPreview={tekst,regels,total};
+    // Na het wachten het actuele object nemen: een samenvoeging van elders kan o intussen vervangen hebben.
+    // Lukte Larry niet en waren de regels al met de hand aangepast, dan blijft het handwerk (en dus zijn bescherming) staan.
+    const o2=getOfferte(key)||o, vorig=o2._mbPreview;
+    o2._mbPreview={tekst,regels,total,handwerk:(!larryOk&&!!(vorig&&vorig.handwerk))};
     saveCalc('off',{key:key});
   }
   // delta/som-regel onderaan de preview (los renderbaar zodat typen niet de focus steelt)
@@ -18666,10 +19062,62 @@ function activiteitOpen(force){
     const se=document.getElementById('calc-prevsom-'+c); if(se) se.textContent=eur(som);
     const de=document.getElementById('calc-prevdelta-'+c); if(de) de.innerHTML=_prevDeltaHtml(key);
   }
+  // ── handwerk in de preview beschermen ───────────────────────────────────────────────────────────────
+  // Een met de hand aangepaste preview (p.handwerk) gaat nooit stil weg: elke actie die hem vervangt (opnieuw genereren,
+  // Sluiten) vraagt eerst; de aanpassingen staan daarnaast als concept in deze browser (mt_calc_prevconcept_<offerte>), zodat
+  // ook herladen of een gesloten preview ze terugbrengt. 'loading' is alleen echt als dít tabblad hem zelf zette (laadPagina):
+  // na herladen midden in een actie blijft er anders eeuwig een wachtscherm staan en kun je niets meer.
+  const PREV_LS='mt_calc_prevconcept_';
+  const _PREV_PAGINA=Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+  function _prevLaad(key,tekst){ const o=getOfferte(key); o._mbPreview=Object.assign(o._mbPreview||{},{loading:tekst,laadPagina:_PREV_PAGINA}); }
+  function _prevLaadt(key){ const p=(getOfferte(key)||{})._mbPreview; return !!(p&&p.loading&&p.laadPagina===_PREV_PAGINA); }
+  function _prevConceptBewaar(key){
+    try{ const p=(getOfferte(key)||{})._mbPreview;
+      if(p&&p.handwerk&&Array.isArray(p.regels)&&p.regels.length) localStorage.setItem(PREV_LS+basisKey(key),JSON.stringify({tijd:new Date().toISOString(),tekst:p.tekst||'',regels:p.regels,total:p.total||0}));
+    }catch(e){ console.warn('preview-concept bewaren mislukt:',e); }
+  }
+  function _prevConceptLees(key){ try{ const r=JSON.parse(localStorage.getItem(PREV_LS+basisKey(key))||'null'); return (r&&Array.isArray(r.regels)&&r.regels.length)?r:null; }catch(e){ return null; } }
+  function _prevConceptWis(key){ try{ localStorage.removeItem(PREV_LS+basisKey(key)); }catch(e){} }
+  // Handwerk bewaard + gevraagd vóór iets het vervangt. true = doorgaan, false = niets doen.
+  async function _prevBehoud(key,actie){
+    const p=(getOfferte(key)||{})._mbPreview;
+    if(!(p&&p.handwerk&&Array.isArray(p.regels)&&p.regels.length)) return true;
+    _prevConceptBewaar(key);
+    const k=await mtDialog.choose({title:'Je aanpassingen gaan verloren',
+      message:'Je hebt de preview met de hand aangepast. '+actie+' vervangt die aanpassingen.\n\nWat wil je doen?',
+      choices:[{label:'Mijn aanpassingen behouden',sublabel:'Er verandert niets.'},
+               {label:actie+' (mijn aanpassingen vervallen)',sublabel:'Een kopie blijft in deze browser bewaard; daarna kun je ze met "Eerdere aanpassingen terugzetten" terughalen.'}]});
+    return k===1;
+  }
+  window.calcPreviewHerstelConcept=function(key){
+    const c=_prevConceptLees(key); if(!c) return;
+    const o=getOfferte(key); o._mbPreview={tekst:c.tekst||'',regels:c.regels,total:c.total||0,handwerk:true};
+    saveCalc('off',{key:key}); _renderMbPrev(key);
+  };
+  window.calcPreviewWisConcept=async function(key){
+    if(!await mtDialog.confirm({title:'Eerdere aanpassingen weggooien',message:'De bewaarde kopie van je aanpassingen aan de preview wordt verwijderd. Dit kan niet ongedaan worden gemaakt.',okLabel:'Weggooien',danger:true})) return;
+    _prevConceptWis(key); _renderMbPrev(key);
+  };
+  function _prevHerstelBalk(key,p){
+    if(p&&p.handwerk) return '';
+    const c=_prevConceptLees(key); if(!c) return '';
+    const tijd=c.tijd?new Date(c.tijd).toLocaleString('nl-NL',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'';
+    return '<div class="calc-mbprev-herstel" style="margin:6px 0;padding:6px 10px;border:1px dashed var(--gold);border-radius:6px;font-size:12px">Je eerdere aanpassingen aan de preview staan nog bewaard'+(tijd?' ('+esc(tijd)+')':'')+'. '
+      +'<button class="btn btn-xs btn-secondary" onclick="calcPreviewHerstelConcept('+jsArg(key)+')">Eerdere aanpassingen terugzetten</button> '
+      +'<button class="btn btn-xs btn-secondary" onclick="calcPreviewWisConcept('+jsArg(key)+')">Weggooien</button></div>';
+  }
+  const _PREV_ONDERBROKEN='<div style="margin:4px 0;padding:6px 10px;background:var(--gold-50,#FBF5E0);border-radius:6px;font-size:12px">⚠ Een vorige actie is onderbroken (de pagina werd herladen). Je preview staat hieronder nog zoals hij was. Zette je hem net door naar Moneybird? Kijk dan eerst in Moneybird of er al een concept staat.</div>';
   function _mbPreviewHtml(key){
+    const p=(getOfferte(key)||{})._mbPreview;
+    const bar=_prevHerstelBalk(key,p);
+    if(!p) return bar;
+    if(p.loading&&p.laadPagina===_PREV_PAGINA) return bar+_mbPreviewKern(key);
+    if(!(Array.isArray(p.regels)&&p.regels.length)&&!p.tekst) return bar;   // alleen een onderbroken wachtscherm: niets te tonen
+    return bar+(p.loading?_PREV_ONDERBROKEN:'')+_mbPreviewKern(key);
+  }
+  function _mbPreviewKern(key){
     const c=cid(key); const o=getOfferte(key); const p=o._mbPreview;
-    if(!p) return '';
-    if(p.loading) return '<div class="calc-mbprev"><div class="calc-mbprev-h">📄 Offerte-preview</div><div style="padding:10px;color:var(--text-dim)">⏳ '+esc(p.loading)+'</div></div>';
+    if(p.loading&&p.laadPagina===_PREV_PAGINA) return '<div class="calc-mbprev"><div class="calc-mbprev-h">📄 Offerte-preview</div><div style="padding:10px;color:var(--text-dim)">⏳ '+esc(p.loading)+'</div></div>';
     const regels=p.regels||[];
     const regelsH=regels.map((r,i)=>'<tr>'
       +'<td><input class="calc-inp calc-prev-desc" value="'+esc(r.description)+'" onchange="calcPrevSetRegel('+jsArg(key)+','+i+',\'description\',this.value)"></td>'
@@ -18699,25 +19147,26 @@ function activiteitOpen(force){
   }
   function _renderMbPrev(key){ const el=document.getElementById('calc-mbprev-'+cid(key)); if(el) el.innerHTML=_mbPreviewHtml(key); }
   // ── preview tweaken (regels/tekst handmatig bijschaven vóór Moneybird) ──────
-  window.calcPrevSetTekst=function(key,val){ const o=getOfferte(key); if(o._mbPreview){ o._mbPreview.tekst=val; saveCalc('off',{key:key}); } };
+  // Elke handmatige aanpassing zet p.handwerk en bewaart meteen een lokaal concept (zie _prevBehoud).
+  window.calcPrevSetTekst=function(key,val){ const o=getOfferte(key); if(o._mbPreview){ o._mbPreview.tekst=val; o._mbPreview.handwerk=true; saveCalc('off',{key:key}); _prevConceptBewaar(key); } };
   window.calcPrevSetRegel=function(key,idx,field,val){
     const o=getOfferte(key); const p=o._mbPreview; if(!p||!p.regels||!p.regels[idx]) return;
     if(field==='price'){ const g=getalInvoer(val); if(!g.ok){ calcStatus('⚠ '+g.melding,'fout',key); _renderMbPrev(key); return; } const x=n(val); p.regels[idx].price=(x==null?0:Math.max(0,x)); } else { p.regels[idx].description=val; }
-    saveCalc('off',{key:key}); _prevSumUpdate(key);
+    p.handwerk=true; saveCalc('off',{key:key}); _prevConceptBewaar(key); _prevSumUpdate(key);
   };
   window.calcPrevDelRegel=function(key,idx){
     const o=getOfferte(key); const p=o._mbPreview; if(!p||!p.regels) return;
     p.regels.splice(idx,1);
     if(!p.regels.length) p.regels.push({description:'Maatwerk conform offerte',price:Math.round((p.total||0)*100)/100});
-    saveCalc('off',{key:key}); _renderMbPrev(key);
+    p.handwerk=true; saveCalc('off',{key:key}); _prevConceptBewaar(key); _renderMbPrev(key);
   };
   window.calcPrevAddRegel=function(key){
     const o=getOfferte(key); const p=o._mbPreview; if(!p) return; p.regels=p.regels||[];
-    p.regels.push({description:'',price:0}); saveCalc('off',{key:key}); _renderMbPrev(key);
+    p.regels.push({description:'',price:0}); p.handwerk=true; saveCalc('off',{key:key}); _prevConceptBewaar(key); _renderMbPrev(key);
   };
   window.calcPrevHerschaal=function(key){
     const o=getOfferte(key); const p=o._mbPreview; if(!p||!p.regels||!p.regels.length) return;
-    p.regels=_normRegels(p.regels,p.total||0); saveCalc('off',{key:key}); _renderMbPrev(key);
+    p.regels=_normRegels(p.regels,p.total||0); p.handwerk=true; saveCalc('off',{key:key}); _prevConceptBewaar(key); _renderMbPrev(key);
   };
   // Knop "Offerte aanmaken in Moneybird" → bouwt EERST een preview die Bart kan bijsturen/hergenereren.
   window.calcMaakOfferteMB=async function(key){
@@ -18727,16 +19176,32 @@ function activiteitOpen(force){
     if(!ctx.mbId){ setSt('⚠ Geen Moneybird-klant gekoppeld. Koppel deze offerte aan een project mét klant (of maak eerst het project aan) — dan vul ik de klant automatisch in.',false); return; }
     const {total}=_offRegels(o);
     if(total<=0){ setSt('⚠ Niets om te offreren — vul eerst materiaal/uren in.',false); return; }
-    o._mbPreview={loading:'Larry stelt nette offerteregels op…'}; saveCalc('off',{key:key}); _renderMbPrev(key);
+    if(_prevLaadt(key)) return;   // er loopt al een generatie in dit tabblad
+    // Staat er al een preview met handwerk (tweede klik op "Preview voor Moneybird"), dan eerst vragen: nooit stil overschrijven.
+    if(!await _prevBehoud(key,'Opnieuw genereren')) return;
+    delete getOfferte(key)._mbPreview;   // een nieuwe preview bouwt altijd op uit de calculatie (zoals voorheen)
+    _prevLaad(key,'Larry stelt nette offerteregels op…');
+    saveCalc('off',{key:key}); _renderMbPrev(key);
     await _calcGenPreview(key); _renderMbPrev(key);
   };
-  window.calcPreviewRegen=async function(key){ const o=getOfferte(key); if(o._mbPreview){ o._mbPreview.loading='Hergenereren op basis van je aanpassingen…'; } else { o._mbPreview={loading:'Genereren…'}; } saveCalc('off',{key:key}); _renderMbPrev(key); await _calcGenPreview(key); _renderMbPrev(key); };
+  window.calcPreviewRegen=async function(key){
+    if(_prevLaadt(key)) return;
+    if(!await _prevBehoud(key,'Opnieuw genereren')) return;
+    const o=getOfferte(key); const hw=!!(o._mbPreview&&o._mbPreview.handwerk);
+    _prevLaad(key,o._mbPreview&&o._mbPreview.regels?'Hergenereren op basis van je aanpassingen…':'Genereren…');
+    if(hw){ const p=getOfferte(key)._mbPreview; delete p.regels; delete p.tekst; p.handwerk=false; }   // bewust weggegooid (bevestigd; kopie staat lokaal)
+    saveCalc('off',{key:key}); _renderMbPrev(key); await _calcGenPreview(key); _renderMbPrev(key);
+  };
   window.calcPreviewChat=async function(key){
-    const inp=document.getElementById('calc-prevchat-'+cid(key)); const instr=inp?inp.value.trim():''; if(!instr) return;
-    const o=getOfferte(key); o._mbPreview=Object.assign({},o._mbPreview||{},{loading:'Aanpassen: '+instr}); saveCalc('off',{key:key}); _renderMbPrev(key);
+    const inp=document.getElementById('calc-prevchat-'+cid(key)); const instr=inp?inp.value.trim():''; if(!instr||_prevLaadt(key)) return;
+    _prevConceptBewaar(key);   // Larry herschrijft de regels: je handwerk blijft als kopie terug te zetten
+    _prevLaad(key,'Aanpassen: '+instr); saveCalc('off',{key:key}); _renderMbPrev(key);
     await _calcGenPreview(key,instr); _renderMbPrev(key);
   };
-  window.calcPreviewSluit=function(key){ const o=getOfferte(key); delete o._mbPreview; saveCalc('off',{key:key}); _renderMbPrev(key); };
+  window.calcPreviewSluit=async function(key){
+    if(!await _prevBehoud(key,'Sluiten')) return;
+    const o=getOfferte(key); delete o._mbPreview; saveCalc('off',{key:key}); _renderMbPrev(key);
+  };
   // De ENIGE outward-actie: pas hier gaat de offerte echt als concept naar Moneybird.
   // Record vóór een Moneybird-actie direct lokaal + op SharePoint ('in-behandeling'), max 5 s wachten.
   const _calcOpslaanNu=key=>()=>{ if(saveCalc('off',{key:key})===false) return false; return Promise.race([syncNu('off').catch(()=>null),new Promise(r=>setTimeout(r,5000))]).then(()=>true); };
@@ -18749,7 +19214,7 @@ function activiteitOpen(force){
     const bev=await mbBevestig({wat:'CONCEPT-offerte aanmaken',contact:ctx.klant||('Moneybird-contact '+ctx.mbId),ref:ctx.ref,bedrag:som,gevaar:!!(opts&&opts.opnieuw),
       extra:(opts&&opts.opnieuw?_mbOpnieuwTekst:'')+'De offerte komt als CONCEPT in Moneybird; je controleert en verstuurt hem zelf.'});
     if(!bev) return;
-    o._mbPreview.loading='Concept-offerte aanmaken in Moneybird…'; _renderMbPrev(key);
+    _prevLaad(key,'Concept-offerte aanmaken in Moneybird…'); _renderMbPrev(key);
     const details=[];
     if(p.tekst) details.push({description:p.tekst});                                  // begeleidende tekst als tekst-regel
     p.regels.forEach(r=>details.push({description:r.description,amount:'1 x',price:(+r.price).toFixed(2)}));
@@ -18759,7 +19224,7 @@ function activiteitOpen(force){
       if(res.controleren){ if(o._mbPreview)delete o._mbPreview.loading; _renderMbPrev(key); setSt(mbControleerHtml(res,'offerte',"calcPreviewDoorzetten('"+key+"',{opnieuw:true})"),false); return; }
       if(!res.ok) throw new Error(res.fout);
       const est=res.data;
-      o.mb_estimate_id=est.id; delete o._mbPreview; saveCalc('off',{key:key}); _renderMbPrev(key);
+      o.mb_estimate_id=est.id; delete o._mbPreview; _prevConceptWis(key); saveCalc('off',{key:key}); _renderMbPrev(key);
       const url='https://moneybird.com/'+getAdmin()+'/estimates/'+est.id;
       setSt('✓ Concept-offerte aangemaakt — <a href="'+url+'" target="_blank" style="color:var(--gold)">open in Moneybird ↗</a>',true);
       window.open(url,'_blank');
@@ -18775,7 +19240,7 @@ function activiteitOpen(force){
     const bev=await mbBevestig({wat:'CONCEPT-verkoopfactuur aanmaken (slaat de offerte-stap over)',contact:ctx.klant||('Moneybird-contact '+ctx.mbId),ref:ctx.ref,bedrag:som,gevaar:!!(opts&&opts.opnieuw),
       extra:(opts&&opts.opnieuw?_mbOpnieuwTekst:'')+'De factuur komt als CONCEPT in Moneybird; je controleert en verstuurt hem zelf.'});
     if(!bev) return;
-    o._mbPreview.loading='Concept-factuur aanmaken in Moneybird…'; _renderMbPrev(key);
+    _prevLaad(key,'Concept-factuur aanmaken in Moneybird…'); _renderMbPrev(key);
     const details=[];
     if(p.tekst) details.push({description:p.tekst});
     p.regels.forEach(r=>details.push({description:r.description,amount:'1 x',price:(+r.price).toFixed(2)}));
@@ -18785,7 +19250,7 @@ function activiteitOpen(force){
       if(res.controleren){ if(o._mbPreview)delete o._mbPreview.loading; _renderMbPrev(key); setSt(mbControleerHtml(res,'factuur',"calcPreviewNaarFactuur('"+key+"',{opnieuw:true})"),false); return; }
       if(!res.ok) throw new Error(res.fout);
       const inv=res.data;
-      o.mb_invoice_id=inv.id; delete o._mbPreview; saveCalc('off',{key:key}); _renderMbPrev(key);
+      o.mb_invoice_id=inv.id; delete o._mbPreview; _prevConceptWis(key); saveCalc('off',{key:key}); _renderMbPrev(key);
       const url='https://moneybird.com/'+getAdmin()+'/sales_invoices/'+inv.id;
       setSt('✓ Concept-factuur aangemaakt — <a href="'+url+'" target="_blank" style="color:var(--gold)">open in Moneybird ↗</a>',true);
       window.open(url,'_blank');
@@ -19066,14 +19531,25 @@ function activiteitOpen(force){
   window.calcDelUur=function(key,rid){const o=getOfferte(key);o.uren=o.uren.filter(u=>u.id!==rid);saveCalc('off',{key:key});renderOfferteCalc(key);};
 
   // standaardwaarden (leeg rekenblad)
-  window.calcSetDefMarge=function(val){const g=getalInvoer(val);if(!g.ok){calcStatus('⚠ '+g.melding,'fout');return;}CALC.defaults.materiaal_marge=(n(val)==null?1.5:n(val));};
-  window.calcSetDefMargeOndergrens=function(val){const g=getalInvoer(val);if(!g.ok){calcStatus('⚠ '+g.melding,'fout');return;}const x=n(val);CALC.defaults.marge_ondergrens=(x==null?0.15:(x>1?x/100:x));};
+  window.calcSetDefMarge=function(val){const g=getalInvoer(val);if(!g.ok){calcStatus('⚠ '+g.melding,'fout');return;}CALC.defaults.materiaal_marge=(n(val)==null?1.5:n(val));_defConceptBewaar();};
+  window.calcSetDefMargeOndergrens=function(val){const g=getalInvoer(val);if(!g.ok){calcStatus('⚠ '+g.melding,'fout');return;}const x=n(val);CALC.defaults.marge_ondergrens=(x==null?0.15:(x>1?x/100:x));_defConceptBewaar();};
   // Instellingen ▸ Uurtarieven: standaardregels op het standaardtarief zetten (alleen na bevestiging daar).
-  window.calcStdTarievenGelijk=async function(std){ if(!(window.MTRol&&MTRol.magGeld&&MTRol.me&&MTRol.magGeld('wijzigen'))) throw new Error('Je mag de uurtarieven niet wijzigen'); await hydrateCalc(); const n=MTPlanning.defaultsGelijkTrekken(CALC.defaults,std); if(n) saveCalc('def',{direct:true}); return n; };
-  window.calcSetDefUur=function(idx,field,val){const u=CALC.defaults.uren[idx];if(!u)return;if(field!=='omschrijving'){const g=getalInvoer(val);if(!g.ok){calcStatus('⚠ '+g.melding,'fout');return;}}u[field]=(field==='omschrijving')?val:(n(val)==null?'':n(val));};
-  window.calcAddDefUur=function(key){CALC.defaults.uren.push({omschrijving:'',uurtarief:stdTarief(),marge:2});renderOfferteCalc(key);};
-  window.calcDelDefUur=function(key,idx){CALC.defaults.uren.splice(idx,1);renderOfferteCalc(key);};
-  window.calcSaveDefaults=function(key){saveCalc('def');flash(key,'✓ opgeslagen als standaard — nieuwe offertes starten hiermee',true);};
+  window.calcStdTarievenGelijk=async function(std){ if(!(window.MTRol&&MTRol.magGeld&&MTRol.me&&MTRol.magGeld('wijzigen'))) throw new Error('Je mag de uurtarieven niet wijzigen'); await hydrateCalc(); const n=MTPlanning.defaultsGelijkTrekken(CALC.defaults,std); if(n) await window.calcSaveDefaults(); return n; };
+  window.calcSetDefUur=function(idx,field,val){const u=CALC.defaults.uren[idx];if(!u)return;if(field!=='omschrijving'){const g=getalInvoer(val);if(!g.ok){calcStatus('⚠ '+g.melding,'fout');return;}}u[field]=(field==='omschrijving')?val:(n(val)==null?'':n(val));_defConceptBewaar();};
+  window.calcAddDefUur=function(key){CALC.defaults.uren.push({omschrijving:'',uurtarief:stdTarief(),marge:2});_defConceptBewaar();renderOfferteCalc(key);};
+  window.calcDelDefUur=function(key,idx){CALC.defaults.uren.splice(idx,1);_defConceptBewaar();renderOfferteCalc(key);};
+  // Opslaan als standaard: stempel, lokaal, dan SharePoint (samenvoeger + ETag). De status zegt eerlijk wat er gebeurd is.
+  window.calcSaveDefaults=async function(key){
+    if(_defStaat.t==='bezig') return {ok:false,reden:'er loopt al een opslag'};
+    CALC.defaults._gewijzigd=new Date().toISOString();
+    if(!lsSave(LS.def,CALC.defaults)){
+      _defStatusZet({t:'open'});
+      calcStatus('⚠ Opslaan mislukt — browseropslag vol of geblokkeerd. Je wijzigingen staan nog in het scherm.','fout',key||undefined);
+      return {ok:false,reden:'browseropslag vol of geblokkeerd'};
+    }
+    _defLsZet(DEF_VUIL,'1');
+    return _defSchrijf(key);
+  };
 
   // ---- van project naar calculatie (K-2): zoeken zonder iets aan te maken -----------------------------
   // Een calculatie kan onder de projectcode staan, maar ook onder een losse sleutel (OFF-…, uit de Inbox of via "Koppel aan
@@ -19188,7 +19664,7 @@ function activiteitOpen(force){
   // Vanuit een geopende mail (inbox) → nieuwe offerte-calculatie met die mail als context.
   // Klant wordt voor-ingevuld als de mail al aan een project gekoppeld is (of registry-match).
   window.inboxMaakOfferte=async function(){
-    if(typeof _inbox==='undefined' || !_inbox.cur){ alert('Open eerst een mail.'); return; }
+    if(typeof _inbox==='undefined' || !_inbox.cur){ await mtDialog.alert({title:'Offerte maken',message:'Open eerst een mail.'}); return; }
     const m=_inbox.cur;
     await hydrateCalc();
     const key='OFF-'+Date.now().toString(36).toUpperCase();
@@ -19305,7 +19781,9 @@ function activiteitOpen(force){
       <div style="margin-top:0.5rem;display:flex;gap:0.5rem;align-items:center">
         <button class="btn btn-xs btn-secondary" onclick="calcAddDefUur(${jsArg(key)})">+ vaste regel</button>
         <button class="btn btn-xs btn-gold" onclick="calcSaveDefaults(${jsArg(key)})">Opslaan als standaard</button>
+        <span class="calc-defstatus" style="font-size:11px;color:${esc(_defStatusTekst().kleur)}">${esc(_defStatusTekst().tekst)}</span>
       </div>
+      <div class="calc-defconflict"></div>
       <p style="font-size:10px;color:var(--text-faint);margin:0.4rem 0 0">Nieuwe offertes starten met deze regels + ${esc(LEGE_MAT_REGELS)} lege materiaalregels. Bestaande offertes wijzigen niet.</p>
     </details>`;
   }
@@ -19708,6 +20186,7 @@ function activiteitOpen(force){
       ${kopHtml}
       ${summary}
       ${kpis}
+      <div id="calc-fact-${esc(c)}"></div>
       <div id="calc-vergeten-${esc(c)}">${vergetenPaneelHtml(key)}</div>
       ${matTabel}
       ${uurTabel}
@@ -19734,7 +20213,8 @@ function activiteitOpen(force){
       ${defaultsPaneel(key)}
       <p style="font-size:10px;color:var(--text-faint);margin:0.5rem 0 0">Inkoopprijzen/marges staan privé op SharePoint — nooit in de publieke repo. "🔍 prijs" zoekt eerst je <b>echte inkoop</b> in voorraad/facturen (Drimensa, Ostermann, …) en zet die als inkoopprijs. Lukt dat niet, dan toont het hooguit een <span style="color:var(--gold)">indicatieve VW-richtprijs</span> (⚠ géén echte inkoop) of meldt het dat je handmatig moet zoeken. Leveranciers hebben geen open prijs-API (onderzoek 28-6) — de factuur-historie is de bron.</p>
     </div>`;
-    _opslagTeken(key); _markeerGetallen(host);
+    _opslagTeken(key); _markeerGetallen(host); _defConflictTeken(host,key);
+    if(typeof geldFactuurBlokVul==='function') geldFactuurBlokVul(proj,'calc-fact-'+c);   // "Facturatie verwacht" (alleen met recht geld)
   };
   // Een regel die intussen elders is verwijderd terwijl jij erin werkte: terugzetten uit wat er op je scherm staat
   // (je invoer gaat dus niet verloren) en dat duidelijk melden. Lukt dat niet, dan in elk geval eerlijk melden.
@@ -19828,9 +20308,12 @@ function activiteitOpen(force){
 // → persisteer in mt_verbeterpunten.json via _SP-laag.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const VB_STATUS_LABEL = {nieuw:'Nieuw', opgepakt:'Opgepakt', afgerond:'Afgerond'};
-const VB_STATUS_KLEUR = {nieuw:'var(--gold)', opgepakt:'var(--green)', afgerond:'var(--text-faint)'};
+// Bouwwachtrij: fasen en statusmapping staan in mt-verbeter.js (nieuw = te beoordelen, opgepakt = goedgekeurd, afgerond = live).
+const VB_FASE_KLEUR = {'te-beoordelen':'var(--gold)', 'goedgekeurd':'var(--green)', 'in-bouw':'var(--green)', 'live':'var(--text-faint)', 'afgewezen':'var(--text-faint)'};
+const VB_BEVESTIGING = 'Vastgelegd. Bart beoordeelt het; je ziet de status hier terug.';
+const VB_SPAR_SYSTEEM = 'Je bent Larry, de bedrijfsassistent van Mortise & Tenon. Een teamlid wil een verbeterpunt indienen voor de interne cockpit-tool. Help het punt scherp en concreet te maken: stel maximaal 3 gerichte vragen (wat is de impact, hoe vaak speelt het, wat zou de ideale situatie zijn). Vat het daarna samen als "**Samenvatting:** probleem → voorgestelde verbetering → verwachte winst". Wees nuchter en meedenkend. Laat weten dat Bart het punt beoordeelt na het indienen; zeg niet dat het gebouwd of gepland wordt. Antwoord altijd in het Nederlands.';
 let _vbLijst = [];           // lokale cache van mt_verbeterpunten.json
+let _vbFeedback = [];        // lokale cache van mt_feedback.json (telefoon)
 let _vbChatGesprek = [];     // [{rol:'gebruiker'|'larry', tekst}]
 let _vbLarrySamenvatting = ''; // laatste tekst van Larry — kan worden overgenomen
 
@@ -19845,11 +20328,45 @@ function _vbIndiener() {
 
 // ── tab openen ──
 async function verbLaadTab() {
-  try {
-    const arr = await _SP.read('mt_verbeterpunten.json');
-    _vbLijst = Array.isArray(arr) ? arr : [];
-  } catch(e) { _vbLijst = []; }
+  try { _vbLijst = MTVerbeter.lijstUit(await _SP.read('mt_verbeterpunten.json')); } catch(e) { _vbLijst = []; }
+  try { _vbFeedback = MTVerbeter.lijstUit(await _SP.read('mt_feedback.json')); } catch(e) { _vbFeedback = []; }
   _vbRenderLijst();
+}
+
+// Status van de 5 meest recente punten uit de wachtrij, als stand voor Larry in dit tabblad (de status komt alleen uit het record).
+function vbStandTekst() {
+  try {
+    const rij = MTVerbeter.wachtrij(_vbLijst, _vbFeedback);
+    const alle = MTVerbeter.FASEN.flatMap(f => rij[f]).sort((a, b) => b.aangemaakt.localeCompare(a.aangemaakt));
+    return MTVerbeter.recordStand(alle);
+  } catch(e) { return ''; }
+}
+// Mag deze gebruiker de status wijzigen? Alleen eigenaar/beheer (rol 'lezen' en de rest niet).
+function vbMagBeheren() { try { return !!(window.MTRol && MTRol.isBeheer && MTRol.isBeheer()); } catch(e) { return false; } }
+
+// Eén record veilig wegschrijven: vers lezen → record vervangen of toevoegen (nieuwste `_gewijzigd` wint) → schrijven met ETag;
+// bij een 412 voegt _SP het opnieuw samen met mergers.mt_verbeterpunten / mt_feedback. Leest SharePoint niet, dan wordt er niets geschreven.
+// → { ok, lijst } of { ok:false, reden }
+async function vbSchrijfRecord(bestand, recOfFn) {
+  const sleutel = bestand.replace(/\.json$/, '');
+  let huidig;
+  try { const rauw = await _SP.read(bestand); if (!MTVerbeter.geldigeVorm(rauw)) return { ok: false, reden: 'het bestand op SharePoint heeft een onverwachte vorm; niets overschreven' }; huidig = MTVerbeter.lijstUit(rauw); } catch(e) { return { ok: false, reden: 'SharePoint is niet bereikbaar' }; }
+  const rec = typeof recOfFn === 'function' ? recOfFn(huidig) : recOfFn;   // functie: bouwt het record uit de verse lijst (null = niets schrijven)
+  if (!rec) return { ok: false, reden: 'niets te schrijven' };
+  const samen = MTVerbeter.samen([rec], huidig);
+  const ok = await _SP.write(bestand, samen, (remote, local) => MTVerbeter.geldigeVorm(remote) ? _SP.mergers[sleutel](typeof local === 'string' ? local : JSON.stringify(local), remote) : null);
+  return ok ? { ok: true, lijst: samen } : { ok: false, reden: 'het opslaan lukte niet' };
+}
+
+// Een nieuw punt in de wachtrij zetten (status: te beoordelen). Gedeeld door het formulier en "Leg vast voor Bart" in de ⓘ-chat.
+async function vbLegVast(p) {
+  const indiener = _vbIndiener();
+  const rec = {id: admId(), titel: p.titel, betreft: p.betreft, omschrijving: p.omschrijving, larry_samenvatting: p.larry_samenvatting || '',
+    indiener: indiener.email, indiener_naam: indiener.naam, status: 'nieuw', fase: 'te-beoordelen', historie: [], aangemaakt_op: new Date().toISOString(), _gewijzigd: Date.now()};
+  if (p.bron) rec.bron = p.bron;
+  const r = await vbSchrijfRecord('mt_verbeterpunten.json', rec);
+  if (r.ok) { _vbLijst = r.lijst; _vbRenderLijst(); try { if (window.track) track('feature', 'verbeterpunt_aangemaakt', {detail: p.betreft, ok: true}); } catch(e) {} }
+  return r;
 }
 
 // ── spar-chat starten ──
@@ -19864,13 +20381,12 @@ async function _vbSparMetLarry() {
 
   // Alleen een eerste Larry-opening insturen als het gesprek nog leeg is.
   if (_vbChatGesprek.length === 0) {
-    const sys = 'Je bent Larry, de bedrijfsassistent van Mortise & Tenon. Een teamlid wil een verbeterpunt indienen voor de interne cockpit-tool. Help het punt scherp en concreet te maken: stel maximaal 3 gerichte vragen (wat is de impact, hoe vaak speelt het, wat zou de ideale situatie zijn). Vat het daarna samen als "**Samenvatting:** probleem → voorgestelde verbetering → verwachte winst". Wees nuchter en meedenkend. Antwoord altijd in het Nederlands.';
     const start = 'Titel: ' + titel + '\nBetreft: ' + betreft + '\nOmschrijving: ' + (omschrijving || '(nog niet ingevuld)');
     _vbChatToon('gebruiker', titel + (omschrijving ? '\n' + omschrijving : ''));
     _vbChatToon('larry', '…', true);
     try {
-      const r = await claudeCall([{role: 'user', content: sys + '\n\n' + start}], 700);
-      const tekst = r && r.content && r.content[0] && r.content[0].text || '(geen antwoord)';
+      const r = await claudeCall([{role: 'user', content: start}], 700, {system: VB_SPAR_SYSTEEM, stand: vbStandTekst()});
+      const tekst = MTVerbeter.antwoord(r);
       _vbChatGesprek = [{rol: 'gebruiker', tekst: start}, {rol: 'larry', tekst}];
       _vbVervangLaatsteLarry(tekst);
       _vbExtractSamenvatting(tekst);
@@ -19892,8 +20408,8 @@ async function _vbChatStuur() {
   try {
     // Bouw het hele gesprek op als doorlopende tekst zodat het model context heeft.
     const conv = _vbChatGesprek.map(m => (m.rol === 'gebruiker' ? 'Teamlid' : 'Larry') + ': ' + m.tekst).join('\n\n');
-    const r = await claudeCall([{role: 'user', content: conv + '\n\nLarry:'}], 700);
-    const ant = r && r.content && r.content[0] && r.content[0].text || '(geen antwoord)';
+    const r = await claudeCall([{role: 'user', content: conv + '\n\nLarry:'}], 700, {system: VB_SPAR_SYSTEEM, stand: vbStandTekst()});
+    const ant = MTVerbeter.antwoord(r);
     _vbChatGesprek.push({rol: 'larry', tekst: ant});
     _vbVervangLaatsteLarry(ant);
     _vbExtractSamenvatting(ant);
@@ -19976,7 +20492,7 @@ async function _vbVerstuur() {
     '<p style="margin:0;line-height:1.6">' + esc(omschrijving || '(geen omschrijving)').replace(/\n/g, '<br>') + '</p>' +
     (heeftSam ? '<h3 style="margin-top:20px;margin-bottom:6px">Larry&#8217;s samenvatting</h3><p style="margin:0;line-height:1.6;font-style:italic">' + esc(_vbLarrySamenvatting).replace(/\n/g, '<br>') + '</p>' : '') +
     '<hr style="margin-top:24px;border:none;border-top:1px solid #ddd">' +
-    '<p style="margin-top:12px;font-size:12px;color:#888">Ingediend via de Verbeterpunten-tab in de M&amp;T-cockpit. Kan samen opgepakt worden.</p>' +
+    '<p style="margin-top:12px;font-size:12px;color:#888">Ingediend via de Verbeterpunten-tab in de M&amp;T-cockpit. Het punt staat daar in de bouwwachtrij (te beoordelen).</p>' +
     '</div>';
   try {
     const r = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
@@ -20004,21 +20520,14 @@ async function _vbVerstuur() {
     return;
   }
 
-  // SP persisteren — dedup op id, nieuwste bovenaan.
-  const aangemaakt_op = new Date().toISOString();
-  const id = admId();
-  let arr = [];
-  try { arr = await _SP.read('mt_verbeterpunten.json') || []; } catch(e) { arr = []; }
-  const record = {id, titel, betreft, omschrijving, larry_samenvatting: _vbLarrySamenvatting || '', indiener: indiener.email, indiener_naam: indiener.naam, status: 'nieuw', aangemaakt_op};
-  arr = arr.filter(x => x.id !== id);
-  arr.unshift(record);
-  _vbLijst = arr;
-  await _SP.write('mt_verbeterpunten.json', arr);
-
-  try { if (window.track) track('feature', 'verbeterpunt_aangemaakt', {detail: betreft, ok: true}); } catch(e) {}
+  // In de bouwwachtrij zetten (vers lezen, per id samenvoegen, ETag) — status: te beoordelen.
+  const opgeslagen = await vbLegVast({titel, betreft, omschrijving, larry_samenvatting: _vbLarrySamenvatting || ''});
   try { if (window.track) track('feature', 'verbeterpunt_gemaild', {detail: betreft, ok: true}); } catch(e) {}
-
-  planToast('✓ Verbeterpunt verstuurd naar Bart');
+  if (!opgeslagen.ok) {
+    await mtDialog.alert({title: 'Mail verstuurd, wachtrij niet bijgewerkt', message: 'De mail naar Bart is verstuurd, maar het punt kon niet in de wachtrij worden gezet (' + opgeslagen.reden + '). Probeer het later opnieuw en verstuur het dan niet nog een keer per mail; meld het aan Bart.'});
+    return;
+  }
+  await mtDialog.alert({title: 'Vastgelegd', message: VB_BEVESTIGING});
 
   // Formulier leegmaken en spar-paneel verbergen.
   document.getElementById('vb-titel').value = '';
@@ -20035,42 +20544,76 @@ async function _vbVerstuur() {
   _vbRenderLijst();
 }
 
-// ── status doorschakelen (nieuw → opgepakt → afgerond → nieuw) ──
-async function _vbStatusWijzig(id, huidig) {
-  const volgorde = ['nieuw', 'opgepakt', 'afgerond'];
-  const volgende = volgorde[(volgorde.indexOf(huidig) + 1) % volgorde.length];
-  let arr;
-  try { arr = await _SP.read('mt_verbeterpunten.json') || []; }
-  catch(e) { planToast('SharePoint niet bereikbaar'); return; }
-  arr = arr.map(x => x.id === id ? {...x, status: volgende} : x);
-  _vbLijst = arr;
-  await _SP.write('mt_verbeterpunten.json', arr);
+// ── status wijzigen (alleen eigenaar/beheer): kies de nieuwe fase, noteer wat er gedaan is, schrijf dat ene record veilig weg ──
+async function _vbStatusWijzig(id) {
+  if (!vbMagBeheren()) { planToast('Alleen Bart (beheer) kan de status wijzigen.'); return; }
+  const bron = _vbLijst.some(x => String(x.id) === String(id)) ? 'verbeterpunt' : 'feedback';   // feedback van de telefoon heeft eigen ids (fb-…)
+  const bestand = bron === 'feedback' ? 'mt_feedback.json' : 'mt_verbeterpunten.json';
+  const rec = (bron === 'feedback' ? _vbFeedback : _vbLijst).find(x => String(x.id) === String(id));
+  if (!rec) { planToast('Dit punt is niet meer te vinden — herlaad het tabblad'); return; }
+  const huidig = MTVerbeter.fase(rec);
+  const opties = MTVerbeter.FASEN.filter(f => f !== huidig);
+  const titel = bron === 'feedback' ? MTVerbeter.item(rec, 'feedback').titel : rec.titel;
+  const i = await mtDialog.choose({title: 'Status wijzigen', message: titel + '\nNu: ' + MTVerbeter.LABEL[huidig], choices: opties.map(f => ({label: MTVerbeter.LABEL[f]}))});
+  if (i == null) return;
+  const nieuweFase = opties[i];
+  const notitie = await mtDialog.prompt({title: MTVerbeter.LABEL[nieuweFase], message: nieuweFase === 'afgewezen' ? 'Waarom wordt dit afgewezen? De indiener ziet deze reden.' : 'Korte notitie: wat er gedaan is en in welke versie (de indiener ziet dit). Mag leeg.', multiline: true, okLabel: 'Opslaan'});
+  if (notitie == null) return;
+  if (nieuweFase === 'afgewezen' && !String(notitie).trim()) { planToast('Geef een reden voor het afwijzen'); return; }
+  const door = _vbIndiener().email;
+  let reden = '';
+  const r = await vbSchrijfRecord(bestand, vers => {
+    const nu = vers.find(x => String(x.id) === String(id));
+    if (!nu) { reden = 'het punt bestaat niet meer'; return null; }
+    const w = MTVerbeter.wijzig(nu, nieuweFase, {notitie, door});
+    if (!w.ok) { reden = w.reden; return null; }
+    return w.rec;
+  });
+  if (!r.ok) { planToast('⚠ Status niet gewijzigd: ' + (reden || r.reden)); return; }
+  if (bron === 'feedback') _vbFeedback = r.lijst; else _vbLijst = r.lijst;
   _vbRenderLijst();
+  planToast('✓ Status: ' + MTVerbeter.LABEL[nieuweFase]);
 }
 
-// ── lijst renderen ──
+// ── wachtrij renderen: per fase gegroepeerd, beide bronnen (cockpit + telefoon) ──
+function _vbItemHtml(x, mag) {
+  const p = Object.assign({}, x, {status: x.fase});   // data-huidig = de huidige fase
+  const kleur = VB_FASE_KLEUR[x.fase] || 'var(--text-faint)', label = MTVerbeter.LABEL[x.fase];
+  const datum = x.aangemaakt ? x.aangemaakt.replace('T', ' ').slice(0, 16) : '';
+  const hist = x.historie.map(h => '<div style="font-size:12px;margin-top:4px;padding-left:8px;border-left:2px solid ' + esc(VB_FASE_KLEUR[h.fase] || 'var(--border)') + '">' +
+    '<strong>' + esc(MTVerbeter.LABEL[h.fase] || h.fase) + '</strong> &middot; ' + esc(String(h.tijd || '').replace('T', ' ').slice(0, 16)) + (h.notitie ? ' &mdash; ' + esc(h.notitie).replace(/\n/g, '<br>') : '') + '</div>').join('');
+  return '<div style="padding:.75rem 0;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:10px">' +
+    '<div style="flex:1;min-width:0">' +
+    '<div style="font-weight:600;font-size:13px">' + esc(x.titel) + '</div>' +
+    '<div style="font-size:12px;color:var(--text-dim);margin-top:2px">' + esc(x.betreft) + ' &middot; ' + esc(x.indiener_naam || x.indiener) + ' &middot; ' + esc(datum) + '</div>' +
+    (x.omschrijving && (x.bron === 'verbeterpunt' || x.omschrijving.length > x.titel.length) ? '<div style="font-size:12px;color:var(--text-dim);margin-top:4px">' + esc(x.omschrijving).replace(/\n/g, '<br>') + '</div>' : '') +
+    hist + '</div>' +
+    '<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">' +
+    '<span style="white-space:nowrap;font-size:12px;font-weight:600;color:' + esc(kleur) + '">' + esc(label) + '</span>' +
+    (mag ?
+    '<button class="btn btn-secondary btn-sm" style="white-space:nowrap;color:' + kleur + ';border-color:' + kleur + '" data-action="vb-status" data-id="' + esc(p.id) + '" data-huidig="' + esc(p.status) + '">' + label + '</button>'
+    : '') +
+    '</div></div>';
+}
 function _vbRenderLijst() {
   const el = document.getElementById('vb-lijst');
   if (!el) return;
-  if (!_vbLijst.length) {
+  const rij = MTVerbeter.wachtrij(_vbLijst, _vbFeedback);
+  const totaal = MTVerbeter.FASEN.reduce((n, f) => n + rij[f].length, 0);
+  if (!totaal) {
     el.innerHTML = '<div style="padding:.75rem;text-align:center;color:var(--text-faint);font-size:13px">Nog geen verbeterpunten ingediend.</div>';
     return;
   }
-  el.innerHTML = _vbLijst.map(p => {
-    const kleur = VB_STATUS_KLEUR[p.status] || 'var(--text-faint)';
-    const label = VB_STATUS_LABEL[p.status] || p.status;
-    const datum = p.aangemaakt_op ? p.aangemaakt_op.replace('T', ' ').slice(0, 16) : '';
-    return '<div style="padding:.75rem 0;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:10px">' +
-      '<div style="flex:1;min-width:0">' +
-      '<div style="font-weight:600;font-size:13px">' + esc(p.titel) + '</div>' +
-      '<div style="font-size:12px;color:var(--text-dim);margin-top:2px">' + esc(p.betreft) + ' &middot; ' + esc(p.indiener_naam || p.indiener) + ' &middot; ' + esc(datum) + '</div>' +
-      (p.omschrijving ? '<div style="font-size:12px;color:var(--text-dim);margin-top:4px">' + esc(p.omschrijving).replace(/\n/g, '<br>') + '</div>' : '') +
-      '</div>' +
-      '<button class="btn btn-secondary btn-sm" style="white-space:nowrap;color:' + kleur + ';border-color:' + kleur + '" data-action="vb-status" data-id="' + esc(p.id) + '" data-huidig="' + esc(p.status) + '">' + label + '</button>' +
-      '</div>';
-  }).join('');
+  const mag = vbMagBeheren();
+  const groepen = MTVerbeter.FASEN.filter(f => rij[f].length).map(f => {
+    const kop = '<span style="color:' + esc(VB_FASE_KLEUR[f] || 'inherit') + '">' + esc(MTVerbeter.LABEL[f]) + '</span> (' + Number(rij[f].length) + ')';
+    const lijst = rij[f].map(x => _vbItemHtml(x, mag)).join('');   // _vbItemHtml escapet elke waarde zelf
+    return (f === 'live' || f === 'afgewezen')
+      ? ['<details style="margin-top:10px"><summary style="cursor:pointer;font-weight:600;font-size:13px">', kop, '</summary>', lijst, '</details>'].join('')
+      : ['<div style="margin-top:10px"><div style="font-weight:600;font-size:13px">', kop, '</div>', lijst, '</div>'].join('');
+  });
+  el.innerHTML = ['<div style="font-size:12px;color:var(--text-dim);margin-bottom:6px">Bart beoordeelt elk punt; de status hieronder is de enige waarheid over wat er met een punt gebeurt.</div>', ...groepen].join('');
 }
-
 // ── event-delegatie (S7-conventie — geen inline-onclick op nieuwe interactieve elementen) ──
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-action]');
@@ -20080,7 +20623,7 @@ document.addEventListener('click', e => {
     case 'vb-chat-stuur': _vbChatStuur(); break;
     case 'vb-verstuur':   _vbVerstuur(); break;
     case 'vb-neem-over':  _vbNeemOver(); break;
-    case 'vb-status':     _vbStatusWijzig(el.dataset.id, el.dataset.huidig); break;
+    case 'vb-status':     _vbStatusWijzig(el.dataset.id); break;
   }
 });
 </script>
