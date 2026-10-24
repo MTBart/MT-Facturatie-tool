@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>MT-paneel</title>
+<link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32.png">
+<link rel="stylesheet" href="../mt-merk.css?v=2026-10-24-logo">
 <!-- Het MT-paneel (Outlook-taakvenster). Ziet er zonder Microsoft-aanmelding niets in; er staat geen data in de repo.
      office.js moet van Microsofts eigen CDN komen (voorwaarde voor Outlook-add-ins). msal-browser 3.30.0 (NAA) staat lokaal in vendor/
      (bron: npm @azure/msal-browser@3.30.0, lib/msal-browser.min.js, sha256 273d446b381814e563442267a072904fb3b7fd0164f4a688ede80f0d74565b3e).
@@ -59,7 +61,7 @@
 </head>
 <body>
 <main>
-  <h1>MT-paneel</h1>
+  <h1 class="mt-merkrij"><svg class="mt-merk" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><rect x="2" y="2" width="96" height="96"/><path d="M55.4 2 V31.3 H34.2 V67.3 H55.4 V98"/></svg><span class="mt-woord" style="font-family:inherit">MT-paneel</span></h1>
   <p id="melding" role="status" aria-live="polite" data-soort="info">Laden…</p>
 
   <section aria-labelledby="h-mail">

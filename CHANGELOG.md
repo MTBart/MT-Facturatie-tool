@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-24 — Backup = v2.24.0
+- Commit: `459027f` | Auteur: Bart Witte
+
 ## 2026-10-24 — Pages-build: VOORTGANG-C2.md had twee Latin-1-bytes (een); nu geldig UTF-8, anders faalt Jekyll
 - Commit: `3183dd2` | Auteur: Bart Witte
 
