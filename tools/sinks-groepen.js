@@ -64,3 +64,9 @@ module.exports['koers'] = { bestand: 'mt-koers.js', omschrijving: _g_koers.omsch
 // Groep mcp-inlog: mcp/src/inlog.js, server-side HTML van de MCP-proef (houd-lijst met redenen in sinks-groep-mcp-inlog.json).
 const _g_mcpinlog = require('./sinks-groep-mcp-inlog.json');
 module.exports['mcp-inlog'] = { bestand: 'mcp/src/inlog.js', omschrijving: _g_mcpinlog.omschrijving, heleBestand: true, veiligeFns: [], fragmentFns: _g_mcpinlog.fragmentFns, houd: _g_mcpinlog.houd, overslaan: [] };
+// Groep projfilter: mt-projfilter.js (houd-lijst met redenen in sinks-groep-projfilter.json).
+const _g_pf = require('./sinks-groep-projfilter.json');
+module.exports['projfilter'] = { bestand: 'mt-projfilter.js', omschrijving: _g_pf.omschrijving, heleBestand: true, veiligeFns: [], fragmentFns: _g_pf.fragmentFns, houd: _g_pf.houd, overslaan: [] };
+// Groep projopruim: mt-projopruim.js (houd-lijst met redenen in sinks-groep-projopruim.json).
+const _g_po = require('./sinks-groep-projopruim.json');
+module.exports['projopruim'] = { bestand: 'mt-projopruim.js', omschrijving: _g_po.omschrijving, heleBestand: true, veiligeFns: [], fragmentFns: _g_po.fragmentFns, houd: _g_po.houd, overslaan: [] };

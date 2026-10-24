@@ -34,7 +34,8 @@
     if (S.bezig) return;
     S.bezig = true;
     try {
-      const [tk, af, bl, pr, be, vd, vl] = await Promise.all(['mt_project_taken_v2.json', 'mt_project_afhank.json', 'mt_planblokken.json', 'mt_projecten.json', 'mt_bestellijst_v2.json', 'mt_vrijedagen.json', 'mt_verlof.json'].map(leesOpt));
+      const [tk, af, bl, pr, be, vd, vl, ir] = await Promise.all(['mt_project_taken_v2.json', 'mt_project_afhank.json', 'mt_planblokken.json', 'mt_projecten.json', 'mt_bestellijst_v2.json', 'mt_vrijedagen.json', 'mt_verlof.json', 'mt_planinrichting.json'].map(leesOpt));
+      if (ir.ok) { try { P.inrichtZet(ir.data === undefined ? null : ir.data); } catch (e) { /* onleesbaar: de vorige inrichting (of de standaard) blijft gelden */ } }   // P3b: de stations en hun namen komen uit Planning inrichten
       let nrs = {}; try { nrs = (D.nummers ? await D.nummers() : null) || {}; } catch (e) { nrs = {}; }
       if (!tk.ok) { S.laadFout = 'Verversen mislukt (' + tk.fout + ')'; if (!S.data) S.staat = 'fout'; return; }
       if (tk.data === null || tk.data === undefined) { S.staat = 'overzetten'; S.data = null; return; }

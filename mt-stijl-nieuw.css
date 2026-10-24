@@ -430,6 +430,128 @@ html[data-stijl="nieuw"] .cn-dropmarker-tijd{position:absolute;top:-2px;left:4px
 html[data-stijl="nieuw"] .cn-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:4px;background:var(--ink);color:var(--surface);font:500 13px/18px var(--sans);box-shadow:var(--shadow-pop);z-index:200;max-width:min(720px,calc(100vw - 32px))}
 html[data-stijl="nieuw"] .cn-toast-knop{height:28px;padding:0 10px;border:1px solid currentColor;border-radius:4px;background:transparent;color:inherit;font:600 13px/18px var(--sans);cursor:pointer;white-space:nowrap}
 html[data-stijl="nieuw"] .cn-toast-sluit{width:24px;height:24px;border:0;background:transparent;color:inherit;font-size:18px;line-height:1;cursor:pointer;opacity:.7}
+/* ── C1: Capaciteit vloeiend (doorlopende tijdas: scrollen om te zoomen, slepen om te schuiven; de rijen krijgen een persoonskolom en een tijdkolom waarin een strook meeschuift) ───── */
+html[data-stijl="nieuw"] .cn-hoofd{overflow:hidden}
+html[data-stijl="nieuw"] .cn-rij{display:grid;grid-template-columns:var(--cn-lbl,190px) minmax(0,1fr)}
+html[data-stijl="nieuw"] .cn-lane{position:relative;overflow:hidden;min-width:0;touch-action:pan-y;user-select:none;-webkit-user-select:none}
+html[data-stijl="nieuw"] .cn-as-rij .cn-lane{touch-action:none;cursor:grab}
+html[data-stijl="nieuw"] .cn-strip{position:relative;will-change:transform}
+html[data-stijl="nieuw"] .cn-as{background:var(--surface)}
+html[data-stijl="nieuw"] .cn-as:focus-visible{outline:2px solid var(--focus,var(--primary));outline-offset:-2px}
+html[data-stijl="nieuw"] .cn-as-rij .cn-hoek{border-right:1px solid var(--line-soft)}
+html[data-stijl="nieuw"] .cn-rij-uren,html[data-stijl="nieuw"] .cn-rij-maand,html[data-stijl="nieuw"] .cn-rij-kw,html[data-stijl="nieuw"] .cn-agenda-rij{border-top:1px solid var(--line)}
+html[data-stijl="nieuw"] .cn-rij>.cn-persoon{border-right:1px solid var(--line-soft);background:var(--surface);position:relative;z-index:1}
+html[data-stijl="nieuw"] .cn-as-week .cn-dagkop,html[data-stijl="nieuw"] .cn-as .cn-dagkop{position:absolute;top:0;bottom:0;overflow:hidden;white-space:nowrap}
+/* uren */
+html[data-stijl="nieuw"] .cn-as-uren .cn-dagkop2{position:absolute;top:0;height:28px;padding:6px 10px 0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;border-left:1px solid var(--line)}
+html[data-stijl="nieuw"] .cn-as-uren .cn-tik{position:absolute;top:28px;height:26px;padding:3px 3px 0;border-left:1px solid var(--line-soft);overflow:visible;white-space:nowrap;font:400 11px/14px var(--mono);color:var(--ink-2)}
+html[data-stijl="nieuw"] .cn-as-uren .cn-tik.deel{color:var(--ink-3);border-left-color:color-mix(in srgb,var(--line-soft) 55%,transparent)}
+html[data-stijl="nieuw"] .cn-as-uren .cn-tik.eerste{border-left-color:var(--line)}
+html[data-stijl="nieuw"] .cn-uren-raster{display:block;padding:0;row-gap:0;min-width:0}
+html[data-stijl="nieuw"] .cn-uren-raster .cn-bw{margin:0;min-height:0}
+html[data-stijl="nieuw"] .cn-uren-raster>.cn-bw{z-index:1}
+html[data-stijl="nieuw"] .cn-dagstreep{position:absolute;top:0;bottom:0;width:1px;background:var(--line);pointer-events:none}
+html[data-stijl="nieuw"] .cn-buiten{position:absolute;top:0;bottom:0;display:grid;place-items:center;pointer-events:none;font:500 12px/16px var(--sans);color:var(--ink-3);background:color-mix(in srgb,var(--surface-sunken) 78%,transparent) repeating-linear-gradient(135deg,transparent 0 6px,color-mix(in srgb,var(--line-strong) 28%,transparent) 6px 7px)}
+html[data-stijl="nieuw"] .cn-uren-vrij{position:absolute;top:0;bottom:0}
+html[data-stijl="nieuw"] .cn-nu{z-index:2}
+html[data-stijl="nieuw"] .cn-greep.u{width:7px;cursor:col-resize;z-index:3}
+html[data-stijl="nieuw"] .cn-bw.uitrekt{z-index:6;box-shadow:0 0 0 2px var(--primary-text)}
+html[data-stijl="nieuw"] .cn-uren-raster .cn-blok{min-height:0;height:100%}
+html[data-stijl="nieuw"] .cn-agenda-knop{align-self:flex-start;height:22px;margin-top:4px;padding:0 6px;border:1px solid var(--line);border-radius:4px;background:transparent;color:var(--ink-2);font:500 11px/16px var(--sans);display:inline-flex;align-items:center;gap:4px;cursor:pointer}
+html[data-stijl="nieuw"] .cn-agenda-knop:hover{background:var(--surface-sunken)}
+html[data-stijl="nieuw"] .cn-agenda-knop .cn-ic{width:12px;height:12px}
+html[data-stijl="nieuw"] .cn-agenda-label{padding:10px 16px;font:500 12px/16px var(--sans);color:var(--ink-2);border-right:1px solid var(--line-soft)}
+html[data-stijl="nieuw"] .cn-agenda-strook{min-height:46px;display:grid;place-items:center;padding:8px;background:repeating-linear-gradient(135deg,var(--surface-sunken) 0 8px,var(--surface) 8px 16px)}
+html[data-stijl="nieuw"] .cn-agenda-tekst{padding:4px 12px;border:1px dashed var(--line-strong);border-radius:4px;background:var(--surface);font:500 12px/16px var(--sans);color:var(--ink-2)}
+/* maand */
+html[data-stijl="nieuw"] .cn-as-maand .cn-weekkop{position:absolute;top:0;height:26px;padding:6px 8px 0;overflow:hidden;white-space:nowrap;border-left:1px solid var(--line)}
+html[data-stijl="nieuw"] .cn-as-maand .cn-dagnum{position:absolute;top:26px;height:26px;padding:4px 2px 0;overflow:hidden}
+html[data-stijl="nieuw"] .cn-maand-strip{display:grid}
+html[data-stijl="nieuw"] .cn-mdag{position:relative;min-width:0}
+html[data-stijl="nieuw"] .cn-mtekst{position:absolute;top:3px;left:0;right:0;text-align:center;font:400 10px/12px var(--mono);color:var(--ink-2);pointer-events:none}
+html[data-stijl="nieuw"] .cn-mtekst.over{color:var(--error)}
+/* kwartaal */
+html[data-stijl="nieuw"] .cn-as-kw .cn-wk{position:absolute;top:0;bottom:0;display:flex;flex-direction:column;justify-content:flex-end;gap:2px;padding:4px 4px 6px;overflow:hidden;white-space:nowrap;text-align:left}
+html[data-stijl="nieuw"] .cn-as-kw .cn-wk-mnd{font:600 12px/14px var(--sans);color:var(--ink);min-height:14px}
+html[data-stijl="nieuw"] .cn-as-kw .cn-wk-nr{font:400 11px/14px var(--mono);color:var(--ink-2);min-height:14px}
+html[data-stijl="nieuw"] .cn-as-kw .cn-wk.mnd{border-left-color:var(--line)}
+@media (max-width:640px){
+  html[data-stijl="nieuw"] .cn-rij .cn-avatar{display:none}
+  html[data-stijl="nieuw"] .cn-rij>.cn-persoon,html[data-stijl="nieuw"] .cn-as-rij .cn-hoek{padding:8px 8px}
+  html[data-stijl="nieuw"] .cn-pnaam b{font-size:13px;overflow:hidden;text-overflow:ellipsis}
+  html[data-stijl="nieuw"] .cn-knop,html[data-stijl="nieuw"] .cn-filter,html[data-stijl="nieuw"] .cn-zk,html[data-stijl="nieuw"] .cn-zoom .cn-knop,html[data-stijl="nieuw"] .cn-zoom .cn-zk{height:44px}
+  html[data-stijl="nieuw"] .cn-knop.icoon,html[data-stijl="nieuw"] .cn-knop.zm{width:44px}
+  html[data-stijl="nieuw"] .cn-zoom{flex-wrap:wrap}
+  html[data-stijl="nieuw"] .cn-agenda-knop{height:32px}
+}
+/* ── C2: stapelen, belasting per persoon, randen slepen in de uurweergave ───── */
+html[data-stijl="nieuw"] .cn-heel{display:flex;flex-direction:column;gap:4px;padding:2px 0 4px;border-bottom:1px dashed var(--line)}
+html[data-stijl="nieuw"] .cn-heel-kop{font:500 10px/12px var(--sans);color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em}
+html[data-stijl="nieuw"] .cn-slot{gap:4px}
+html[data-stijl="nieuw"] .cn-meer{align-self:flex-start;height:22px;padding:0 8px;border:1px solid var(--line-strong);border-radius:11px;background:var(--surface);color:var(--ink-2);font:500 11px/16px var(--sans);cursor:pointer}
+html[data-stijl="nieuw"] .cn-meer:hover{background:var(--surface-sunken);color:var(--ink)}
+html[data-stijl="nieuw"] .cn-meer.chip{position:absolute;z-index:2}
+html[data-stijl="nieuw"] .cn-meer:focus-visible,html[data-stijl="nieuw"] .cn-bbadge:focus-visible{outline:2px solid var(--focus,var(--primary));outline-offset:2px}
+html[data-stijl="nieuw"] .cn-alldag .cn-blok{flex-direction:row;align-items:center;gap:8px;min-height:0;height:100%;padding:0 8px 0 10px}
+html[data-stijl="nieuw"] .cn-alldag .cn-blok-kop{flex:1 1 auto;min-width:0}
+html[data-stijl="nieuw"] .cn-alldag .cn-blok-sub{flex:0 1 auto;max-width:45%}
+html[data-stijl="nieuw"] .cn-alldag .cn-blok-titel{font-size:12px}
+html[data-stijl="nieuw"] .cn-uren-raster>.cn-alldag{z-index:1}
+html[data-stijl="nieuw"] .cn-greep.d{width:9px;cursor:ew-resize;z-index:3}
+html[data-stijl="nieuw"] .cn-greep-tip{position:absolute;left:0;top:-22px;padding:0 6px;border-radius:3px;background:var(--primary-text);color:#fff;font:500 11px/18px var(--mono);white-space:nowrap;pointer-events:none;z-index:7}
+html[data-stijl="nieuw"] .cn-bbadge{align-self:flex-start;height:22px;padding:0 8px;border:1px solid var(--line);border-radius:11px;background:var(--surface-sunken);color:var(--ink-2);font:600 11px/16px var(--mono);cursor:pointer;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+html[data-stijl="nieuw"] .cn-bbadge.nul{color:var(--ink)}
+html[data-stijl="nieuw"] .cn-bbadge.teveel{border-color:var(--error);background:color-mix(in srgb,var(--error) 9%,var(--surface));color:var(--error)}
+html[data-stijl="nieuw"] .cn-bpop{position:fixed;z-index:300;width:min(340px,calc(100vw - 16px));padding:12px 14px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);color:var(--ink);box-shadow:var(--shadow-pop);font:400 12px/16px var(--sans);display:flex;flex-direction:column;gap:6px}
+html[data-stijl="nieuw"] .cn-bpop[hidden]{display:none}
+html[data-stijl="nieuw"] .cn-bpop b{font:600 13px/18px var(--sans)}
+html[data-stijl="nieuw"] .cn-bpop-reg{display:flex;justify-content:space-between;gap:12px;font-weight:600}
+html[data-stijl="nieuw"] .cn-bpop-reg.tot{padding-top:6px;border-top:1px solid var(--line)}
+html[data-stijl="nieuw"] .cn-bpop-reg.tot.teveel{color:var(--error)}
+html[data-stijl="nieuw"] .cn-bpop-sub{color:var(--ink-2);font-size:11px}
+html[data-stijl="nieuw"] .cn-bpop-lijst{display:flex;flex-direction:column;gap:2px;max-height:200px;overflow:auto}
+html[data-stijl="nieuw"] .cn-bpop-rij{display:flex;justify-content:space-between;gap:12px}
+html[data-stijl="nieuw"] .cn-bpop-naam{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* ── C3: de takenbak (lijst, filters, groepen; op een telefoon een schuiflade) ───── */
+html[data-stijl="nieuw"] .cn-ongepland:not(.dicht){position:sticky;top:8px;align-self:flex-start}
+html[data-stijl="nieuw"] .cn-ong-kop{flex-wrap:nowrap;align-items:center;gap:8px;padding:10px 12px}
+html[data-stijl="nieuw"] .cn-ong-kop>.cn-num{flex:0 0 auto;white-space:nowrap}
+html[data-stijl="nieuw"] .cn-ong-kop>.cn-bak-filterknop{flex:0 0 auto;margin-left:auto}
+html[data-stijl="nieuw"] .cn-bak-modus{min-width:0;flex:0 1 auto;max-width:160px;height:30px;padding:0 22px 0 0;border:0;background-color:transparent;color:var(--ink);font:600 16px/22px var(--sans);cursor:pointer;width:auto}
+html[data-stijl="nieuw"] .cn-bak-modus:focus-visible{outline:2px solid var(--focus,var(--primary));outline-offset:2px}
+html[data-stijl="nieuw"] .cn-bak-filterknop{height:28px;padding:0 10px;font-size:12px}
+html[data-stijl="nieuw"] .cn-bak-filterknop.aan{border-color:var(--primary);font-weight:600}
+html[data-stijl="nieuw"] .cn-bak-filters{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:10px 12px;border-bottom:1px solid var(--line-soft)}
+html[data-stijl="nieuw"] .cn-bak-filters .cn-filter{width:100%;max-width:none;min-width:0;height:30px;padding:0 6px;font-size:12px;border-style:solid}
+html[data-stijl="nieuw"] .cn-bak-zoek,html[data-stijl="nieuw"] .cn-bak-wis{grid-column:1 / -1}
+html[data-stijl="nieuw"] .cn-bak-wis{height:28px}
+html[data-stijl="nieuw"] .cn-ong-lijst{max-height:calc(100vh - 200px);overflow:auto}
+html[data-stijl="nieuw"] .cn-bak-groepkop{margin-top:4px}
+html[data-stijl="nieuw"] .cn-bak-groep{width:100%;display:flex;align-items:center;gap:8px;padding:6px 4px;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--ink);font:600 13px/18px var(--sans);cursor:pointer;text-align:left}
+html[data-stijl="nieuw"] .cn-bak-groep:focus-visible{outline:2px solid var(--focus,var(--primary));outline-offset:1px}
+html[data-stijl="nieuw"] .cn-bak-groepnaam{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+html[data-stijl="nieuw"] .cn-bak-meta{color:var(--ink-3);font-size:11px}
+html[data-stijl="nieuw"] .cn-lade-knop{display:none}
+@media (max-width:640px){
+  html[data-stijl="nieuw"] #agenda-capaciteit{padding-bottom:72px;transform:none !important;animation:none !important}   /* een transform (ook een lege) maakt van dit vlak het venster voor een vaste lade */
+  html[data-stijl="nieuw"] .cn-ongepland:not(.dicht){position:fixed;left:8px;right:8px;bottom:0;top:auto;z-index:150;flex:none;max-width:none;display:flex;flex-direction:column;max-height:78vh;border-radius:12px 12px 0 0;box-shadow:var(--shadow-pop);transform:translateY(calc(100% - 58px));transition:transform .2s}
+  html[data-stijl="nieuw"] .cn-ongepland.open{transform:none}
+  html[data-stijl="nieuw"] .cn-lade-knop{display:inline-flex;order:-1}
+  html[data-stijl="nieuw"] .cn-ongepland.open .cn-lade-knop .cn-ic{transform:rotate(180deg)}
+  html[data-stijl="nieuw"] .cn-ong-klap{display:none}
+  html[data-stijl="nieuw"] .cn-ong-kop{padding:10px 12px}
+  html[data-stijl="nieuw"] .cn-ong-lijst{max-height:none;flex:1 1 auto}
+  html[data-stijl="nieuw"] .cn-bak-modus{height:44px;font-size:15px}
+  html[data-stijl="nieuw"] .cn-bak-filterknop{height:44px}
+  html[data-stijl="nieuw"] .cn-bak-filters .cn-filter{height:44px;font-size:14px}
+  html[data-stijl="nieuw"] .cn-bak-groep{min-height:44px}
+}
+/* ── P1b: optionele vrije dag (naam, gele laag) en een nieuw planblok ───── */
+html[data-stijl="nieuw"] .cn-cel.opt{background:color-mix(in srgb,var(--brass-soft) 45%,var(--surface))}
+html[data-stijl="nieuw"] .cn-optnaam{font:500 11px/14px var(--sans);color:var(--brass-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+html[data-stijl="nieuw"] .cn-opt{position:absolute;top:0;bottom:0;padding:2px 6px;background:color-mix(in srgb,var(--brass-soft) 55%,transparent);color:var(--brass-ink);font:500 11px/14px var(--sans);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;pointer-events:none}
+html[data-stijl="nieuw"] .cn-uren-raster{cursor:cell}
+html[data-stijl="nieuw"] .cn-uren-raster .cn-bw,html[data-stijl="nieuw"] .cn-uren-raster .cn-meer{cursor:pointer}
 /* ── brok 9: Admin ▸ Team en werktijden (mt-werktijden.js; vervangt in de nieuwe stijl de kaart "Werkuren per week") ───── */
 html[data-stijl="nieuw"] #adm-werkuren-kaart{display:none}
 html[data-stijl="nieuw"] .wt-root:not([hidden]){display:block;margin-bottom:20px}
@@ -764,3 +886,74 @@ html[data-stijl="nieuw"] .stijl-melding-knop:hover{background:var(--surface-sunk
 html[data-stijl="nieuw"] .stijl-melding-x{width:34px;height:34px;border:0;border-radius:4px;background:none;color:var(--ink-2);font:400 20px/1 var(--sans);cursor:pointer}
 html[data-stijl="nieuw"] .stijl-melding-x:hover{background:var(--surface-sunken)}
 html[data-stijl="nieuw"] .stijl-melding-knop:focus-visible,html[data-stijl="nieuw"] .stijl-melding-x:focus-visible{outline:2px solid var(--focus,var(--primary));outline-offset:2px}
+
+/* ── G1: de laag Geklokt in de Capaciteit (uren uit Toggl naast het geplande; alleen kijken) ── */
+html[data-stijl="nieuw"] .cn-gk-knop{display:inline-flex;align-items:center;gap:6px}
+html[data-stijl="nieuw"] .cn-gk-knop .cn-ic{width:16px;height:16px}
+html[data-stijl="nieuw"] .cn-gk-knop.aan{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+html[data-stijl="nieuw"] .cn-gk-baan{position:absolute;left:0;right:0;border-top:1px dashed var(--line);background:color-mix(in srgb,var(--surface-sunken) 70%,transparent);pointer-events:none}
+html[data-stijl="nieuw"] .cn-gk-seg{position:absolute;z-index:1;min-width:3px;padding:0;border:1px solid color-mix(in srgb,var(--block-color,var(--ink-2)) 65%,var(--surface));border-radius:3px;background:color-mix(in srgb,var(--block-color,var(--ink-2)) 26%,var(--surface));cursor:pointer}
+html[data-stijl="nieuw"] .cn-gk-seg:hover{background:color-mix(in srgb,var(--block-color,var(--ink-2)) 45%,var(--surface))}
+html[data-stijl="nieuw"] .cn-gk-seg.buiten{border-style:dashed}
+html[data-stijl="nieuw"] .cn-gk-seg:focus-visible,html[data-stijl="nieuw"] .cn-gk-cel:focus-visible,html[data-stijl="nieuw"] .cn-gk-mtekst:focus-visible,html[data-stijl="nieuw"] .cn-gkpop-proj:focus-visible{outline:2px solid var(--focus,var(--primary));outline-offset:1px}
+html[data-stijl="nieuw"] .cn-gk-cel{align-self:flex-start;max-width:100%;padding:0 5px;border:0;border-radius:3px;background:var(--surface-sunken);color:var(--ink-2);font:400 10px/16px var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+html[data-stijl="nieuw"] .cn-gk-cel:hover{background:var(--line-soft)}
+html[data-stijl="nieuw"] .cn-gk-som{font-style:normal;color:var(--ink-2)}
+html[data-stijl="nieuw"] .cn-gk-lijn{position:absolute;left:3px;bottom:2px;height:3px;max-width:calc(100% - 6px);border-radius:2px;background:var(--ink-2);opacity:.7}
+html[data-stijl="nieuw"] .cn-gk-mtekst{position:absolute;top:15px;left:0;right:0;padding:0;border:0;background:none;text-align:center;font:400 10px/12px var(--mono);color:var(--ink-2);text-decoration:underline dotted;cursor:pointer}
+html[data-stijl="nieuw"] .cn-kw-gk{font:400 10px/12px var(--mono);color:var(--ink-2)}
+html[data-stijl="nieuw"] .cn-kw-gk.klein{display:block;height:3px;border-radius:2px;background:var(--ink-2);opacity:.6}
+html[data-stijl="nieuw"] .cn-lg-gk{display:block;width:14px;height:8px;border:1px solid var(--ink-2);border-radius:2px;background:color-mix(in srgb,var(--ink-2) 25%,var(--surface))}
+html[data-stijl="nieuw"] .cn-legenda .cn-gk-sync{color:var(--ink-2);font-size:11px}
+html[data-stijl="nieuw"] .cn-gkpop-item{display:flex;flex-direction:column;gap:2px;padding:6px 0;border-top:1px solid var(--line-soft)}
+html[data-stijl="nieuw"] .cn-gkpop-item:first-child{border-top:0;padding-top:0}
+html[data-stijl="nieuw"] .cn-gkpop-proj{display:flex;align-items:center;gap:6px;padding:0;border:0;background:none;text-align:left;font:600 12px/16px var(--sans);color:var(--ink);cursor:pointer}
+html[data-stijl="nieuw"] .cn-gkpop-proj.plat{cursor:default}
+html[data-stijl="nieuw"] .cn-gkpop-dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--block-color,var(--ink-2))}
+@media (max-width:640px){html[data-stijl="nieuw"] .cn-gk-knop{min-height:44px}html[data-stijl="nieuw"] .cn-gk-seg{min-width:8px}}
+/* ── D1: de agenda-strook met de Outlook-afspraken (alleen kijken) ── */
+html[data-stijl="nieuw"] .cn-agenda-label b{display:block;font:600 12px/16px var(--sans);color:var(--ink)}
+html[data-stijl="nieuw"] .cn-agenda-sub{display:block;font:400 11px/14px var(--sans);color:var(--ink-2)}
+html[data-stijl="nieuw"] .cn-agenda-tekst.probleem{max-width:min(640px,100%);text-align:left;border-color:var(--error);color:var(--ink)}
+html[data-stijl="nieuw"] .cn-agenda-strip{position:relative;background:var(--surface)}
+html[data-stijl="nieuw"] .cn-ag-blok{position:absolute;box-sizing:border-box;padding:0 6px;border:1px solid var(--line-strong);border-radius:3px;background:color-mix(in srgb,var(--ink-2) 16%,var(--surface));color:var(--ink);font:500 11px/16px var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+html[data-stijl="nieuw"] .cn-ag-blok>span{display:block;overflow:hidden;text-overflow:ellipsis}
+html[data-stijl="nieuw"] .cn-ag-blok.oof{border-color:color-mix(in srgb,var(--error) 50%,var(--surface));background:color-mix(in srgb,var(--error) 12%,var(--surface))}
+html[data-stijl="nieuw"] .cn-ag-blok.tentative{border-style:dashed;background:repeating-linear-gradient(135deg,var(--surface-sunken) 0 5px,var(--surface) 5px 10px)}
+html[data-stijl="nieuw"] .cn-ag-blok.buiten{border-style:dotted}
+html[data-stijl="nieuw"] .cn-ag-blok:focus-visible{outline:2px solid var(--focus,var(--primary));outline-offset:1px}
+html[data-stijl="nieuw"] .cn-ag-meer{position:absolute;font:500 10px/12px var(--mono);color:var(--ink-2)}
+html[data-stijl="nieuw"] .cn-hoek .cn-agenda-knop.alle{margin-top:4px}
+html[data-stijl="nieuw"] .cn-hoek .cn-agenda-knop.alle[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+/* ── P7b/P7c: totaalrijen, rollen zonder naam, de heatmap van de bezetting en de beschikbaarheidsbalk ── */
+html[data-stijl="nieuw"] .cn-rolchip{display:inline-block;align-self:flex-start;margin-top:2px;padding:0 6px;border:1px solid var(--line-strong);border-radius:10px;font:500 10px/16px var(--sans);color:var(--ink-2)}
+html[data-stijl="nieuw"] .cn-rolchip.rol{border-style:dashed}
+html[data-stijl="nieuw"] .cn-avatar.rol{border:1px dashed var(--ink-2);background:transparent}
+html[data-stijl="nieuw"] .cn-avatar.totaal{border-radius:4px;background:var(--surface-sunken);font-size:10px}
+html[data-stijl="nieuw"] .cn-persoon[data-totaal]{background:var(--surface-sunken)}
+html[data-stijl="nieuw"] .cn-rij.cn-eerste-totaal{border-top:2px solid var(--line-strong)}
+html[data-stijl="nieuw"] .cn-rolknop{align-self:flex-start;margin-top:4px;height:22px;padding:0 6px;border:1px solid var(--line);border-radius:4px;background:transparent;color:var(--ink-2);font:500 11px/16px var(--sans);cursor:pointer}
+html[data-stijl="nieuw"] .cn-rolknop:hover{background:var(--surface-sunken)}
+html[data-stijl="nieuw"] .cn-hm-knop{display:inline-flex;align-items:center;gap:6px}
+html[data-stijl="nieuw"] .cn-hm-knop .cn-ic{width:16px;height:16px}
+/* één kleurschaal: één tint (het groen van de tool) van licht naar donker voor 0 tot 100%, en de foutkleur met arcering voor overboekt (niet alleen kleur) */
+html[data-stijl="nieuw"] .hm.hm0{background:var(--surface)}
+html[data-stijl="nieuw"] .hm.hm1{background:color-mix(in srgb,var(--primary) 10%,var(--surface))}
+html[data-stijl="nieuw"] .hm.hm2{background:color-mix(in srgb,var(--primary) 20%,var(--surface))}
+html[data-stijl="nieuw"] .hm.hm3{background:color-mix(in srgb,var(--primary) 32%,var(--surface))}
+html[data-stijl="nieuw"] .hm.hm4{background:color-mix(in srgb,var(--primary) 46%,var(--surface))}
+html[data-stijl="nieuw"] .hm.hm5{background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--error) 38%,var(--surface)) 0 5px,color-mix(in srgb,var(--error) 22%,var(--surface)) 5px 10px)}
+html[data-stijl="nieuw"] .cn-cel.hm.nu,html[data-stijl="nieuw"] .cn-mdag.hm.nu{box-shadow:inset 0 0 0 2px var(--brass)}
+html[data-stijl="nieuw"] .cn-hm-streep{position:absolute;top:0;height:5px;z-index:0;pointer-events:none}
+html[data-stijl="nieuw"] .cn-hm-leg{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+html[data-stijl="nieuw"] .cn-hm-lg{display:flex;align-items:center;gap:4px;font-size:11px}
+html[data-stijl="nieuw"] .cn-hm-sw{display:block;width:14px;height:10px;border:1px solid var(--line-strong);border-radius:2px}
+html[data-stijl="nieuw"] .cn-kw-laad.hm{border-radius:3px}
+html[data-stijl="nieuw"] .cn-beschik{position:fixed;z-index:310;width:230px;padding:8px 10px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);color:var(--ink);box-shadow:var(--shadow-pop);font:400 12px/16px var(--sans);display:flex;flex-direction:column;gap:4px;pointer-events:none}
+html[data-stijl="nieuw"] .cn-beschik[hidden]{display:none}
+html[data-stijl="nieuw"] .cn-beschik b{font:600 12px/16px var(--sans)}
+html[data-stijl="nieuw"] .cn-beschik-balk{display:block;height:8px;border-radius:4px;background:var(--surface-sunken);overflow:hidden}
+html[data-stijl="nieuw"] .cn-beschik-balk>span{display:block;height:100%;background:color-mix(in srgb,var(--primary) 55%,var(--surface))}
+html[data-stijl="nieuw"] .cn-beschik.over .cn-beschik-balk>span{background:var(--error)}
+html[data-stijl="nieuw"] .cn-beschik.over .cn-beschik-tekst{color:var(--error);font-weight:600}
+@media (max-width:640px){html[data-stijl="nieuw"] .cn-hm-knop{min-height:44px}}

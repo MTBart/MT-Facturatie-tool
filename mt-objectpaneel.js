@@ -47,7 +47,7 @@
   const relatieLijst = items => el('ul', { klass: 'tp-lijst' }, items.map(x => el('li', null, link(x.href, x.ga, [
     x.dot ? el('span', { klass: 'tp-dot ' + x.dot, 'aria-hidden': 'true' }) : null,
     el('span', { klass: 'tp-tekst' }, el('span', { klass: 'tp-naam', tekst: x.naam }), x.sub ? el('span', { klass: 'tp-sub', tekst: x.sub }) : null),
-    x.chips || null, icoon(IC.pijl)], 'tp-link tp-taakrij', { title: x.titel || null }))));
+    x.chips || null, icoon(IC.pijl)], 'tp-link tp-taakrij', { title: x.titel || null }), x.na || null)));   // x.na: een node onder de rij (F2a: type en wachttijd van de koppeling)
 
   // ── opslaan: eerlijke status, ongedaan maken, geen stil verlies ──
   const toast = (tekst, ongedaan, lang, label) => { try { if (D.toast) D.toast(tekst, ongedaan, lang, label); } catch (e) {} };
@@ -132,18 +132,18 @@
     const s = el('select', { id: 'tp-v-' + veld, klass: 'tp-invoer tp-keuze', 'aria-label': o.label, disabled: kan ? null : true, title: kan ? (o.titel || null) : (o.waarom || GEEN_RECHT) },
       opties.map(([w, l]) => el('option', { value: w, tekst: l })));
     s.value = waarde;
-    s.addEventListener('change', () => { const velden = {}; velden[veld] = s.value; const gezien = {}; gezien[veld] = waarde; bewaar({ velden, gezien }, o.wat || veld); });
+    s.addEventListener('change', () => { const velden = {}; velden[veld] = s.value; const gezien = {}; gezien[veld] = o.gezien !== undefined ? o.gezien : waarde; bewaar({ velden, gezien }, o.wat || veld); });   // o.gezien: de ruwe opgeslagen waarde als die anders is dan de getoonde (fase: de naam op de taak, het label kan intussen anders heten)
     return s;
   }
   // Tags (meer waarden): een × per tag haalt hem weg, typen + Enter voegt toe (met suggesties). Slaat de hele lijst op, met de oude lijst als "gezien".
   function tagsVeld(veld, lijst, o) {
     o = o || {};
     const kan = o.kan !== false, oud = (lijst || []).slice(), lid = 'tp-v-' + veld + '-lijst';
-    const zet = nieuw => { const velden = {}; velden[veld] = nieuw; const gezien = {}; gezien[veld] = oud; bewaar({ velden, gezien }, o.wat || veld); };
+    const zet = nieuw => { const velden = {}; velden[veld] = nieuw; const gezien = {}; gezien[veld] = oud; return bewaar({ velden, gezien }, o.wat || veld); };
     const tags = oud.map(t => el('span', { klass: 'tp-tag' }, t, kan ? el('button', { type: 'button', klass: 'tp-tag-weg', 'aria-label': 'Tag ' + t + ' weghalen', title: 'Weghalen', klik: () => zet(oud.filter(x => x !== t)), tekst: '×' }) : null));
     const invoer = kan ? el('input', { type: 'text', id: 'tp-v-' + veld, klass: 'tp-invoer tp-tag-invoer', 'aria-label': (o.label || 'Tags') + ': toevoegen', placeholder: o.placeholder || 'Tag toevoegen…', list: o.suggesties ? lid : null, autocomplete: 'off' }) : null;
     if (invoer) invoer.addEventListener('keydown', ev => {
-      if (ev.key === 'Enter') { ev.preventDefault(); const t = invoer.value.replace(/\s+/g, ' ').trim(); if (t && !oud.some(x => x.toLowerCase() === t.toLowerCase())) zet(oud.concat([t])); invoer.value = ''; }
+      if (ev.key === 'Enter') { ev.preventDefault(); const t = invoer.value.replace(/\s+/g, ' ').trim(); if (t && !oud.some(x => x.toLowerCase() === t.toLowerCase())) { invoer.value = ''; try { invoer.blur(); } catch (e) { } zet(oud.concat([t])).then(() => { const n = D.doc.getElementById('tp-v-' + veld); if (n) n.focus(); }); } invoer.value = ''; }   // blur: anders tekent het paneel pas opnieuw als je het veld verlaat; daarna staat de cursor weer in het veld
       else if (ev.key === 'Escape' && invoer.value) { ev.preventDefault(); ev.stopPropagation(); invoer.value = ''; }
     });
     return el('div', { klass: 'tp-tags', title: kan ? null : (o.waarom || GEEN_RECHT) }, tags, tags.length || kan ? null : el('span', { klass: 'tp-sub', tekst: 'Geen tags' }), invoer,
@@ -333,6 +333,8 @@
     '#tp-paneel .tp-klein{height:28px;padding:0 10px;font-size:12px}#tp-paneel .tp-gevaar{color:var(--error,#c4322a);border-color:var(--error,#c4322a)}',
     '#tp-paneel .tp-meldingen{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}#tp-paneel .tp-melding{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 10px;border-radius:4px;font-size:13px}#tp-paneel .tp-voorstel{background:var(--brass-soft,#fbefd2);color:var(--brass-ink,#6b4c05)}#tp-paneel .tp-conflict{background:var(--error-50,#fce6e4);color:var(--error,#c4322a)}',
     '#tp-paneel .tp-tags{display:flex;flex-wrap:wrap;align-items:center;gap:6px}#tp-paneel .tp-tag{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 4px 0 8px;border-radius:4px;background:var(--surface-sunken,#f1ede5);font-size:12px}#tp-paneel .tp-tag-weg{border:0;background:transparent;cursor:pointer;color:var(--ink-3,#646a64);font-size:15px;line-height:1;padding:0 4px}#tp-paneel .tp-tag-invoer{flex:1 1 120px;min-width:120px}',
+    '#tp-paneel .tp-rand{border-color:var(--line,#dfd8cb)}',
+    '#tp-paneel .tp-prim{background:var(--primary,#17643f);border-color:var(--primary,#17643f);color:#fff}#tp-paneel .tp-prim:hover{background:var(--primary,#17643f);filter:brightness(1.08)}',
     '.tp-naamlink{color:inherit;text-decoration:underline;text-decoration-color:var(--line,#dfd8cb);text-underline-offset:3px}.tp-naamlink:hover{color:var(--primary,#17643f);text-decoration-color:currentColor}'
   ];
 

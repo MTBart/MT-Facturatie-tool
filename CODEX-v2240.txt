@@ -1,0 +1,30 @@
+## No-go voor main, tenzij onderstaande twee punten zijn afgedekt
+
+1. **Blokkade — oude v2.21-tab kan `mt_planblokken` blijven schrijven na schema 12**
+
+   - Bestand: `v2.html:3132-3150`, `mt-planning.js:2935-2939`; vergelijking met live `a208a4e`.
+   - Scenario: een gebruiker heeft v2.21 nog open. Na `schema_min=12` blokkeert die versie alleen projecten/taken, niet de oude planblokroute. Ook wordt het in-bestand-schema voor planblokken niet gezet. De oude tab kan dus daarna nog planblokken opslaan en nieuwere P4/P7/D0-velden beschadigen of terugdraaien.
+   - Minimale fix: maak dit een harde uitrolvoorwaarde: bewerkingsstop, alle v2.21-tabs sluiten/hard herladen, pas daarna `schema_uitgerold/schema_min=12`. Voor technische afdwinging is server-/workerhandhaving nodig; een nieuwe clientpatch beschermt reeds geladen oude JS niet.
+
+2. **Moet voor release — `mt_planinrichting` is niet afdoende beschermd tegen v2.23**
+
+   - Bestand: `v2.html:4115-4125`.
+   - Scenario: v2.24 voegt `mt_planinrichting` terecht toe aan `_PROJ_SCHEMA_SLEUTELS`, maar v2.23 kende die bescherming niet. Een nog open v2.23-tab kan na de uitrol inrichting opslaan terwijl P7c-records (`inzet`, `rol`, nieuwe velden) aanwezig zijn.
+   - Minimale fix: laat `planInrichtOpslaan()` vóór lokale mutatie én vóór `_SP.write()` altijd vers `await projSchemaCheck(true)` uitvoeren en fail-closed blokkeren. Dit vult het huidige gat; daarnaast blijft de harde-herlaadvoorwaarde uit punt 1 nodig voor reeds geopende v2.23-tabs.
+
+## Gecontroleerd, geen releasebevinding
+
+- D0 staat werkelijk uit: `AGENDA_SCHRIJVEN=false` in `v2.html:3974`. `MTAgendaUit.init()` registreert alleen dependencies. Alleen `verwerk()` kan SharePoint/Graph aanspreken en die retourneert direct bij de init-vlag uit (`mt-agenda-uit.js:238-252`). Er is geen aangesloten `verwerk()`-aanroep gevonden.
+- P4b-datum- en koppelschrijvers lopen via `MTCapaciteitNieuw.drop` respectievelijk `tpWijzig`/`afhWijzig`; tijdlijn schrijft niet zelf. `gezien` en herstelstempels zijn aanwezig.
+- P7b/P7c gebruikt dezelfde roostercellen voor belasting, heatmap en beschikbaarheid; Outlook wordt alleen als visuele bezetstrook gelezen en telt niet mee als werk.
+- Aanbetalingspoort doet alleen `mbGet`, leest vóór de klik opnieuw, zet nooit stil groen, en bewaart geen bedragen in taakvelden. Paginering en creditnota-/eindfactuurbehandeling zijn fail-closed.
+- `mt-iconen.js` bouwt SVG via DOM-API’s, zonder `innerHTML` voor gegevens; de oude stijl zet vervangen emoji en statusiconen terug. `.btn-xs` blijft onder `html[data-stijl="nieuw"]` op 26px.
+- Scriptvolgorde/cache-versies in `v2.html`, `mobiel.html` en `tv.html` ogen consistent.
+
+De verhoging naar schema 12 is dus **niet zelfstandig veilig vanaf schema 5 of 11** zolang oude tabs nog actief kunnen schrijven. Met beide fixes/uitrolvoorwaarden hierboven: **go voor main**.
+
+
+--- Verwerking door de integrator ---
+1. Blokkade (oude v2.21-tab schrijft planblokken na schema 12): geen codewijziging; was al een harde uitrolvoorwaarde in RELEASE-v2230 (werkstop, iedereen herladen, daarna pas schema 12). Staat als stap 0/5/5b in RELEASE-v2240.md.
+2. Moet voor release (mt_planinrichting vers schemacheck): verwerkt in c268a9c (planInrichtOpslaan leest eerst vers projSchemaCheck(true)). Een nog open v2.23-tab is daarmee niet beschermd; dat dekt alleen de werkstop + herladen.
+Door de integratie zelf gevonden: in de P7b-init van MTPlanInrichting zaten verplaats/verplaatsHerstel per ongeluk in een commentaar (verwijderen van een fase met taken deed niets); hersteld in c268a9c (rook-p3b ving het).

@@ -5,8 +5,8 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
-## 2026-10-24 — Backup = v2.19.0
-- Commit: `0bc2c56` | Auteur: Bart Witte
+## 2026-10-24 — Backup = v2.21.0
+- Commit: `cbbf0ec` | Auteur: Bart Witte
 
 ## 2026-10-23 — Release v2.21.0: planning met filterbalk, planblokpaneel, Bord en tijdlijn over alle projecten; Financien met Facturatie verwacht en Factuurplanning; eerlijke Larry met bouwwachtrij (claude-haiku-5-5); calculatie met versiepaneel, behouden voorbeeld en standaardwaarden; laadtest ruimt Chrome op; backup = v2.20.0
 - Commit: `a208a4e` | Auteur: Bart Witte

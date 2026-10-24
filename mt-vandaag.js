@@ -360,6 +360,14 @@
     }
     return null;
   }
+  // Het materiaal van een taak: vers uit de bestellijst op SharePoint (de lokale kopie op de telefoon kan oud zijn). Lukt het lezen niet, dan geen bevestiging (het is een hulp, geen slot).
+  async function materiaalVoor(item) {
+    try {
+      const raw = await D.sp.read('mt_bestellijst_v2.json'); if (!Array.isArray(raw)) return null;
+      const p = projInfo(item.code);
+      return P.taakMateriaal(item.taak, P.bestelVanTaak(raw, item.taak.id, { code: item.code, project_id: (p && p.projectId) || '' }), { vandaag: P.vandaagYmd() });
+    } catch (e) { return null; }
+  }
   async function zetStatus(id, nieuw, code) {
     if (S.bezig) return;
     let item = zoekItem(id, code); if (!item || item.soort !== 'taak') return;
@@ -371,6 +379,13 @@
     if (item.wacht && item.wacht.wacht && huidig === 'todo' && nieuw !== 'todo' && nieuw !== 'wacht') {   // een taak die op een voorganger wacht start pas na een bevestiging
       const ja = await D.dialog().confirm({ title: 'Deze taak wacht', message: '"' + t.naam + '" wacht op: ' + wachtTekst(item) + '.\nToch ' + (nieuw === 'klaar' ? 'op klaar zetten' : 'starten') + '?', okLabel: 'Toch doorgaan' });
       if (!ja) return;
+    }
+    if (nieuw !== 'wacht' && huidig !== 'bezig' && huidig !== 'klaar') {   // een taak met open materiaal (bestelregels die aan de taak hangen) gaat niet stil naar Bezig of Klaar (P5)
+      const mat = await materiaalVoor(item);
+      if (mat && P.materiaalVraagBevestiging(t, mat, nieuw)) {
+        const ja = await D.dialog().confirm({ title: 'Het materiaal is nog niet binnen', message: P.materiaalBevestigTekst(t.naam, mat, nieuw, P.datumKort), okLabel: 'Toch doorgaan' });
+        if (!ja) return;
+      }
     }
     blok = schrijfBlok(P.ROL.TAAK_STATUS); if (blok) { D.toast(blok); return; }   // opnieuw na de dialogen: de lijst, het schema of het recht kan intussen veranderd zijn
     item = zoekItem(id, code) || item;
@@ -517,7 +532,7 @@
     if (bestel) {
       const regel = P.meldingBestel({ omschrijving: tekst, aantal: String(v.aantal == null ? '1' : v.aantal).replace(',', '.'), eenheid: v.eenheid, project: p.code, project_id: p.projectId || '', opmerking: v.opmerking, door: w.email, doorNaam: w.naam, rol, nu, id: v.id || '' });
       const res = await P.bestelNieuwSchrijf(D.sp, {
-        regel, lokaal: D.storage.getItem(LS_BESTEL), mag: s => D.rol.mag(s), door: w.email, dev: D.dev(), nu,
+        regel, lokaal: D.storage.getItem(LS_BESTEL), mag: s => D.rol.mag(s), door: w.email, dev: D.dev(), nu, voorWrite,   // dezelfde schemacontrole als bij de taken en de cockpit
         journaal: r => P.journaalSchrijf(D.sp, 'mt_bestellijst_journaal.json', { id: 'j' + nu.toString(36) + Math.random().toString(36).slice(2, 6), tijd: new Date(nu).toISOString(), actie: 'nieuw (bestelvoorstel telefoon)', door: w.email, voor: null, na: JSON.parse(JSON.stringify(r)), via: 'mobiel' }, 1000)
       });
       return afhandelenBestel(res);
