@@ -6,8 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#0f1715">
 <title>M&T werkplaats-tv</title>
+<link rel="icon" type="image/svg+xml" href="icons/icon.svg">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <!-- Dezelfde lokale msal-browser als mobiel.html (geen CDN). -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jost:ital,wght@0,500;1,400&display=swap">
+<link rel="stylesheet" href="mt-merk.css?v=2026-10-24-logo">
 <script src="vendor/msal-browser.min.js?v=2.39.0"></script>
 <script src="mt-core.js?v=2026-10-13a"></script>
 <script src="mt-rollen.js?v=2026-10-09a"></script>
@@ -21,6 +24,7 @@ body{background:var(--bg);color:var(--tekst);font-family:'Manrope','Segoe UI',sy
 button{font:inherit;color:inherit;cursor:pointer}
 #tv-login{margin:auto;text-align:center;padding:40px}
 #tv-login h1{font-size:40px;margin-bottom:12px}
+#tv-login .tv-sub{font-size:26px;font-weight:500;color:var(--dim);margin-bottom:18px;letter-spacing:.02em}
 #tv-login p{color:var(--dim);margin-bottom:24px;font-size:22px}
 #tv-login button,.tv-knop{min-height:72px;padding:0 36px;font-size:28px;border-radius:14px;border:2px solid var(--groen);background:var(--vlak2)}
 #tv-app[hidden]{display:none}
@@ -89,7 +93,8 @@ button{font:inherit;color:inherit;cursor:pointer}
 </head>
 <body>
 <div id="tv-login">
-  <h1>M&amp;T werkplaats-tv</h1>
+  <h1 class="mt-merkrij mt-login-merk"><svg class="mt-merk" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><rect x="2" y="2" width="96" height="96"/><path d="M55.4 2 V31.3 H34.2 V67.3 H55.4 V98"/></svg><b class="mt-woord">mortise <em>&amp;</em> tenon</b></h1>
+  <h2 class="tv-sub">werkplaats-tv</h2>
   <p id="tv-login-tekst">Log in met het werkplaatsaccount. Dit scherm toont alleen; wijzigen doe je op je eigen telefoon.</p>
   <button type="button" id="tv-login-knop" class="tv-knop">Inloggen</button>
 </div>

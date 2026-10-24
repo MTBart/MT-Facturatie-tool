@@ -27,6 +27,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>M&T Mobiel</title>
 <link rel="manifest" href="manifest-mobiel.json">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jost:ital,wght@0,500;1,400&display=swap">
+<link rel="stylesheet" href="mt-merk.css?v=2026-10-24-logo">
+<link rel="icon" type="image/svg+xml" href="icons/icon.svg">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <!-- msal-browser lokaal gevendord (was jsdelivr @2 = 2.39.0, laatste v2-release).
@@ -862,7 +865,7 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 
 <!-- ── LOGIN SCREEN ── -->
 <div id="login-screen">
-  <div class="login-logo">M<span>&amp;</span>T</div>
+  <div class="mt-merkrij mt-login-merk" style="color:#fff"><svg class="mt-merk" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><rect x="2" y="2" width="96" height="96"/><path d="M55.4 2 V31.3 H34.2 V67.3 H55.4 V98"/></svg><b class="mt-woord">mortise <em>&amp;</em> tenon</b></div>
   <div class="login-sub">Mortise &amp; Tenon · Mobiel</div>
   <div class="login-card">
     <div class="login-card-title">Inloggen vereist</div>
@@ -878,7 +881,7 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 
 <!-- ── APP HEADER ── -->
 <header class="app-header">
-  <div class="app-title" style="display:flex;align-items:center">M<span>&amp;</span>T<span class="demo-badge" id="demoBadge" style="display:none">DEMO</span></div>
+  <div class="app-title" style="display:flex;align-items:center"><div class="mt-merkrij" style="font-size:16px"><svg class="mt-merk" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><rect x="2" y="2" width="96" height="96"/><path d="M55.4 2 V31.3 H34.2 V67.3 H55.4 V98"/></svg><b class="mt-woord">mortise <em>&amp;</em> tenon</b></div><span class="demo-badge" id="demoBadge" style="display:none">DEMO</span></div>
   <div class="header-btns">
     <button class="header-info-btn" id="zoekKnop" type="button" aria-label="Zoeken" aria-haspopup="dialog" title="Zoeken">🔍</button>
     <button class="header-info-btn" id="geldKnop" style="display:none" onclick="geldLaagOpen()" aria-label="Financiën" title="Financiën">€</button>
