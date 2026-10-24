@@ -26,7 +26,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>BACKUP v2.21.0 — M&T Mobiel</title>
+<title>BACKUP v2.24.0 — M&T Mobiel</title>
 <link rel="manifest" href="manifest-mobiel.json">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -39,6 +39,7 @@
      één bron voor cockpit én app (audit-actie S2). Moet vóór de code laden die het
      gebruikt; ?v= = cachebuster, zelfde patroon als in v2.html. -->
 <script src="mt-core.js?v=2026-10-13a"></script>
+<script src="mt-iconen.js?v=2026-10-24z" defer></script>
 <script src="mt-project.js?v=2026-10-15b"></script>
 <script src="mt-rollen.js?v=2026-10-09a"></script>
 <script src="mt-dialog.js?v=2026-10-11b"></script>
@@ -50,11 +51,11 @@
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
-<script src="mt-planning.js?v=2026-10-17n"></script>
-<script src="mt-vandaag.js?v=2026-10-17n"></script>
+<script src="mt-planning.js?v=2026-10-24z"></script>
+<script src="mt-vandaag.js?v=2026-10-23f"></script>
 <script src="mt-startvenster.js?v=2026-10-15b"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
-<script src="mt-verhuis.js?v=2026-10-23a"></script>
+<script src="mt-verhuis.js?v=2026-10-23k7"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
      fonts-CSS binnen is; preconnect scheelt de dubbele DNS/TLS-roundtrip. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -856,9 +857,10 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 .pv-form{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}.pv-form input{min-height:40px;padding:0 8px;border:1px solid var(--border);border-radius:8px;font:inherit}.pv-form .vol{grid-column:1/-1}
 </style>
 <link rel="stylesheet" href="mt-stijl-mobiel.css?v=2026-10-16c">
+<link rel="stylesheet" href="mt-rust.css?v=2026-10-24z">
 </head>
 <body>
-<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.21.0, 2026-10-24). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
+<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.24.0, 2026-10-24). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
 
 <!-- ── LOGIN SCREEN ── -->
 <div id="login-screen">
@@ -2388,16 +2390,28 @@ const _mijnEmail = () => String((_msAccount && _msAccount.username) || '').toLow
 const _pvMoetVoorstel = () => !!(window.MTRol && MTRol.afdwingen() && !MTRol.mag('projecten:wijzigen'));
 const _pvMagBeslissen = () => !window.MTRol || MTRol.mag('projecten:wijzigen');
 async function _pvLees() {
-  try { const r = await _SP.read('mt_planblokken.json'); _pvBlokken = MTPlanVoorstel.samen(_pvBlokken, Array.isArray(r) ? r : []); }
+  try { const r = await _SP.read('mt_planblokken.json'); _pvBlokken = MTPlanning.blokSamen(_pvBlokken, Array.isArray(r) ? r : []); }   // F1: dezelfde samenvoeger als de cockpit (per veld)
   catch (e) {}
   return _pvBlokken;
+}
+async function _tellerSchemaMin() {   // GET /teller/status → schema_min (de app-versie die projecttaken, planblokken en bestellingen nog mag schrijven)
+  const h = await authHeader(); if (!h['X-Auth-Token']) return null;
+  const r = await fetch(WORKER + '/teller/status', { headers: h }); if (!r.ok) return null;
+  const j = await r.json().catch(() => null); return j && Number.isFinite(Number(j.schema_min)) ? Number(j.schema_min) : null;
 }
 async function _pvSchrijf(wijzig) {
   const remote = await _SP.read('mt_planblokken.json').catch(() => null);
   if (!Array.isArray(remote)) { showToast('SharePoint niet bereikbaar — probeer het zo opnieuw'); return false; }
-  _pvBlokken = wijzig(MTPlanVoorstel.samen(_pvBlokken, remote));
+  // F1: via de gedeelde schrijfkern van de cockpit (MTPlanning.blokSchrijf): alleen wat deze telefoon wijzigde krijgt een stempel, vers lezen, ETag, een 412 wordt per veld samengevoegd.
+  let basis; try { basis = MTPlanning.blokSamen(_pvBlokken, remote); } catch (e) { showToast('De planning heeft een onverwachte vorm — er is niets gewijzigd'); return false; }
+  const nieuw = wijzig(JSON.parse(JSON.stringify(basis)));
+  const r = await MTPlanning.blokSchrijf(_SP, { patches: MTPlanning.blokPatches(basis, nieuw), lokaal: _pvBlokken, nu: Date.now(), door: _mijnEmail(), dev: _devIdM(),
+    voorWrite: async () => { try { return !MTPlanning.schemaGeblokkeerd(await _tellerSchemaMin()); } catch (e) { return true; } } });   // dezelfde schemadrempel als de cockpit (de teller); onbekend = niet geblokkeerd
   if (typeof AGENDA_CACHE !== "undefined") for (const k of Object.keys(AGENDA_CACHE)) delete AGENDA_CACHE[k];   // de agenda toont planblokken: opnieuw opbouwen
-  return await _SP.write('mt_planblokken.json', _pvBlokken, (r2, lokaal) => { _pvBlokken = MTPlanVoorstel.samen(lokaal, r2); return _pvBlokken; });
+  if (r.data) _pvBlokken = r.data;
+  if (!r.ok) { showToast(r.reden === 'geblokkeerd' ? MTPlanning.SCHEMA_TEKST : 'Niet opgeslagen — probeer het zo opnieuw'); return false; }
+  if (r.afwijkend && r.afwijkend.length) showToast('Iemand anders wijzigde dit blok tegelijk; je ziet nu de nieuwe stand.');
+  return true;
 }
 
 // ═══ VANDAAG (planning stap 2): de aansluiting tussen mt-vandaag.js en deze app ═══
@@ -2459,11 +2473,7 @@ if (window.MTVandaag) MTVandaag.init({
   account: () => _msAccount, demo: () => _demoMode, nu: () => Date.now(), dev: _devIdM,
   werktijdenAan: () => { try { return document.documentElement.getAttribute('data-stijl') === 'nieuw'; } catch (e) { return false; } },   // de werktijden tellen alleen mee in de nieuwe stijl (zoals op de desktop)
   toast: m => showToast(m), dialog: () => window.mtDialog,
-  schemaMin: async () => {   // GET /teller/status → schema_min (de app-versie die projecttaken nog mag schrijven)
-    const h = await authHeader(); if (!h['X-Auth-Token']) return null;
-    const r = await fetch(WORKER + '/teller/status', { headers: h }); if (!r.ok) return null;
-    const j = await r.json().catch(() => null); return j && Number.isFinite(Number(j.schema_min)) ? Number(j.schema_min) : null;
-  },
+  schemaMin: _tellerSchemaMin,
   pvLees: () => _pvLees(), pvBlokken: () => _pvBlokken,
   project: _vdProject, projectLijst: () => allProjects().filter(p => MT_PROJ_INFO[p.code]).map(p => _vdProject(p.code)),
   openProject: id => openProjectSheet(id),
@@ -5032,10 +5042,10 @@ function _voRuimteRender() {
   const zonder = voorOpnamePhotos.filter(p => !(p.ruimte || '')).length;
   let h = _voRuimtes.map((r, ri) => {
     const act = (r === _voRuimteActief);
-    return `<button class="btn ${act ? 'btn-gold' : 'btn-secondary'}" style="min-height:38px;padding:6px 12px;font-size:13px"
+    return `<button class="btn ${act ? 'btn-gold ui-gekozen' : 'btn-secondary'}" style="min-height:38px;padding:6px 12px;font-size:13px"
       data-ridx="${esc(ri)}" data-ract="${act ? 'rename' : 'kies'}">${escHtml(r)} (${esc(_voRuimteCount(r))})</button>`;
   }).join('');
-  if (zonder) h += `<button class="btn ${_voRuimteActief === '' ? 'btn-gold' : 'btn-secondary'}" style="min-height:38px;padding:6px 12px;font-size:13px" onclick="voRuimteKies('')">Zonder ruimte (${esc(zonder)})</button>`;
+  if (zonder) h += `<button class="btn ${_voRuimteActief === '' ? 'btn-gold ui-gekozen' : 'btn-secondary'}" style="min-height:38px;padding:6px 12px;font-size:13px" onclick="voRuimteKies('')">Zonder ruimte (${esc(zonder)})</button>`;
   tabs.innerHTML = h;
   if (sel) {
     sel.innerHTML = _voRuimtes.map(r => `<option value="${escHtml(r)}"${r === _voRuimteActief ? ' selected' : ''}>${escHtml(r)} (${esc(_voRuimteCount(r))} foto's)</option>`).join('')
@@ -5671,8 +5681,8 @@ function loadChecklist() {
 function setRapTypeButtons() {
   const bo = document.getElementById("rapTypeOpname");
   const bl = document.getElementById("rapTypeOplevering");
-  if (bo) bo.className = "btn " + (rapType === "opname" ? "btn-gold" : "btn-secondary");
-  if (bl) bl.className = "btn " + (rapType === "oplevering" ? "btn-gold" : "btn-secondary");
+  if (bo) bo.className = "btn " + (rapType === "opname" ? "btn-gold ui-gekozen" : "btn-secondary");
+  if (bl) bl.className = "btn " + (rapType === "oplevering" ? "btn-gold ui-gekozen" : "btn-secondary");
 }
 
 function kiesRapType(t) {

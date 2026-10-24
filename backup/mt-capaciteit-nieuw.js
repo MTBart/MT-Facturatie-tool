@@ -15,7 +15,9 @@
   const LS_ZOOM = 'mt-cap-zoom';
   const ZOOM_UI = true;    // de zoomknoppen: kwartaal, maand, week, 3 dagen, dag (brok 7)
   const ZOOMS = [['kwartaal', 'Kwartaal'], ['maand', 'Maand'], ['week', 'Week'], ['3d', '3 dagen'], ['dag', 'Dag']];
-  const S = { zoom: 'week', anker: null, persoon: '', project: '', ongDicht: false, fRev: -1 };
+  // C1 (doorlopende schaal): zoom en anker blijven de snelkeuze (de knoppen, de link, de tests). Zodra je scrolt, knijpt of sleept is `vrij` waar en gelden ppd (pixels per werkdag) en pos
+  // (de werkdag-index aan de linkerrand, met een breuk voor het deel van de dag) als enige waarheid; `zoom` is dan alleen het etiket van het niveau waarin je zit en `anker` de datum aan de linkerrand.
+  const S = { zoom: 'week', anker: null, persoon: '', project: '', ongDicht: false, fRev: -1, vrij: false, ppd: 0, pos: 0, Wv: 0, agenda: {}, meer: {}, bak: { modus: 'ongepland', klant: '', project: '', fase: '', act: '', wie: '', q: '', groep: '' }, bakFilterOpen: false, bakDicht: {}, ladeOpen: false, bakItems: [], gk: false, gkLijst: [], gkVoor: null, hm: false };
   // De gedeelde filterbalk (mt-planfilter.js): project, persoon en periode (begindatum en zoom) komen daar vandaan en staan in de link. Zonder die module (losse tests) werkt alles als voorheen.
   const FF = () => root.MTPlanFilter || null;
   function trekFilter() {   // de gedeelde stand overnemen zodra die veranderd is (de balk, een link, een andere weergave)
@@ -24,16 +26,24 @@
     S.project = g.project; S.persoon = f.persoonSlug('iedereen');
     if (f.ZOOMS.includes(g.zoom)) S.zoom = g.zoom;
     if (f.isYmd(g.van)) { S.anker = g.van; S.exactDag = false; } else if (S.fRev >= 0) S.anker = null;   // een link zonder datum = deze periode
+    // een link met schaal (pixels per uur) en tijd is een vrije stand; zonder schaal geldt de snelkeuze (zoom + van) zoals altijd
+    const sc = Number(g.schaal);
+    if (sc > 0) { S.vrij = true; S.ppd = begrens(sc * UH(), S.Wv || 1000); const dag0 = P.isYmd(S.anker) ? S.anker : P.vandaagYmd(), t = tijdMin(g.tijd); S.pos = wiVan(dag0) + (t === null ? 0 : Math.max(0, Math.min(0.999, (t - U0) / (UH() * 60)))); S.exactDag = false; } else if (S.fRev >= 0 || g.van || g.zoom) S.vrij = false;   // een link met alleen een snelkeuze wint van de onthouden vrije schaal
+    { const tb = TB(); if (tb) { if (g.bak || g.bf) S.bak = tb.decodeer(g.bak, g.bf); else if (S.fRev >= 0) S.bak = tb.standaard(); } }   // de takenbak: de lijst en de filters uit de link
+    if (D && D.geklokt) { if (g.gk === '1') S.gk = true; else if (S.gk && S.fRev < 0) f.zet({ gk: '1' }); else if (S.fRev >= 0) S.gk = false; }
+    if (g.hm === '1') S.hm = true; else if (S.hm && S.fRev < 0) f.zet({ hm: '1' }); else if (S.fRev >= 0) S.hm = false;   // P7b: de heatmap van de bezetting, zelfde regels als Geklokt   // de laag Geklokt (G1): de link wint; een onthouden keuze komt in de link
     S.fRev = f.rev();
   }
   function duwPeriode() {   // een eigen keuze van de periode (bladeren, zoom) naar de gedeelde stand en de link
     const f = FF(); if (!f) return;
-    const nu = P.vandaagYmd();
-    f.zet({ van: S.anker && S.anker !== nu ? S.anker : '', zoom: S.zoom }); S.fRev = f.rev();
+    const nu = P.vandaagYmd(), p = { van: S.anker && S.anker !== nu ? S.anker : '', zoom: S.zoom, schaal: '', tijd: '' };
+    if (S.vrij && S.ppd > 0) { p.schaal = String(Math.round(S.ppd / UH() * 10) / 10); const fr = S.pos - Math.floor(S.pos); if (fr > 0.002) p.tijd = hhmm(U0 + Math.round(fr * UH() * 12) * 5); }   // de linkerrand tot op 5 minuten
+    f.zet(p); S.fRev = f.rev();
   }
   function duwFilter(patch) { const f = FF(); if (!f) return; f.zet(patch); S.fRev = f.rev(); }   // een sprong naar een taak of persoon zet de filters zelf
   const LS_ONG = 'mt-cap-ong';   // 'dicht' = de Ongepland-kolom is ingeklapt (per computer onthouden)
-  const U0 = 420, U1 = 1020, KOL = 20;   // 07:00 tot 17:00 in halve uren (20 kolommen per dag)
+  let U0 = 420, U1 = 1020;   // de as van een dag: 07:00 tot 17:00, ruimer zodra iemands werktijden daarbuiten vallen (zie bepaalUren)
+  const UH = () => (U1 - U0) / 60;   // uren per getekende dag
 
   // ── datums ──
   const nr = ymd => { const [y, m, d] = ymd.split('-').map(Number); return Math.round(Date.UTC(y, m - 1, d) / 864e5); };
@@ -52,14 +62,104 @@
   const hhmm = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
   const tijdMin = t => { const m = /^(\d{1,2}):(\d{2})/.exec(String(t || '')); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
 
+  // ── de doorlopende schaal (C1) ──
+  // De tijdas telt alleen werkdagen (zaterdag en zondag bestaan niet in het model): de werkdag-index wi is 0 op maandag 5 januari 1970, 5 op de maandag erna, enzovoort. De schaal is ppd
+  // (pixels per werkdag); een werkdag beslaat de as U0..U1, dus pixels per uur = ppd / UH. Alles hieronder is rekenwerk zonder DOM (testbaar met b-cap-zoom-harness.js).
+  const MIN_PPD = 6, MAX_PPD = 3600, MAX_DAGEN_ZICHT = 300;
+  const wiVan = s => { const n = nr(s) - 4, wk = Math.floor(n / 7), d = n - wk * 7; return d < 5 ? wk * 5 + d : (wk + 1) * 5; };   // een weekend valt op de maandag erna
+  const datumVanWi = wi => { const w = Math.floor(wi), wk = Math.floor(w / 5); return ymd(4 + wk * 7 + (w - wk * 5)); };
+  const begrens = (ppd, Wv) => Math.max(MIN_PPD, Wv / MAX_DAGEN_ZICHT, Math.min(MAX_PPD, ppd));   // nooit meer dan MAX_DAGEN_ZICHT werkdagen tegelijk in beeld
+  N.wiVan = wiVan; N.datumVanWi = datumVanWi; N.begrens = begrens;
+  // De grenzen (in pixels per werkdag) tussen kwartaal | maand | week | uren, bij een tijdkolom van Wv pixels
+  // De grenzen volgen de breedte van de tijdkolom: kwartaal/maand bij 40 dagen in beeld, maand/week bij 10, week/uren bij 3,5 (zodat "week" een week blijft en "3 dagen" ook op een smalle kolom drie dagen is), met ondergrenzen voor wat leesbaar blijft
+  N.drempels = Wv => ({ km: Math.max(12, Wv / 40), mw: Math.max(110, Wv / 10), wu: Math.max(150, Wv / 3.5) });
+  // Het niveau waarin een schaal valt: kwartaal, maand, week, 3d of dag (het etiket op de knoppen)
+  N.modus = (ppd, Wv) => { const t = N.drempels(Wv); if (ppd < t.km) return 'kwartaal'; if (ppd < t.mw) return 'maand'; if (ppd < t.wu) return 'week'; return ppd < Wv * 0.55 ? '3d' : 'dag'; };
+  // De schaal van een snelkeuze: zoveel mogelijk precies zoveel dagen in beeld (65 · 20 · 5 · 3 · 1), maar binnen het eigen niveau (op een telefoon past een week niet: dan scrolt de rest)
+  N.preset = (z, Wv) => {
+    const t = N.drempels(Wv), kl = (x, a, b) => Math.max(a, Math.min(b, x));
+    if (z === 'kwartaal') return kl(Wv / 65, Math.max(MIN_PPD, Wv / MAX_DAGEN_ZICHT), t.km - 0.5);
+    if (z === 'maand') return kl(Wv / 20, t.km + 0.5, t.mw - 0.5);
+    if (z === 'week') return kl(Wv / 5, t.mw + 0.5, t.wu - 0.5);
+    if (z === '3d') return Math.max(t.wu + 0.5, Wv / 3);
+    return Math.max(t.wu + 0.5, Wv);
+  };
+  // Het aantal werkdagen (met breuk) dat één klik op vorige/volgende schuift: één eenheid van het niveau
+  N.eenheid = z => z === 'kwartaal' ? 65 : z === 'maand' ? 20 : z === 'week' ? 5 : z === '3d' ? 3 : 1;
+  // Zoomen rond een punt: het moment onder de muis (x pixels vanaf de linkerrand van de tijdkolom) blijft onder de muis. st = { ppd, pos } -> { ppd, pos }
+  N.zoomRond = (st, x, factor, Wv) => { const ppd2 = begrens(st.ppd * factor, Wv); return { ppd: ppd2, pos: st.pos + x / st.ppd - x / ppd2 }; };
+  // Schuiven: dx pixels naar rechts slepen toont wat links lag; de positie blijft binnen een eindig bereik (ruim drie jaar)
+  N.schuif = (st, dx) => ({ ppd: st.ppd, pos: st.pos - dx / st.ppd });
+  N.posBegrens = (pos, vandaagWi) => Math.max(vandaagWi - 800, Math.min(vandaagWi + 800, pos));
+  // De rasterstap bij het slepen en uittrekken van een planblok: 15 minuten vanaf 60 pixels per uur (dagweergave), anders 30 (3 dagen); in de weekweergave is er geen uurraster maar een dagdeel
+  N.snapMin = ppd => (ppd / UH() >= 60 ? 15 : 30);
+  N.snap = (min, stap) => Math.round(min / stap) * stap;
+  // Een plek (pixels in de strook van een persoon, vanaf de eerste getekende dag) naar werkdag-index en minuten in de dag
+  N.plekNaarTijd = (px, ppd, stap, grijp) => {
+    const x = px - (grijp || 0), k = Math.floor(x / ppd), min = U0 + (x - k * ppd) / ppd * (U1 - U0);
+    return { k, min: Math.max(U0, Math.min(U1 - stap, N.snap(min, stap))) };
+  };
+  // Een blok van `start` (minuten) en `duur` tegen de as: links en breedte in pixels (binnen de as geknipt)
+  N.blokPx = (k, start, eind, ppd) => { const a = Math.max(U0, start), e = Math.min(U1, Math.max(a + 15, eind)); return { left: k * ppd + (a - U0) / (U1 - U0) * ppd, width: Math.max(3, (e - a) / (U1 - U0) * ppd) }; };
+  // Uittrekken: de nieuwe start en duur van een blok na een sleep van dMin minuten aan de rechter (eind) of linker (start) rand. Minimaal één rasterstap, binnen de as.
+  N.uittrek = (start, duur, kant, dMin, stap) => {
+    const eind = start + duur;
+    if (kant === 'eind') { const e = Math.max(start + stap, Math.min(U1, N.snap(eind + dMin, stap))); return { start, duur: e - start }; }
+    const s = Math.min(eind - stap, Math.max(U0, N.snap(start + dMin, stap))); return { start: s, duur: eind - s };
+  };
+  // Het etiket boven de tijdas: titel en subtitel voor het venster van `eerste` t/m `laatste` (datums van de zichtbare werkdagen) met `midden` in het midden
+  const hoofdletter = s => s.charAt(0).toUpperCase() + s.slice(1);
+  N.titelVoor = function (zoom, eerste, laatste, midden) {
+    if (zoom === 'week') return { titel: 'Week ' + isoWeek(monday(midden)), sub: dagMnd(eerste) + ' – ' + dagMnd(laatste) };
+    if (zoom === 'maand') { const a = Number(eerste.slice(5, 7)) - 1, b = Number(laatste.slice(5, 7)) - 1; return { titel: a === b ? hoofdletter(MNDLANG[a]) : hoofdletter(MNDLANG[a]) + ' – ' + MNDLANG[b], sub: 'week ' + isoWeek(eerste) + '–' + isoWeek(laatste) }; }
+    if (zoom === 'kwartaal') return { titel: Math.max(1, Math.round((nr(laatste) - nr(eerste) + 1) / 7)) + ' weken', sub: 'week ' + isoWeek(eerste) + '–' + isoWeek(laatste) + ' · ' + dagMnd(eerste) + ' – ' + dagMnd(laatste) };
+    if (zoom === '3d') return { titel: DAGKORT[wd(nr(eerste))] + ' ' + dagMnd(eerste) + ' – ' + DAGKORT[wd(nr(laatste))] + ' ' + dagMnd(laatste), sub: 'week ' + isoWeek(eerste) + ' · ' + hhmm(U0) + '–' + hhmm(U1) };
+    return { titel: hoofdletter(DAGLANG[wd(nr(eerste))]) + ' ' + dagMnd(eerste), sub: 'week ' + isoWeek(eerste) + ' · ' + hhmm(U0) + '–' + hhmm(U1) };
+  };
+  // De as van een dag volgt de werktijden van het team: minstens 07:00-17:00, ruimer als iemand eerder begint of later eindigt (hele uren). Alleen rekenwerk; zonder werktijden blijft het 07:00-17:00.
+  const werkMap = () => { try { return P.werktijdenMap && D.werktijden ? P.werktijdenMap(D.werktijden()) : {}; } catch (e) { return {}; } };
+  function bepaalUren() {
+    let a = 420, e = 1020;
+    try { Object.values(werkMap()).forEach(rec => { (P.WERKTIJD_DAGEN || []).forEach(k => { const x = rec.dagen && rec.dagen[k]; if (!x || !x.werk) return; const s = tijdMin(x.start), z = tijdMin(x.eind); if (s !== null && z !== null && z > s) { a = Math.min(a, Math.floor(s / 60) * 60); e = Math.max(e, Math.ceil(z / 60) * 60); } }); }); } catch (x) {}
+    U0 = Math.max(300, a); U1 = Math.min(1320, e);
+  }
+  N.bepaalUren = bepaalUren; N.as = () => ({ U0, U1 });
+  // Het werkvenster van deze persoon op deze weekdag (wdIdx 0 = maandag): { a, e } in minuten, { vrij: true } als hij die dag niet werkt, of null zonder werktijden-record
+  N.werkVenster = function (slug, wdIdx) {
+    const rec = werkMap()[String(slug || '').toLowerCase()]; if (!rec) return null;
+    const x = rec.dagen && rec.dagen[(P.WERKTIJD_DAGEN || [])[wdIdx]]; if (!x || !x.werk) return { vrij: true };
+    const a = tijdMin(x.start), e = tijdMin(x.eind); return a === null || e === null || e <= a ? null : { a, e };
+  };
+
   // ── rekenwerk (geen DOM) ──
   // Een venster van `weken` weken vanaf de maandag `van`, in stukken van maximaal 6 weken (zo veel rekent weekRooster in één keer) samengevoegd.
+  // C1: de stukken van zes weken liggen vast op een raster (week-nummer deelbaar door 6) en worden onthouden, zodat schuiven en zoomen niet bij elke beweging opnieuw rekent. N.teken()
+  // (een verandering in de gegevens, een filter) wist het geheugen; het schuiven en zoomen zelf niet. Met een extra weekenddag (alleen "Naar de dag") wordt niet onthouden.
+  const stukken = new Map();
+  N.cacheWis = () => stukken.clear();
+  const stuk = (vanMa, o) => {
+    const sl = vanMa + '|' + (o.project || '') + '|' + P.vandaagYmd(); let s = stukken.get(sl);
+    if (!s) { const opt = Object.assign({}, o, { vandaag: vanMa, weken: 6, wachtVandaag: P.vandaagYmd() }); s = { cap: P.teamCapaciteit(D.taken(), D.afhank(), D.blokken(), opt), rr: P.weekRooster(D.taken(), D.afhank(), D.blokken(), opt), n: 6 }; if (stukken.size > 40) stukken.clear(); stukken.set(sl, s); }
+    return s;
+  };
   function rooster(van, weken, o) {
+    if (o && Array.isArray(o.extra) && o.extra.length) return roosterVan(van, weken, o);
+    const wk = Math.floor((nr(van) - 4) / 7), w0 = Math.floor(wk / 6) * 6, delen = [];
+    for (let w = w0; w < wk + weken; w += 6) delen.push(stuk(ymd(4 + w * 7), o));
+    const r = voegSamen(delen, o), a = wk - w0;
+    if (!a && r.dagen.length === weken * 5) return r;
+    const snij = (arr, k, l) => arr.slice(k, l);   // alleen de gevraagde weken (de stukken zijn op het raster gelegd)
+    return { dagen: snij(r.dagen, a * 5, (a + weken) * 5).map(d => Object.assign({}, d, { week: d.week - a })), rijen: r.rijen.map(t => Object.assign({}, t, { dagen: snij(t.dagen, a * 5, (a + weken) * 5), weken: snij(t.weken, a, a + weken), slots: snij(t.slots, a * 5, (a + weken) * 5) })) };
+  }
+  function roosterVan(van, weken, o) {
     const delen = [];
     for (let w = 0; w < weken; w += 6) {
-      const n = Math.min(6, weken - w), opt = Object.assign({}, o, { vandaag: plusDagen(van, w * 7), weken: n });
+      const n = Math.min(6, weken - w), opt = Object.assign({}, o, { vandaag: plusDagen(van, w * 7), weken: n, wachtVandaag: P.vandaagYmd() });
       delen.push({ cap: P.teamCapaciteit(D.taken(), D.afhank(), D.blokken(), opt), rr: P.weekRooster(D.taken(), D.afhank(), D.blokken(), opt), n });
     }
+    return voegSamen(delen, o);
+  }
+  function voegSamen(delen, o) {
     const dagen = [], rijen = [];
     delen.forEach((dl, di) => {
       dl.cap.dagen.forEach(d => dagen.push(Object.assign({}, d, { week: di * 6 + d.week })));
@@ -89,13 +189,37 @@
     return { items: lijst, min: lijst.reduce((s, x) => s + x.min, 0) };
   }
 
+  const roosterOpties = st => ({ team: D.team() || [], vrij: D.vrij ? D.vrij() : null, verlof: D.verlof ? D.verlof() : null, werkuren: D.werkuren ? D.werkuren() : null, werktijden: D.werktijden ? D.werktijden() : null, project: st.project || '' });
+  // Na het tekenen alvast de stukken van zes weken vóór en na het beeld rekenen (één per keer, in de pauzes): over de grens van een stuk schuiven kost dan geen beeld.
+  function voorLaad(m) {
+    clearTimeout(S.vlT);
+    const wk0 = Math.floor(m.d0w / 5), wk1 = wk0 + m.weken - 1, lijst = [Math.floor(wk1 / 6) * 6 + 6, Math.floor(wk0 / 6) * 6 - 6];
+    let i = 0;
+    const stap = () => { if (i >= lijst.length || gebaarActief() || !S.V) return; const w = lijst[i++]; try { stuk(ymd(4 + w * 7), roosterOpties(S)); } catch (e) {} S.vlT = setTimeout(stap, 40); };
+    S.vlT = setTimeout(stap, 150);
+  }
+  // De Ongepland-lijst (taken zonder datum en voorstellen), gefilterd op project en persoon. Los van het venster: het schuiven en zoomen hoeft dit niet opnieuw te rekenen.
+  function ongeplandVoor(st, team, o) {
+    const og = ongepland({ team, vrij: o.vrij, verlof: o.verlof, project: st.project || '' });
+    if (st.persoon) { og.items = og.items.filter(x => { const sl = Object.keys(D.taken() || {}).find(c => String(c).toLowerCase() === String(x.code).toLowerCase()); const t = sl ? (D.taken()[sl] || []).find(y => y && y.id === x.id) : null; return t && P.taakMensen(t).some(p => P.zelfdePersoon(p, st.persoon, team)); }); og.min = og.items.reduce((s, x) => s + x.min, 0); }
+    return og;
+  }
+  // st.d0 en st.d1 (werkdag-indexen, d1 niet meegeteld) vragen een venster op de doorlopende tijdas: de weken eromheen worden gerekend, m.venster zegt welke dagen (indexen in m.dagen) in beeld zijn en
+  // m.d0w is de werkdag-index van m.dagen[0]. Zonder d0/d1 geldt de snelkeuze (st.zoom + st.anker) precies zoals voorheen.
   N.model = function (st) {
     st = Object.assign({}, S, st || {});
     const today = P.vandaagYmd(), zoom = st.zoom, anker = st.anker || today;
-    const team = D.team() || [], o = { team, vrij: D.vrij ? D.vrij() : null, verlof: D.verlof ? D.verlof() : null, werkuren: D.werkuren ? D.werkuren() : null, werktijden: D.werktijden ? D.werktijden() : null, project: st.project || '' };
-    let van, weken, zichtbaar;
+    const team = D.team() || [], o = roosterOpties(st);
+    let van, weken, zichtbaar, venster = null, d0w = null;
     const weekendDag = zoom === 'dag' && st.exactDag && P.isYmd(anker) && ((wd(nr(anker)) + 6) % 7) > 4;   // alleen na "Naar de dag" (exactDag) op een zaterdag of zondag (Afwijkingen: iemand werkte toch): precies die dag, als extra kolom. Gewoon bladeren of Vandaag op een weekend springt nog naar de maandag.   // zichtbaar = de datums die getekend worden
-    if (zoom === 'week') { van = monday(anker); weken = 1; }
+    const vrijVenster = Number.isFinite(st.d0) && Number.isFinite(st.d1) && !weekendDag;
+    if (vrijVenster) {
+      const a = Math.floor(st.d0), b = Math.max(a + 1, Math.ceil(st.d1)), w0 = Math.floor(a / 5), w1 = Math.floor((b - 1) / 5);
+      d0w = w0 * 5; van = datumVanWi(d0w); weken = Math.min(MAX_DAGEN_ZICHT / 5 + 2, w1 - w0 + 1);
+      venster = []; for (let d = a; d < Math.min(b, d0w + weken * 5); d++) venster.push(d - d0w);
+      if (zoom === '3d' || zoom === 'dag') zichtbaar = venster.map(i => datumVanWi(d0w + i));
+    }
+    else if (zoom === 'week') { van = monday(anker); weken = 1; }
     else if (zoom === 'maand') { van = monday(anker); weken = 4; }
     else if (zoom === 'kwartaal') { van = monday(anker); weken = 13; }
     else {
@@ -103,14 +227,19 @@
       if (zoom === '3d') { let d = s0; for (let i = 0; i < 2; i++) { d = plusWerkdagen(d, 1); zichtbaar.push(d); } weken = Math.ceil((nr(zichtbaar[2]) - nr(van) + 1) / 7); }
     }
     const r = rooster(van, weken, o);
-    const dagIdx = zichtbaar ? zichtbaar.map(d => r.dagen.findIndex(x => x.datum === d)) : null;
+    const dagIdx = zichtbaar ? (vrijVenster ? venster.slice() : zichtbaar.map(d => r.dagen.findIndex(x => x.datum === d))) : null;
+    if (!venster) venster = dagIdx ? dagIdx.slice() : r.dagen.map((d, i) => i);
+    if (d0w === null) d0w = wiVan(van);
     let rijen = r.rijen; if (st.persoon) rijen = rijen.filter(x => x.slug === st.persoon);
-    const m = { zoom, today, anker, van, weken, dagen: r.dagen.map(d => Object.assign({}, d, { nu: d.datum === today })), dagIdx, rijen, project: st.project, persoon: st.persoon };
-    m.ongepland = ongepland({ team, vrij: o.vrij, verlof: o.verlof, project: st.project || '' });
-    if (st.persoon) { m.ongepland.items = m.ongepland.items.filter(x => { const sl = Object.keys(D.taken() || {}).find(c => String(c).toLowerCase() === String(x.code).toLowerCase()); const t = sl ? (D.taken()[sl] || []).find(y => y && y.id === x.id) : null; return t && P.taakMensen(t).some(p => P.zelfdePersoon(p, st.persoon, team)); }); m.ongepland.min = m.ongepland.items.reduce((s, x) => s + x.min, 0); }
+    { const rollen = new Map(team.filter(x => x && x.placeholder).map(x => [String(x.slug).toLowerCase(), x])); if (rollen.size) rijen = rijen.map(x => rollen.has(x.slug) ? Object.assign({}, x, { rol: true, rolK: rollen.get(x.slug).rolK }) : x); }   // P7b: een rol zonder naam is een rij met een duidelijke markering
+    if (!st.persoon && P.soortRijen && P.inrichting) { try { rijen = rijen.concat(P.soortRijen(r, P.inrichting())); } catch (e) { console.warn('Capaciteit (totalen):', e); } }   // P7c: de totaalrijen Werkplaats en Kantoor onder de personen: vraag tegenover aanbod, afgeleid van dezelfde items
+    const m = { zoom, today, anker, van, weken, dagen: r.dagen.map(d => Object.assign({}, d, { nu: d.datum === today })), dagIdx, venster, d0w, weekend: weekendDag, rijen, project: st.project, persoon: st.persoon };
+    m.ongepland = st.ongepland || ongeplandVoor(st, team, o);
+    m.opt = {}; try { (D.vrijedagen ? D.vrijedagen() : []).forEach(v => { if (v && v.type === 'optioneel' && P.isYmd(v.datum)) m.opt[v.datum] = String(v.naam || 'Optionele vrije dag'); }); } catch (e) {}   // een optionele vrije dag (bv. een brugdag): een gewone werkdag, wel zichtbaar met de naam
     // periodetitel
-    const eerste = m.dagen[0].datum, laatste = m.dagen[m.dagen.length - 1].datum;
-    if (zoom === 'week') { m.titel = 'Week ' + isoWeek(van); m.sub = dagMnd(van) + ' – ' + dagMnd(plusDagen(van, 4)); }
+    const eerste = m.dagen[venster[0]].datum, laatste = m.dagen[venster[venster.length - 1]].datum;
+    if (vrijVenster) Object.assign(m, N.titelVoor(zoom, eerste, laatste, m.dagen[venster[Math.floor((venster.length - 1) / 2)]].datum));
+    else if (zoom === 'week') { m.titel = 'Week ' + isoWeek(van); m.sub = dagMnd(van) + ' – ' + dagMnd(plusDagen(van, 4)); }
     else if (zoom === 'maand') { const a = Number(eerste.slice(5, 7)) - 1, b = Number(laatste.slice(5, 7)) - 1; m.titel = a === b ? MNDLANG[a].charAt(0).toUpperCase() + MNDLANG[a].slice(1) : MNDLANG[a].charAt(0).toUpperCase() + MNDLANG[a].slice(1) + ' – ' + MNDLANG[b]; m.sub = 'week ' + isoWeek(van) + '–' + isoWeek(plusDagen(van, 21)); }
     else if (zoom === 'kwartaal') { m.titel = '13 weken'; m.sub = 'week ' + isoWeek(van) + '–' + isoWeek(plusDagen(van, 84)) + ' · ' + dagMnd(van) + ' – ' + dagMnd(plusDagen(van, 88)); }
     else if (zoom === '3d') { const z = zichtbaar; m.titel = DAGKORT[wd(nr(z[0]))] + ' ' + dagMnd(z[0]) + ' – ' + DAGKORT[wd(nr(z[2]))] + ' ' + dagMnd(z[2]); m.sub = 'week ' + isoWeek(z[0]) + ' · 07:00–17:00'; }
@@ -147,7 +276,7 @@
     const e = D.doc.createElement(tag);
     Object.entries(props || {}).forEach(([k, v]) => {
       if (v === null || v === undefined || v === false) return;
-      if (k === 'klass') e.className = v; else if (k === 'tekst') e.textContent = v; else if (k === 'klik') e.addEventListener('click', v); else if (k === 'wijzig') e.addEventListener('change', v); else e.setAttribute(k, v === true ? '' : v);
+      if (k === 'klass') e.className = v; else if (k === 'tekst') e.textContent = v; else if (k === 'klik') e.addEventListener('click', v); else if (k === 'wijzig') e.addEventListener('change', v); else if (k === 'input') e.addEventListener('input', v); else e.setAttribute(k, v === true ? '' : v);
     });
     kids.flat(2).forEach(x => { if (x === null || x === undefined || x === false) return; e.appendChild(typeof x === 'string' ? D.doc.createTextNode(x) : x); });
     return e;
@@ -184,14 +313,14 @@
   // Sleepbaar zijn planblokken (ook als ze aan een taak hangen) en de taken in Ongepland; een open voorstel en een taak met alleen een datum niet.
   const blokIdVan = it => it.blokId != null ? String(it.blokId) : (it.soort === 'blok' && /^blok:/.test(String(it.id)) ? String(it.id).slice(5) : null);
   N.mag = () => !!(D.magSlepen && D.magSlepen());
-  N.sleepbaar = it => N.mag() && !!blokIdVan(it) && !N.isVoorstel(it);
+  N.sleepbaar = it => N.mag() && !it.afgeleid && !!blokIdVan(it) && !N.isVoorstel(it);
   // T4: een taakbalk (een taak met datums zonder planblok) sleep je naar een andere persoon: alleen de persoon verandert, de datums blijven (verschuiven en uittrekken komt later)
-  N.taakSleepbaar = it => N.mag() && (!D.magTaken || !!D.magTaken()) && !!it && it.soort === 'taak' && it.blokId == null && !N.isVoorstel(it) && it.status !== 'klaar';   // T5: ook met het recht om taken te wijzigen; zonder dat geen balk en geen grepen
+  N.taakSleepbaar = it => N.mag() && (!D.magTaken || !!D.magTaken()) && !!it && !it.afgeleid && it.soort === 'taak' && it.blokId == null && !N.isVoorstel(it) && it.status !== 'klaar';   // T5: ook met het recht om taken te wijzigen; zonder dat geen balk en geen grepen
   const geenZone = () => { D.doc.querySelectorAll('.cn-slot.drop,.cn-uren-raster.drop').forEach(z => z.classList.remove('drop')); D.doc.querySelectorAll('.cn-dropmarker').forEach(z => { z.hidden = true; }); };
   function sleepBron(bron, node, tekst) {
     node.setAttribute('draggable', 'true');
-    node.addEventListener('dragstart', ev => { S.sleep = bron; node.classList.add('sleept'); try { ev.dataTransfer.setData('text/plain', tekst || ''); ev.dataTransfer.effectAllowed = 'move'; } catch (e) {} });
-    node.addEventListener('dragend', () => { S.sleep = null; node.classList.remove('sleept'); geenZone(); });
+    node.addEventListener('dragstart', ev => { S.sleep = bron; S.grijp = Math.max(0, (ev.clientX || 0) - node.getBoundingClientRect().left); node.classList.add('sleept'); try { ev.dataTransfer.setData('text/plain', tekst || ''); ev.dataTransfer.effectAllowed = 'move'; } catch (e) {} });
+    node.addEventListener('dragend', () => { S.sleep = null; node.classList.remove('sleept'); geenZone(); beschikWeg(); });
   }
   // Eén plek waar je kunt loslaten; `geef(ev)` geeft de doelspec (persoon, datum, dagdeel of start) of null
   function doelZone(node, geef, markeer) {
@@ -203,15 +332,18 @@
       try { ev.dataTransfer.dropEffect = reden ? 'none' : 'move'; } catch (e) {}
       if (reden) { node.classList.remove('drop'); if (markeer) markeer(null); return; }
       ev.preventDefault(); node.classList.add('drop'); if (markeer) markeer(d);
+      beschikToon(ev, Object.assign({}, S.sleep, d));   // P7b: de vrije uren van het doel, live
     });
-    node.addEventListener('dragleave', ev => { if (!node.contains(ev.relatedTarget)) { node.classList.remove('drop'); if (markeer) markeer(null); } });
-    node.addEventListener('drop', ev => { ev.preventDefault(); node.classList.remove('drop'); if (markeer) markeer(null); const d = geef(ev), b = S.sleep; S.sleep = null; geenZone(); if (d && b) N.drop(Object.assign({}, b, d)); });
+    node.addEventListener('dragleave', ev => { if (!node.contains(ev.relatedTarget)) { node.classList.remove('drop'); if (markeer) markeer(null); beschikWeg(); } });
+    node.addEventListener('drop', ev => { ev.preventDefault(); node.classList.remove('drop'); beschikWeg(); if (markeer) markeer(null); const d = geef(ev), b = S.sleep; S.sleep = null; geenZone(); if (d && b) N.drop(Object.assign({}, b, d)); });
   }
-  // Loslaten op een tijdbalk: de dag volgt uit de plek op de balk, de tijd uit de plek binnen de dag (stappen van 15 minuten)
-  function urenDoel(raster, dagen, ev) {
-    const r = raster.getBoundingClientRect(); if (!r.width) return null;
-    const x = Math.max(0, Math.min(0.9999, (ev.clientX - r.left) / r.width)) * dagen.length, k = Math.floor(x);
-    const min = Math.max(U0, Math.min(U1 - 15, U0 + Math.round((x - k) * (U1 - U0) / 15) * 15));
+  // Loslaten op een tijdbalk: de dag volgt uit de plek op de balk, de tijd uit de plek binnen de dag, gerasterd op V.snap minuten (15 bij de dagweergave, 30 bij 3 dagen). Een bestaand blok begint waar
+  // zijn linkerrand komt (de plek waar je het vastpakte telt mee), niet waar de muis is.
+  function urenDoel(raster, dagen, ev, V) {
+    const r = raster.getBoundingClientRect(); if (!r.width || !dagen.length) return null;
+    const px = ev.clientX - r.left, grijp = S.sleep && S.sleep.soort === 'verplaats' ? (S.grijp || 0) : 0;
+    const t = N.plekNaarTijd(px, V.ppd, V.snap, grijp), k = Math.max(0, Math.min(dagen.length - 1, t.k));
+    const min = t.k < 0 ? U0 : t.k >= dagen.length ? U1 - V.snap : t.min;
     return { datum: dagen[k], start: hhmm(min), minuut: min, kolom: k };
   }
 
@@ -219,9 +351,9 @@
   function blok(it, uur, stijl) {
     const voorstel = N.isVoorstel(it), wacht = !!(it.wacht && it.status !== 'klaar'), sleep = N.sleepbaar(it), bid = blokIdVan(it), taakSleep = !sleep && N.taakSleepbaar(it), taakBron = { soort: 'taakbalk', taak: { code: it.code, id: it.id, naam: it.naam, voorstel: false }, van: it.persoon || '', vanDatum: it.datum || '' }, mijlpaal = !!(it.taak && it.taak.soort === 'mijlpaal');
     const sub = el('span', { klass: 'cn-blok-sub' }, el('span', { klass: 'cn-code', tekst: projNr(it.code) }), ' ' + projNaam(it.code), it.min && !uur ? ' · ' + uren(it.min) : '');
-    const b = el('div', { role: 'button', tabindex: '0', klass: 'cn-blok' + (voorstel ? ' voorstel' : '') + (wacht ? ' wacht' : '') + (sleep || taakSleep ? ' sleepbaar' : ''), 'data-taak': taakSleep ? String(it.id) : null, 'data-code': taakSleep ? String(it.code) : null, 'data-pf-taak': it.soort === 'taak' ? String(it.id) : null, 'data-pf-code': it.soort === 'taak' ? String(it.code) : null, 'aria-keyshortcuts': taakSleep ? 'ArrowLeft ArrowRight Shift+ArrowLeft Shift+ArrowRight Alt+Shift+ArrowLeft Alt+Shift+ArrowRight' : null, style: '--block-color:' + P.projectKleur(it.code), title: [it.naam, projNr(it.code) + ' ' + projNaam(it.code), it.min ? uren(it.min) : '', voorstel ? 'voorstel' : '', wacht ? ('wacht' + (it.wachtTekst ? ': ' + it.wachtTekst : '')) : '', it.waarschuwing || '', it.nietEenduidig ? 'niet eenduidig aan een taak gekoppeld (hetzelfde taak-id staat in meer dan één project)' : ''].filter(Boolean).join(' · ') },
+    const b = el('div', { role: 'button', tabindex: '0', klass: 'cn-blok' + (voorstel ? ' voorstel' : '') + (wacht ? ' wacht' : '') + (sleep || taakSleep ? ' sleepbaar' : ''), 'data-taak': taakSleep ? String(it.id) : null, 'data-code': taakSleep ? String(it.code) : null, 'data-pf-taak': it.soort === 'taak' ? String(it.id) : null, 'data-pf-code': it.soort === 'taak' ? String(it.code) : null, 'data-blok': sleep ? String(bid) : null, 'aria-keyshortcuts': taakSleep ? 'ArrowLeft ArrowRight Shift+ArrowLeft Shift+ArrowRight Alt+Shift+ArrowLeft Alt+Shift+ArrowRight' : null, style: '--block-color:' + P.projectKleur(it.code), title: [it.naam, projNr(it.code) + ' ' + projNaam(it.code), it.min ? uren(it.min) : '', voorstel ? 'voorstel' : '', wacht ? ('wacht' + (it.wachtTekst ? ': ' + it.wachtTekst : '')) : '', it.waarschuwing || '', it.nietEenduidig ? 'niet eenduidig aan een taak gekoppeld (hetzelfde taak-id staat in meer dan één project)' : ''].filter(Boolean).join(' · ') },
       el('span', { klass: 'cn-blok-kop' }, el('span', { klass: 'cn-blok-titel', tekst: it.naam }), voorstel ? el('span', { klass: 'cn-chipje', tekst: 'voorstel' }) : null, wacht && !voorstel ? el('span', { klass: 'cn-chipje wacht', tekst: 'wacht' }) : null, D.taakBezig && it.soort === 'taak' && D.taakBezig(it.code, it.id) ? el('span', { klass: 'cn-chipje wacht', tekst: 'opslaan hangt', title: 'Opslaan hangt: wacht even of herlaad de pagina om opnieuw te proberen' }) : null, it.waarschuwing ? el('span', { klass: 'cn-chipje wacht', tekst: 'let op', title: it.waarschuwing }) : null), uur ? el('span', { klass: 'cn-blok-sub' }, el('span', { klass: 'cn-tijd', tekst: uur }), ' · ', el('span', { klass: 'cn-code', tekst: projNr(it.code) }), ' ' + projNaam(it.code)) : sub);
-    if (S.toon && it.soort === 'taak' && String(it.id) === S.toon.id && String(it.code).toLowerCase() === S.toon.code && D.nu() < S.toon.tot) b.classList.add('tp-gemarkeerd');   // "Toon in tijdlijn" vanuit het taakpaneel
+    if (S.toon && !it.afgeleid && it.soort === 'taak' && String(it.id) === S.toon.id && String(it.code).toLowerCase() === S.toon.code && D.nu() < S.toon.tot) b.classList.add('tp-gemarkeerd');   // "Toon in tijdlijn" vanuit het taakpaneel
     klikOpen(b, it);
     b.addEventListener('keydown', ev => { if ((ev.key === 'Enter' || ev.key === ' ') && ev.target === b) { ev.preventDefault(); openItem(it, b); } });
     if (sleep) sleepBron({ soort: 'verplaats', blokId: bid }, b, it.naam); else if (taakSleep) sleepBron(taakBron, b, it.naam);
@@ -230,7 +362,7 @@
       if (S.zoom === 'week' && !mijlpaal) [['start', it.eerste, 'l', 'start'], ['eind', it.laatste, 'r', 'eind']].forEach(([kant, tonen, kl, woord]) => {
         if (!tonen) return;
         const g = el('span', { klass: 'cn-greep ' + kl, 'aria-hidden': 'true', title: 'Sleep om de ' + woord + ' te verplaatsen' });
-        sleepBron({ soort: 'taakrand', kant, taak: taakBron.taak, van: it.persoon || '' }, g, it.naam); g.addEventListener('dragstart', ev => ev.stopPropagation());   // de greep sleept alleen de rand, niet de hele balk
+        sleepBron({ soort: 'taakrand', kant, taak: taakBron.taak, van: it.persoon || '', gezien: { start: (it.taak && it.taak.start) || '', eind: (it.taak && it.taak.eind) || '' } }, g, it.naam); g.addEventListener('dragstart', ev => ev.stopPropagation());   // de greep sleept alleen de rand, niet de hele balk
         b.appendChild(g);
       });
       // het toetsenbord: pijltje = de balk een bedrijfswerkdag schuiven, Shift+pijltje = het eind, Alt+Shift+pijltje = de start
@@ -254,124 +386,708 @@
     if (N.omzetbaar(it) && (S.zoom === 'week' || S.zoom === '3d' || S.zoom === 'dag')) w.appendChild(el('button', { type: 'button', klass: 'cn-vpl omz', 'aria-label': 'Zet ' + it.naam + ' om naar een taakbalk', title: 'Omzetten naar taakbalk…', klik: ev => { ev.stopPropagation(); N.omzetten(it); } }, icoon('M4 8h16M4 16h16M13 4l4 4-4 4M11 12l-4 4 4 4')));
     if (sleep && D.dialoog && (S.zoom === 'week' || S.zoom === '3d' || S.zoom === 'dag')) w.appendChild(el('button', { type: 'button', klass: 'cn-vpl', 'aria-label': 'Verplaats ' + it.naam + ' naar…', title: 'Verplaats naar…', klik: ev => { ev.stopPropagation(); N.menu({ soort: 'verplaats', blokId: bid, naam: it.naam }); } }, icoon('M7 7h11l-3-3M17 17H6l3 3')));
     return w;
-  }  const persoonKop = (r, tekst, over, balk) => el('div', { klass: 'cn-persoon' },
-    el('div', { klass: 'cn-pkop' }, el('span', { klass: 'cn-avatar', tekst: ini(r.naam) }), el('span', { klass: 'cn-pnaam' }, el('b', { tekst: r.naam }), r.heeftCap ? null : el('span', { klass: 'cn-sub', tekst: 'zonder eigenaar of niet in het team' }))),
-    tekst ? el('span', { klass: 'cn-vrij' + (over ? ' over' : ''), tekst }) : null, balk || null);
+  }  const persoonKop = (r, tekst, over, balk, badge, extra, extra2) => el('div', { klass: 'cn-persoon' + (r.totaal ? ' totaal' : r.rol ? ' rol' : ''), 'data-totaal': r.totaal ? '1' : null }, badge || null,
+    el('div', { klass: 'cn-pkop' }, avatarEl(r), el('span', { klass: 'cn-pnaam' }, el('b', { tekst: r.naam }), rolChip(r), r.heeftCap ? null : el('span', { klass: 'cn-sub', tekst: 'zonder eigenaar of niet in het team' }))),
+    tekst ? el('span', { klass: 'cn-vrij' + (over ? ' over' : ''), tekst }) : null, balk || null, extra || null, extra2 || null);
   const laadBalk = (gepl, cap, over) => el('span', { klass: 'cn-laad', role: 'img', 'aria-label': 'gepland ' + uren(gepl) + ' van ' + uren(cap) }, el('span', { style: 'width:' + (cap > 0 ? Math.min(100, Math.round(gepl / cap * 100)) : 0) + '%', klass: over ? 'over' : '' }));
 
-  function tekenWeek(m, rijen, wrap) {
-    const dagen = m.dagen, kol = dagen.length;
-    const raster = el('div', { klass: 'cn-week', style: 'grid-template-columns:190px repeat(' + kol + ',minmax(128px,1fr));min-width:' + (190 + kol * 128) + 'px' });
-    raster.appendChild(el('div', { klass: 'cn-hoek' }, el('span', { tekst: 'Team · ' + rijen.filter(r => r.heeftCap).length }), el('span', { tekst: 'ochtend / middag' })));
-    dagen.forEach(d => raster.appendChild(el('div', { klass: 'cn-dagkop' + (d.nu ? ' nu' : '') }, el('b', { tekst: DAGKORT[wd(nr(d.datum))] }), ' ', el('span', { klass: 'cn-num', tekst: dagMnd(d.datum) }))));
-    rijen.forEach(r => {
-      const w = r.weken[0] || { gepland_min: 0, cap_min: 0, over_min: 0 };
-      raster.appendChild(persoonKop(r, r.heeftCap ? N.weekTekst(r, 0) : '', w.over_min > 0, r.heeftCap ? laadBalk(w.gepland_min, w.cap_min, w.over_min > 0) : null));
-      r.dagen.forEach((c, i) => {
-        const som = N.celSom(c), d = dagen[i];
-        const cel = el('div', { klass: 'cn-cel' + (d.nu ? ' nu' : '') + (som.staat === 'vrij' ? ' vrij' : '') + (som.staat === 'over' ? ' over' : '') + (som.staat === 'vol' ? ' vol' : '') });
-        cel.appendChild(el('div', { klass: 'cn-som' + (som.staat === 'over' ? ' over' : '') }, el('span', { tekst: som.sum }), som.over ? el('span', { tekst: som.over }) : null));
-        if (c.verlof) cel.appendChild(el('div', { klass: 'cn-vrijtekst', tekst: 'Vrij (verlof)' }));
-        else if (!c.werkdag) cel.appendChild(el('div', { klass: 'cn-vrijtekst', tekst: 'Vrije dag' }));
-        if ((c.verlof || !c.werkdag) && r.slug) doelZone(cel, () => ({ persoon: r.slug, datum: c.datum, dagdeel: 0 }));   // loslaten mag, maar eerst een bevestiging (V.waarschuwing)
-        else (r.slots[i] || [[], []]).forEach((lijst, dl) => { const slot = el('div', { klass: 'cn-slot' }, lijst.map(it => blok(it)), lijst.length ? null : el('div', { klass: 'cn-leeg', tekst: dl ? 'middag' : 'ochtend' })); if (r.slug) doelZone(slot, () => ({ persoon: r.slug, datum: c.datum, dagdeel: dl })); cel.appendChild(slot); });
-        if (c.verlof || !c.werkdag) (c.items || []).forEach(it => cel.appendChild(blok(it)));   // iets op een vrije dag niet laten verdwijnen
-        raster.appendChild(cel);
+  // ── C2: stapelen en de belasting per persoon ──
+  // Stapelen: taken die elkaar overlappen bij dezelfde persoon staan in banen onder elkaar (een taak houdt dezelfde baan over de dagen); er zijn er MAX_STAPEL zichtbaar, de rest zit achter "+N meer".
+  const MAX_STAPEL = 4;
+  const itemSleutel = it => (it.soort || '') + '|' + String(it.code == null ? '' : it.code).toLowerCase() + '|' + String(it.id);
+  N.MAX_STAPEL = MAX_STAPEL; N.itemSleutel = itemSleutel;
+  N.banen = function (perDag) {   // perDag: per dag een lijst items -> { dagen: per dag [{ it, lane }], banen }
+    const toe = new Map(); let max = 0;
+    const dagen = perDag.map(items => {
+      const bezet = new Set(), res = items.map(it => { const l = toe.get(itemSleutel(it)); if (l !== undefined && !bezet.has(l)) { bezet.add(l); return { it, lane: l }; } return { it, lane: -1 }; });
+      res.forEach(x => { if (x.lane >= 0) return; let l = 0; while (bezet.has(l)) l++; bezet.add(l); x.lane = l; toe.set(itemSleutel(x.it), l); });
+      res.forEach(x => { if (x.lane + 1 > max) max = x.lane + 1; });
+      return res;
+    });
+    return { dagen, banen: max };
+  };
+  // Belasting = beschikbaar min gepland over de dagen idx van rij r. Beschikbaar is de capaciteit van die persoon per dag (zijn werktijden, min verlof en vrije dagen), gepland de raming per dag zoals
+  // MTPlanning.weekRooster die verdeelt (taakVerdeling over echte werkdagen, planblokken zonder dubbeltelling met hun taak, een open voorstel telt niet): dezelfde getallen als Mijn werk en de weekbezetting,
+  // zonder afronding op dagdelen. Het saldo is netto over de periode: wat een taak binnen haar datums vrij verdeelbaar maakt.
+  const uurTekst = min => { const n = Math.max(0, Math.round(min)), h = Math.floor(n / 60), r = n % 60; return h && r ? h + ' u ' + r + ' min' : h ? h + ' u' : r ? r + ' min' : '0 u'; };
+  N.uurTekst = uurTekst;
+  N.belasting = function (r, idx) {
+    let cap = 0, gepl = 0; const per = new Map(), dagen = [];
+    idx.forEach(i => {
+      const c = r.dagen[i]; if (!c) return;
+      cap += c.cap_min; gepl += c.gepland_min;
+      dagen.push({ datum: c.datum, cap: c.cap_min, gepl: c.gepland_min, verlof: !!c.verlof, werkdag: !!c.werkdag, werktNiet: !!c.werktNiet });
+      (c.items || []).forEach(it => {
+        if (it.planvoorstel) return; const min = Math.round(it.min || 0); if (min <= 0) return;
+        const k = itemSleutel(it), x = per.get(k) || { naam: it.naam, code: it.code, soort: it.soort, min: 0 }; x.min += min; per.set(k, x);
       });
     });
-    wrap.appendChild(raster);
+    const items = [...per.values()].sort((a, b) => b.min - a.min || String(a.naam).localeCompare(String(b.naam)));
+    return { cap, gepl, saldo: cap - gepl, dagen, items };
+  };
+  N.belastingTekst = function (saldo) {
+    const s = Math.round(saldo);
+    if (s > 0) return { tekst: uurTekst(s) + ' over', staat: 'over' };
+    if (s === 0) return { tekst: '0 u over', staat: 'nul' };
+    return { tekst: uurTekst(-s) + ' te veel', staat: 'teveel' };
+  };
+  // De periode waar het getal bij de naam over gaat: de week in het midden van beeld (kwartaal, maand en week) of de dag in het midden (3 dagen en dag)
+  function belastingPeriode(V) {
+    const m = V.m, mid = V.venster[Math.floor((V.venster.length - 1) / 2)];
+    if (V.teken === 'uren' || m.weekend) return { idx: [mid], label: DAGLANG[wd(nr(m.dagen[mid].datum))] + ' ' + dagMnd(m.dagen[mid].datum) };
+    const w0 = Math.floor(mid / 5) * 5, idx = []; for (let i = w0; i < w0 + 5 && i < m.dagen.length; i++) idx.push(i);
+    return { idx, label: 'week ' + isoWeek(m.dagen[idx[0]].datum) + ' (' + dagMnd(m.dagen[idx[0]].datum) + ' – ' + dagMnd(m.dagen[idx[idx.length - 1]].datum) + ')' };
+  }
+  // De uitleg bij een totaalrij: "werkplaats 46 u gevraagd, 40 u vast + 12 u inspringers" (over de dagen van de periode)
+  function totaalTekst(r, idx) {
+    let vraag = 0, vast = 0, ins = 0; idx.forEach(i => { const c = r.dagen[i]; if (c) { vraag += c.gepland_min; vast += c.vast_min || 0; ins += c.inspring_min || 0; } });
+    return (r.soortK === 'wp' ? 'werkplaats ' : 'kantoor ') + uurTekst(vraag) + ' gevraagd, ' + uurTekst(vast) + ' vast + ' + uurTekst(ins) + ' inspringers';
+  }
+  function belastingEl(V, r) {
+    if (!r.heeftCap) return null;
+    const p = belastingPeriode(V), b = N.belasting(r, p.idx), t = N.belastingTekst(b.saldo), metRec = !!werkMap()[String(r.slug || '').toLowerCase()];
+    const dagTekst = b.dagen.map(d => DAGKORT[wd(nr(d.datum))] + ' ' + (d.verlof ? 'verlof' : !d.werkdag ? 'vrij' : d.werktNiet ? 'werkt niet' : uurTekst(d.cap))).join(' · ');
+    const rijen = b.items.slice(0, 12).map(x => el('div', { klass: 'cn-bpop-rij' }, el('span', { klass: 'cn-bpop-naam' }, el('span', { klass: 'cn-code', tekst: x.code ? projNr(x.code) : '' }), ' ' + x.naam), el('span', { klass: 'cn-num', tekst: uurTekst(x.min) })));
+    if (b.items.length > 12) rijen.push(el('div', { klass: 'cn-bpop-sub', tekst: '… en ' + (b.items.length - 12) + ' andere' }));
+    const pop = el('div', { klass: 'cn-bpop', role: 'tooltip', hidden: true },
+      el('b', { tekst: r.naam + ' · ' + p.label }),
+      el('div', { klass: 'cn-bpop-reg' }, el('span', { tekst: 'Beschikbaar' }), el('span', { klass: 'cn-num', tekst: uurTekst(b.cap) })),
+      r.totaal ? el('div', { klass: 'cn-bpop-sub', tekst: totaalTekst(r, p.idx) }) : null,
+      el('div', { klass: 'cn-bpop-sub', tekst: dagTekst + (r.totaal ? ' (aanbod = wie dit kan doen, minus zijn werk van de andere soort)' : r.rol ? ' (rol zonder naam: uren per dag volgens Planning inrichten)' : metRec ? ' (volgens de werktijden)' : ' (geen werktijden ingevuld: werkuren per week gedeeld door 5)') }),
+      el('div', { klass: 'cn-bpop-reg' }, el('span', { tekst: 'Gepland' }), el('span', { klass: 'cn-num', tekst: uurTekst(b.gepl) })),
+      rijen.length ? el('div', { klass: 'cn-bpop-lijst' }, rijen) : el('div', { klass: 'cn-bpop-sub', tekst: 'Niets gepland in deze periode.' }),
+      el('div', { klass: 'cn-bpop-reg tot ' + t.staat }, el('span', { tekst: 'Beschikbaar − gepland' }), el('span', { klass: 'cn-num', tekst: (b.saldo < 0 ? '−' : '') + uurTekst(Math.abs(b.saldo)) + (b.saldo < 0 ? ' (te veel)' : ' (over)') })));
+    const badge = el('button', { type: 'button', klass: 'cn-bbadge ' + t.staat, 'aria-expanded': 'false', 'aria-label': 'Belasting van ' + r.naam + ', ' + p.label + ': ' + t.tekst + '. Activeer voor de opbouw.' }, el('span', { tekst: t.tekst }));
+    let open = false, vast = false;
+    const buiten = ev => { if (!badge.contains(ev.target) && !pop.contains(ev.target)) verberg(); };
+    const toon = () => {
+      if (open) return; if (S.popOpruim && S.popOpruim !== verberg) S.popOpruim(); S.popOpruim = verberg; open = true; pop.hidden = false; D.doc.body.appendChild(pop);
+      const br = badge.getBoundingClientRect(), g = D.doc.defaultView, pw = pop.offsetWidth, ph = pop.offsetHeight;
+      let y = br.bottom + 6; if (g && y + ph > g.innerHeight - 8) y = Math.max(8, br.top - ph - 6);
+      pop.style.left = Math.max(8, Math.min(br.left, (g ? g.innerWidth : 1000) - pw - 8)) + 'px'; pop.style.top = y + 'px'; badge.setAttribute('aria-expanded', 'true');
+    };
+    function verberg() { if (!open) return; open = false; vast = false; if (pop.parentNode) pop.parentNode.removeChild(pop); badge.setAttribute('aria-expanded', 'false'); D.doc.removeEventListener('pointerdown', buiten, true); }
+    badge.addEventListener('mouseenter', toon); badge.addEventListener('focus', toon);
+    badge.addEventListener('mouseleave', () => { if (!vast) verberg(); }); badge.addEventListener('blur', () => { if (!vast) verberg(); });
+    badge.addEventListener('click', ev => { ev.stopPropagation(); if (vast) verberg(); else { toon(); vast = true; D.doc.addEventListener('pointerdown', buiten, true); } });
+    badge.addEventListener('keydown', ev => { if (ev.key === 'Escape') verberg(); });
+    return badge;
+  }
+  // ── G1: de laag "Geklokt" ──
+  // Naast het geplande de uren die echt zijn geklokt (Toggl, zoals ze in de Uren staan: dezelfde bron als het oude Rooster en de Lijst, geen nieuwe aanroep). Alleen kijken: er wordt niets geschreven.
+  // Een entry telt op de dag en het uur in Amsterdam, ook als de computer in een andere tijdzone staat. Een lopende timer (negatieve duur), een entry van een onbekende persoon en een entry buiten het venster doen niet mee.
+  const LS_GK = 'mt-cap-geklokt', GK_H = 18;   // GK_H: de hoogte van de dunne strook onder de blokken in de uurweergave
+  const TZ_AMS = (() => { try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Amsterdam', hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (e) { return null; } })();
+  N.lokaal = function (iso) {   // een ISO-tijd -> { datum: 'jjjj-mm-dd', min: minuten sinds middernacht } in Amsterdam, of null
+    const s = String(iso == null ? '' : iso).trim(); if (!s) return null;
+    if (!/T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}(:?\d{2})?)$/i.test(s)) {   // zonder tijdzone is het al de lokale tijd
+      const z = /^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}):(\d{2}))?/.exec(s); return z && P.isYmd(z[1]) ? { datum: z[1], min: z[2] ? Number(z[2]) * 60 + Number(z[3]) : 0 } : null;
+    }
+    const t = Date.parse(s); if (!Number.isFinite(t) || !TZ_AMS) return null;
+    const dl = {}; TZ_AMS.formatToParts(new Date(t)).forEach(x => { dl[x.type] = x.value; });
+    return { datum: dl.year + '-' + dl.month + '-' + dl.day, min: (Number(dl.hour) % 24) * 60 + Number(dl.minute) };
+  };
+  // Stap 1 (eenmaal per keer tekenen): de entries naar regels per persoon en dag op de lokale tijd; stap 2 (bij elk nieuw venster): de regels in het venster per persoon en dag bij elkaar.
+  N.gkVoorbereid = function (entries, team) {
+    const uit = { lijst: [], lopend: 0, onbekend: 0 };
+    (entries || []).forEach((e, i) => {
+      if (!e || typeof e !== 'object') return;
+      const sec = Number(e.duur != null ? e.duur : e.duration); if (!Number.isFinite(sec)) return;
+      if (sec < 0) { uit.lopend++; return; }   // een timer die nog loopt heeft een negatieve duur
+      const min = Math.round(sec / 60); if (min <= 0) return;
+      const l = N.lokaal(e.start); if (!l) return;
+      const slug = String(P.persoonSlug(e.teamlid, team) || '').toLowerCase(); if (!slug) { uit.onbekend++; return; }
+      uit.lijst.push({ id: String(e.id != null ? e.id : e.toggl_id != null ? e.toggl_id : 'gk' + i), slug, datum: l.datum, start: l.min, eind: l.min + min, min, code: e.project_code || '', taak: e.taak_naam || '', oms: e.omschrijving || '' });
+    });
+    return uit;
+  };
+  N.gkKies = function (voor, van, tot) {
+    const uit = { per: Object.create(null), n: 0, min: 0, weekend: 0, buiten: 0, lopend: voor.lopend, onbekend: voor.onbekend };
+    voor.lijst.forEach(b => {
+      if ((van && b.datum < van) || (tot && b.datum > tot)) { uit.buiten++; return; }
+      if (isWeekend(b.datum)) uit.weekend++;
+      const pers = uit.per[b.slug] || (uit.per[b.slug] = Object.create(null)), dag = pers[b.datum] || (pers[b.datum] = { min: 0, blokken: [] });
+      dag.min += b.min; dag.blokken.push(b); uit.n++; uit.min += b.min;
+    });
+    Object.keys(uit.per).forEach(s => Object.keys(uit.per[s]).forEach(d => uit.per[s][d].blokken.sort((a, b) => a.start - b.start || a.eind - b.eind)));
+    return uit;
+  };
+  N.geklokt = (entries, o) => N.gkKies(N.gkVoorbereid(entries, (o && o.team) || []), o && o.van, o && o.tot);
+  const gkDag = (V, slug, datum) => { const p = V.gk && slug ? V.gk.per[String(slug).toLowerCase()] : null; return (p && p[datum]) || null; };
+  const gkNaam = code => { if (!code) return 'Geen project'; try { if (D.gkProject) { const t = D.gkProject(code); if (t) return String(t); } } catch (e) {} const n = projNaam(code); return (projNr(code) + (n ? ' ' + n : '')).trim(); };
+  const gkTijd = b => hhmm(b.start) + '–' + hhmm(b.eind % 1440);
+  const gkTekst = b => gkTijd(b) + ' · ' + uren(b.min) + ' · ' + gkNaam(b.code) + (b.taak ? ' · ' + b.taak : '') + (b.oms ? ' · ' + b.oms : '');
+  function gkSyncTekst(V) {
+    let iso = ''; try { iso = (D.gkSync && D.gkSync()) || ''; } catch (e) {}
+    const t = Date.parse(iso), d = Number.isFinite(t) ? new Date(t) : null;
+    const wanneer = d ? 'laatste sync ' + d.getDate() + ' ' + MND[d.getMonth()] + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') : 'nog niet gesynct';
+    return 'Geklokt uit Toggl, ' + wanneer + ' · ' + (V.gk ? V.gk.n : 0) + ' regels in beeld · een week die nog niet gesynct is kan leeg lijken: gebruik dan Sync nu';
+  }
+  // Het detail van een geklokt blok (of van alle blokken van een dag): project, taak, omschrijving, tijd en duur
+  function gkPop(anker, titel, blokken) {
+    if (S.popOpruim) { try { S.popOpruim(); } catch (e) {} S.popOpruim = null; }
+    const tot = blokken.reduce((s, b) => s + b.min, 0);
+    const rijen = blokken.map(b => {
+      const bekend = !!projInfo(b.code), stip = el('i', { klass: 'cn-gkpop-dot', style: '--block-color:' + P.projectKleur(b.code) });
+      return el('div', { klass: 'cn-gkpop-item' },
+        el('div', { klass: 'cn-bpop-reg' }, el('span', { klass: 'cn-num', tekst: gkTijd(b) }), el('span', { klass: 'cn-num', tekst: uren(b.min) })),
+        bekend && D.openProject ? el('button', { type: 'button', klass: 'cn-gkpop-proj', title: 'Open het project', klik: () => { verberg(); open(b.code); } }, stip, gkNaam(b.code)) : el('div', { klass: 'cn-gkpop-proj plat' }, stip, gkNaam(b.code)),
+        b.taak ? el('div', { klass: 'cn-bpop-sub', tekst: 'Taak: ' + b.taak }) : null,
+        b.oms ? el('div', { klass: 'cn-bpop-sub', tekst: b.oms }) : null);
+    });
+    const pop = el('div', { klass: 'cn-bpop cn-gkpop', role: 'dialog', 'aria-label': 'Geklokte uren, ' + titel },
+      el('b', { tekst: 'Geklokt · ' + titel }), el('div', { klass: 'cn-bpop-lijst' }, rijen),
+      blokken.length > 1 ? el('div', { klass: 'cn-bpop-reg tot' }, el('span', { tekst: 'Samen' }), el('span', { klass: 'cn-num', tekst: uren(tot) })) : null,
+      el('div', { klass: 'cn-bpop-sub', tekst: 'Uit Toggl. Alleen kijken: wijzigen doe je in de Uren.' }));
+    const buiten = ev => { if (!pop.contains(ev.target) && !anker.contains(ev.target)) verberg(); };
+    const toets = ev => { if (ev.key === 'Escape') { verberg(); try { anker.focus(); } catch (e) {} } };
+    function verberg() { if (pop.parentNode) pop.parentNode.removeChild(pop); D.doc.removeEventListener('pointerdown', buiten, true); D.doc.removeEventListener('keydown', toets, true); if (S.popOpruim === verberg) S.popOpruim = null; }
+    D.doc.body.appendChild(pop); S.popOpruim = verberg;
+    const br = anker.getBoundingClientRect(), g = D.doc.defaultView, pw = pop.offsetWidth, ph = pop.offsetHeight;
+    let y = br.bottom + 6; if (g && y + ph > g.innerHeight - 8) y = Math.max(8, br.top - ph - 6);
+    pop.style.left = Math.max(8, Math.min(br.left, (g ? g.innerWidth : 1000) - pw - 8)) + 'px'; pop.style.top = y + 'px';
+    D.doc.addEventListener('pointerdown', buiten, true); D.doc.addEventListener('keydown', toets, true);
+  }
+  // De regel onder de naam: geklokt tegenover gepland voor dezelfde periode als het getal in het belastingbadge (de week in het midden, of de dag in het midden bij 3 dagen en dag)
+  function gkSomEl(V, r) {
+    if (!V.gk || !r.slug || r.totaal || r.rol) return null;
+    const p = belastingPeriode(V), b = N.belasting(r, p.idx), gk = p.idx.reduce((s, i) => s + ((gkDag(V, r.slug, V.m.dagen[i].datum) || {}).min || 0), 0);
+    return el('span', { klass: 'cn-vrij cn-gk-som', title: 'Geklokt (Toggl) tegenover gepland, ' + p.label, tekst: 'geklokt ' + uren(gk) + ' / gepland ' + uren(b.gepl) });
+  }
+  function gkCelRegel(V, r, c, datum, gd) {   // de weekweergave: onder de som van de dag, een klik toont de blokken
+    const tekst = V.ppd >= 190 ? 'geklokt ' + uren(gd.min) + ' / gepland ' + uren(c.gepland_min) : V.ppd >= 140 ? 'gekl. ' + uren(gd.min) + ' / gepl. ' + uren(c.gepland_min) : 'gekl. ' + uren(gd.min);   // de volle woorden als er plek voor is
+    const knop = el('button', { type: 'button', klass: 'cn-gk-cel', title: 'Geklokt ' + uren(gd.min) + ' (Toggl) tegenover gepland ' + uren(c.gepland_min) + '. Klik voor de blokken.', 'aria-label': r.naam + ', ' + P.datumKort(datum) + ': geklokt ' + uren(gd.min) + ' tegenover gepland ' + uren(c.gepland_min), tekst, klik: ev => { ev.stopPropagation(); gkPop(knop, r.naam + ' · ' + P.datumKort(datum), gd.blokken); } });
+    return knop;
+  }
+  function gkSegment(V, r, datum, k, b, top) {   // de uurweergave: een dun blok op de echte tijd
+    const bereik = U1 - U0, a = Math.max(U0, Math.min(U1, b.start)), e = Math.max(U0, Math.min(U1, b.eind));
+    const links = k * V.ppd + (a - U0) / bereik * V.ppd, breed = Math.max(3, (e - a) / bereik * V.ppd), buiten = b.eind <= U0 || b.start >= U1;
+    const knop = el('button', { type: 'button', klass: 'cn-gk-seg' + (buiten ? ' buiten' : ''), style: 'left:' + links.toFixed(1) + 'px;width:' + breed.toFixed(1) + 'px;top:' + (top + 2) + 'px;height:' + (GK_H - 4) + 'px;--block-color:' + P.projectKleur(b.code), title: 'Geklokt: ' + gkTekst(b), 'aria-label': r.naam + ', geklokt ' + gkTekst(b), klik: ev => { ev.stopPropagation(); gkPop(knop, r.naam + ' · ' + P.datumKort(datum), [b]); } });
+    return knop;
+  }
+  function gkMaandMerk(V, r, c, datum) {   // de maandweergave: een dun streepje onderin de dag (breedte = geklokt tegenover beschikbaar) en bij genoeg ruimte het getal
+    const gd = gkDag(V, r.slug, datum); if (!gd) return null;
+    const pct = c.cap_min > 0 ? Math.min(100, Math.round(gd.min / c.cap_min * 100)) : 100, uit = [el('span', { klass: 'cn-gk-lijn', style: 'width:' + pct + '%', title: P.datumKort(datum) + ': geklokt ' + uren(gd.min), 'aria-hidden': 'true' })];
+    if (V.ppd >= 56) { const knop = el('button', { type: 'button', klass: 'cn-gk-mtekst', title: 'Geklokt ' + uren(gd.min) + '. Klik voor de blokken.', 'aria-label': r.naam + ', ' + P.datumKort(datum) + ': geklokt ' + uren(gd.min), tekst: 'gekl. ' + uren(gd.min), klik: ev => { ev.stopPropagation(); gkPop(knop, r.naam + ' · ' + P.datumKort(datum), gd.blokken); } }); uit.push(knop); }
+    return uit;
+  }
+  const gkWeekSom = (V, r, w) => { let s = 0; for (let k = 0; k < 5; k++) { const d = V.m.dagen[w * 5 + k], gd = d ? gkDag(V, r.slug, d.datum) : null; if (gd) s += gd.min; } return s; };
+  const gkKwTitel = (V, r, w) => { const s = gkWeekSom(V, r, w); return s ? ' · geklokt ' + uren(s) : ''; };
+  const gkKwRegel = (V, r, w, wkPx) => { const s = gkWeekSom(V, r, w); if (!s) return null; return wkPx >= 56 ? el('span', { klass: 'cn-kw-gk', title: 'geklokt ' + uren(s), tekst: 'gekl. ' + uren(s) }) : el('span', { klass: 'cn-kw-gk klein', title: 'geklokt ' + uren(s), 'aria-hidden': 'true' }); };
+  function gkKnopEl() {
+    if (!D.geklokt) return null;
+    const host = !!(D.laagHost && D.laagHost());   // de knop staat bij Sync nu in de balk van de Agenda (daar is plek); zonder die plek (losse tests) in de balk van de Capaciteit
+    return el('button', { type: 'button', klass: host ? 'btn btn-sm cn-gk-knop ' + (S.gk ? 'btn-gold' : 'btn-secondary') : 'cn-knop cn-gk-knop' + (S.gk ? ' aan' : ''), id: 'cn-geklokt', 'aria-pressed': S.gk ? 'true' : 'false', title: 'Geklokt: toon naast het geplande de uren die echt geklokt zijn (uit Toggl). Alleen kijken.', klik: () => N.gkZet(!S.gk) }, icoon('M12 7v5l3 2M12 21a9 9 0 1 0 0-18a9 9 0 0 0 0 18z'), el('span', { klass: 'cn-gk-lbl', tekst: 'Geklokt' }));
+  }
+  function gkKnopPlaats() {   // naar de plek in de balk van de Agenda, of (zonder die plek) terug een knop voor in de balk van de Capaciteit
+    const host = D.laagHost ? D.laagHost() : null; if (!host) return null;
+    host.textContent = ''; const k = gkKnopEl(); if (k) host.appendChild(k); host.appendChild(hmKnopEl()); return host;
+  }
+  N.gkAan = function (aan) {   // zonder tekenen: de stand, de onthouden keuze en de link
+    S.gk = !!aan && !!(D && D.geklokt);
+    try { D.storage && (S.gk ? D.storage.setItem(LS_GK, '1') : D.storage.removeItem(LS_GK)); } catch (e) {}
+    duwFilter({ gk: S.gk ? '1' : '' });
+  };
+  N.gkZet = function (aan) { N.gkAan(aan); N.teken(); };
+
+  // ── P7b: banen en rollen zonder naam, de heatmap van de bezetting, de keuze bij een botsing en de beschikbaarheidsbalk tijdens het slepen ──
+  const LS_HM = 'mt-cap-heat';
+  const avatarEl = r => el('span', { klass: 'cn-avatar' + (r.totaal ? ' totaal' : r.rol ? ' rol' : ''), tekst: r.totaal ? (r.soortK === 'wp' ? 'WP' : 'KA') : ini(r.naam) });
+  const rolChip = r => r.totaal ? el('span', { klass: 'cn-rolchip totaal', tekst: 'totaal · vraag en aanbod', title: 'De vraag (uren van taken met een ' + (r.soortK === 'wp' ? 'werkplaats' : 'kantoor') + 'activiteit) tegenover het aanbod (wie dit kan doen: vast, plus inspringers). Afgeleid van de taken; je stelt het in bij Admin, Planning inrichten, Inzetbaarheid.' })
+    : r.rol ? el('span', { klass: 'cn-rolchip rol', tekst: 'rol zonder naam', title: 'Een rol zonder naam (bijvoorbeeld inhuur). Je kunt er taken aan toewijzen en de rol later omzetten naar een echte persoon.' }) : null;
+  const rolKnop = r => r.rol && N.mag() ? el('button', { type: 'button', klass: 'cn-rolknop', title: 'Alle taken en blokken van deze rol naar een echte persoon', tekst: 'Zet om…', klik: ev => { ev.stopPropagation(); N.rolOmzetten(r.rolK); } }) : null;
+  const hmNiveau = c => P.bezettingNiveau(c.gepland_min, c.cap_min), hmKlasse = n => ' hm ' + (n < 0 ? 'hmx' : 'hm' + n);
+  const hmKl = c => S.hm && c ? hmKlasse(hmNiveau(c)) : '';
+  const HM_NAMEN = ['niets gepland', 'tot 25%', 'tot 50%', 'tot 75%', 'tot 100%', 'overboekt'];
+  const hmLegenda = () => el('span', { klass: 'cn-hm-leg', role: 'img', 'aria-label': 'Bezetting: ' + HM_NAMEN.join(', ') }, HM_NAMEN.map((tekst, n) => el('span', { klass: 'cn-hm-lg' }, el('i', { klass: 'cn-hm-sw hm hm' + n }), tekst)));
+  function hmKnopEl() {
+    const host = !!(D.laagHost && D.laagHost());
+    return el('button', { type: 'button', klass: host ? 'btn btn-sm cn-hm-knop ' + (S.hm ? 'btn-gold' : 'btn-secondary') : 'cn-knop cn-hm-knop' + (S.hm ? ' aan' : ''), id: 'cn-bezetting', 'aria-pressed': S.hm ? 'true' : 'false', title: 'Kleur de bezetting: dezelfde getallen als de belasting, één schaal voor personen, rollen en banen.', klik: () => N.hmZet(!S.hm) }, icoon('M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z'), el('span', { klass: 'cn-gk-lbl', tekst: 'Bezetting' }));
+  }
+  N.hmAan = function (aan) { S.hm = !!aan; try { D.storage && (S.hm ? D.storage.setItem(LS_HM, '1') : D.storage.removeItem(LS_HM)); } catch (e) {} duwFilter({ hm: S.hm ? '1' : '' }); };
+  N.hmZet = function (aan) { N.hmAan(aan); N.teken(); };
+  // De beschikbaarheid van één persoon, rol of baan op één dag, uit dezelfde cellen als de belasting
+  N.beschikbaar = function (slug, datum) {
+    const m = N.laatste; if (!m || !slug) return null;
+    const r = m.rijen.find(x => x.slug === String(slug).toLowerCase()); if (!r) return null;
+    const i = m.dagen.findIndex(d => d.datum === datum), c = i >= 0 ? r.dagen[i] : null; if (!c) return null;
+    return { naam: r.naam, cap: c.cap_min, gepland: c.gepland_min, vrij: Math.max(0, c.cap_min - c.gepland_min), over: Math.max(0, c.gepland_min - c.cap_min), verlof: !!c.verlof, werkdag: !!c.werkdag, baan: !!r.totaal, index: i };
+  };
+  const taakVan = t0 => { if (!t0 || !t0.code || t0.id == null) return null; const tk = D.taken() || {}, code = Object.keys(tk).find(c => String(c).toLowerCase() === String(t0.code).toLowerCase()); return code ? (tk[code] || []).find(x => x && !x._vervallen && String(x.id) === String(t0.id)) || null : null; };
+  // Hoeveel minuten komen er op de doeldag bij als deze actie lukt? (een inschatting: een blok is precies zijn duur; een taak is zijn raming gedeeld over zijn dagen, op de eerste dag hoogstens de dagcapaciteit)
+  N.toevoeging = function (spec, a) {
+    if (!spec) return 0;
+    if (spec.soort === 'verplaats') {
+      const b = (D.blokken() || []).find(x => x && !x._vervallen && String(x.id) === String(spec.blokId)); if (!b) return 0;
+      const oud = Math.max(0, Math.round(Number(b.duurMin) || 0)), nieuw = spec.duurMin != null ? Math.round(Number(spec.duurMin)) : oud;
+      return P.zelfdePersoon(b.persoon, spec.persoon, D.team() || []) && b.datum === spec.datum ? Math.max(0, nieuw - oud) : nieuw;
+    }
+    const t = taakVan(spec.taak); if (!t) return 0;
+    const raming = P.taakRamingMin(t); if (!(raming > 0)) return 0;
+    if (spec.soort === 'nieuw') { const cap = a && a.cap > 0 ? a.cap : raming, dagen = Math.max(1, Math.ceil(raming / cap)); return Math.ceil(raming / dagen); }   // de taak verdeelt zich over zijn dagen: de eerste dag krijgt zijn aandeel
+    if (spec.soort === 'taakbalk' && spec.datum) {
+      const m = N.laatste, vi = m ? m.dagen.findIndex(d => d.datum === spec.vanDatum) : -1; let min = 0;
+      if (m && vi >= 0) m.rijen.forEach(r => { const c = r.dagen[vi]; if (c && !r.totaal) (c.items || []).forEach(it => { if (it.soort === 'taak' && String(it.id) === String(spec.taak.id) && String(it.code).toLowerCase() === String(spec.taak.code).toLowerCase()) min += it.min || 0; }); });
+      if (min) return min;
+      const dagen = P.isYmd(t.start) && P.isYmd(t.eind) ? Math.max(1, P.werkdagenTussen(t.start, t.eind, D.vrij ? D.vrij() : null)) : 1; return Math.round(raming / dagen);
+    }
+    return 0;
+  };
+  const dagNaam = d => P.datumKort(d);
+  // Bij een overboekte persoon of rol: geen stille blokkade en geen stille overboeking, maar een keuze.
+  function alsAnder(m, spec, a, toe, act) {
+    let beste = null;
+    m.rijen.forEach(r => { if (r.totaal || !r.heeftCap || r.slug === String(spec.persoon).toLowerCase() || !P.kanDoen(r.slug, act, P.inrichting())) return; const c = r.dagen[a.index]; if (!c || !c.werkdag || c.verlof || c.cap_min <= 0) return; const vrij = c.cap_min - c.gepland_min; if (vrij >= Math.min(toe, c.cap_min) && (!beste || vrij > beste.vrij)) beste = { slug: r.slug, naam: r.naam, vrij }; });
+    return beste;
+  }
+  // Het soort werk van wat er verplaatst wordt: de activiteit van de taak, ook bij een bestaand planblok (via zijn taak_id)
+  function actVan(spec) {
+    if (spec.taak) return (taakVan(spec.taak) || {}).activiteit || '';
+    if (spec.blokId) { const b = (D.blokken() || []).find(x => x && String(x.id) === String(spec.blokId)); if (b && b.taak_id != null) { const tk = D.taken() || {}; for (const c of Object.keys(tk)) { const t = (tk[c] || []).find(x => x && !x._vervallen && String(x.id) === String(b.taak_id)); if (t) return t.activiteit || ''; } } }
+    return '';
+  }
+  async function botsing(spec) {
+    const dlg = D.dialoog; if (!dlg || !dlg.choose || !N.mag() || spec._geenBotsing) return { spec };
+    if (!spec.persoon || !P.isYmd(spec.datum) || !['verplaats', 'nieuw', 'taakbalk'].includes(spec.soort)) return { spec };
+    const act0 = actVan(spec);
+    if (act0 && !P.kanDoen(spec.persoon, act0, P.inrichting())) {   // slepen is een bewuste keuze, maar wel eerst een waarschuwing: deze persoon doet dit werk volgens Planning inrichten niet
+      const wie = ((D.team() || []).find(t => t && String(t.slug).toLowerCase() === String(spec.persoon).toLowerCase()) || {}).naam || spec.persoon;
+      const ja = dlg.confirm ? await dlg.confirm({ title: 'Doet ' + wie + ' dit werk?', message: wie + ' staat bij Inzetbaarheid niet ingesteld voor dit werk.', okLabel: 'Toch inplannen', cancelLabel: 'Annuleren' }) : false;
+      if (!ja) return { stop: true };
+    }
+    const a = N.beschikbaar(spec.persoon, spec.datum); if (!a || a.totaal || a.cap <= 0) return { spec };   // zonder capaciteit (vrij, verlof): de bestaande vraag van de planroute geldt
+    const toe = N.toevoeging(spec, a); if (!(toe > 0) || a.gepland + toe <= a.cap) return { spec };
+    const m = N.laatste, r = m.rijen.find(x => x.slug === String(spec.persoon).toLowerCase()); let later = null;
+    const inBeeld = m.venster && m.venster.length ? m.venster : m.dagen.map((d, i) => i);   // alleen in beeld zoeken: "Later" moet je ook kunnen zien
+    for (const i of inBeeld) { if (i <= a.index) continue; const c = r.dagen[i]; if (c && c.werkdag && !c.verlof && !c.onderhoud && c.cap_min > 0 && c.cap_min - c.gepland_min >= Math.min(toe, c.cap_min)) { later = m.dagen[i]; break; } }
+    const taak = spec.soort !== 'verplaats' && !!taakVan(spec.taak), wacht = taak && spec.soort === 'nieuw' && !!D.wijzig, naam = (spec.soort === 'verplaats' ? ((D.blokken() || []).find(x => x && String(x.id) === String(spec.blokId)) || {}).taak : (spec.taak && spec.taak.naam)) || 'Dit';
+    const opties = [{ actie: 'boek', label: 'Toch boeken', sublabel: a.naam + ' zit dan ' + uurTekst(a.gepland + toe - a.cap) + ' over op ' + dagNaam(spec.datum) },
+      { actie: 'later', label: later ? 'Later: ' + dagNaam(later.datum) : 'Later (geen vrije dag in beeld)', sublabel: later ? 'de eerstvolgende dag met genoeg ruimte' : 'kies dan een ander moment' },
+      { actie: 'ander', label: 'Ander moment kiezen…', sublabel: 'persoon, dag en moment zelf kiezen' }];
+    if (wacht) opties.push({ actie: 'wacht', label: 'Op de wachtlijst', sublabel: 'de taak komt op Wacht (takenbak) tot er ruimte is' });
+    const act = taak ? (taakVan(spec.taak) || {}).activiteit || '' : '', kand = act || taak ? alsAnder(m, spec, a, toe, act) : null;   // iemand anders die dit werk doet en die dag ruimte heeft (stel nooit iemand voor die dit werk niet doet)
+    if (kand) opties.push({ actie: 'persoon', label: 'Naar ' + kand.naam, sublabel: kand.naam + ' doet dit werk en heeft ' + uurTekst(kand.vrij) + ' vrij op ' + dagNaam(spec.datum) });
+    const i = await dlg.choose({ title: a.naam + ' is vol', message: naam + ' past niet:\n' + a.naam + ' heeft op ' + dagNaam(spec.datum) + ' nog ' + uurTekst(a.vrij) + ' vrij van ' + uurTekst(a.cap) + ', en dit is ongeveer ' + uurTekst(toe) + '.\nWat wil je?', choices: opties.map(o => ({ label: o.label, sublabel: o.sublabel })) });
+    if (i === null || i === undefined || !opties[i]) return { stop: true };
+    const actie = opties[i].actie;
+    if (actie === 'boek') return { spec: Object.assign({}, spec, { _geenBotsing: true }) };
+    if (actie === 'persoon') return { spec: Object.assign({}, spec, { persoon: kand.slug, _geenBotsing: true }) };
+    if (actie === 'later') { if (!later) { N.toast('Er is geen vrije dag in beeld. Kies "Ander moment kiezen" of blader verder.'); return { stop: true }; } return { spec: Object.assign({}, spec, { datum: later.datum, _geenBotsing: true }) }; }
+    if (actie === 'ander') { const bron = spec.soort === 'verplaats' ? { soort: 'verplaats', blokId: spec.blokId, naam } : spec.soort === 'nieuw' ? { soort: 'nieuw', taak: spec.taak, naam } : { soort: 'taakbalk', taak: spec.taak, van: spec.van, naam }; setTimeout(() => N.menu(bron), 0); return { stop: true }; }
+    const t = taakVan(spec.taak), res = await D.wijzig({ code: spec.taak.code, id: spec.taak.id, naam, velden: { status: 'wacht' }, gezien: { status: t.status || 'todo' }, reden: 'Wacht op capaciteit van ' + a.naam + ' (' + dagNaam(spec.datum) + ')' }, { traag: () => N.toast('Opslaan duurt lang, even geduld…', null, true) });
+    N.teken(); naWijziging();
+    if (!res || !res.ok) N.toast((res && res.reden) || 'De taak kon niet op de wachtlijst gezet worden.', null, true);
+    else N.toast(naam + ' staat op de wachtlijst (Wacht).', res.wijziging && D.wijzigHerstel ? async () => { const h = await D.wijzigHerstel(res.wijziging); N.teken(); naWijziging(); N.toast(h && h.ok ? 'Teruggezet' : ((h && h.reden) || 'Terugzetten lukt niet.')); } : null);
+    return { stop: true, wachtlijst: true };
+  }
+  N._botsing = botsing;
+  // De beschikbaarheidsbalk bij de muis tijdens het slepen: de vrije uren van het doel, live, met wat dit erbij zet
+  function beschikEl() { let e = D.doc.getElementById('cn-beschik'); if (!e) { e = el('div', { id: 'cn-beschik', klass: 'cn-beschik', role: 'status', hidden: true }); D.doc.body.appendChild(e); } return e; }
+  function beschikWeg() { const e = D.doc.getElementById('cn-beschik'); if (e) e.hidden = true; }
+  function beschikToon(ev, spec) {
+    const e = beschikEl(), a = spec && spec.persoon ? N.beschikbaar(spec.persoon, spec.datum) : null;
+    if (!a || a.totaal) { e.hidden = true; return; }
+    const toe = N.toevoeging(spec, a) || 0, na = a.gepland + toe, over = a.cap > 0 ? na > a.cap : na > 0, pct = a.cap > 0 ? Math.min(100, Math.round(na / a.cap * 100)) : 100, sleutel = [a.naam, spec.datum, a.cap, a.gepland, toe].join('|');
+    if (e._sleutel !== sleutel) {
+      e._sleutel = sleutel; e.textContent = ''; e.className = 'cn-beschik' + (over ? ' over' : '');
+      e.appendChild(el('b', { tekst: a.naam + ' · ' + dagNaam(spec.datum) }));
+      e.appendChild(el('span', { klass: 'cn-beschik-balk', 'aria-hidden': 'true' }, el('span', { style: 'width:' + pct + '%' })));
+      e.appendChild(el('span', { klass: 'cn-beschik-tekst', tekst: a.cap <= 0 ? 'geen capaciteit (vrij, verlof of onderhoud)' : over ? uurTekst(na - a.cap) + ' te veel' + (toe ? ' na dit' : '') + ' (van ' + uurTekst(a.cap) + ')' : uurTekst(a.cap - na) + ' vrij' + (toe ? ' na dit' : '') + ' (van ' + uurTekst(a.cap) + ')' }));
+    }
+    const g = D.doc.defaultView, x = (ev.clientX || 0) + 16, y = (ev.clientY || 0) + 16; e.hidden = false;
+    e.style.left = Math.max(8, Math.min(x, (g ? g.innerWidth : 1000) - e.offsetWidth - 8)) + 'px'; e.style.top = Math.max(8, Math.min(y, (g ? g.innerHeight : 800) - e.offsetHeight - 8)) + 'px';
+  }
+  N._beschikToon = beschikToon;
+  // Een rol zonder naam omzetten naar een echte persoon: alle taken (via de takenroute, met controle op wat een ander intussen wijzigde) en alle planblokken (via de planblokroute) gaan naar die persoon.
+  N.rolOmzetten = async function (k) {
+    const dlg = D.dialoog; if (!dlg || !dlg.choose || !dlg.confirm || !N.mag() || S.bezig || S.menuBezig || !D.wijzig) return { ok: false };
+    const rol = ((P.inrichting() || {}).rollen || []).find(x => x.k === String(k)); if (!rol) return { ok: false };
+    const echte = (D.team() || []).filter(t => t && t.slug && !t.placeholder);
+    const taken = [], tk = D.taken() || {}; Object.keys(tk).forEach(code => { if (code.startsWith('__') || !Array.isArray(tk[code])) return; P.takenActief(tk[code]).forEach(t => { if (P.taakMensen(t).includes(rol.slug)) taken.push({ code, id: t.id, naam: t.naam || '', t }); }); });
+    const blokken = (D.blokken() || []).filter(b => b && !b._vervallen && String(b.persoon || '').toLowerCase() === rol.slug);
+    if (!taken.length && !blokken.length) { N.toast('"' + rol.label + '" heeft geen taken of blokken om om te zetten.'); return { ok: true, noop: true }; }
+    const pi = await dlg.choose({ title: '"' + rol.label + '" omzetten', message: taken.length + (taken.length === 1 ? ' taak' : ' taken') + ' en ' + blokken.length + (blokken.length === 1 ? ' blok' : ' blokken') + ' gaan naar:', choices: echte.map(t => ({ label: t.naam })) }); if (pi === null || pi === undefined || !echte[pi]) return { ok: false };
+    const lid = echte[pi];
+    if (!(await dlg.confirm({ title: 'Omzetten naar ' + lid.naam, message: 'Alle taken en blokken van "' + rol.label + '" worden van ' + lid.naam + '. Dat gaat één voor één met controle; wat niet lukt blijft bij de rol staan en wordt gemeld.', okLabel: 'Omzetten' }))) return { ok: false };
+    const mislukt = []; let gelukt = 0; const oudToast = N.toast; N.toast = () => {};   // geen melding per taak: één samenvatting aan het eind (altijd hersteld, ook bij een fout)
+    try {
+      S.bulk = true;   // over taken én blokken: geen andere sleepactie ertussen
+      S.bezig = true;
+      try {
+      for (const x of taken) {
+        const nu = P.taakMensen(x.t), anders = nu.filter(p => p !== rol.slug), gezien = { toegewezen: x.t.toegewezen || '' };
+        if (P.MEERDERE_PERSONEN && anders.length) { mislukt.push({ naam: x.naam || 'taak', reden: 'meerdere personen: pas de personen in het taakpaneel aan' }); continue; }   // het veld toegewezen is voor één persoon; een lijst gaat via het personenpaneel
+        let r; try { r = await D.wijzig({ code: x.code, id: x.id, naam: x.naam, velden: { toegewezen: lid.slug }, gezien }, {}); } catch (e) { r = { ok: false, reden: String((e && e.message) || e) }; }
+        if (r && r.ok) gelukt++; else mislukt.push({ naam: x.naam || 'taak', reden: (r && r.reden) || 'niet gelukt' });
+      }
+      } finally { S.bezig = false; }
+      for (const b of blokken) {
+        let r; try { r = await N.drop({ soort: 'verplaats', blokId: b.id, persoon: lid.slug, datum: b.datum, start: b.start, _geenBotsing: true, _bulk: true }); } catch (e) { r = { ok: false, reden: String((e && e.message) || e) }; }
+        if (r && (r.ok || r.noop)) gelukt++; else mislukt.push({ naam: b.taak || 'blok', reden: (r && r.reden) || 'niet gelukt' });
+      }
+    } finally { N.toast = oudToast; S.bezig = false; S.bulk = false; }
+    N.teken(); naWijziging();
+    N.toast(mislukt.length ? gelukt + ' omgezet naar ' + lid.naam + ', ' + mislukt.length + ' niet (' + mislukt.slice(0, 3).map(x => x.naam + ': ' + x.reden).join('; ') + '). Probeer de rest opnieuw.' : gelukt + ' omgezet naar ' + lid.naam + '. "' + rol.label + '" is nu leeg en kan in Planning inrichten verwijderd worden.', null, true);
+    return { ok: !mislukt.length, gelukt, mislukt };
+  };
+
+  // ── D1: de agenda-strook onder een persoon: zijn Outlook-afspraken als "bezet" op dezelfde tijdas als de blokken erboven ──
+  // Alleen kijken (mt-capagenda.js leest, schrijft nooit, en trekt niets af van de beschikbare uren). Zonder die module of zonder gegevens zegt de strook eerlijk wat er is.
+  const AG_BAAN = 22, AG_MAX = 3;
+  const CA = () => root.MTCapAgenda || null;
+  const AG_NAAM = { busy: 'bezet', oof: 'afwezig', tentative: 'voorlopig' };
+  const agTitel = b => (b.heleDag ? 'hele dag' : hhmm(b.start) + '–' + hhmm(b.eind % 1440)) + ' · ' + (AG_NAAM[b.status] || 'bezet') + (b.onderwerp ? ' · ' + b.onderwerp : b.prive ? ' · privé' : '') + (b.plaats ? ' · ' + b.plaats : '') + (b.herhaald ? ' · herhalend' : '');
+  function agendaRij(V, r) {
+    const A = CA(), m = V.m, idx = V.venster, st = A && r.slug ? A.stand(r.slug) : { status: 'geen' };
+    const dagen = idx.map(i => m.dagen[i].datum), banen = st.status === 'klaar' ? dagen.map(d => A.banen(A.afspraken(r.slug, d))) : [], aantal = banen.reduce((s, b) => s + b.blokken.length, 0);
+    const bijgewerkt = st.ts ? (() => { const d = new Date(st.ts); return 'bijgewerkt ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); })() : '';
+    const dekt = !A || !r.slug || A.dekt(r.slug, dagen[0], dagen[dagen.length - 1]);   // staan alle dagen in beeld in wat gelezen is? Zo niet, dan is het nog onderweg (een lege strook is dan geen "geen afspraken")
+    const sub = st.status === 'klaar' ? (!dekt ? 'laden…' : (aantal ? '' : 'geen afspraken in beeld · ') + (st.deels ? 'LET OP: niet alle afspraken getoond (meer dan 500 in dit venster) · ' : '') + (st.over ? st.over + ' overgeslagen (onbekende tijdzone) · ' : '') + (st.verversen ? 'bijwerken…' : bijgewerkt)) : st.status === 'laden' || st.status === 'leeg' ? 'laden…' : '';
+    const label = el('div', { klass: 'cn-agenda-label' }, el('b', { tekst: 'Agenda · ' + r.naam }), el('span', { klass: 'cn-agenda-sub', tekst: 'Outlook · alleen kijken' + (sub ? ' · ' + sub : '') }));
+    const bericht = (tekst, probleem) => rijEl('cn-agenda-rij', label, el('div', { klass: 'cn-agenda-strook' }, el('div', { klass: 'cn-agenda-tekst' + (probleem ? ' probleem' : ''), role: 'status', tekst })));
+    if (!A || !r.slug) return bericht('Voor deze regel is geen agenda bekend.', true);
+    if (st.status === 'laden' || st.status === 'leeg') return bericht('Afspraken uit Outlook laden…');
+    if (st.status !== 'klaar') return bericht(st.melding || 'agenda van ' + r.naam + ' niet zichtbaar', true);
+    const zicht = Math.min(AG_MAX, Math.max(1, ...banen.map(b => b.banen))), meer = banen.some(b => b.banen > AG_MAX), H = zicht * AG_BAAN + 10 + (meer ? 14 : 0), bereik = U1 - U0, ppd = V.ppd;
+    const strip = stripEl('cn-agenda-strip', V.breedte, 'height:' + H + 'px');
+    dagen.forEach((d, k) => {
+      strip.appendChild(el('span', { klass: 'cn-dagstreep', 'aria-hidden': 'true', style: 'left:' + k * ppd + 'px' }));
+      let verborgen = 0;
+      banen[k].blokken.forEach(b => {
+        if (b.lane >= AG_MAX) { verborgen++; return; }
+        const a = Math.max(U0, Math.min(U1, b.start)), e = Math.max(U0, Math.min(U1, b.eind)), buiten = !b.heleDag && (b.eind <= U0 || b.start >= U1);
+        const links = b.heleDag ? k * ppd + 1 : k * ppd + (a - U0) / bereik * ppd + 1, breed = b.heleDag ? ppd - 2 : Math.max(3, (e - a) / bereik * ppd - 2);
+        strip.appendChild(el('div', { klass: 'cn-ag-blok ' + b.status + (buiten ? ' buiten' : '') + (b.heleDag ? ' hele' : ''), tabindex: '0', title: agTitel(b), 'aria-label': r.naam + ', ' + agTitel(b), style: 'left:' + links.toFixed(1) + 'px;width:' + breed.toFixed(1) + 'px;top:' + (5 + b.lane * AG_BAAN) + 'px;height:' + (AG_BAAN - 4) + 'px' }, el('span', { tekst: b.onderwerp || (b.prive ? 'privé' : AG_NAAM[b.status] || 'bezet') })));
+      });
+      if (verborgen) strip.appendChild(el('span', { klass: 'cn-ag-meer', title: verborgen + ' afspraken meer op ' + P.datumKort(d), style: 'left:' + (k * ppd + 4) + 'px;top:' + (5 + AG_MAX * AG_BAAN) + 'px', tekst: '+' + verborgen }));
+    });
+    return rijEl('cn-agenda-rij', label, strip);
+  }
+  function agendaVraag(m) {   // de afspraken voor de dagen in beeld ophalen (gedempt en alleen wat nog niet in het geheugen staat)
+    const A = CA(); if (!A || !D || !m || m.weekend || !m.venster.length) return;
+    if (!Object.keys(S.agenda).some(k => S.agenda[k])) return;
+    try { A.vraag(m.dagen[m.venster[0]].datum, m.dagen[m.venster[m.venster.length - 1]].datum); } catch (e) { console.warn('Agenda (Outlook):', e); }
   }
 
-  function tekenUren(m, rijen, wrap) {
-    const idx = m.dagIdx, kolTot = idx.length * KOL, nu = D.nu();
-    const hoofd = el('div', { klass: 'cn-uren-kop', style: 'grid-template-columns:180px minmax(0,1fr)' }, el('div', { klass: 'cn-hoek' }, el('span', { tekst: 'Team · uren' })),
-      el('div', { klass: 'cn-uren-schaal', style: 'grid-template-columns:repeat(' + kolTot + ',minmax(0,1fr))' },
-        idx.map(i => el('div', { klass: 'cn-dagkop2' + (m.dagen[i].nu ? ' nu' : ''), style: 'grid-column:span ' + KOL }, el('b', { tekst: DAGKORT[wd(nr(m.dagen[i].datum))] }), ' ', el('span', { klass: 'cn-num', tekst: dagMnd(m.dagen[i].datum) }))),
-        idx.map(i => { const t = []; for (let h = 7; h < 17; h++) t.push(el('div', { klass: 'cn-tik' + (m.dagen[i].nu ? ' nu' : '') + (h === 7 ? ' eerste' : ''), style: 'grid-column:span 2', title: String(h).padStart(2, '0') + ':00', tekst: String(h).padStart(2, '0') + (idx.length === 1 ? ':00' : '') })); return t; })));
-    const bin = el('div', { klass: 'cn-uren' });   // de uurkolommen schalen mee met de breedte (fr-eenheden): 07:00-17:00 past altijd, zonder horizontaal scrollen
-    bin.appendChild(hoofd);
+  // "+N meer" / "minder": de rij uitklappen of weer terug naar MAX_STAPEL banen
+  const meerKnop = (tekst, open, sleutel, stijl) => el('button', { type: 'button', klass: 'cn-meer' + (stijl ? ' chip' : ''), style: stijl || null, 'aria-expanded': open ? 'true' : 'false', tekst, klik: ev => { ev.stopPropagation(); S.meer[sleutel] = !open; N.vlakTeken(true); } });
+  const stapelEl = (items, sleutel, maak) => {   // items onder elkaar, maximaal MAX_STAPEL, dan een knop
+    const open = !!S.meer[sleutel], toon = open ? items : items.slice(0, MAX_STAPEL), rest = items.length - toon.length, uit = toon.map(maak);
+    if (rest > 0) uit.push(meerKnop('+' + rest + ' meer', false, sleutel)); else if (open && items.length > MAX_STAPEL) uit.push(meerKnop('minder', true, sleutel));
+    return uit;
+  };
+  // Een rand van een taakbalk in de uurweergave slepen (hele dagen): de datum van de rand wordt de dag waar je loslaat, via dezelfde taakroute (spec taakrand) als de grepen van de weekweergave
+  function dagGreep(w, bl, kant, ctx) {
+    const g = el('span', { klass: 'cn-greep d ' + (kant === 'eind' ? 'r' : 'l'), 'aria-hidden': 'true', title: kant === 'eind' ? 'Sleep om de einddatum te verplaatsen (hele dagen)' : 'Sleep om de startdatum te verplaatsen (hele dagen)' });
+    g.addEventListener('pointerdown', ev => {
+      if ((ev.pointerType === 'mouse' && ev.button !== 0) || S.bezig) return;
+      ev.preventDefault(); ev.stopPropagation();
+      const x0 = ev.clientX, l0 = parseFloat(w.style.left), w0 = parseFloat(w.style.width), tip = el('span', { klass: 'cn-greep-tip' });
+      let dd = 0; bl.setAttribute('draggable', 'false'); w.classList.add('uitrekt'); w.appendChild(tip); S.gebaar = Date.now();
+      try { g.setPointerCapture(ev.pointerId); } catch (e) {}
+      const verplicht = (() => { try { return P.vrijSet(D.vrij ? D.vrij() : null); } catch (e) { return new Set(); } })();   // wat je ziet is wat er wordt opgeslagen: een weekend of verplichte vrije dag schuift naar de eerstvolgende (start) of vorige (eind) werkdag
+      const doel = () => { let wi = wiVan(ctx.datum) + dd, d = datumVanWi(wi); for (let i = 0; i < 30 && verplicht.has(d); i++) { wi += kant === 'eind' ? -1 : 1; d = datumVanWi(wi); } return d; };
+      const mv = e => {
+        dd = Math.round((e.clientX - x0) / ctx.ppd);
+        if (kant === 'eind') w.style.width = Math.max(8, w0 + dd * ctx.ppd) + 'px'; else { const nw = Math.max(8, w0 - dd * ctx.ppd); w.style.left = (l0 + w0 - nw) + 'px'; w.style.width = nw + 'px'; }
+        tip.textContent = (kant === 'eind' ? 'tot ' : 'vanaf ') + P.datumKort(doel());
+      };
+      const klaar = e => {
+        g.removeEventListener('pointermove', mv); g.removeEventListener('pointerup', klaar); g.removeEventListener('pointercancel', klaar);
+        try { g.releasePointerCapture(ev.pointerId); } catch (x) {}
+        bl.setAttribute('draggable', 'true'); w.classList.remove('uitrekt'); S.gebaar = 0; if (tip.parentNode) tip.parentNode.removeChild(tip);
+        if (e.type === 'pointercancel' || dd === 0) { w.style.left = l0 + 'px'; w.style.width = w0 + 'px'; gebaarKlaar(); return; }
+        S.focusTaak = String(ctx.taak.id); S.focusCode = String(ctx.taak.code);
+        N.drop({ soort: 'taakrand', kant, taak: ctx.taak, van: ctx.van, datum: doel(), gezien: ctx.gezien });   // gezien: wat je bij het tekenen zag; is het intussen anders, dan wordt er niets overschreven
+      };
+      g.addEventListener('pointermove', mv); g.addEventListener('pointerup', klaar); g.addEventListener('pointercancel', klaar);
+    });
+    g.addEventListener('click', ev => ev.stopPropagation());
+    bl.appendChild(g);
+  }
+  // ── de tijdlijn: rijen met links de persoon (blijft staan) en rechts een tijdkolom waarin een strook met de zichtbare dagen langs schuift (C1) ──
+  // V = { m, ppd, Wv, kind, venster (indexen in m.dagen), snap }. Elke strook (.cn-strip) begint bij dezelfde werkdag (V.base) en wordt in plaats() met een transform op de positie gezet;
+  // schuiven binnen een dag raakt dus geen DOM, en een nieuwe dag in beeld bouwt de stroken opnieuw op (zonder de gegevens opnieuw te rekenen).
+  const rijEl = (kl, label, strip) => el('div', { klass: 'cn-rij ' + kl }, label, el('div', { klass: 'cn-lane' }, strip));
+  const stripEl = (kl, breedte, stijl, ...kids) => el('div', { klass: 'cn-strip ' + kl, style: 'width:' + Math.round(breedte * 100) / 100 + 'px;' + (stijl || '') }, ...kids);
+  const dagenVan = V => V.venster.map(i => V.m.dagen[i]);
+  const asRij = (V, hoek, kl, hoogte, ...kids) => {
+    const as = stripEl('cn-as ' + (kl || ''), V.breedte, 'height:' + hoogte + 'px', ...kids);
+    as.setAttribute('tabindex', '0'); as.setAttribute('role', 'group'); as.setAttribute('aria-label', 'Tijdas. Pijl links en rechts schuiven, plus en min zoomen. Je kunt ook scrollen om te zoomen en de as slepen om te schuiven.');
+    return rijEl('cn-as-rij', hoek, as);
+  };
+
+  function tekenWeek(V, rijen, wrap) {
+    const m = V.m, venster = V.venster, dagen = dagenVan(V), kol = dagen.length, cols = 'grid-template-columns:repeat(' + kol + ',' + V.ppd + 'px)';
+    wrap.appendChild(asRij(V, el('div', { klass: 'cn-hoek' }, el('span', { tekst: 'Team · ' + rijen.filter(r => r.heeftCap && !r.totaal).length }), el('span', { tekst: 'ochtend / middag' })), 'cn-as-week', 40,
+      dagen.map((d, k) => el('div', { klass: 'cn-dagkop' + (d.nu ? ' nu' : ''), style: 'left:' + k * V.ppd + 'px;width:' + V.ppd + 'px' }, el('b', { tekst: DAGKORT[wd(nr(d.datum))] }), ' ', el('span', { klass: 'cn-num', tekst: dagMnd(d.datum) })))));
+    const wkIdx = Math.floor(venster[Math.floor((kol - 1) / 2)] / 5);   // de week in het midden van beeld geeft de weektotalen bij de naam
     rijen.forEach(r => {
-      const per = idx.map(i => ({ i, ...N.urenBlokken((r.dagen[i] || {}).items) }));
-      const banen = Math.max(1, ...per.map(p => p.banen)), dubbel = per.some(p => p.dubbel);
-      const gepl = idx.reduce((s, i) => s + ((r.dagen[i] || {}).gepland_min || 0), 0);
-      const raster = el('div', { klass: 'cn-uren-raster', style: 'grid-template-columns:repeat(' + kolTot + ',minmax(0,1fr));grid-template-rows:repeat(' + banen + ',48px)' });
-      per.forEach((p, k) => {
-        const c = r.dagen[p.i];
-        if (c.verlof || !c.werkdag) raster.appendChild(el('div', { klass: 'cn-uren-vrij', style: 'grid-column:' + (k * KOL + 1) + ' / ' + (k * KOL + KOL + 1) + ';grid-row:1 / span ' + banen, tekst: c.verlof ? 'Vrij (verlof)' : 'Vrije dag' }));
-        p.blokken.forEach(b => {
-          const a = k * KOL + Math.floor((b.start - U0) / 30) + 1, e = k * KOL + Math.max(Math.floor((b.start - U0) / 30) + 1, Math.ceil((b.eind - U0) / 30)) + 1;
-          raster.appendChild(blok(b.it, hhmm(b.start) + '–' + hhmm(b.eind) + (b.bij ? ' ~' : ''), 'grid-column:' + a + ' / ' + e + ';grid-row:' + (b.lane + 1)));
-        });
+      const w = r.weken[wkIdx] || r.weken[0] || { gepland_min: 0, cap_min: 0, over_min: 0 };
+      const strip = stripEl('cn-week', V.breedte, cols);
+      venster.forEach(i => {
+        const c = r.dagen[i], d = m.dagen[i];
+        const som = N.celSom(c);
+        const cel = el('div', { title: r.totaal ? totaalTekst(r, [i]) : null, klass: 'cn-cel' + hmKl(c) + (d.nu ? ' nu' : '') + (m.opt[d.datum] ? ' opt' : '') + (som.staat === 'vrij' ? ' vrij' : '') + (som.staat === 'over' ? ' over' : '') + (som.staat === 'vol' ? ' vol' : '') });
+        cel.appendChild(el('div', { klass: 'cn-som' + (som.staat === 'over' ? ' over' : '') }, el('span', { tekst: som.sum }), som.over ? el('span', { tekst: som.over }) : null));
+        { const gd = V.gk ? gkDag(V, r.slug, d.datum) : null; if (gd) cel.appendChild(gkCelRegel(V, r, c, d.datum, gd)); }   // G1: geklokt naast gepland
+        if (m.opt[d.datum]) cel.appendChild(el('div', { klass: 'cn-optnaam', title: 'Optionele vrije dag', tekst: m.opt[d.datum] }));
+        if (c.verlof) cel.appendChild(el('div', { klass: 'cn-vrijtekst', tekst: 'Vrij (verlof)' }));
+        else if (!c.werkdag) cel.appendChild(el('div', { klass: 'cn-vrijtekst', tekst: c.onderhoud ? 'Onderhoud: ' + c.onderhoud : 'Vrije dag' }));
+        if ((c.verlof || !c.werkdag) && r.slug && !r.totaal) doelZone(cel, () => ({ persoon: r.slug, datum: c.datum, dagdeel: 0 }));   // loslaten mag, maar eerst een bevestiging (V.waarschuwing)
+        else {   // wat de hele dag beslaat (in beide dagdelen) staat één keer bovenaan; de rest per dagdeel; elk stapeltje maximaal MAX_STAPEL
+          const sl = r.slots[i] || [[], []], heel = sl[0].filter(x => sl[1].includes(x)), eigen = sl.map(l => l.filter(x => !heel.includes(x))), sk = (r.slug || '_') + '|' + c.datum;
+          if (heel.length) cel.appendChild(el('div', { klass: 'cn-heel' }, el('span', { klass: 'cn-heel-kop', tekst: 'hele dag' }), stapelEl(heel, sk + '|h', it => blok(it))));
+          eigen.forEach((lijst, dl) => { const slot = el('div', { klass: 'cn-slot' }, stapelEl(lijst, sk + '|' + dl, it => blok(it)), lijst.length ? null : el('div', { klass: 'cn-leeg', tekst: dl ? 'middag' : 'ochtend' })); if (r.slug && !r.totaal) doelZone(slot, () => ({ persoon: r.slug, datum: c.datum, dagdeel: dl })); cel.appendChild(slot); });
+        }
+        if (c.verlof || !c.werkdag) (c.items || []).forEach(it => cel.appendChild(blok(it)));   // iets op een vrije dag niet laten verdwijnen
+        strip.appendChild(cel);
       });
-      if (r.slug) {   // loslaan op een tijd: een lijntje toont waar het blok begint
+      wrap.appendChild(rijEl('cn-rij-week', persoonKop(r, '', w.over_min > 0, r.heeftCap ? laadBalk(w.gepland_min, w.cap_min, w.over_min > 0) : null, belastingEl(V, r), gkSomEl(V, r), rolKnop(r)), strip));
+    });
+  }
+
+  // De uurweergave (3 dagen en dag, en alles daartussen): een planblok staat op zijn echte begintijd en duur; een taak zonder tijd komt achter elkaar vanaf 08:00 (met ~). Buiten de werktijd van de
+  // persoon is het gedimd. Het raster wordt fijner naarmate je verder inzoomt; slepen en uittrekken rasteren op V.snap minuten (15 bij de dagweergave, 30 bij drie dagen).
+  const BAAN = 52, ALD = 28;   // hoogte van een baan voor een blok met tijd, en voor een dagbalk
+  function uitrekGreep(w, bl, kant, ctx) {   // de rand van een planblok slepen = de begintijd of de duur wijzigen, via dezelfde route als verplaatsen (spec.duurMin)
+    const g = el('span', { klass: 'cn-greep u ' + (kant === 'eind' ? 'r' : 'l'), 'aria-hidden': 'true', title: kant === 'eind' ? 'Sleep om het eind te verplaatsen (' + ctx.snap + ' min)' : 'Sleep om het begin te verplaatsen (' + ctx.snap + ' min)' });
+    g.addEventListener('pointerdown', ev => {
+      if ((ev.pointerType === 'mouse' && ev.button !== 0) || S.bezig) return;
+      ev.preventDefault(); ev.stopPropagation();
+      const x0 = ev.clientX, v0 = w.style.left, b0 = w.style.width, tijd = w.querySelector('.cn-tijd'), t0 = tijd ? tijd.textContent : '';
+      let huidig = { start: ctx.start, duur: ctx.duur };
+      bl.setAttribute('draggable', 'false'); w.classList.add('uitrekt'); S.gebaar = Date.now();
+      try { g.setPointerCapture(ev.pointerId); } catch (e) {}
+      const mv = e => {
+        huidig = N.uittrek(ctx.start, ctx.duur, kant, (e.clientX - x0) / ctx.ppu * 60, ctx.snap);
+        const p = N.blokPx(ctx.k, huidig.start, huidig.start + huidig.duur, ctx.ppd); w.style.left = (p.left + 1) + 'px'; w.style.width = Math.max(2, p.width - 2) + 'px';
+        if (tijd) tijd.textContent = hhmm(huidig.start) + '–' + hhmm(huidig.start + huidig.duur);
+      };
+      const klaar = e => {
+        g.removeEventListener('pointermove', mv); g.removeEventListener('pointerup', klaar); g.removeEventListener('pointercancel', klaar);
+        try { g.releasePointerCapture(ev.pointerId); } catch (x) {}
+        bl.setAttribute('draggable', 'true'); w.classList.remove('uitrekt'); S.gebaar = 0;
+        if (e.type === 'pointercancel' || (huidig.start === ctx.start && huidig.duur === ctx.duur)) { w.style.left = v0; w.style.width = b0; if (tijd) tijd.textContent = t0; gebaarKlaar(); return; }
+        N.drop({ soort: 'verplaats', blokId: ctx.blokId, persoon: ctx.persoon, datum: ctx.datum, start: hhmm(huidig.start), duurMin: huidig.duur });
+      };
+      g.addEventListener('pointermove', mv); g.addEventListener('pointerup', klaar); g.addEventListener('pointercancel', klaar);
+    });
+    g.addEventListener('click', ev => ev.stopPropagation());
+    bl.appendChild(g);
+  }
+  function tekenUren(V, rijen, wrap) {
+    const m = V.m, idx = V.venster, ppd = V.ppd, ppu = ppd / UH(), nd = idx.length, nu = D.nu(), breedte = V.breedte;
+    // de as: dagnamen en de uren (fijner naarmate er meer ruimte is)
+    const stapLabel = ppu >= 140 ? 15 : ppu >= 55 ? 30 : ppu >= 20 ? 60 : ppu >= 10 ? 120 : 240, tikken = [];
+    idx.forEach((i, k) => { for (let t = Math.ceil(U0 / stapLabel) * stapLabel; t < U1; t += stapLabel) tikken.push(el('div', { klass: 'cn-tik' + (m.dagen[i].nu ? ' nu' : '') + (t === U0 ? ' eerste' : '') + (t % 60 ? ' deel' : ''), style: 'left:' + (k * ppd + (t - U0) / 60 * ppu).toFixed(1) + 'px', title: hhmm(t), tekst: t % 60 ? ':' + String(t % 60).padStart(2, '0') : (stapLabel >= 60 && ppu < 44 ? String(t / 60).padStart(2, '0') : hhmm(t)) })); });
+    const agAlle = rijen.filter(x => !x.totaal && !x.rol).map(x => x.slug || '_'), agAlleOpen = !!agAlle.length && agAlle.every(k => S.agenda[k]);
+    wrap.appendChild(asRij(V, el('div', { klass: 'cn-hoek' }, el('span', { tekst: 'Team · uren' }), CA() ? el('button', { type: 'button', klass: 'cn-agenda-knop alle', 'aria-pressed': agAlleOpen ? 'true' : 'false', title: 'De Outlook-agenda van iedereen als bezet onder de blokken tonen of verbergen (alleen kijken)', klik: () => { agAlle.forEach(k => { S.agenda[k] = !agAlleOpen; }); bewaarAgenda(); N.vlakTeken(true); } }, agAlleOpen ? 'Agenda\'s uit' : 'Agenda\'s aan') : null), 'cn-as-uren', 54,
+      idx.map((i, k) => el('div', { klass: 'cn-dagkop2' + (m.dagen[i].nu ? ' nu' : ''), style: 'left:' + k * ppd + 'px;width:' + ppd + 'px' }, el('b', { tekst: DAGKORT[wd(nr(m.dagen[i].datum))] }), ' ', el('span', { klass: 'cn-num', tekst: dagMnd(m.dagen[i].datum) }))), tikken));
+    const lijnen = 'repeating-linear-gradient(to right,var(--line-soft) 0 1px,transparent 1px ' + ppu.toFixed(2) + 'px)'
+      + (ppu >= 50 ? ',repeating-linear-gradient(to right,color-mix(in srgb,var(--line-soft) 55%,transparent) 0 1px,transparent 1px ' + (ppu / 2).toFixed(2) + 'px)' : '')
+      + (ppu >= 110 ? ',repeating-linear-gradient(to right,color-mix(in srgb,var(--line-soft) 30%,transparent) 0 1px,transparent 1px ' + (ppu / 4).toFixed(2) + 'px)' : '');
+    rijen.forEach(r => {
+      // Taken zonder tijd (de raming per dag) staan als dagbalken in banen bovenaan; planblokken met een tijd staan eronder op hun echte tijd (ook in banen). Maximaal MAX_STAPEL banen, de rest achter "+N meer".
+      const dagItems = idx.map(i => ((r.dagen[i] || {}).items || [])), rijSl = r.slug || '_', uitg = !!S.meer[rijSl];
+      const metTijd = dagItems.map(l => l.filter(it => tijdMin(it.start) !== null)), zonderTijd = dagItems.map(l => l.filter(it => tijdMin(it.start) === null));
+      const per = idx.map((i, k) => ({ i, ...N.urenBlokken(metTijd[k]) })), alle = N.banen(zonderTijd);
+      const bT = Math.max(1, ...per.map(p => p.banen)), dubbel = per.some(p => p.dubbel), zichtT = uitg ? bT : Math.min(bT, MAX_STAPEL), zichtA = uitg ? alle.banen : Math.min(alle.banen, MAX_STAPEL);
+      const meerA = !uitg && alle.banen > zichtA, meerT = !uitg && bT > zichtT, kanMeer = alle.banen > MAX_STAPEL || bT > MAX_STAPEL;
+      const tOff = zichtA ? zichtA * ALD + 6 + (meerA ? 20 : 0) : (meerA ? 20 : 0);
+      const gepl = idx.reduce((s, i) => s + ((r.dagen[i] || {}).gepland_min || 0), 0), hoogte0 = tOff + zichtT * BAAN + 12 + (meerT ? 20 : 0), gkDagen = V.gk ? idx.map(i => gkDag(V, r.slug, m.dagen[i].datum)) : null, hoogte = hoogte0 + (gkDagen ? GK_H + 4 : 0);   // G1: onder de blokken een dunne strook met wat geklokt is
+      const raster = stripEl('cn-uren-raster', breedte, 'height:' + hoogte + 'px;background-image:' + lijnen + ';background-size:' + breedte + 'px 100%;background-repeat:no-repeat');
+      per.forEach((p, k) => {
+        const c = r.dagen[p.i], d = m.dagen[p.i], links = k * ppd, wdIdx = (wd(nr(d.datum)) + 6) % 7;
+        raster.appendChild(el('span', { klass: 'cn-dagstreep', 'aria-hidden': 'true', style: 'left:' + links + 'px' }));
+        if (S.hm && c) raster.appendChild(el('span', { klass: 'cn-hm-streep' + hmKl(c), title: 'Bezetting ' + P.datumKort(d.datum) + ': ' + uren(c.gepland_min) + ' van ' + uren(c.cap_min), 'aria-hidden': 'true', style: 'left:' + links + 'px;width:' + ppd + 'px' }));
+        if (m.opt[d.datum]) raster.appendChild(el('div', { klass: 'cn-opt', title: 'Optionele vrije dag: ' + m.opt[d.datum], style: 'left:' + links + 'px;width:' + ppd + 'px', tekst: m.opt[d.datum] }));
+        const dim = (a, b, tekst) => raster.appendChild(el('div', { klass: 'cn-buiten', style: 'left:' + (links + a / (U1 - U0) * ppd).toFixed(1) + 'px;width:' + ((b - a) / (U1 - U0) * ppd).toFixed(1) + 'px', tekst: tekst || '' }));
+        if (c.verlof || !c.werkdag) raster.appendChild(el('div', { klass: 'cn-uren-vrij', style: 'left:' + links + 'px;width:' + ppd + 'px', tekst: c.verlof ? 'Vrij (verlof)' : c.onderhoud ? 'Onderhoud: ' + c.onderhoud : 'Vrije dag' }));
+        else {
+          const wv = r.slug ? N.werkVenster(r.slug, wdIdx) : null;   // buiten de werktijd van deze persoon gedimd (zonder rooster: niets)
+          if (wv && wv.vrij) dim(0, U1 - U0, p.blokken.length ? '' : 'werkt niet');
+          else if (wv) { if (wv.a > U0) dim(0, Math.min(U1, wv.a) - U0); if (wv.e < U1) dim(Math.max(U0, wv.e) - U0, U1 - U0); }
+        }
+        let verbA = 0, verbT = 0;
+        alle.dagen[k].forEach(({ it, lane }) => {   // de dagbalken van taken zonder tijd
+          if (lane >= zichtA) { verbA++; return; }
+          const w = blok(it, uren(it.min || 0), 'position:absolute;left:' + (links + 1) + 'px;width:' + (ppd - 2) + 'px;top:' + (4 + lane * ALD) + 'px;height:' + (ALD - 4) + 'px'), bl = w.firstChild;
+          w.classList.add('cn-alldag');
+          if (bl && bl.hasAttribute('data-taak') && it.soort === 'taak' && !(it.taak && it.taak.soort === 'mijlpaal')) {   // de randen van een taakbalk: begin- en einddatum slepen (hele dagen)
+            const taakB = { code: it.code, id: it.id, naam: it.naam, voorstel: false };
+            const gezien = { start: (it.taak && it.taak.start) || '', eind: (it.taak && it.taak.eind) || '' };
+            if (it.eerste) dagGreep(w, bl, 'start', { taak: taakB, van: it.persoon || '', datum: d.datum, ppd, gezien });
+            if (it.laatste) dagGreep(w, bl, 'eind', { taak: taakB, van: it.persoon || '', datum: d.datum, ppd, gezien });
+          }
+          raster.appendChild(w);
+        });
+        if (verbA) raster.appendChild(meerKnop('+' + verbA + ' meer', false, rijSl, 'left:' + (links + 3) + 'px;top:' + (4 + zichtA * ALD) + 'px'));
+        p.blokken.forEach(b => {
+          if (b.lane >= zichtT) { verbT++; return; }
+          const px = N.blokPx(k, b.start, b.eind, ppd), top = tOff + 6 + b.lane * BAAN;
+          const w = blok(b.it, hhmm(b.start) + '–' + hhmm(b.eind) + (b.bij ? ' ~' : ''), 'position:absolute;left:' + (px.left + 1).toFixed(1) + 'px;width:' + Math.max(2, px.width - 2).toFixed(1) + 'px;top:' + top + 'px;height:' + (BAAN - 4) + 'px');
+          const bl = w.firstChild, s0 = tijdMin(b.it.start);
+          if (r.slug && !b.bij && s0 !== null && N.sleepbaar(b.it) && bl && bl.getAttribute('draggable') === 'true') {   // alleen een planblok met een echte begintijd: de randen zijn te slepen
+            const ctx = { blokId: blokIdVan(b.it), persoon: r.slug, datum: d.datum, k, start: s0, duur: Math.max(0, Math.round(b.it.min || 0)) || (b.eind - b.start), ppd, ppu, snap: V.snap };
+            uitrekGreep(w, bl, 'start', ctx); uitrekGreep(w, bl, 'eind', ctx);
+            bl.setAttribute('aria-keyshortcuts', 'ArrowLeft ArrowRight Shift+ArrowLeft Shift+ArrowRight');   // het toetsenbord: pijltje = een rasterstap verschuiven, Shift+pijltje = het eind een rasterstap verplaatsen
+            bl.addEventListener('keydown', ev => {
+              const pijl = ev.key === 'ArrowLeft' ? -1 : ev.key === 'ArrowRight' ? 1 : 0; if (!pijl || ev.target !== bl || ev.ctrlKey || ev.metaKey || ev.altKey || S.bezig || N.mag() !== true) return;
+              ev.preventDefault();
+              let start = ctx.start, duur = ctx.duur;
+              if (ev.shiftKey) duur = N.uittrek(start, duur, 'eind', pijl * V.snap, V.snap).duur; else start = Math.max(U0, Math.min(U1 - Math.max(duur, V.snap), start + pijl * V.snap));
+              S.focusBlok = String(ctx.blokId); N.drop({ soort: 'verplaats', blokId: ctx.blokId, persoon: ctx.persoon, datum: ctx.datum, start: hhmm(start), duurMin: duur });
+            });
+          }
+          raster.appendChild(w);
+        });
+        if (verbT) raster.appendChild(meerKnop('+' + verbT + ' meer', false, rijSl, 'left:' + (links + 3) + 'px;top:' + (tOff + 6 + zichtT * BAAN) + 'px'));
+      });
+      if (gkDagen) {
+        raster.appendChild(el('div', { klass: 'cn-gk-baan', 'aria-hidden': 'true', style: 'top:' + hoogte0 + 'px;height:' + GK_H + 'px' }));
+        per.forEach((p, k) => { const gd = gkDagen[k]; if (gd) gd.blokken.forEach(b => raster.appendChild(gkSegment(V, r, m.dagen[p.i].datum, k, b, hoogte0))); });
+        raster._gkTop = hoogte0;   // een klik op de strook maakt geen nieuw planblok
+      }
+      raster.setAttribute('data-slug', r.totaal ? '' : r.slug || ''); raster._dagen = per.map(p => m.dagen[p.i].datum); raster._V = V; raster._tOff = tOff;   // voor een klik op een lege plek (nieuw planblok)
+      if (r.slug && !r.totaal) {   // loslaten op een tijd: een lijntje toont waar het blok begint
         const marker = el('span', { klass: 'cn-dropmarker', hidden: true, 'aria-hidden': 'true' }, el('span', { klass: 'cn-dropmarker-tijd' })); raster.appendChild(marker);
         const dagenDatum = per.map(p => m.dagen[p.i].datum);
-        doelZone(raster, ev => { const d = urenDoel(raster, dagenDatum, ev); return d ? { persoon: r.slug, datum: d.datum, start: d.start, _min: d.minuut, _k: d.kolom } : null; }, d => { if (!d) { marker.hidden = true; return; } marker.hidden = false; marker.style.left = ((d._k * KOL + (d._min - U0) / 30) / kolTot * 100).toFixed(2) + '%'; marker.firstChild.textContent = d.start; });
+        doelZone(raster, ev => { const d = urenDoel(raster, dagenDatum, ev, V); return d ? { persoon: r.slug, datum: d.datum, start: d.start, _min: d.minuut, _k: d.kolom } : null; }, d => { if (!d) { marker.hidden = true; return; } marker.hidden = false; marker.style.left = (d._k * ppd + (d._min - U0) / (U1 - U0) * ppd).toFixed(1) + 'px'; marker.firstChild.textContent = d.start; });
       }
-      // nu-lijn (alleen als vandaag in beeld is en de tijd tussen 07:00 en 17:00 valt)
+      // nu-lijn (alleen als vandaag in beeld is en de tijd binnen de as valt)
       const t = new Date(nu), tm = t.getHours() * 60 + t.getMinutes(), k = idx.findIndex(i => m.dagen[i].datum === m.today);
-      if (k >= 0 && tm >= U0 && tm <= U1) raster.appendChild(el('span', { klass: 'cn-nu', 'aria-hidden': 'true', style: 'left:' + ((k * KOL + (tm - U0) / 30) / kolTot * 100).toFixed(2) + '%' }));
-      bin.appendChild(el('div', { klass: 'cn-uren-rij', style: 'grid-template-columns:180px minmax(0,1fr)' },
-        el('div', { klass: 'cn-persoon enkel' }, el('div', { klass: 'cn-pkop' }, el('span', { klass: 'cn-avatar', tekst: ini(r.naam) }), el('span', { klass: 'cn-pnaam' }, el('b', { tekst: r.naam }), el('span', { klass: 'cn-vrij' + (dubbel ? ' over' : ''), tekst: dubbel ? 'dubbel geboekt' : uren(gepl) + ' gepland' })))), raster));
+      if (k >= 0 && tm >= U0 && tm <= U1) raster.appendChild(el('span', { klass: 'cn-nu', 'aria-hidden': 'true', style: 'left:' + (k * ppd + (tm - U0) / (U1 - U0) * ppd).toFixed(1) + 'px' }));
+      const open = !!S.agenda[r.slug || '_'];
+      const label = el('div', { klass: 'cn-persoon enkel' + (r.totaal ? ' totaal' : r.rol ? ' rol' : ''), 'data-totaal': r.totaal ? '1' : null }, belastingEl(V, r), el('div', { klass: 'cn-pkop' }, avatarEl(r), el('span', { klass: 'cn-pnaam' }, el('b', { tekst: r.naam }), rolChip(r), (r.heeftCap && !dubbel) ? null : el('span', { klass: 'cn-vrij' + (dubbel ? ' over' : ''), tekst: dubbel ? 'dubbel geboekt' : uren(gepl) + ' gepland' }))),
+        gkSomEl(V, r), rolKnop(r),
+        uitg && kanMeer ? meerKnop('minder', true, rijSl) : null,
+        el('button', { type: 'button', klass: 'cn-agenda-knop', 'aria-expanded': open ? 'true' : 'false', title: 'De Outlook-afspraken van ' + r.naam + ' als bezet onder de blokken (alleen kijken)', klik: () => { S.agenda[r.slug || '_'] = !open; bewaarAgenda(); N.vlakTeken(true); } }, 'Agenda', icoon(open ? 'M6 15l6-6l6 6' : 'M6 9l6 6l6-6')));
+      if (r.totaal || r.rol) { const kn = label.querySelector('.cn-agenda-knop'); if (kn) kn.remove(); }   // een baan of rol zonder naam heeft geen Outlook-agenda
+      wrap.appendChild(rijEl('cn-rij-uren', label, raster));
+      if (open && !r.totaal && !r.rol) wrap.appendChild(agendaRij(V, r));
     });
-    wrap.appendChild(bin);
   }
 
-  function tekenMaand(m, rijen, wrap) {
-    const dagen = m.dagen, kol = dagen.length;
-    const bin = el('div', { klass: 'cn-maand', style: 'min-width:960px' });
-    const kopRij = el('div', { klass: 'cn-maand-kop', style: 'grid-template-columns:200px repeat(' + kol + ',minmax(0,1fr))' }, el('div', { klass: 'cn-hoek', style: 'grid-row:span 2' }, el('span', { tekst: 'Belasting per dag' })));
-    for (let w = 0; w < m.weken; w++) kopRij.appendChild(el('div', { klass: 'cn-weekkop', style: 'grid-column:span 5', tekst: 'week ' + isoWeek(plusDagen(m.van, w * 7)) }));
-    dagen.forEach((d, i) => kopRij.appendChild(el('div', { klass: 'cn-dagnum' + (d.nu ? ' nu' : '') + (i % 5 === 0 ? ' eerste' : ''), tekst: String(Number(d.datum.slice(8))) })));
-    bin.appendChild(kopRij);
+  function tekenMaand(V, rijen, wrap) {
+    const m = V.m, venster = V.venster, dagen = dagenVan(V), kol = dagen.length, cols = 'grid-template-columns:repeat(' + kol + ',' + V.ppd + 'px)';
+    const kopWeken = [];   // per week het aantal zichtbare dagen: de weekkop beslaat die kolommen
+    venster.forEach(i => { const w = Math.floor(i / 5), l = kopWeken[kopWeken.length - 1]; if (l && l.w === w) l.n++; else kopWeken.push({ w, n: 1, i }); });
+    const dagnum = ppd => ppd >= 14;
+    wrap.appendChild(asRij(V, el('div', { klass: 'cn-hoek' }, el('span', { tekst: 'Belasting per dag' })), 'cn-as-maand', 52,
+      kopWeken.map(k => el('div', { klass: 'cn-weekkop', style: 'left:' + (venster.indexOf(k.i)) * V.ppd + 'px;width:' + k.n * V.ppd + 'px', tekst: k.n >= 3 || V.ppd >= 30 ? 'week ' + isoWeek(m.dagen[k.i].datum) : '' })),
+      dagen.map((d, k) => dagnum(V.ppd) ? el('div', { klass: 'cn-dagnum' + (d.nu ? ' nu' : '') + (venster[k] % 5 === 0 ? ' eerste' : ''), style: 'left:' + k * V.ppd + 'px;width:' + V.ppd + 'px', tekst: String(Number(d.datum.slice(8))) }) : null)));
     rijen.forEach(r => {
-      const over = r.dagen.filter(c => c.over_min > 0).length, cap = r.dagen.reduce((s, c) => s + c.cap_min, 0), gepl = r.dagen.reduce((s, c) => s + c.gepland_min, 0);
-      const rij = el('div', { klass: 'cn-maand-rij', style: 'grid-template-columns:200px repeat(' + kol + ',minmax(0,1fr))' },
-        el('div', { klass: 'cn-persoon enkel' }, el('div', { klass: 'cn-pkop' }, el('span', { klass: 'cn-avatar', tekst: ini(r.naam) }), el('span', { klass: 'cn-pnaam' }, el('b', { tekst: r.naam }), el('span', { klass: 'cn-vrij' + (over ? ' over' : ''), tekst: over ? over + (over === 1 ? ' dag over' : ' dagen over') : (r.heeftCap ? uren(Math.max(0, cap - gepl)) + ' vrij' : uren(gepl) + ' gepland'), title: '' })))));
-      r.dagen.forEach((c, i) => {
-        const nuDag = dagen[i].nu, pct = c.cap_min > 0 ? c.gepland_min / c.cap_min * 100 : (c.gepland_min ? 100 : 0);
-        const vrij = c.verlof || !c.werkdag;
-        rij.appendChild(el('div', { klass: 'cn-mdag' + (nuDag ? ' nu' : '') + (i % 5 === 0 ? ' eerste' : '') + (vrij ? ' vrij' : ''), title: P.datumKort(c.datum) + ': ' + (c.verlof ? 'verlof' : !c.werkdag ? 'vrije dag' : uren(c.gepland_min) + ' van ' + uren(c.cap_min)) },
-          vrij ? null : el('span', { klass: 'cn-mbalk' + (c.over_min > 0 ? ' over' : c.gepland_min > 0 && pct >= 100 ? ' vol' : ''), style: 'height:' + Math.max(c.gepland_min ? 8 : 0, Math.min(100, Math.round(pct))) + '%' })));
+      const cs = venster.map(i => r.dagen[i]);
+      const over = cs.filter(c => c.over_min > 0).length, cap = cs.reduce((s, c) => s + c.cap_min, 0), gepl = cs.reduce((s, c) => s + c.gepland_min, 0);
+      const label = el('div', { klass: 'cn-persoon enkel' + (r.totaal ? ' totaal' : r.rol ? ' rol' : ''), 'data-totaal': r.totaal ? '1' : null }, belastingEl(V, r), el('div', { klass: 'cn-pkop' }, avatarEl(r), el('span', { klass: 'cn-pnaam' }, el('b', { tekst: r.naam }), rolChip(r), (r.heeftCap && !over) ? null : el('span', { klass: 'cn-vrij' + (over ? ' over' : ''), tekst: over ? over + (over === 1 ? ' dag over' : ' dagen over') : uren(gepl) + ' gepland', title: '' }))), gkSomEl(V, r), rolKnop(r));
+      const strip = stripEl('cn-maand-strip', V.breedte, cols);
+      venster.forEach((i, k) => {
+        const c = r.dagen[i], d = m.dagen[i], pct = c.cap_min > 0 ? c.gepland_min / c.cap_min * 100 : (c.gepland_min ? 100 : 0), vrij = c.verlof || !c.werkdag;
+        strip.appendChild(el('div', { klass: 'cn-mdag' + hmKl(c) + (d.nu ? ' nu' : '') + (i % 5 === 0 ? ' eerste' : '') + (vrij ? ' vrij' : ''), title: P.datumKort(c.datum) + ': ' + (c.verlof ? 'verlof' : !c.werkdag ? 'vrije dag' : uren(c.gepland_min) + ' van ' + uren(c.cap_min)) },
+          vrij ? null : el('span', { klass: 'cn-mbalk' + (c.over_min > 0 ? ' over' : c.gepland_min > 0 && pct >= 100 ? ' vol' : ''), style: 'height:' + Math.max(c.gepland_min ? 8 : 0, Math.min(100, Math.round(pct))) + '%' }),
+          !vrij && V.ppd >= 56 && c.gepland_min ? el('span', { klass: 'cn-mtekst' + (c.over_min > 0 ? ' over' : ''), tekst: uren(c.gepland_min) }) : null,
+          V.gk ? gkMaandMerk(V, r, c, d.datum) : null));
       });
-      bin.appendChild(rij);
+      wrap.appendChild(rijEl('cn-rij-maand', label, strip));
     });
-    wrap.appendChild(bin);
   }
 
-  function tekenKwartaal(m, rijen, wrap) {
-    const W = m.weken, bin = el('div', { klass: 'cn-kwartaal', style: 'min-width:960px' });
-    const kop = el('div', { klass: 'cn-kw-kop', style: 'grid-template-columns:200px repeat(' + W + ',minmax(0,1fr))' }, el('div', { klass: 'cn-hoek' }, el('span', { tekst: 'Projecten per persoon' })));
-    for (let w = 0; w < W; w++) { const ma = plusDagen(m.van, w * 7); kop.appendChild(el('div', { klass: 'cn-wk' + (ma <= m.today && m.today <= plusDagen(ma, 6) ? ' nu' : ''), title: dagMnd(ma), tekst: 'wk ' + isoWeek(ma) })); }
-    bin.appendChild(kop);
+  function tekenKwartaal(V, rijen, wrap) {
+    const m = V.m, W = m.weken, wkPx = V.ppd * 5, cols = 'grid-template-columns:repeat(' + W + ',' + wkPx + 'px)', w0 = m.d0w / 5, stapLabel = Math.max(1, Math.ceil(46 / wkPx));
+    const kop = [];
+    for (let w = 0; w < W; w++) {
+      const ma = plusDagen(m.van, w * 7), eerste = [0, 1, 2, 3, 4].map(k => plusDagen(ma, k)).find(d => d.slice(8) === '01'), mdag = eerste || ma, nieuweMaand = !!eerste || w === 0;   // de maandnaam staat boven de week waarin de 1e valt (en links in beeld)
+      kop.push(el('div', { klass: 'cn-wk' + (ma <= m.today && m.today <= plusDagen(ma, 6) ? ' nu' : '') + (nieuweMaand ? ' mnd' : ''), style: 'left:' + w * wkPx + 'px;width:' + wkPx + 'px', title: dagMnd(ma) },
+        el('span', { klass: 'cn-wk-mnd', tekst: nieuweMaand ? MND[Number(mdag.slice(5, 7)) - 1] + (mdag.slice(5, 7) === '01' ? ' ' + mdag.slice(0, 4) : '') : '' }), el('span', { klass: 'cn-wk-nr', tekst: (w0 + w) % stapLabel === 0 ? 'wk ' + isoWeek(ma) : '' })));
+    }
+    wrap.appendChild(asRij(V, el('div', { klass: 'cn-hoek' }, el('span', { tekst: 'Projecten per persoon' })), 'cn-as-kw', 46, kop));
     rijen.forEach(r => {
       const perWeek = []; for (let w = 0; w < W; w++) perWeek.push(r.dagen.slice(w * 5, w * 5 + 5));
       const spans = new Map();   // projectcode -> [eerste week, laatste week]
       perWeek.forEach((dg, w) => dg.forEach(c => (c.items || []).forEach(it => { if (!it.code) return; const s = spans.get(it.code) || [w, w]; s[0] = Math.min(s[0], w); s[1] = Math.max(s[1], w); spans.set(it.code, s); })));
       const balken = [...spans.entries()].sort((a, b) => a[1][0] - b[1][0] || (a[0] < b[0] ? -1 : 1));
-      const raster = el('div', { klass: 'cn-kw-raster', style: 'grid-template-columns:repeat(' + W + ',minmax(0,1fr))' });
-      for (let w = 0; w < W; w++) { const wk = r.weken[w] || { gepland_min: 0, cap_min: 0, over_min: 0 }; raster.appendChild(el('div', { klass: 'cn-kw-laad', style: 'grid-row:1;grid-column:' + (w + 1), title: uren(wk.gepland_min) + ' van ' + uren(wk.cap_min) }, el('span', { klass: 'cn-kw-tekst' + (wk.over_min > 0 ? ' over' : ''), tekst: wk.gepland_min ? uren(wk.gepland_min) : '' }), el('span', { klass: 'cn-laad' }, el('span', { klass: wk.over_min > 0 ? 'over' : '', style: 'width:' + (wk.cap_min > 0 ? Math.min(100, Math.round(wk.gepland_min / wk.cap_min * 100)) : 0) + '%' })))); }
+      const raster = stripEl('cn-kw-raster', W * wkPx, cols);
+      for (let w = 0; w < W; w++) { const wk = r.weken[w] || { gepland_min: 0, cap_min: 0, over_min: 0 }; raster.appendChild(el('div', { klass: 'cn-kw-laad' + hmKl(wk), style: 'grid-row:1;grid-column:' + (w + 1), title: uren(wk.gepland_min) + ' van ' + uren(wk.cap_min) + (V.gk ? gkKwTitel(V, r, w) : '') }, el('span', { klass: 'cn-kw-tekst' + (wk.over_min > 0 ? ' over' : ''), tekst: wk.gepland_min && wkPx >= 38 ? uren(wk.gepland_min) : '' }), el('span', { klass: 'cn-laad' }, el('span', { klass: wk.over_min > 0 ? 'over' : '', style: 'width:' + (wk.cap_min > 0 ? Math.min(100, Math.round(wk.gepland_min / wk.cap_min * 100)) : 0) + '%' })), V.gk ? gkKwRegel(V, r, w, wkPx) : null)); }
       balken.forEach(([code, [a, b]], i) => raster.appendChild(el('button', { type: 'button', klass: 'cn-blok cn-balk', style: '--block-color:' + P.projectKleur(code) + ';grid-row:' + (i + 2) + ';grid-column:' + (a + 1) + ' / ' + (b + 2), title: projNr(code) + ' ' + projNaam(code) + ' · week ' + isoWeek(plusDagen(m.van, a * 7)) + (a === b ? '' : ' t/m ' + isoWeek(plusDagen(m.van, b * 7))), klik: () => open(code) }, el('span', { klass: 'cn-blok-titel' }, el('span', { klass: 'cn-code', tekst: projNr(code) }), a === b ? '' : ' ' + projNaam(code)))));
-      bin.appendChild(el('div', { klass: 'cn-kw-rij', style: 'grid-template-columns:200px minmax(0,1fr)' }, el('div', { klass: 'cn-persoon enkel' }, el('div', { klass: 'cn-pkop' }, el('span', { klass: 'cn-avatar', tekst: ini(r.naam) }), el('span', { klass: 'cn-pnaam' }, el('b', { tekst: r.naam }), el('span', { klass: 'cn-sub', tekst: balken.length + (balken.length === 1 ? ' project' : ' projecten') })))), raster));
+      wrap.appendChild(rijEl('cn-rij-kw', el('div', { klass: 'cn-persoon enkel' + (r.totaal ? ' totaal' : r.rol ? ' rol' : ''), 'data-totaal': r.totaal ? '1' : null }, belastingEl(V, r), el('div', { klass: 'cn-pkop' }, avatarEl(r), el('span', { klass: 'cn-pnaam' }, el('b', { tekst: r.naam }), rolChip(r), el('span', { klass: 'cn-sub', tekst: balken.length + (balken.length === 1 ? ' project' : ' projecten') }))), gkSomEl(V, r), rolKnop(r)), raster));
     });
-    wrap.appendChild(bin);
   }
 
   N.ongKlap = function (dicht) { S.ongDicht = !!dicht; try { D.storage && (dicht ? D.storage.setItem(LS_ONG, 'dicht') : D.storage.removeItem(LS_ONG)); } catch (e) {} N.teken(); };
-  function zijkolom(m) {
-    const up = m.ongepland;
-    if (S.ongDicht) { const b = el('button', { type: 'button', klass: 'cn-ong-dicht', 'aria-expanded': 'false', 'aria-label': 'Ongepland tonen: ' + up.items.length + ' taken, ' + uren(up.min), title: 'Ongepland tonen', klik: () => N.ongKlap(false) }, icoon('M15 6l-6 6l6 6'), el('span', { klass: 'cn-num', tekst: String(up.items.length) }), el('span', { klass: 'cn-ong-tekst', tekst: 'Ongepland' })); return el('aside', { klass: 'cn-ongepland dicht', 'aria-label': 'Ongepland (ingeklapt)' }, b); }
-    return el('aside', { klass: 'cn-ongepland', 'aria-labelledby': 'cn-h-ongepland' },
-      el('div', { klass: 'cn-ong-kop' }, el('span', { id: 'cn-h-ongepland', tekst: 'Ongepland' }), el('span', { klass: 'cn-num cn-sub', tekst: up.items.length + ' · ' + uren(up.min) }), el('button', { type: 'button', klass: 'cn-knop icoon cn-ong-klap', 'aria-expanded': 'true', 'aria-label': 'Ongepland inklappen', title: 'Inklappen', klik: () => N.ongKlap(true) }, icoon('M9 6l6 6l-6 6'))),
-      el('div', { klass: 'cn-ong-lijst' }, up.items.length ? up.items.map(u => ongItem(u)) : el('div', { klass: 'cn-sub cn-ong-leeg', tekst: 'Alles heeft een plek.' })));
+  // ── de takenbak (C3): de rechterkolom met een keuze van lijst (Ongepland, Alles open, Te laat, Wacht, Deze week), filters en groeperen; zie mt-takenbak.js voor het rekenwerk ──
+  const TB = () => root.MTTakenbak || null;
+  const LS_BAK = 'mt-cap-bak';
+  const laagS = s => String(s == null ? '' : s).trim().toLowerCase();
+  const kaartLeeg = u => ({ code: u.code, id: u.id, naam: u.naam, min: u.min, voorstel: !!u.voorstel, tekst: u.tekst || '', status: 'todo', mensen: [], activiteit: '', fase: '', klant: '', projectLabel: String(u.code), projectNaam: '', start: '', eind: '', wacht: false, teLaat: false });
+  // De kaarten van de gekozen lijst: de bovenste filterbalk (project, persoon) geldt voor alle lijsten; Ongepland is precies de lijst van de Capaciteit (S.ong), de rest komt uit alle open taken (S.bakItems)
+  function bakModel() {
+    const tb = TB(); if (!tb) return null;
+    const team = D.team() || [], alle = S.bakItems || [], kaart = new Map(alle.map(x => [tb.sleutel(x.code, x.id), x]));
+    let lijst;
+    if (S.bak.modus === 'ongepland') lijst = S.ong.items.map(u => Object.assign({}, kaart.get(tb.sleutel(u.code, u.id)) || kaartLeeg(u), { tekst: u.tekst || '', voorstel: !!u.voorstel }));
+    else lijst = tb.sorteer(alle.filter(it => (!S.project || laagS(it.code) === laagS(S.project)) && (!S.persoon || it.mensen.some(m => P.zelfdePersoon(m, S.persoon, team))) && tb.inModus(it, S.bak.modus, null)));
+    const items = tb.filter(lijst, S.bak);
+    return { lijst, items, min: items.reduce((s, x) => s + x.min, 0), opties: tb.opties(lijst), groepen: tb.groepeer(items, S.bak.groep) };
   }
-  // Een taak in Ongepland: sleepbaar naar een dagdeel of een tijd (er ontstaat een planblok), of via "Inplannen…" met het toetsenbord
+  const bakBewaar = () => {
+    const tb = TB(); if (!tb) return;
+    try { D.storage && D.storage.setItem(LS_BAK, JSON.stringify(S.bak)); } catch (e) {}
+    const f = FF(); if (f) { const c = tb.codeer(S.bak); f.zet({ bak: c.bak, bf: c.bf }); S.fRev = f.rev(); }
+  };
+  N.bakZet = function (patch) { Object.assign(S.bak, patch); bakBewaar(); N.bakTeken(); };
+  N.bakTeken = function () {   // alleen de kolom vervangen (de rijen blijven staan); een veld waarin je typt houdt de cursor
+    if (!S.kader || !D) return;
+    const oud = S.aside, ae = D.doc.activeElement, aid = ae && ae.id, pos = ae && ae.selectionStart, nieuw = zijkolom({ ongepland: S.ong });
+    if (oud && oud.parentNode === S.kader) S.kader.replaceChild(nieuw, oud); else S.kader.appendChild(nieuw);
+    S.aside = nieuw;
+    if (aid) { const e = D.doc.getElementById(aid); if (e && e.focus) { e.focus(); try { if (pos !== null && pos !== undefined && e.setSelectionRange) e.setSelectionRange(pos, pos); } catch (x) {} } }
+    if (FF()) FF().markeer(nieuw);
+  };
+  const bakMeta = it => {   // de regel onder een kaart: datums, wie, en wat opvalt
+    const ds = it.start ? dagMnd(it.start) + (it.eind && it.eind !== it.start ? '–' + dagMnd(it.eind) : '') : '', wie = it.mensen.map(s => ini(persNaam(s))).join(' ');
+    return [ds, wie, it.wacht ? 'wacht' : '', it.teLaat ? 'te laat' : ''].filter(Boolean).join(' · ');
+  };
+  function zijkolom(m) {
+    const up = m.ongepland, tb = TB(), bm = bakModel(), n = bm ? bm.items.length : up.items.length, min = bm ? bm.min : up.min, modus = tb ? S.bak.modus : 'ongepland', titel = tb ? (tb.MODI.find(x => x[0] === modus) || tb.MODI[0])[1] : 'Ongepland', nf = tb ? tb.aantalFilters(S.bak) : 0;
+    if (S.ongDicht) { const b = el('button', { type: 'button', klass: 'cn-ong-dicht', 'aria-expanded': 'false', 'aria-label': titel + ' tonen: ' + n + ' taken, ' + uren(min), title: titel + ' tonen', klik: () => N.ongKlap(false) }, icoon('M15 6l-6 6l6 6'), el('span', { klass: 'cn-num', tekst: String(n) }), el('span', { klass: 'cn-ong-tekst', tekst: titel })); return el('aside', { klass: 'cn-ongepland dicht', 'aria-label': titel + ' (ingeklapt)' }, b); }
+    const aside = el('aside', { klass: 'cn-ongepland' + (S.ladeOpen ? ' open' : ''), 'aria-label': 'Takenbak' });
+    const modusKeuze = tb ? el('select', { id: 'cn-bak-modus', klass: 'cn-bak-modus', 'aria-label': 'Takenbak: welke taken', wijzig: ev => N.bakZet({ modus: ev.target.value }) }, tb.MODI.map(x => el('option', { value: x[0], tekst: x[1] }))) : el('span', { id: 'cn-h-ongepland', tekst: 'Ongepland' });
+    if (tb) modusKeuze.value = modus;
+    const lade = el('button', { type: 'button', klass: 'cn-knop cn-lade-knop', 'aria-expanded': S.ladeOpen ? 'true' : 'false', 'aria-label': 'Takenbak openen of sluiten', klik: () => { S.ladeOpen = !S.ladeOpen; aside.classList.toggle('open', S.ladeOpen); lade.setAttribute('aria-expanded', S.ladeOpen ? 'true' : 'false'); } }, icoon('M6 15l6-6l6 6'));
+    aside.appendChild(el('div', { klass: 'cn-ong-kop' }, lade, modusKeuze, el('span', { klass: 'cn-num cn-sub', tekst: n + ' · ' + uren(min) }),
+      tb ? el('button', { type: 'button', klass: 'cn-knop cn-bak-filterknop' + (nf ? ' aan' : ''), 'aria-expanded': S.bakFilterOpen ? 'true' : 'false', 'aria-controls': 'cn-bak-filters', klik: () => { S.bakFilterOpen = !S.bakFilterOpen; N.bakTeken(); } }, 'Filter' + (nf ? ' (' + nf + ')' : '')) : null,
+      el('button', { type: 'button', klass: 'cn-knop icoon cn-ong-klap', 'aria-expanded': 'true', 'aria-label': titel + ' inklappen', title: 'Inklappen', klik: () => N.ongKlap(true) }, icoon('M9 6l6 6l-6 6'))));
+    if (tb && S.bakFilterOpen && bm) {
+      const sel = (id, label, lijst, waarde, sleutel, extra) => { const s = el('select', { id, klass: 'cn-filter', 'aria-label': label, wijzig: ev => N.bakZet({ [sleutel]: ev.target.value }) }, el('option', { value: '', tekst: label + ': alle' }), extra || null, lijst.map(x => el('option', { value: x[0], tekst: x[1] }))); s.value = waarde; if (s.value !== waarde) s.value = ''; return s; };
+      const wie = bm.opties.wie.map(x => [x[0], persNaam(x[0])]);
+      aside.appendChild(el('div', { klass: 'cn-bak-filters', id: 'cn-bak-filters' },
+        sel('cn-bak-klant', 'Klant', bm.opties.klant, S.bak.klant, 'klant'), sel('cn-bak-project', 'Project', bm.opties.project, S.bak.project, 'project'), sel('cn-bak-fase', 'Fase', bm.opties.fase, S.bak.fase, 'fase', el('option', { value: '-', tekst: 'Zonder fase' })),
+        sel('cn-bak-act', 'Activiteit', bm.opties.act, S.bak.act, 'act'), sel('cn-bak-wie', 'Persoon', wie, S.bak.wie, 'wie', el('option', { value: '-', tekst: 'Niemand' })),
+        el('input', { type: 'search', id: 'cn-bak-zoek', klass: 'cn-filter cn-bak-zoek', placeholder: 'Zoeken in de lijst', 'aria-label': 'Zoeken in de takenbak', value: S.bak.q, input: ev => { clearTimeout(S.bakT); const v = ev.target.value; S.bakT = setTimeout(() => N.bakZet({ q: v }), 250); } }),
+        el('select', { id: 'cn-bak-groep', klass: 'cn-filter', 'aria-label': 'Groeperen', wijzig: ev => N.bakZet({ groep: ev.target.value }) }, tb.GROEPEN.map(x => el('option', { value: x[0], tekst: x[0] ? 'Groepeer: ' + x[1].toLowerCase() : x[1] }))),
+        nf ? el('button', { type: 'button', klass: 'cn-knop cn-bak-wis', klik: () => N.bakZet({ klant: '', project: '', fase: '', act: '', wie: '', q: '' }) }, 'Wis filters') : null));
+      aside.querySelector('#cn-bak-groep').value = S.bak.groep;
+    }
+    const kaarten = [];
+    if (!bm) up.items.forEach(u => kaarten.push(ongItem(u)));
+    else if (!bm.items.length) kaarten.push(el('div', { klass: 'cn-sub cn-ong-leeg', tekst: modus === 'ongepland' && !nf ? 'Alles heeft een plek.' : nf ? 'Niets gevonden voor deze filters.' : 'Niets in deze lijst.' }));
+    else bm.groepen.forEach(g => {
+      const mk = it => ongItem(Object.assign({}, it, { meta: modus === 'ongepland' ? '' : bakMeta(it) }));
+      if (!S.bak.groep) { g.items.forEach(it => kaarten.push(mk(it))); return; }
+      const sl = modus + '|' + S.bak.groep + '|' + g.k, dicht = !!S.bakDicht[sl];
+      kaarten.push(el('div', { klass: 'cn-bak-groepkop' }, el('button', { type: 'button', klass: 'cn-bak-groep', 'aria-expanded': dicht ? 'false' : 'true', klik: () => { S.bakDicht[sl] = !dicht; N.bakTeken(); } }, icoon(dicht ? 'M9 6l6 6l-6 6' : 'M6 9l6 6l6-6'), el('span', { klass: 'cn-bak-groepnaam', tekst: g.label }), el('span', { klass: 'cn-num cn-sub', tekst: g.items.length + ' · ' + uren(g.min) }))));
+      if (!dicht) g.items.forEach(it => kaarten.push(mk(it)));
+    });
+    aside.appendChild(el('div', { klass: 'cn-ong-lijst' }, kaarten));
+    return aside;
+  }  // Een taak in Ongepland: sleepbaar naar een dagdeel of een tijd (er ontstaat een planblok), of via "Inplannen…" met het toetsenbord
   function ongItem(u) {
     const sleep = N.mag() && (!D.magTaken || !!D.magTaken()) && !u.voorstel, taak = { code: u.code, id: u.id, naam: u.naam, min: u.min, voorstel: u.voorstel };   // een taak uit Ongepland slepen past de taak aan: dat vraagt ook het recht om taken te wijzigen
     const gemarkeerd = !!S.markeer && String(S.markeer.id) === String(u.id) && (!S.markeer.code || String(S.markeer.code).toLowerCase() === String(u.code).toLowerCase()) && D.nu() < S.markeer.tot;   // net vanuit Vandaag gekozen om in te plannen
-    const knop = el('div', { role: 'button', tabindex: '0', klass: 'cn-blok cn-ong' + (u.voorstel ? ' voorstel' : '') + (sleep ? ' sleepbaar' : '') + (gemarkeerd ? ' gemarkeerd' : ''), 'data-pf-taak': String(u.id), 'data-pf-code': String(u.code), style: '--block-color:' + P.projectKleur(u.code), title: u.tekst || u.naam },
+    const knop = el('div', { role: 'button', tabindex: '0', klass: 'cn-blok cn-ong' + (u.voorstel ? ' voorstel' : '') + (sleep ? ' sleepbaar' : '') + (gemarkeerd ? ' gemarkeerd' : ''), 'data-pf-taak': String(u.id), 'data-pf-code': String(u.code), style: '--block-color:' + P.projectKleur(u.code), title: [u.tekst || u.naam, u.meta].filter(Boolean).join(' · ') },
       el('span', { klass: 'cn-ong-rij' }, el('span', { klass: 'cn-blok-titel', tekst: u.naam }), u.min ? el('span', { klass: 'cn-num cn-sub', tekst: uren(u.min) }) : null),
-      el('span', { klass: 'cn-blok-sub' }, el('span', { klass: 'cn-code', tekst: projNr(u.code) }), ' ' + projNaam(u.code), u.voorstel ? ' · voorstel werkplaats' : ''));
+      el('span', { klass: 'cn-blok-sub' }, el('span', { klass: 'cn-code', tekst: projNr(u.code) }), ' ' + projNaam(u.code), u.voorstel ? ' · voorstel werkplaats' : ''), u.meta ? el('span', { klass: 'cn-blok-sub cn-bak-meta', tekst: u.meta }) : null);
     const item = { soort: 'taak', id: u.id, code: u.code };
     klikOpen(knop, item);
     knop.addEventListener('keydown', ev => { if ((ev.key === 'Enter' || ev.key === ' ') && ev.target === knop) { ev.preventDefault(); openItem(item, knop); } });
@@ -383,6 +1099,7 @@
 
   // ── uitvoeren, ongedaan maken en het toetsenbord-alternatief ──
   const persNaam = slug => { const t = (D.team() || []).find(x => String(x.slug).toLowerCase() === String(slug).toLowerCase()); return t ? t.naam : slug; };
+  const naWijziging = () => { if (D.naWijziging) { try { D.naWijziging(); } catch (e) { console.warn('Capaciteit: verversen na een wijziging:', e); } } };
   N.toast = function (tekst, ongedaan, lang, label) {
     const oud = D.doc.getElementById('cn-toast'); if (oud && oud.parentNode) oud.parentNode.removeChild(oud);
     clearTimeout(N.toast._t);
@@ -394,10 +1111,14 @@
   };
   // spec = { soort:'verplaats', blokId } of { soort:'nieuw', taak } plus { persoon, datum, dagdeel | start }
   N.drop = async function (spec) {
-    if (S.bezig) return { ok: false, bezet: true, reden: 'Er loopt nog een opslag in de planning; probeer het zo opnieuw.' };
+    if (S.bezig || S.botsingBezig || (S.bulk && !spec._bulk)) return { ok: false, bezet: true, reden: 'Er loopt nog een opslag in de planning; probeer het zo opnieuw.' };
+    S.botsingBezig = true; let bs; try { bs = await botsing(spec); } finally { S.botsingBezig = false; }   // P7b: een overboekte persoon of rol: eerst de keuze (toch boeken, later, ander moment, wachtlijst)
+    if (bs.stop) { N.teken(); return { ok: false, geannuleerd: true, botsing: true, wachtlijst: !!bs.wachtlijst }; }
+    spec = bs.spec;
+    if (S.bezig && !spec._bulk) return { ok: false, bezet: true, reden: 'Er loopt nog een opslag in de planning; probeer het zo opnieuw.' };
     const schoon = {}; Object.keys(spec).forEach(k => { if (k[0] !== '_') schoon[k] = spec[k]; });
     S.bezig = true;   // de lock gaat er meteen op en komt altijd vrij (finally), ook bij een uitzondering of een time-out in de opslag
-    try { return await N._drop(schoon); } finally { S.bezig = false; S.focusTaak = null; }
+    try { return await N._drop(schoon); } finally { S.bezig = false; S.focusTaak = null; S.focusBlok = null; }
   };   // -> de uitkomst (voor het taakpaneel, dat de datums via deze zelfde route wijzigt); de meldingen en het ongedaan maken doet N._drop zelf
   // Een opslag die na 90 s nog hing: de echte actie loopt door en houdt het slot van die taak vast; zodra SharePoint antwoordt komt hier de uitkomst (opgeslagen, niet opgeslagen of tegelijk gewijzigd)
   N.naOnzeker = function (belofte) {
@@ -420,10 +1141,10 @@
     if (!r || !r.ok) { N.toast((r && r.reden) || 'Dat lukt niet.'); return r || { ok: false, reden: 'Dat lukt niet.' }; }
     if (r.noop) return r;
     S.markeer = null;
-    N.teken();
+    N.teken(); naWijziging();   // de projecttabel en het taakpaneel tonen de nieuwe datums meteen
     if (r.tegelijk) { N.toast(r.tegelijk, null, true); return r; }   // iemand wijzigde tegelijk en won: de planning toont nu de samengevoegde stand; geen ongedaan maken
     const w = r.wijziging, wat = w.soort === 'taak' && !w.na.datum && w.voor && w.voor.start ? (w.naam || 'Taak') + ': datums gewist, de taak staat weer in Ongepland' : w.soort === 'taak' ? (w.naam || 'Taak') + ' → ' + persNaam(w.na.persoon) + (w.na.datum && w.voor && (w.voor.start !== w.na.datum || w.voor.eind !== w.na.eind) ? ', ' + P.datumKort(w.na.datum) + (w.na.eind && w.na.eind !== w.na.datum ? ' t/m ' + P.datumKort(w.na.eind) : '') : '') + (r.melding ? ' · ' + r.melding : '')
-      : (w.naam || 'Planblok') + ' → ' + persNaam(w.na.persoon) + ', ' + P.datumKort(w.na.datum) + ' ' + w.na.start;
+      : (w.naam || 'Planblok') + ' → ' + persNaam(w.na.persoon) + ', ' + P.datumKort(w.na.datum) + ' ' + w.na.start + (w.na.duurMin ? ' · ' + uren(w.na.duurMin) : '');
     if (!r.behouden) { N.toast('Iemand anders was net sneller met ' + (w.naam || 'dit blok') + ': jouw wijziging is niet bewaard.'); return r; }
     N.toast(wat + (r.opgeslagen ? '' : ' (alleen lokaal bewaard: SharePoint is niet bereikbaar)'), async () => {
       let h; try { h = await D.herstel(w, opt); } catch (e) { h = { ok: false, reden: 'Terugzetten mislukt: ' + ((e && e.message) || e) }; }
@@ -431,11 +1152,12 @@
       if (h && h.onzeker) { N.toast(h.reden, null, true); N.naOnzeker(h.onzeker); return; }
       N.toast(h && h.ok ? (h.tegelijk || 'Teruggezet') : ((h && h.reden) || 'Terugzetten lukt niet.'), null, !!(h && h.tegelijk));
       if (D.naHerstel) { try { D.naHerstel(); } catch (e) {} }
+      naWijziging();
     });
     return r;
   };
   // T6: een oud tb:-planblok dat bij een taak hoort (het item heeft de taak en een blokId) kan een taakbalk worden. Alleen met het recht om te slepen en om taken te wijzigen; niet voor een open voorstel.
-  N.omzetbaar = it => !!D.omzetten && !!D.dialoog && N.mag() === true && (!D.magTaken || !!D.magTaken()) && !!it && it.soort === 'taak' && it.blokId != null && !N.isVoorstel(it) && it.status !== 'klaar';
+  N.omzetbaar = it => !!D.omzetten && !!D.dialoog && N.mag() === true && (!D.magTaken || !!D.magTaken()) && !!it && !it.afgeleid && it.soort === 'taak' && it.blokId != null && !N.isVoorstel(it) && it.status !== 'klaar';
   N.omzetten = async function (it, opnieuw) {
     if (!N.omzetbaar(it) || S.bezig || S.menuBezig) return;
     const blokPersoon = x => { const b = (D.blokken() || []).find(y => y && String(y.id) === String(x.blokId)); return b ? (P.persoonSlug(b.persoon, D.team()) || b.persoon) : x.persoon; };
@@ -510,18 +1232,20 @@
   async function menuStappen(bron) {
     const dlg = D.dialoog; if (!dlg || !dlg.choose || !N.mag()) return;
     const m = N.laatste; if (!m) return;
-    const team = (D.team() || []).filter(t => t && t.slug), titel = 'Verplaats naar…';
+    const act = actVan(bron), team = (D.team() || []).filter(t => t && t.slug && P.kanDoen(t.slug, act, P.inrichting())), titel = 'Verplaats naar…';   // P7c: alleen wie dit werk doet
+    if (!team.length) { N.toast('Niemand is ingesteld om dit werk te doen (Admin, Planning inrichten, Inzetbaarheid).'); return; }
     const pi = await dlg.choose({ title: titel, message: bron.naam + '\nKies de persoon', choices: team.map(t => ({ label: t.naam })) }); if (pi === null || pi === undefined) return;
-    const dagen = (m.dagIdx ? m.dagIdx.map(i => m.dagen[i]) : m.dagen).filter(d => d.werkdag);
+    const dagen = (m.venster ? m.venster.map(i => m.dagen[i]) : m.dagIdx ? m.dagIdx.map(i => m.dagen[i]) : m.dagen).filter(d => d.werkdag);
     if (bron.soort === 'taakbalk') { if (!dagen.length) return; N.drop({ soort: 'taakbalk', taak: bron.taak, van: bron.van, persoon: team[pi].slug, datum: dagen[0].datum }); return; }   // alleen de persoon verandert: de datums blijven
     const di = await dlg.choose({ title: titel, message: bron.naam + ' → ' + team[pi].naam + '\nKies de dag', choices: dagen.map(d => ({ label: P.datumKort(d.datum) })) }); if (di === null || di === undefined) return;
     if (bron.soort === 'nieuw') { N.drop({ soort: 'nieuw', taak: bron.taak, persoon: team[pi].slug, datum: dagen[di].datum }); return; }   // uit Ongepland: de taak begint op die dag (het moment doet er niet toe, het is een taakbalk)
     const uurZoom = S.zoom === '3d' || S.zoom === 'dag', opties = [{ label: 'Ochtend', sublabel: 'op de eerste vrije tijd', spec: { dagdeel: 0 } }, { label: 'Middag', sublabel: 'op de eerste vrije tijd', spec: { dagdeel: 1 } }];
-    if (uurZoom) for (let h = 7; h < 17; h++) opties.push({ label: String(h).padStart(2, '0') + ':00', spec: { start: String(h).padStart(2, '0') + ':00' } });
+    if (uurZoom) for (let t = Math.ceil(U0 / 30) * 30; t < U1; t += 30) opties.push({ label: hhmm(t), spec: { start: hhmm(t) } });
     const oi = await dlg.choose({ title: titel, message: bron.naam + ' → ' + team[pi].naam + ', ' + P.datumKort(dagen[di].datum) + '\nKies het moment', choices: opties.map(o => ({ label: o.label, sublabel: o.sublabel })) }); if (oi === null || oi === undefined) return;
     N.drop(Object.assign({}, bron.soort === 'nieuw' ? { soort: 'nieuw', taak: bron.taak } : { soort: 'verplaats', blokId: bron.blokId }, { persoon: team[pi].slug, datum: dagen[di].datum }, opties[oi].spec));
   }
-  const HINT = { kwartaal: 'Elke balk is een project; de uren per week staan erboven', maand: 'Hoogte = belasting per dag · inzoomen naar week voor de blokken', week: 'Getinte blokken per project · gestippeld = open voorstel', '3d': 'Blokken in uren · twee banen = dubbel geboekt', dag: 'Blokken in uren · de messing lijn is nu' };
+  const HINT = { kwartaal: 'Elke balk is een project; de uren per week staan erboven', maand: 'Hoogte = belasting per dag · inzoomen voor de blokken', week: 'Getinte blokken per project · gestippeld = open voorstel', '3d': 'Blokken in uren · twee banen = dubbel geboekt', dag: 'Blokken in uren · de messing lijn is nu' };
+  const GEBAAR = 'Scroll op de tijdas om te zoomen · sleep de as of de achtergrond om te schuiven';
   function filterKnoppen() {
     if (FF()) return FF().balk({ pre: 'cap', std: 'iedereen', status: false, klaar: () => N.teken() });   // dezelfde balk als Mijn werk en de Planning van een project (de status past hier niet: de Capaciteit telt uren, geen taakstatus)
     const team = D.team() || [];
@@ -532,53 +1256,238 @@
     proj.value = S.project;
     return [wie, proj];
   }
+  const LS_SCHAAL = 'mt-cap-schaal', LS_AGENDA = 'mt-cap-agenda';
+  const bewaarAgenda = () => { try { D.storage && D.storage.setItem(LS_AGENDA, JSON.stringify(S.agenda)); } catch (e) {} };
+  const vandaagWi = () => wiVan(P.vandaagYmd());
+  // Naar een snelkeuze (de knoppen): de schaal en de plek volgen uit zoom + anker, zoals voorheen. Vanuit een vrije stand blijft het midden van wat je ziet het midden.
+  N.zoom = function (z) {
+    if (!ZOOM_UI || !ZOOMS.some(x => x[0] === z)) return;
+    if (S.vrij && S.ppd > 0) {
+      const mid = Math.floor(S.pos + (S.Wv / S.ppd) / 2);
+      S.anker = datumVanWi(z === '3d' ? mid - 1 : mid);
+    }
+    S.vrij = false; S.exactDag = false; S.zoom = z; try { D.storage && (D.storage.setItem(LS_ZOOM, z), D.storage.removeItem(LS_SCHAAL)); } catch (e) {}
+    duwPeriode(); N.teken();
+  };
   N.stap = function (richting) {
-    S.exactDag = false; const a = S.anker || P.vandaagYmd();
+    S.exactDag = false;
+    if (S.vrij) {   // één eenheid van het niveau waarin je zit, vanaf waar je nu staat (ook halverwege een dag)
+      S.pos = N.posBegrens(S.pos + richting * N.eenheid(S.zoom), vandaagWi()); N.vlakTeken(); N.stapStil(true); return;
+    }
+    const a = S.anker || P.vandaagYmd();
     S.anker = S.zoom === 'week' ? plusDagen(a, 7 * richting) : S.zoom === 'maand' ? plusDagen(a, 28 * richting) : S.zoom === 'kwartaal' ? plusDagen(a, 91 * richting) : S.zoom === '3d' ? plusWerkdagen(volgendeWerkdag(a, 1), 3 * richting) : plusWerkdagen(volgendeWerkdag(a, 1), richting);
     duwPeriode(); N.teken();
   };
-  N.zoom = function (z) {
-    if (!ZOOM_UI || !ZOOMS.some(x => x[0] === z)) return;
-    S.exactDag = false; S.zoom = z; try { D.storage && D.storage.setItem(LS_ZOOM, z); } catch (e) {}
-    duwPeriode(); N.teken();
+  N.naarVandaag = function () {
+    S.exactDag = false;
+    if (S.vrij && S.ppd > 0) { const n = S.Wv / S.ppd; S.pos = N.posBegrens(vandaagWi() - Math.max(0, (n - 1) / 2), vandaagWi()); N.vlakTeken(); N.stapStil(true); return; }   // vandaag in het midden
+    S.anker = P.vandaagYmd(); duwPeriode(); N.teken();
   };
 
+  // ── gebaren: scrollen om te zoomen, slepen om te schuiven, knijpen op touch ──
+  const gebaarOK = () => !!(S.V && S.vlak && D && D.doc.contains(S.vlak));
+  const maakVrij = () => { if (!S.vrij) { S.vrij = true; S.exactDag = false; } };   // S.ppd en S.pos hold de snelkeuze die nu getekend staat
+  N.stapStil = function (nu) {   // na een gebaar: het niveau-etiket, de datum aan de linkerrand en de link bijwerken (niet bij elke beweging)
+    clearTimeout(S.stilT);
+    const doe = () => { if (!S.vrij) return; S.anker = datumVanWi(Math.floor(S.pos)); duwPeriode(); try { D.storage && D.storage.setItem(LS_SCHAAL, String(Math.round(S.ppd / UH() * 10) / 10)); } catch (e) {} };
+    if (nu) doe(); else S.stilT = setTimeout(doe, 300);
+  };
+  N.vraag = function () {   // tekenen hoogstens één keer per beeld
+    if (S.raf) return;
+    const run = () => { S.raf = 0; try { N.vlakTeken(); } catch (e) { console.warn('Capaciteit (tekenen):', e); } };
+    const g = D.doc.defaultView; S.raf = g && g.requestAnimationFrame ? g.requestAnimationFrame(run) : setTimeout(run, 16);
+  };
+  N.zoomBeweeg = function (x, factor) {   // x = pixels vanaf de linkerrand van de tijdkolom
+    if (!gebaarOK() || !(factor > 0)) return;
+    maakVrij(); const r = N.zoomRond({ ppd: S.ppd, pos: S.pos }, Math.max(0, Math.min(S.Wv, x)), factor, S.Wv);
+    S.ppd = r.ppd; S.pos = N.posBegrens(r.pos, vandaagWi()); N.vraag(); N.stapStil();
+  };
+  N.schuifPx = function (dx) {   // dx > 0: de inhoud schuift naar rechts (je ziet wat eerder lag)
+    if (!gebaarOK() || !dx) return;
+    maakVrij(); S.pos = N.posBegrens(N.schuif({ ppd: S.ppd, pos: S.pos }, dx).pos, vandaagWi()); N.vraag(); N.stapStil();
+  };
+  // P1b: een klik (of tik) op een lege plek van de uurweergave = een nieuw planblok op die persoon, dag en tijd (op het kwartier of de halve rasterstap), in het planblokpaneel
+  N.legeKlik = function (ev) {
+    if (!D || !D.nieuwBlok || (ev.pointerType === 'mouse' && ev.button !== 0)) return;
+    const e = D.doc.elementFromPoint(ev.clientX, ev.clientY); if (!e || !e.closest) return;
+    const raster = e.closest('.cn-uren-raster'); if (!raster || e.closest('.cn-bw,.cn-meer,button,.cn-greep,.cn-bpop,a,input,select,textarea')) return;
+    const slug = raster.getAttribute('data-slug'), V = raster._V, dagen = raster._dagen; if (!slug || !V || !dagen) return;
+    const r = raster.getBoundingClientRect(); if (ev.clientY - r.top < (raster._tOff || 0) || (raster._gkTop && ev.clientY - r.top >= raster._gkTop)) return;   // de strook met dagbalken (taken) is geen tijdvlak
+    const t = N.plekNaarTijd(ev.clientX - r.left, V.ppd, V.snap, 0); if (t.k < 0 || t.k >= dagen.length) return;
+    if (D.magBlok && !D.magBlok()) { N.toast('Je kunt hier alleen kijken: plannen doet kantoor.'); return; }
+    D.nieuwBlok({ persoon: slug, datum: dagen[t.k], start: hhmm(t.min), duurMin: 60 });
+  };
+  function koppelGebaren(vlak) {
+    const norm = (v, mode) => mode === 1 ? v * 16 : mode === 2 ? v * 400 : v;
+    const laneLinks = () => { const l = vlak.querySelector('.cn-lane'); return (l || vlak).getBoundingClientRect().left; };
+    vlak.addEventListener('wheel', ev => {
+      if (!gebaarOK()) return;
+      const dy = norm(ev.deltaY, ev.deltaMode), dx = norm(ev.deltaX, ev.deltaMode), opAs = !!(ev.target && ev.target.closest && ev.target.closest('.cn-as-rij'));
+      if (ev.ctrlKey || (opAs && !ev.shiftKey && Math.abs(dy) >= Math.abs(dx) && dy)) { ev.preventDefault(); N.zoomBeweeg(ev.clientX - laneLinks(), Math.exp(-dy * (ev.ctrlKey ? 0.01 : 0.0022))); }   // Ctrl+wiel en knijpen op een trackpad (de browser meldt dat als Ctrl+wiel): overal; het gewone wiel alleen op de tijdas
+      else if (ev.shiftKey || Math.abs(dx) > Math.abs(dy)) { ev.preventDefault(); N.schuifPx(-(ev.shiftKey && !dx ? dy : dx)); }   // Shift+wiel en horizontaal scrollen: schuiven
+      // het gewone wiel boven de rijen blijft verticaal scrollen
+    }, { passive: false });
+    const ptrs = new Map(); let pan = null, pinch = null;
+    const stopTraag = () => { if (S.traagId) { const g = D.doc.defaultView; if (g && g.cancelAnimationFrame) g.cancelAnimationFrame(S.traagId); S.traagId = 0; } };
+    const eindPan = (ev, geannuleerd) => {
+      ptrs.delete(ev.pointerId); if (!ptrs.size) setTimeout(gebaarKlaar, 0);
+      if (pinch && ptrs.size < 2) pinch = null;
+      if (pan && pan.id === ev.pointerId) {
+        const p = pan; pan = null;
+        if (p.bewogen) {
+          S.nietKlikken = true; setTimeout(() => { S.nietKlikken = false; }, 60);
+          const h = p.hist, nu = h[h.length - 1], oud = h.find(x => nu[1] - x[1] < 120) || nu;   // uitrollen na een veeg op touch
+          const v = nu[1] > oud[1] ? (nu[0] - oud[0]) / (nu[1] - oud[1]) : 0;
+          if (!geannuleerd && ev.pointerType === 'touch' && Math.abs(v) > 0.3) {
+            let last = nu[1], vv = Math.max(-3, Math.min(3, v)); const g = D.doc.defaultView;   // een veeg rolt uit, maar nooit sneller dan 3 px per ms
+            const stap = t => { if (!gebaarOK()) { S.traagId = 0; return; } const dt = Math.min(48, t - last); last = t; vv *= Math.pow(0.94, dt / 16); S.pos = N.posBegrens(S.pos - vv * dt / S.ppd, vandaagWi()); N.vlakTeken(); if (Math.abs(vv) > 0.03) S.traagId = g.requestAnimationFrame(stap); else { S.traagId = 0; N.stapStil(true); } };
+            S.traagId = g.requestAnimationFrame(stap);
+          } else N.stapStil();
+        }
+      }
+    };
+    vlak.addEventListener('pointerdown', ev => {
+      if (!gebaarOK() || (ev.pointerType === 'mouse' && ev.button !== 0)) return;
+      const t = ev.target; if (!t || !t.closest) return;
+      const opAs = !!t.closest('.cn-as-rij .cn-lane');
+      if (!opAs && (!t.closest('.cn-lane') || t.closest('.cn-blok,.cn-bw,button,input,select,textarea,a,.cn-greep'))) return;   // blokken en knoppen houden hun eigen gedrag; de lege achtergrond en de as schuiven
+      stopTraag(); S.gebaar = Date.now(); ptrs.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+      if (ptrs.size === 1) pan = { id: ev.pointerId, x: ev.clientX, y: ev.clientY, pos0: S.pos, ppd0: S.ppd, bewogen: false, hist: [[ev.clientX, ev.timeStamp || Date.now()]] };
+      else if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pan = null; maakVrij(); pinch = { d0: Math.max(10, Math.hypot(a.x - b.x, a.y - b.y)), cx0: (a.x + b.x) / 2, ppd0: S.ppd, pos0: S.pos }; }
+      try { vlak.setPointerCapture(ev.pointerId); } catch (e) {}
+    });
+    vlak.addEventListener('pointermove', ev => {
+      if (!ptrs.has(ev.pointerId)) return;
+      ptrs.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+      if (pinch && ptrs.size >= 2) {
+        const [a, b] = [...ptrs.values()], d = Math.hypot(a.x - b.x, a.y - b.y), cx = (a.x + b.x) / 2, links = laneLinks();
+        const r = N.zoomRond({ ppd: pinch.ppd0, pos: pinch.pos0 }, Math.max(0, Math.min(S.Wv, pinch.cx0 - links)), d / pinch.d0, S.Wv);
+        S.ppd = r.ppd; S.pos = N.posBegrens(r.pos - (cx - pinch.cx0) / r.ppd, vandaagWi()); N.vraag(); N.stapStil(); return;
+      }
+      if (pan && pan.id === ev.pointerId) {
+        const dx = ev.clientX - pan.x;
+        if (!pan.bewogen && Math.abs(dx) < 4 && Math.abs(ev.clientY - pan.y) < 4) return;
+        pan.bewogen = true; maakVrij();
+        pan.hist.push([ev.clientX, ev.timeStamp || Date.now()]); if (pan.hist.length > 8) pan.hist.shift();
+        S.pos = N.posBegrens(pan.pos0 - dx / pan.ppd0, vandaagWi()); N.vraag(); N.stapStil();
+        if (ev.cancelable) ev.preventDefault();
+      }
+    });
+    vlak.addEventListener('pointerup', ev => { const bewogen = pan && pan.id === ev.pointerId && pan.bewogen, enkel = ptrs.size === 1 && ptrs.has(ev.pointerId); eindPan(ev, false); if (!bewogen && enkel && !pinch && ev.isPrimary !== false) N.legeKlik(ev); });
+    vlak.addEventListener('pointercancel', ev => eindPan(ev, true));
+    vlak.addEventListener('click', ev => { if (S.nietKlikken) { ev.stopPropagation(); ev.preventDefault(); } }, true);   // na een sleep geen klik op wat eronder lag
+    vlak.addEventListener('keydown', ev => {   // het toetsenbord op de tijdas
+      if (!ev.target || !ev.target.closest || !ev.target.closest('.cn-as') || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+      if (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight') { ev.preventDefault(); N.schuifPx((ev.key === 'ArrowLeft' ? 1 : -1) * (ev.shiftKey ? S.ppd / 4 : S.ppd)); N.stapStil(true); }
+      else if (ev.key === '+' || ev.key === '=' || ev.key === '-' || ev.key === '_') { ev.preventDefault(); N.zoomBeweeg(S.Wv / 2, ev.key === '+' || ev.key === '=' ? 1.3 : 1 / 1.3); N.stapStil(true); }
+    });
+  }
+
+  // ── tekenen ──
+  const LBL = () => { const g = D.doc.defaultView; return g && g.innerWidth <= 640 ? 104 : 190; };
+  const optiesBasis = st => ({ team: D.team() || [], vrij: D.vrij ? D.vrij() : null, verlof: D.verlof ? D.verlof() : null, project: st.project || '' });
+  N.balkBijwerken = function (m) {
+    const b = S.balk; if (!b) return;
+    b.titel.textContent = m.titel; b.titel.setAttribute('title', m.titel + ' · ' + m.sub); b.sub.textContent = m.sub;
+    b.zk.forEach((k, i) => { const aan = ZOOMS[i][0] === S.zoom; k.classList.toggle('aan', aan); k.setAttribute('aria-pressed', aan ? 'true' : 'false'); });
+  };
+  // De tijdkolom: de stand (snelkeuze of vrij) naar een schaal en een venster, dan de rijen. Met `forceer` altijd opnieuw; anders wordt bij een beweging binnen dezelfde dagen alleen verschoven.
+  N.vlakTeken = function (forceer) {
+    const vlak = S.vlak; if (!vlak || !D || !D.doc.contains(vlak)) return;
+    const hoofd = vlak.parentNode, cw = hoofd && hoofd.clientWidth, Wv = cw > 0 ? Math.max(160, cw - LBL() - 2) : (S.Wv || 1000), today = P.vandaagYmd();
+    S.Wv = Wv;
+    const weekendPad = !S.vrij && S.zoom === 'dag' && S.exactDag && P.isYmd(S.anker) && ((wd(nr(S.anker)) + 6) % 7) > 4;   // een weekenddag (alleen via "Naar de dag") is één losse kolom
+    if (S.centreer) { S.centreer = false; if (S.vrij) S.pos = vandaagWi() - Math.max(0, (Wv / S.ppd - 1) / 2); }
+    if (!S.vrij) { S.ppd = N.preset(S.zoom, Wv); const a = P.isYmd(S.anker) ? S.anker : today; S.pos = S.zoom === 'week' || S.zoom === 'maand' || S.zoom === 'kwartaal' ? wiVan(monday(a)) : wiVan(a); }
+    S.ppd = begrens(S.ppd, Wv); S.pos = N.posBegrens(S.pos, vandaagWi());
+    const kind = weekendPad ? 'dag' : N.modus(S.ppd, Wv);
+    if (S.vrij) { S.zoom = kind; S.anker = datumVanWi(Math.floor(S.pos)); }
+    const n = Wv / S.ppd, d0 = Math.floor(S.pos + 1e-9), d1 = Math.max(d0 + 1, Math.ceil(S.pos + n - 1e-6)), snap = N.snapMin(S.ppd);
+    const sleutel = [weekendPad ? 'w' + S.anker : d0 + ':' + d1, S.ppd.toFixed(3), Wv, S.project, S.persoon, S.zoom, JSON.stringify(S.agenda), U0, U1, today, S.gk ? 'g' : '', S.hm ? 'h' : '', CA() ? CA().rev() : 0].join('|');
+    if (!forceer && S.sleutel === sleutel && vlak.firstChild) { N.plaats(); return; }
+    if (S.popOpruim) { try { S.popOpruim(); } catch (e) {} S.popOpruim = null; }   // een open opbouw hoort bij de oude weergave
+    let m;
+    try { m = N.model(Object.assign({}, S, { zoom: S.zoom, ongepland: S.ong, d0: weekendPad ? undefined : d0, d1: weekendPad ? undefined : d1 })); }
+    catch (e) { console.warn('Capaciteit (nieuw):', e); vlak.textContent = ''; vlak.appendChild(el('div', { klass: 'cn-melding', tekst: 'De planning kon niet worden berekend.' })); S.V = null; return; }
+    N.laatste = m;
+    const uren = kind === '3d' || kind === 'dag', teken = uren ? 'uren' : kind;
+    const V = { m, ppd: S.ppd, Wv, kind, snap, venster: m.venster, teken };
+    V.breedte = teken === 'kwartaal' ? m.weken * 5 * S.ppd : m.venster.length * S.ppd;
+    V.base = m.weekend ? null : m.d0w + (teken === 'kwartaal' ? 0 : m.venster[0]);
+    V.gk = null;   // G1: de geklokte uren van het venster (de entries zijn eenmaal per keer tekenen naar lokale tijd gerekend)
+    if (S.gk && D.geklokt && m.dagen.length) { try { if (!S.gkVoor) S.gkVoor = N.gkVoorbereid(S.gkLijst, D.team() || []); V.gk = N.gkKies(S.gkVoor, m.dagen[0].datum, m.dagen[m.dagen.length - 1].datum); } catch (e) { console.warn('Capaciteit (geklokt):', e); } }
+    S.V = V;
+    vlak.textContent = '';
+    const rijen = m.rijen;
+    if (!rijen.length) vlak.appendChild(el('div', { klass: 'cn-melding', tekst: 'Geen teamleden voor deze keuze.' }));
+    else if (teken === 'week') tekenWeek(V, rijen, vlak);
+    else if (teken === 'maand') tekenMaand(V, rijen, vlak);
+    else if (teken === 'kwartaal') tekenKwartaal(V, rijen, vlak);
+    else tekenUren(V, rijen, vlak);
+    const hint = HINT[kind] + ((kind === 'week' || kind === '3d' || kind === 'dag') ? (N.mag() ? ' · sleep een blok, of kies ⇄ voor het toetsenbord' : ' · verplaatsen is voor kantoor') : '');
+    vlak.appendChild(el('div', { klass: 'cn-legenda' }, el('span', null, el('i', { klass: 'cn-lg-balk' }), 'gepland t.o.v. beschikbaar'), el('span', { klass: 'over' }, el('i', { klass: 'cn-lg-over' }), 'meer gepland dan beschikbaar'), el('span', null, el('i', { klass: 'cn-lg-vrij' }), 'vrij of verlof'), el('span', null, el('i', { klass: 'cn-lg-voorstel' }), 'open voorstel'), S.hm ? hmLegenda() : null, V.gk ? el('span', null, el('i', { klass: 'cn-lg-gk' }), 'geklokt (Toggl)') : null, V.gk ? el('span', { klass: 'cn-gk-sync', tekst: gkSyncTekst(V) }) : null, el('span', { klass: 'cn-hint', tekst: hint + ' · ' + GEBAAR })));
+    S.sleutel = sleutel;
+    { const eerste = vlak.querySelector('.cn-persoon[data-totaal]'), rij = eerste && eerste.closest('.cn-rij'); if (rij) rij.classList.add('cn-eerste-totaal'); }   // P7b: een streep boven de eerste baan
+    N.balkBijwerken(m); N.plaats(); if (!m.weekend) voorLaad(m);
+    if (teken === 'uren') agendaVraag(m);   // D1: de Outlook-afspraken van wie een open agenda-strook heeft
+    const w = D.doc.getElementById('agenda-capaciteit');
+    if (w && S.focusTaak) { const f = [...w.querySelectorAll('.cn-blok[data-taak]')].find(x => x.getAttribute('data-taak') === S.focusTaak && (!S.focusCode || x.getAttribute('data-code') === S.focusCode)); S.focusTaak = null; S.focusCode = null; if (f && f.focus) f.focus(); }   // de balk waarop met het toetsenbord gewerkt werd houdt de focus
+    if (w && S.focusBlok) { const f = [...w.querySelectorAll('.cn-blok[data-blok]')].find(x => x.getAttribute('data-blok') === S.focusBlok); S.focusBlok = null; if (f && f.focus) f.focus(); }
+    if (FF() && w) FF().markeer(w);   // de geselecteerde taak (het laatst geopende taakpaneel) blijft gemarkeerd bij het wisselen van weergave
+  };
+  N.plaats = function () {   // de stroken op de plek van S.pos zetten (alleen een transform: geen DOM-werk)
+    const V = S.V, vlak = S.vlak; if (!V || !vlak) return;
+    const x = V.base === null ? 0 : (V.base - S.pos) * V.ppd, t = 'translate3d(' + x.toFixed(2) + 'px,0,0)';
+    vlak.querySelectorAll('.cn-strip').forEach(s => { s.style.transform = t; });
+  };
+
+  const gebaarActief = () => !!S.gebaar && Date.now() - S.gebaar < 10000;   // tijdens slepen of knijpen niet de hele weergave vervangen (de sleep zou ophouden); daarna alsnog
+  const gebaarKlaar = () => { S.gebaar = 0; if (S.nogTeken) { S.nogTeken = false; N.teken(); } };
   N.teken = function () {
     const w = D && D.doc.getElementById('agenda-capaciteit'); if (!w) return;
+    if (gebaarActief()) { S.nogTeken = true; return; }
+    N.cacheWis(); if (S.popOpruim) { try { S.popOpruim(); } catch (e) {} S.popOpruim = null; }
+    if (S.ro) { try { S.ro.disconnect(); } catch (e) {} S.ro = null; }
     w.textContent = '';
     trekFilter();
     if (!S.anker) S.anker = P.vandaagYmd();
-    let m; try { m = N.model(); } catch (e) { console.warn('Capaciteit (nieuw):', e); w.appendChild(el('div', { klass: 'cn-melding', tekst: 'De planning kon niet worden berekend.' })); return; }
-    N.laatste = m;
-    const zi = ZOOMS.findIndex(z => z[0] === S.zoom);
+    bepaalUren();
+    if (S.gk && D.geklokt) { try { S.gkLijst = D.geklokt() || []; } catch (e) { S.gkLijst = []; } } else S.gkLijst = [];   // G1: eenmaal per keer tekenen lezen (de Uren staan in de browser)
+    S.gkVoor = null;
+    try { const tb = TB(); S.bakItems = tb ? tb.items(D.taken(), D.afhank(), D.blokken(), { team: D.team() || [], vrij: D.vrij ? D.vrij() : null, vandaag: P.vandaagYmd(), project: D.project }) : []; } catch (e) { console.warn('Capaciteit (takenbak):', e); S.bakItems = []; }
+    try { S.ong = ongeplandVoor(S, D.team() || [], optiesBasis(S)); } catch (e) { console.warn('Capaciteit (nieuw):', e); w.appendChild(el('div', { klass: 'cn-melding', tekst: 'De planning kon niet worden berekend.' })); return; }
     const knop = (label, klik, kl) => el('button', { type: 'button', klass: 'cn-knop' + (kl ? ' ' + kl : ''), 'aria-label': label, klik });
     const vorige = knop('Vorige periode', () => N.stap(-1), 'icoon'), volgende = knop('Volgende periode', () => N.stap(1), 'icoon');
     vorige.appendChild(icoon('M15 6l-6 6l6 6')); volgende.appendChild(icoon('M9 6l6 6l-6 6'));
-    const vandaag = knop('Naar vandaag', () => { S.exactDag = false; S.anker = P.vandaagYmd(); duwPeriode(); N.teken(); }); vandaag.textContent = 'Vandaag';
+    const vandaag = knop('Naar vandaag', () => N.naarVandaag()); vandaag.textContent = 'Vandaag';
+    const zi = () => ZOOMS.findIndex(z => z[0] === S.zoom);
+    const zk = ZOOMS.map(z => el('button', { type: 'button', klass: 'cn-zk' + (z[0] === S.zoom ? ' aan' : ''), 'aria-pressed': z[0] === S.zoom ? 'true' : 'false', klik: () => N.zoom(z[0]), tekst: z[1] }));
     const zoomGroep = el('div', { klass: 'cn-zoom', role: 'group', 'aria-label': 'Inzoomen' },
-      (() => { const b = knop('Uitzoomen', () => N.zoom(ZOOMS[Math.max(0, zi - 1)][0]), 'zm'); b.appendChild(icoon('M5 12h14')); return b; })(),
-      ZOOMS.map(z => { const b = el('button', { type: 'button', klass: 'cn-zk' + (z[0] === S.zoom ? ' aan' : ''), 'aria-pressed': z[0] === S.zoom ? 'true' : 'false', klik: () => N.zoom(z[0]), tekst: z[1] }); return b; }),
-      (() => { const b = knop('Inzoomen', () => N.zoom(ZOOMS[Math.min(ZOOMS.length - 1, zi + 1)][0]), 'zm'); b.appendChild(icoon('M12 5v14M5 12h14')); return b; })());
-    w.appendChild(el('div', { klass: 'cn-balk-boven' }, vorige, vandaag, volgende, el('span', { klass: 'cn-titel', title: m.titel + ' · ' + m.sub, tekst: m.titel }), el('span', { klass: 'cn-sub cn-num', tekst: m.sub }), el('span', { klass: 'cn-rek' }), filterKnoppen(), ZOOM_UI ? zoomGroep : null));
+      (() => { const b = knop('Uitzoomen', () => N.zoom(ZOOMS[Math.max(0, zi() - 1)][0]), 'zm'); b.appendChild(icoon('M5 12h14')); return b; })(), zk,
+      (() => { const b = knop('Inzoomen', () => N.zoom(ZOOMS[Math.min(ZOOMS.length - 1, zi() + 1)][0]), 'zm'); b.appendChild(icoon('M12 5v14M5 12h14')); return b; })());
+    const titel = el('span', { klass: 'cn-titel' }), sub = el('span', { klass: 'cn-sub cn-num' });
+    S.balk = { titel, sub, zk };
+    const nieuwKnop = D.nieuwBlok && (!D.magBlok || D.magBlok()) ? el('button', { type: 'button', klass: 'cn-knop', id: 'cn-nieuw-blok', title: 'Een planblok maken (ook: klik op een lege plek in de uurweergave)', klik: () => { const a = S.anker && P.isYmd(S.anker) ? S.anker : P.vandaagYmd(); D.nieuwBlok({ persoon: S.persoon || '', datum: isWeekend(a) ? volgendeWerkdag(a, 1) : a, start: '09:00', duurMin: 60 }); } }, icoon('M12 5v14M5 12h14'), 'Planblok') : null;
+    w.appendChild(el('div', { klass: 'cn-balk-boven' }, vorige, vandaag, volgende, titel, sub, el('span', { klass: 'cn-rek' }), filterKnoppen(), gkKnopPlaats() ? null : [gkKnopEl(), hmKnopEl()], nieuwKnop, ZOOM_UI ? zoomGroep : null));
     if (D.takenKlaar && !D.takenKlaar()) w.appendChild(el('div', { klass: 'cn-melding', role: 'status', tekst: D.takenStatusTekst() + ' Je ziet alleen wat er al staat.' }));
-    const vlak = el('div', { klass: 'cn-vlak' });
-    const rijen = m.rijen;
-    if (!rijen.length) vlak.appendChild(el('div', { klass: 'cn-melding', tekst: 'Geen teamleden voor deze keuze.' }));
-    else if (S.zoom === 'week') tekenWeek(m, rijen, vlak);
-    else if (S.zoom === 'maand') tekenMaand(m, rijen, vlak);
-    else if (S.zoom === 'kwartaal') tekenKwartaal(m, rijen, vlak);
-    else tekenUren(m, rijen, vlak);
-    vlak.appendChild(el('div', { klass: 'cn-legenda' }, el('span', null, el('i', { klass: 'cn-lg-balk' }), 'gepland t.o.v. beschikbaar'), el('span', { klass: 'over' }, el('i', { klass: 'cn-lg-over' }), 'meer gepland dan beschikbaar'), el('span', null, el('i', { klass: 'cn-lg-vrij' }), 'vrij of verlof'), el('span', null, el('i', { klass: 'cn-lg-voorstel' }), 'open voorstel'), el('span', { klass: 'cn-hint', tekst: HINT[S.zoom] + ((S.zoom === 'week' || S.zoom === '3d' || S.zoom === 'dag') ? (N.mag() ? ' · sleep een blok, of kies ⇄ voor het toetsenbord' : ' · verplaatsen is voor kantoor') : '') })));
-    w.appendChild(el('div', { klass: 'cn-kader' }, el('div', { klass: 'cn-hoofd' }, vlak), zijkolom(m)));
-    if (S.focusTaak) { const f = [...w.querySelectorAll('.cn-blok[data-taak]')].find(x => x.getAttribute('data-taak') === S.focusTaak && (!S.focusCode || x.getAttribute('data-code') === S.focusCode)); S.focusTaak = null; S.focusCode = null; if (f && f.focus) f.focus(); }   // de balk waarop met het toetsenbord gewerkt werd houdt de focus
-    if (FF()) FF().markeer(w);   // de geselecteerde taak (het laatst geopende taakpaneel) blijft gemarkeerd bij het wisselen van weergave
+    const vlak = el('div', { klass: 'cn-vlak', style: '--cn-lbl:' + LBL() + 'px' });
+    koppelGebaren(vlak);
+    S.aside = zijkolom({ ongepland: S.ong }); S.kader = el('div', { klass: 'cn-kader' }, el('div', { klass: 'cn-hoofd' }, vlak), S.aside);
+    w.appendChild(S.kader);
+    S.vlak = vlak; S.V = null; S.sleutel = '';
+    N.vlakTeken(true);   // eerst in het document (de breedte meten), dan de rijen
+    if (typeof ResizeObserver !== 'undefined' && vlak.parentNode) {   // een andere breedte (venster, Ongepland in- of uitgeklapt, telefoon gedraaid): opnieuw tekenen
+      let b0 = vlak.parentNode.clientWidth;
+      S.ro = new ResizeObserver(() => { const b1 = vlak.parentNode ? vlak.parentNode.clientWidth : 0; if (b1 > 0 && Math.abs(b1 - b0) > 2) { b0 = b1; N.vraag(); } });
+      S.ro.observe(vlak.parentNode);
+    }
   };
 
   // Vanuit Vandaag ("Inplannen" bij een taak zonder datum): de taak in Ongepland markeren en het bestaande "Plan … in…"-keuzemenu (N.menu) openen. Er is geen eigen schrijfroute:
   // plannen loopt via N.drop, dus via D.verplaats met dezelfde controles als slepen. De aanroeper heeft de Agenda al op Capaciteit gezet. Zonder recht (N.mag) blijft het bij markeren.
   N.inplannen = function (taak) {
     if (!taak || taak.id === undefined || taak.id === null) return false;
-    duwFilter({ persoon: '', project: '' }); S.exactDag = false; S.persoon = ''; S.project = ''; S.anker = P.vandaagYmd(); S.ongDicht = false;
+    duwFilter({ persoon: '', project: '' }); S.exactDag = false; S.vrij = false; S.persoon = ''; S.project = ''; S.anker = P.vandaagYmd(); S.ongDicht = false;
     if (S.zoom === 'maand' || S.zoom === 'kwartaal') S.zoom = 'week';   // een keuzemenu voor dag en moment heeft een week of dagweergave nodig (de bewaarde zoomkeuze verandert niet)
     duwPeriode();
     S.markeer = { id: String(taak.id), code: String(taak.code == null ? '' : taak.code), tot: D.nu() + 60000 };
@@ -593,7 +1502,7 @@
   // Vanuit het taakpaneel ("Toon in tijdlijn"): de week van de taak, zonder filters, en de balk(en) van die taak een minuut gemarkeerd (de aanroeper wisselt naar de Agenda ▸ Capaciteit).
   N.toonTaak = function (taak, datum) {
     if (!taak || taak.id == null) return false;
-    duwFilter({ persoon: '', project: '' }); S.exactDag = false; S.persoon = ''; S.project = ''; S.anker = P.isYmd(datum) ? datum : P.vandaagYmd();
+    duwFilter({ persoon: '', project: '' }); S.exactDag = false; S.vrij = false; S.persoon = ''; S.project = ''; S.anker = P.isYmd(datum) ? datum : P.vandaagYmd();
     if (S.zoom === 'maand' || S.zoom === 'kwartaal') S.zoom = 'week';   // de balken zijn pas in een week- of dagweergave te zien (de bewaarde zoomkeuze verandert niet)
     duwPeriode();
     S.toon = { id: String(taak.id), code: String(taak.code == null ? '' : taak.code).toLowerCase(), tot: D.nu() + 60000 };
@@ -601,10 +1510,17 @@
     const e = D.doc.querySelector('#agenda-capaciteit .cn-blok.tp-gemarkeerd'); if (e && e.scrollIntoView) e.scrollIntoView({ block: 'center', inline: 'center' });
     return !!e;
   };
-  N.gaNaar = function (datum, slug) { if (P.isYmd(datum)) S.anker = datum; S.persoon = slug || ''; S.project = ''; S.zoom = P.isYmd(datum) ? 'dag' : 'week'; S.exactDag = P.isYmd(datum); duwFilter({ persoon: slug || '', project: '' }); duwPeriode(); };   // precies die dag (ook een weekenddag), met die persoon in beeld; de bewaarde zoomkeuze verandert niet
+  N.gaNaar = function (datum, slug) { S.vrij = false; if (P.isYmd(datum)) S.anker = datum; S.persoon = slug || ''; S.project = ''; S.zoom = P.isYmd(datum) ? 'dag' : 'week'; S.exactDag = P.isYmd(datum); duwFilter({ persoon: slug || '', project: '' }); duwPeriode(); };   // precies die dag (ook een weekenddag), met die persoon in beeld; de bewaarde zoomkeuze verandert niet
   N.init = function (deps) {
     D = deps; P = deps.planning || root.MTPlanning;
-    try { const z = D.storage && D.storage.getItem(LS_ZOOM); if (ZOOM_UI && z && ZOOMS.some(x => x[0] === z)) S.zoom = z; S.ongDicht = !!(D.storage && D.storage.getItem(LS_ONG) === 'dicht'); } catch (e) {}
+    if (CA() && !S.agLuister) { S.agLuister = true; CA().opLuister(() => { if (S.vlak && D && D.doc.contains(S.vlak)) N.vraag(); }); }   // D1: nieuwe afspraken binnen = opnieuw tekenen (hoogstens één keer per beeld)
+    try { const z = D.storage && D.storage.getItem(LS_ZOOM); if (ZOOM_UI && z && ZOOMS.some(x => x[0] === z)) S.zoom = z; S.ongDicht = !!(D.storage && D.storage.getItem(LS_ONG) === 'dicht');
+      const sc = Number(D.storage && D.storage.getItem(LS_SCHAAL)); if (sc >= 0.5 && sc <= 400) { S.vrij = true; S.ppd = sc * UH(); S.centreer = true; }   // de laatst gebruikte vrije schaal (niet de plek: die is vandaag)
+      { const tb = TB(), b = D.storage && D.storage.getItem(LS_BAK); if (tb && b) { const c = tb.codeer(JSON.parse(b)); S.bak = tb.decodeer(c.bak || 'ongepland', c.bf); } }
+      const ag = D.storage && D.storage.getItem(LS_AGENDA); if (ag) { const o = JSON.parse(ag); if (o && typeof o === 'object') S.agenda = o; }
+      if (D.geklokt && D.storage && D.storage.getItem(LS_GK) === '1') S.gk = true;
+      if (D.storage && D.storage.getItem(LS_HM) === '1') S.hm = true;   // P7b: de heatmap blijft aan zoals je hem liet   // G1: de laag Geklokt blijft aan zoals je hem liet
+    } catch (e) {}
     return N;
   };
   N.S = S;

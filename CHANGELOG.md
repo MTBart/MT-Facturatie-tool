@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-24 — Pages-build: VOORTGANG-C2.md had twee Latin-1-bytes (een); nu geldig UTF-8, anders faalt Jekyll
+- Commit: `3183dd2` | Auteur: Bart Witte
+
 ## 2026-10-24 — Release v2.24.0 (met v2.22.0 en v2.23.0): planblokwriter, materiaal, Planning inrichten, taken bewerken in het project, telefoon; checklist en poorten, vier typen afhankelijkheden en beperkingen; Capaciteit met klik-om-te-plannen, laag Geklokt, Outlook bezet, heatmap, rollen zonder naam en inzetbaarheid (geen banen); tijdlijn bewerken; projectscherm in samenhang met tabblad Uren & budget; projectlijst-filter en bulk afronden; rustige stijl met lijn-iconen; aanbetalingspoort uit Moneybird (alleen lezen); schema 12; backup = v2.21.0
 - Commit: `4a2b2f9` | Auteur: Bart Witte
 

@@ -5,7 +5,7 @@
  * Eén bron, één balk: elke weergave tekent dezelfde balk (F.balk), leest dezelfde stand en laat het filter in de link staan, dus wisselen van weergave behoudt wat je
  * koos, een gekopieerde link toont dezelfde stand en de laatste keuze (project, persoon, status) wordt per gebruiker onthouden.
  * Alleen schermstand: niets hiervan gaat naar SharePoint; de enige opslag is localStorage (altijd in try/catch, het scherm werkt ook zonder).
- * De link: #tab=agenda&weergave=capaciteit&project=<code>&wie=<ik|iedereen|slug>&status=<open|bezig|wacht|klaar>&van=<jjjj-mm-dd>&zoom=<week|…>
+ * De link: #tab=agenda&weergave=capaciteit&project=<code>&wie=<ik|iedereen|slug>&status=<open|bezig|wacht|klaar>&van=<jjjj-mm-dd>&zoom=<week|…>&schaal=<px per uur>&tijd=<uu:mm>
  *   en voor een project: #projecten/<code>/planning?status=…&wie=…  (een oude #tab=agenda blijft werken: dan geldt de onthouden stand).
  * Rekenwerk zonder DOM (leesLink, linkStaart, statusPast, persoonPast) is los te testen; tekent met DOM-calls, nooit met opgebouwde HTML. Alles van buiten via init(deps).
  * ========================================================================== */
@@ -17,10 +17,10 @@
   const WEERGAVEN = ['mijnwerk', 'capaciteit', 'bord', 'tijdlijn', 'grid', 'lijst', 'plan'];
   const ZOOMS = ['kwartaal', 'maand', 'week', '3d', 'dag'];
   const STATUSSEN = [['open', 'Open', 'todo'], ['bezig', 'Bezig', 'bezig'], ['wacht', 'Wacht', 'wacht'], ['klaar', 'Klaar', 'klaar']];   // [linkwaarde, label, taakstatus]
-  const BORDEN = ['status', 'stroom', 'fase'];   // de indeling van het Bord (P3)
-  const SLEUTELS = ['project', 'persoon', 'status', 'van', 'zoom', 'bord'];
-  const LINK = { project: 'project', persoon: 'wie', status: 'status', van: 'van', zoom: 'zoom', bord: 'bord' };
-  const S = { project: '', persoon: '', status: '', van: '', zoom: '', bord: '', selectie: null, rev: 0, hashAchter: false };
+  const BORDEN = ['status', 'stroom', 'fase', 'week'];   // de indeling van het Bord (P3)
+  const SLEUTELS = ['project', 'persoon', 'status', 'van', 'zoom', 'bord', 'schaal', 'tijd', 'bak', 'bf', 'gk', 'hm'];
+  const LINK = { project: 'project', persoon: 'wie', status: 'status', van: 'van', zoom: 'zoom', bord: 'bord', schaal: 'schaal', tijd: 'tijd', bak: 'bak', bf: 'bf', gk: 'gk', hm: 'hm' };
+  const S = { project: '', persoon: '', status: '', van: '', zoom: '', bord: '', schaal: '', tijd: '', bak: '', bf: '', gk: '', hm: '', selectie: null, rev: 0, hashAchter: false };
   let geladen = false;
   const luisteraars = [];
 
@@ -33,7 +33,13 @@
     status: v => STATUSSEN.some(x => x[0] === v) ? v : '',
     van: v => isYmd(v) ? v : '',
     zoom: v => ZOOMS.includes(v) ? v : '',
-    bord: v => BORDEN.includes(v) ? v : ''
+    bord: v => BORDEN.includes(v) ? v : '',
+    schaal: v => { const s = String(v == null ? '' : v).trim(), n = Number(s); return /^\d{1,3}(\.\d)?$/.test(s) && n >= 0.5 && n <= 400 ? String(n) : ''; },   // de vrije zoom van de Capaciteit: pixels per uur (leeg = een snelkeuze)
+    tijd: v => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(v == null ? '' : v)) ? String(v) : '',   // de tijd van de dag aan de linkerrand bij een vrije zoom
+    bak: v => ['alles', 'telaat', 'wacht', 'week'].includes(v) ? v : '',   // de lijst van de takenbak (leeg = Ongepland)
+    bf: v => { const s = String(v == null ? '' : v); return s.length <= 700 && /^[\w~;%.\-*()!'+]*$/.test(s) ? s : ''; },   // de filters en de groepering van de takenbak (zie mt-takenbak.js: codeer)
+    gk: v => String(v == null ? '' : v) === '1' ? '1' : '',   // de laag Geklokt in de Capaciteit staat aan (leeg = uit)
+    hm: v => String(v == null ? '' : v) === '1' ? '1' : ''   // de heatmap van de bezetting in de Capaciteit staat aan (leeg = uit)
   };
   F.WEERGAVEN = WEERGAVEN; F.ZOOMS = ZOOMS; F.STATUSSEN = STATUSSEN;
   F.isYmd = isYmd;
@@ -241,7 +247,7 @@
     } catch (e) {}
     return F;
   };
-  F._reset = function () { Object.assign(S, { project: '', persoon: '', status: '', van: '', zoom: '', bord: '', selectie: null, rev: 0, hashAchter: false }); geladen = false; luisteraars.length = 0; };
+  F._reset = function () { Object.assign(S, { project: '', persoon: '', status: '', van: '', zoom: '', bord: '', schaal: '', tijd: '', bak: '', bf: '', gk: '', hm: '', selectie: null, rev: 0, hashAchter: false }); geladen = false; luisteraars.length = 0; };
   F.S = S;
   root.MTPlanFilter = F;
   if (typeof module !== 'undefined' && module.exports) module.exports = F;
