@@ -4114,6 +4114,7 @@ function planInrichtMag(){ return admMagActiviteit(); }
 function planInrichtRecords(){ _inrichtVers(true); try{ return MTPlanning.inrichtBewerkbaar(_inrRaw); }catch(e){ return MTPlanning.inrichtStandaard(); } }
 async function planInrichtOpslaan(nieuw){
   if(!planInrichtMag()) return {ok:false,reden:'Alleen de beheerder richt de planning in.'};
+  try{ if(typeof projSchemaCheck==='function') await projSchemaCheck(true); }catch(e){}   // v2.24 (Codex): vers de schemadrempel lezen voor er iets verandert; geblokkeerd = niets opgeslagen
   if(typeof _SP==='undefined'||!_SP.ready||_SP.blockedKeys.has('mt_planinrichting')) return {ok:false,reden:'De synchronisatie is nog niet klaar of geblokkeerd: er is niets opgeslagen. Probeer het zo opnieuw (of herlaad de pagina).'};
   let rec; try{ rec=MTPlanning.inrichtSchrijf(localStorage.getItem('mt_planinrichting'),nieuw,{door:_spWie(),dev:_spDev()}); }catch(e){ return {ok:false,reden:'Niet opgeslagen: '+(e.message||e)}; }
   const zet=(typeof _lsSet==='function'?_lsSet:localStorage.setItem.bind(localStorage)), tekst=JSON.stringify(rec);
@@ -4165,7 +4166,7 @@ function planInrichtTeken(){
 }
 try{ _inrichtVers(true); }catch(e){}
 try{ MTPlanInrichting.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, mag:()=>planInrichtMag(), records:()=>planInrichtRecords(), opslaan:r=>planInrichtOpslaan(r),
-  gebruik:(ty,k)=>{ const g=MTPlanning.inrichtGebruik(ty,k,projTakenAll(),sjablonenRuw()); if(ty==='rol'){ const slug='rol-'+k, b=agPlanActief().filter(x=>String(x.persoon||'').toLowerCase()===slug); g.n+=b.length; if(b.length) g.blokken=b.length; } return g; },   // een rol met planblokken is ook nog in gebruik verplaats:(ty,van,naar,vg)=>planInrichtVerplaats(ty,van,naar,vg), verplaatsHerstel:w=>planInrichtVerplaatsHerstel(w),
+  gebruik:(ty,k)=>{ const g=MTPlanning.inrichtGebruik(ty,k,projTakenAll(),sjablonenRuw()); if(ty==='rol'){ const slug='rol-'+k, b=agPlanActief().filter(x=>String(x.persoon||'').toLowerCase()===slug); g.n+=b.length; if(b.length) g.blokken=b.length; } return g; },   verplaats:(ty,van,naar,vg)=>planInrichtVerplaats(ty,van,naar,vg), verplaatsHerstel:w=>planInrichtVerplaatsHerstel(w),   // gebruik: een rol met planblokken is ook nog in gebruik
   vers:async()=>{ await _tpVersLokaal(); }, migratiePlan:()=>planFaseMigratiePlan(), migratieUitvoer:vg=>planFaseMigratieUitvoer(vg), get dialoog(){ return window.mtDialog; },
   toast:(t,o,l,lb)=>MTCapaciteitNieuw.toast(t,o,l,lb), rolOmzetten:k=>MTCapaciteitNieuw.rolOmzetten(k),
   naWijziging:()=>{ _inrichtVers(true); try{ planInrichtTeken(); }catch(e){} try{ const ag=document.getElementById('tab-agenda'); if(ag&&ag.classList.contains('active')&&typeof renderAgenda==='function') renderAgenda(); }catch(e){} try{ if(window.MTBord) MTBord.teken(); }catch(e){} try{ if(window.MTTijdlijn&&MTTijdlijn.teken) MTTijdlijn.teken(); }catch(e){} try{ MTTaakPaneel.ververs(); }catch(e){} } }); }catch(e){ console.warn('Planning inrichten init:',e); }
