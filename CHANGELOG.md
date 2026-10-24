@@ -5,8 +5,233 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-24 — Release v2.24.0 (met v2.22.0 en v2.23.0): planblokwriter, materiaal, Planning inrichten, taken bewerken in het project, telefoon; checklist en poorten, vier typen afhankelijkheden en beperkingen; Capaciteit met klik-om-te-plannen, laag Geklokt, Outlook bezet, heatmap, rollen zonder naam en inzetbaarheid (geen banen); tijdlijn bewerken; projectscherm in samenhang met tabblad Uren & budget; projectlijst-filter en bulk afronden; rustige stijl met lijn-iconen; aanbetalingspoort uit Moneybird (alleen lezen); schema 12; backup = v2.21.0
+- Commit: `4a2b2f9` | Auteur: Bart Witte
+
 ## 2026-10-24 — Backup = v2.21.0
 - Commit: `cbbf0ec` | Auteur: Bart Witte
+
+## 2026-10-24 — Releasedocument v2.24.0 (met v2.22/v2.23) en Codex-uitvoer
+- Commit: `21b4576` | Auteur: Bart Witte
+
+## 2026-10-24 — Planning inrichten: verplaats/verplaatsHerstel stonden per ongeluk in het commentaar van de P7b-init (verwijderen van een fase met taken deed niets); planInrichtOpslaan leest eerst vers de schemadrempel (Codex)
+- Commit: `c268a9c` | Auteur: Bart Witte
+
+## 2026-10-23 — Updates-item v2.24.0: aanbetalingspoort
+- Commit: `1705f58` | Auteur: Bart Witte
+
+## 2026-10-23 — Merge poort-mb (aanbetalingspoort uit Moneybird, alleen lezen, verbeterpunt 72); cache-versies
+- Commit: `4f1a228` | Auteur: Bart Witte
+
+## 2026-10-23 — Versielabel v2.24.0, updates-item en cache-versies (2026-10-24z) voor de bestanden die sinds v2.23 wijzigden
+- Commit: `fe70a4a` | Auteur: Bart Witte
+
+## 2026-10-23 — Merge rust-r2 (mt-iconen.js, lijn-iconen, statustaal, tekstpas, overloop Voorraad/Opleveringen). Conflicten alleen cache-versies in v2.html en mobiel.html
+- Commit: `3cf86cb` | Auteur: Bart Witte
+
+## 2026-10-23 — Poort Aanbetaling binnen stelt zichzelf voor uit Moneybird (verbeterpunt 72)
+- Commit: `5e10508` | Auteur: Bart Witte
+
+## 2026-10-23 — Merge planning-p4b (tijdlijn bewerken: slepen, rekken, koppelen). Conflicten: v2.html (scripttags en Capaciteit-init: naHerstel tekent ook de tijdlijn), mt-tijdlijn.js (noot van P4b)
+- Commit: `0e9bf84` | Auteur: Bart Witte
+
+## 2026-10-23 — Merge capaciteit-p7b (D0 agenda-fundament achter vlag UIT, P7b heatmap/rollen/botsing, P7c inzetbaarheid; schema 12)
+- Commit: `1060500` | Auteur: Bart Witte
+
+## 2026-10-23 — ﻿Merge samenhang-s3 (S3 Uren & budget, S7-rest)
+- Commit: `0af45c2` | Auteur: Bart Witte
+
+## 2026-10-23 — P7c: banen eruit, inzetbaarheid per persoon en totaalrijen Werkplaats/Kantoor
+- Commit: `71bc295` | Auteur: Bart Witte
+
+## 2026-10-23 — Capaciteit P7b: banen (CNC, Afwerken, Montageploeg), rollen zonder naam, heatmap, botsing en beschikbaarheidsbalk
+- Commit: `abe41c7` | Auteur: Bart Witte
+
+## 2026-10-23 — Samenhang S7 (rest): snelkeuzes Open/Lopend/Leads/Te nacalculeren/Afgerond in de projectfilter en een projectenoverzicht rechts zonder project
+- Commit: `8f5e6e1` | Auteur: Bart Witte
+
+## 2026-10-23 — Samenhang S3: tabblad Uren & budget met meter, facturatie verwacht, prognose, nacalculatie en materiaalinkoop
+- Commit: `8f428b1` | Auteur: Bart Witte
+
+## 2026-10-23 — Telefoon: .btn, .btn-sm en .btn-xs houden 44 px tikvlak onder mt-rust.css (hogere specificiteit van de rustlaag won van S0)
+- Commit: `6a8d002` | Auteur: Bart Witte
+
+## 2026-10-23 — Takentabel op de telefoon: de uurknoppen blijven 44 px hoog onder mt-rust.css (btn-xs won van de 44 px-regel)
+- Commit: `420549f` | Auteur: Bart Witte
+
+## 2026-10-23 — Planning P4b: Codex-review verwerkt
+- Commit: `408c439` | Auteur: Bart Witte
+
+## 2026-10-23 — Tijdlijn: de noot zegt niet meer dat BB/EE/BE en kalenderdagen niet bestaan (F2a ondersteunt ze)
+- Commit: `3fe6ae7` | Auteur: Bart Witte
+
+## 2026-10-23 — Merge integratie-v2230 in capaciteit-d0 (P3b en de rest van de integratie als basis voor P7b)
+- Commit: `e588bca` | Auteur: Bart Witte
+
+## 2026-10-23 — Releasecheck tools/check-verwijzingen.js: lokale script- en stylesheet-verwijzingen moeten naar een bestaand bestand wijzen
+- Commit: `76d879c` | Auteur: Bart Witte
+
+## 2026-10-23 — Capaciteit D0: fundament om naar de agenda te schrijven (vlag UIT, nergens aan gekoppeld)
+- Commit: `3f0d5e5` | Auteur: Bart Witte
+
+## 2026-10-23 — Planning P4b: de tijdlijn bewerken
+- Commit: `51ae77f` | Auteur: Bart Witte
+
+## 2026-10-23 — Cache-versies hersteld: de eerdere versieslag had de bestandsnamen weggelaten
+- Commit: `ee830c6` | Auteur: Bart Witte
+
+## 2026-10-23 — Versielabel v2.23.0, updates-item en eenduidige cache-versies (2026-10-23z) voor alle gewijzigde bestanden
+- Commit: `39d019c` | Auteur: Bart Witte
+
+## 2026-10-23 — Rust-pas: geen horizontale overloop meer op de telefoon bij Voorraad en Opleveringen (opmaak, <= 760 px)
+- Commit: `fca6956` | Auteur: Bart Witte
+
+## 2026-10-23 — Merge rust-r1 (rustige stijllaag, ui-hoofd/ui-gekozen) in integratie-v2230
+- Commit: `2d209b0` | Auteur: Bart Witte
+
+## 2026-10-23 — Merge projectlijst-opruim (PL1, PL2) in integratie-v2230
+- Commit: `4c96e9a` | Auteur: Bart Witte
+
+## 2026-10-23 — Merge samenhang-s7 (S1, S5, S2, S4, S7) in integratie-v2230
+- Commit: `fdf18cc` | Auteur: Bart Witte
+
+## 2026-10-23 — Merge capaciteit-d1 (P1b, G1, D1) in integratie-v2230
+- Commit: `78074cc` | Auteur: Bart Witte
+
+## 2026-10-23 — Merge planning-f2b (P6, B1/B2, F2a, F2b) in integratie-v2230
+- Commit: `cb81c93` | Auteur: Bart Witte
+
+## 2026-10-23 — Rust-pas R2+R3: lijn-iconen i.p.v. emoji, statuschips met icoon, en tekstpas (nieuwe stijl, gebieden buiten het projectscherm)
+- Commit: `af0a14b` | Auteur: Bart Witte
+
+## 2026-10-23 — Samenhang S7: + Nieuw met vier keuzes, en op de telefoon de lijst of het project met Projecten terug
+- Commit: `3c6ac43` | Auteur: Bart Witte
+
+## 2026-10-23 — Projecten opruimen in bulk (PL2): selectiemodus, Afronden en Verloren met voorbeeld, eindstand, resultaat per project en Ongedaan maken
+- Commit: `45bc24a` | Auteur: Bart Witte
+
+## 2026-10-23 — Planning F2b: Codex-review verwerkt
+- Commit: `55acbbf` | Auteur: Bart Witte
+
+## 2026-10-23 — Capaciteit D1: de Outlook-afspraken van het team als "bezet" in de agenda-strook (alleen lezen)
+- Commit: `4e263e4` | Auteur: Bart Witte
+
+## 2026-10-23 — Planning F2b: beperkingen per taak en afhankelijkheden tussen projecten
+- Commit: `d3eac5c` | Auteur: Bart Witte
+
+## 2026-10-23 — Rust-pas R1: stijllaag mt-rust.css (tokens, brug naar de oude variabelen, basiscomponenten), alleen in de nieuwe stijl
+- Commit: `fa3a54a` | Auteur: Bart Witte
+
+## 2026-10-23 — Planning F2a: Codex-review verwerkt
+- Commit: `6f2d0c1` | Auteur: Bart Witte
+
+## 2026-10-23 — Capaciteit G1: laag Geklokt (Toggl-uren naast het geplande), Rooster en Lijst achter ?oud-rooster=1
+- Commit: `c522e06` | Auteur: Bart Witte
+
+## 2026-10-23 — Samenhang S4: Planning samengevoegd tot meldingen, een takentabel met twee weergaven en links naar Capaciteit en Tijdlijn
+- Commit: `625e2f8` | Auteur: Bart Witte
+
+## 2026-10-23 — Planning F2a: afhankelijkheden op MS Project-niveau, deel 1
+- Commit: `34d74f2` | Auteur: Bart Witte
+
+## 2026-10-23 — Samenhang S2: Overzicht opgeschoond en de projectgegevens in een paneel
+- Commit: `68eb22b` | Auteur: Bart Witte
+
+## 2026-10-23 — Planning B1+B2: Bord-Week en een mini-tijdlijn op elke kaart
+- Commit: `eec3699` | Auteur: Bart Witte
+
+## 2026-10-23 — Planning P6: Codex-review verwerkt (recht per bewerking, veilig Ongedaan maken)
+- Commit: `4ecafa9` | Auteur: Bart Witte
+
+## 2026-10-23 — Capaciteit P1b: Codex-review verwerkt (stabiel nummer en slot tegen dubbele blokken, id-conflict niet als gelukt, intrekken alleen door de indiener in de werkplaats-rol)
+- Commit: `044113b` | Auteur: Bart Witte
+
+## 2026-10-23 — Planning P6: checklist in een taak (P6a) en poorten (P6b)
+- Commit: `1312edc` | Auteur: Bart Witte
+
+## 2026-10-23 — Samenhang S5: Productie omdraaien (Te bestellen bovenaan, importvakken ingeklapt)
+- Commit: `85337d0` | Auteur: Bart Witte
+
+## 2026-10-23 — Projectlijst: filteren, sorteren en groeperen (PL1)
+- Commit: `557bd81` | Auteur: Bart Witte
+
+## 2026-10-23 — Capaciteit P1b: Planning vervangen (klik op een lege plek = nieuw planblok, bewerkbaar planblokpaneel, voorstellen beslissen)
+- Commit: `a08bc73` | Auteur: Bart Witte
+
+## 2026-10-23 — Cache-versie mt-planning.js op mobiel en tv gelijk aan v2.html (2026-10-23i)
+- Commit: `f1779a0` | Auteur: Bart Witte
+
+## 2026-10-23 — Samenhang S1: vaste projectkop (fase, lever, uren, volgende actie, ⋯-menu)
+- Commit: `c5c2f0d` | Auteur: Bart Witte
+
+## 2026-10-23 — Versielabel v2.22.0 en updates-item
+- Commit: `26d0de8` | Auteur: Bart Witte
+
+## 2026-10-23 — Merge calc-k7 (inkoopregel-tombstones mt_voorraad_weg, offertekeuze-samenvoeger)
+- Commit: `15e3c1f` | Auteur: Bart Witte
+
+## 2026-10-23 — Merge capaciteit-c3 (C1 zoomen/schuiven, C2 stapelen + belasting, C3 takenbak)
+- Commit: `7b21f7a` | Auteur: Bart Witte
+
+## 2026-10-23 — Merge telefoon-s0 (project-taken P2p, Voortgang, S0 telefoon-CSS)
+- Commit: `5ef0c52` | Auteur: Bart Witte
+
+## 2026-10-23 — Merge planning-p3b (F1 planblokwriter, P5 materiaal als voorwaarde, P3b borden inrichten)
+- Commit: `c36d59c` | Auteur: Bart Witte
+
+## 2026-10-23 — Capaciteit C3: de takenbak (lijst kiezen, filteren, groeperen, link, schuiflade op de telefoon)
+- Commit: `5e502bf` | Auteur: Bart Witte
+
+## 2026-10-23 — Planning P3b: tweede Codex-ronde verwerkt
+- Commit: `4731a0c` | Auteur: Bart Witte
+
+## 2026-10-23 — Planning P3b: Codex-review verwerkt, soort verplicht, herkenningswoorden
+- Commit: `2b86f0e` | Auteur: Bart Witte
+
+## 2026-10-23 — Telefoon S0: v2 past op 390 en 430 px zonder zijwaarts scrollen
+- Commit: `76ebfbd` | Auteur: Bart Witte
+
+## 2026-10-23 — Capaciteit C2: Codex-review verwerkt (gezien bij rand slepen, genormaliseerde vrije dag, popover opruimen, vandaag in tekensleutel)
+- Commit: `ee92472` | Auteur: Bart Witte
+
+## 2026-10-23 — K-7 ronde 2 (Codex): verhuis terugdraaien vergelijkt zonder stempel, merger idempotent, tombstone wint bij gelijke stempel
+- Commit: `d1ca1dc` | Auteur: Bart Witte
+
+## 2026-10-23 — Planning P2p: toon bij een afgevinkte taak wie en wanneer ("✓ door Mathijs · 22-10")
+- Commit: `45b57ac` | Auteur: Bart Witte
+
+## 2026-10-23 — K-7 na Codex-review: verhuis kent tombstones, eigen sleutel per regel, convergente samenvoeger, rolcontrole ook in de opslagfunctie
+- Commit: `37c986d` | Auteur: Bart Witte
+
+## 2026-10-23 — Planning P2p: Voortgang, Codex-review verwerkt (verse lijst bij bulk, bron bij terugzetten, fase-slot en -terugzetten, concept-datum blijft staan)
+- Commit: `70475d3` | Auteur: Bart Witte
+
+## 2026-10-23 — Planning P2p: blok Voortgang bovenaan Project, Overzicht
+- Commit: `5fd3e8b` | Auteur: Bart Witte
+
+## 2026-10-23 — Capaciteit C2: taken stapelen, randen slepen in de uurweergave, belasting per persoon, wacht met de echte vandaag
+- Commit: `ede5977` | Auteur: Bart Witte
+
+## 2026-10-23 — K-7: inkoopregel verwijderen en offertekeuze nacalculatie zijn gedeeld, samengevoegd en terug te halen
+- Commit: `fd47cee` | Auteur: Bart Witte
+
+## 2026-10-23 — Planning P3b: borden zelf inrichten (stations, fases en activiteiten)
+- Commit: `9c92582` | Auteur: Bart Witte
+
+## 2026-10-23 — Planning P2p: Codex-review verwerkt (geen stil overschrijven na een bevestiging, journaalregel van de oude statusknop)
+- Commit: `2d5bba0` | Auteur: Bart Witte
+
+## 2026-10-23 — Planning P2p: taken bewerken in de takentabel van het project
+- Commit: `228226b` | Auteur: Bart Witte
+
+## 2026-10-23 — Capaciteit vloeiend (C1): traploos zoomen en schuiven, uurweergave met echte tijden, planblok op 15 minuten
+- Commit: `48a3056` | Auteur: Bart Witte
+
+## 2026-10-23 — Planning P5: Codex-review verwerkt (fase-editor en verse bestellijst)
+- Commit: `4408cc7` | Auteur: Bart Witte
+
+## 2026-10-23 — Planning P5: materiaal als voorwaarde voor een taak
+- Commit: `aaaccdd` | Auteur: Bart Witte
 
 ## 2026-10-23 — Release v2.21.0: planning met filterbalk, planblokpaneel, Bord en tijdlijn over alle projecten; Financien met Facturatie verwacht en Factuurplanning; eerlijke Larry met bouwwachtrij (claude-haiku-5-5); calculatie met versiepaneel, behouden voorbeeld en standaardwaarden; laadtest ruimt Chrome op; backup = v2.20.0
 - Commit: `a208a4e` | Auteur: Bart Witte
@@ -14,11 +239,17 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 ## 2026-10-23 — Backup = v2.20.0
 - Commit: `31c397f` | Auteur: Bart Witte
 
+## 2026-10-23 — Planning F1: Codex-review verwerkt (offline lokaal stempelen, één keten, geen stil overschrijven, 412 opnieuw toepassen)
+- Commit: `a4b1f67` | Auteur: Bart Witte
+
 ## 2026-10-23 — Tijdlijn: datums buiten 2000-2099 tellen als geen datum (kapotte datum maakte de tijdas onbegrensd breed); cache-versie
 - Commit: `21399a3` | Auteur: Bart Witte
 
 ## 2026-10-23 — v2.21.0: Tijdlijn in updates-item en cache-versie mt-planfilter
 - Commit: `116d842` | Auteur: Bart Witte
+
+## 2026-10-23 — Planning F1: de veilige planblokwriter (stempel per veld, vers lezen, ETag, controle achteraf, schemadrempel)
+- Commit: `a2192dc` | Auteur: Bart Witte
 
 ## 2026-10-23 — Merge planning-p4a in integratie-v2210
 - Commit: `ed8e245` | Auteur: Bart Witte
