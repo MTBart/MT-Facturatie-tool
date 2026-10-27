@@ -187,10 +187,10 @@ test('betaalvertraging: uit een bestaand prognose-event; zonder event (eerste pl
 // ── incl./excl. btw ──
 const offBtw = (id, incl, excl) => F.schatNorm({ id, estimate_id: '2026-9' + String(id).slice(-2), contact_id: 900000000031, total_price_incl_tax_base: incl, total_price_excl_tax_base: excl, state: 'accepted', contact: { company_name: 'Btw BV' } });
 test('btw: verhouding per offerte uit Moneybird (21%, 9%, 0%), geen vaste 21%; ontbrekend of onzinnig = geen verhouding', () => {
-  const rijen = F.bouwRijen({ schatten: [offBtw(300000000031, '12100.00', '10000.00'), offBtw(300000000032, '10900.00', '10000.00'), offBtw(300000000033, '5000.00', '5000.00'), offBtw(300000000034, '5000.00', undefined), offBtw(300000000035, '5000.00', '0'), offBtw(300000000036, '5000.00', '99999')], items: {}, posten: [], projecten: [], vandaag: V, maanden: 6 });
+  const rijen = F.bouwRijen({ schatten: [offBtw(300000000031, '12100.00', '10000.00'), offBtw(300000000032, '10900.00', '10000.00'), offBtw(300000000033, '5000.00', '5000.00'), offBtw(300000000034, '5000.00', undefined), offBtw(300000000035, '5000.00', '0'), offBtw(300000000036, '5000.00', '99999'), offBtw(300000000037, '100.00', '150.00')], items: {}, posten: [], projecten: [], vandaag: V, maanden: 6 });
   const v = id => rijen.find(r => r.estimateId === String(id)).verh;
   assert.deepStrictEqual(v(300000000031), { excl: 1000000, incl: 1210000 }); assert.deepStrictEqual(v(300000000032), { excl: 1000000, incl: 1090000 }); assert.deepStrictEqual(v(300000000033), { excl: 500000, incl: 500000 });
-  assert.strictEqual(v(300000000034), null); assert.strictEqual(v(300000000035), null); assert.strictEqual(v(300000000036), null);
+  assert.strictEqual(v(300000000034), null); assert.strictEqual(v(300000000035), null); assert.strictEqual(v(300000000036), null); assert.strictEqual(v(300000000037), null, '150 excl bij 100 incl is ongeldig');
   assert.strictEqual(F.naarExcl(1210000, v(300000000031)), 1000000); assert.strictEqual(F.naarExcl(1090000, v(300000000032)), 1000000); assert.strictEqual(F.naarExcl(100, null), null); assert.strictEqual(F.naarIncl(100, null), null);
 });
 test('btw: rijExcl rekent elk bedrag per offerte om; zonder verhouding nvt met nullen', () => {
@@ -219,6 +219,18 @@ test('btw: invoer in excl naar incl op hele centen; de som blijft het incl.-tota
   assert.strictEqual(F.exclNaarIncl(1000000, { excl: 1000000, incl: 1090000 }, 1090000), 1090000); assert.strictEqual(F.exclNaarIncl(123456, { excl: 500000, incl: 500000 }, 0), 123456);
   // een bedrag van 1 cent excl. kan een cent verschil geven, maar nooit meer dan het beschikbare deel via de snap
   assert.strictEqual(F.exclNaarIncl(1, v, 0), 1);
+});
+test('btw: roundtrip incl → excl → incl is idempotent (21%, 9%, 0%), ook 10x herhaald en bij grote en kleine bedragen', () => {
+  const verhs = [{ excl: 100000, incl: 121000 }, { excl: 100000, incl: 109000 }, { excl: 77777, incl: 77777 }, { excl: 1234567, incl: 1493827 }];
+  for (const v of verhs) for (const inc0 of [1, 2, 3, 4, 5, 7, 49, 99, 100, 333, 1234, 9999, 100001, 1210000, 98765432]) {
+    let inc = inc0;
+    for (let i = 0; i < 10; i++) { const ex = F.naarExcl(inc, v), terug = F.exclNaarIncl(ex, v, inc + 5000, inc); assert.strictEqual(terug, inc, `incl ${inc0} (${v.excl}/${v.incl}) ronde ${i}`); inc = terug; }
+    assert.strictEqual(inc, inc0, 'na 10 keer opnieuw niets veranderd');
+  }
+  // het voorbeeld uit de review: 0,03 incl. bij 21% is 0,02 excl.; opnieuw opslaan blijft 0,03 incl.
+  const v21 = { excl: 10000, incl: 12100 }; assert.strictEqual(F.naarExcl(3, v21), 2); assert.strictEqual(F.exclNaarIncl(2, v21, 100, 3), 3);
+  // een echt ander bedrag wordt wél omgerekend
+  assert.strictEqual(F.exclNaarIncl(5, v21, 100, 3), 6);
 });
 test('btw: totalen Te factureren in excl = som van de omgerekende rijen; kas (binnen) blijft ongewijzigd incl.', () => {
   const sch = [offBtw(300000000061, '12100.00', '10000.00'), offBtw(300000000062, '10900.00', '10000.00'), offBtw(300000000063, '5000.00', undefined)];

@@ -61,7 +61,7 @@
     if (!isFinite(t) || t <= 0) return null;
     const k = e.contact || {}, naam = String(k.company_name || [k.firstname, k.lastname].filter(Boolean).join(' ') || '').trim();
     const tx = parseFloat(e.total_price_excl_tax_base != null ? e.total_price_excl_tax_base : e.total_price_excl_tax);
-    return { id: String(e.id), nummer: String(e.estimate_id || ''), naam, ref: String(e.reference || '').trim(), contact_id: e.contact_id != null ? String(e.contact_id) : '', totaalC: c(t), exclC: isFinite(tx) && tx > 0 && tx <= t * 2 ? c(tx) : null,
+    return { id: String(e.id), nummer: String(e.estimate_id || ''), naam, ref: String(e.reference || '').trim(), contact_id: e.contact_id != null ? String(e.contact_id) : '', totaalC: c(t), exclC: isFinite(tx) && c(tx) > 0 && c(tx) <= c(t) ? c(tx) : null,
       datum: String(e.estimate_date || String(e.created_at || '').slice(0, 10) || ''),
       status: { accepted: 'geaccepteerd', open: 'openstaand', late: 'openstaand', draft: 'concept' }[String(e.state || 'accepted')] || 'overig' };
   };
@@ -496,7 +496,9 @@
   F.naarIncl = (cc, v) => v && v.excl > 0 ? Math.round(cc * v.incl / v.excl) : null;
   // Een getypt excl-bedrag naar incl, op hele centen. Is het gelijk aan het hele nog beschikbare deel (maxInclC) in excl, dan wordt het precies dat deel,
   // zodat de som gelijk blijft aan het offertetotaal (incl.) zonder losse restcent.
-  F.exclNaarIncl = function (exclC, v, maxInclC) {
+  // Komt het getypte excl-bedrag overeen met de getoonde excl-waarde van het bestaande incl-bedrag (huidigInclC), dan blijft dat incl-bedrag exact (idempotent).
+  F.exclNaarIncl = function (exclC, v, maxInclC, huidigInclC) {
+    if (huidigInclC != null && F.naarExcl(huidigInclC, v) === exclC) return huidigInclC;
     const inc = F.naarIncl(exclC, v); if (inc == null) return null;
     return maxInclC > 0 && F.naarExcl(maxInclC, v) === exclC ? maxInclC : inc;
   };
@@ -504,7 +506,7 @@
   F.rijExcl = function (r) {
     const v = r.verh, x = k => F.naarExcl(k, v);
     if (!v) return Object.assign({}, r, { nvt: true, totaalC: 0, mbTotaalC: r.mbTotaalC == null ? null : 0, gefC: 0, gefNettoC: 0, creditC: 0, nogC: 0, geplandC: 0, eerderC: 0, laterC: 0, eerderVrijC: 0, maanden: r.maanden.map(m => Object.assign({}, m, { vrijC: 0, vastGefC: 0, vastOpenC: 0 })) });
-    return Object.assign({}, r, { totaalC: x(r.totaalC), mbTotaalC: r.mbTotaalC == null ? null : x(r.mbTotaalC), gefC: x(r.gefC), gefNettoC: x(r.gefNettoC), creditC: x(r.creditC), nogC: x(r.nogC), geplandC: x(r.geplandC), eerderC: x(r.eerderC), laterC: x(r.laterC), eerderVrijC: x(r.eerderVrijC),
+    return Object.assign({}, r, { excl: true, totaalC: x(r.totaalC), mbTotaalC: r.mbTotaalC == null ? null : x(r.mbTotaalC), gefC: x(r.gefC), gefNettoC: x(r.gefNettoC), creditC: x(r.creditC), nogC: x(r.nogC), geplandC: x(r.geplandC), eerderC: x(r.eerderC), laterC: x(r.laterC), eerderVrijC: x(r.eerderVrijC),
       maanden: r.maanden.map(m => Object.assign({}, m, { vrijC: x(m.vrijC), vastGefC: x(m.vastGefC), vastOpenC: x(m.vastOpenC) })) });
   };
   // ── Maandtotalen ─────────────────────────────────────────────────────────────
@@ -748,7 +750,7 @@ th.num .mtf-sortknop .mtf-sortpijl{position:absolute;left:-9px;top:50%;margin:-5
     const bedrag = h('input', { class: 'mtf-pop-bedrag', type: 'text', inputmode: 'decimal', autocomplete: 'off', 'aria-label': 'Bedrag of percentage' + btwTxt, value: m.vrijC ? F.fmt(disp(m.vrijC)) : '' });
     const label = h('input', { class: 'mtf-pop-label', type: 'text', maxlength: '24', list: 'mtf-labels', autocomplete: 'off', 'aria-label': 'Label van dit factuurdeel', placeholder: 'bijvoorbeeld aanbetaling', value: m.label && m.label !== REST_LABEL ? m.label : '' });
     const hint = h('div', { class: 'mtf-pop-hint', 'aria-live': 'polite' });
-    const lees = () => { if (modus === 'eur') { const v = F.parseBedrag(bedrag.value); return v == null || !exclM ? v : F.exclNaarIncl(v, r.verh, r.nogC + m.vrijC); } const p = F.parsePct(bedrag.value); return p == null ? null : F.pctNaarCenten(totaal, p); };
+    const lees = () => { if (modus === 'eur') { const v = F.parseBedrag(bedrag.value); return v == null || !exclM ? v : F.exclNaarIncl(v, r.verh, r.nogC + m.vrijC, m.vrijC); } const p = F.parsePct(bedrag.value); return p == null ? null : F.pctNaarCenten(totaal, p); };
     const anders = r.geplandC - m.vrijC + r.gefC, pctGepland = cc => String(F.centenNaarPct(totaal, anders + cc)).replace('.', ',');
     const toon = () => { const cc = lees(); hint.textContent = cc == null ? 'Dit is geen geldig bedrag.' : modus === 'eur' ? `${pctGepland(cc)}% van € ${F.fmt(totaalD)}${btwTxt} gepland${exclM ? ` · = € ${F.fmt(cc)} incl. btw` : ''}` : `€ ${F.fmt(disp(cc))}${btwTxt}; samen ${pctGepland(cc)}% van € ${F.fmt(totaalD)}${btwTxt} gepland${exclM ? ` · = € ${F.fmt(cc)} incl. btw` : ''}`; };
     const knopEur = h('button', { type: 'button', class: 'ui-knop ui-knop--primair', 'aria-pressed': 'true', data: { modus: 'eur' } }, '€'), knopPct = h('button', { type: 'button', class: 'ui-knop', 'aria-pressed': 'false', data: { modus: 'pct' } }, '%');
@@ -759,7 +761,7 @@ th.num .mtf-sortknop .mtf-sortpijl{position:absolute;left:-9px;top:50%;margin:-5
       bedrag.value = cc == null || cc === 0 ? '' : modus === 'eur' ? F.fmt(disp(cc)) : String(F.centenNaarPct(totaal, cc)).replace('.', ','); toon();
     };
     knopEur.addEventListener('click', () => zetModus('eur')); knopPct.addEventListener('click', () => zetModus('pct')); bedrag.addEventListener('input', toon);
-    const sla = cc => { if (cc == null) { toast('Vul een bedrag of percentage in.'); return; } closePop(true); wijzig(sl, (it, ov) => F.zetCel(it, ov, ym, cc, st.data.vandaag, { label: label.value, behoudAan: behoudAanVoor(r) }), 'Opgeslagen — Financiën rekent mee'); };
+    const sla = cc => { if (cc == null) { toast('Vul een bedrag of percentage in.'); return; } if (exclM && cc === m.vrijC) { closePop(true); return; } closePop(true); wijzig(sl, (it, ov) => F.zetCel(it, ov, ym, cc, st.data.vandaag, { label: label.value, behoudAan: behoudAanVoor(r) }), 'Opgeslagen — Financiën rekent mee'); };
     const opslaan = h('button', { type: 'button', class: 'ui-knop ui-knop--primair' }, 'Opslaan'), restKnop = h('button', { type: 'button', class: 'ui-knop', disabled: !(r.nogC > 0) }, 'Rest hier'),
       weg = m.vrijC ? h('button', { type: 'button', class: 'ui-knop' }, 'Verwijderen') : null, sluit = h('button', { type: 'button', class: 'mtf-pop-x', 'aria-label': 'Sluiten', title: 'Sluiten (Esc)' }, '×');
     opslaan.addEventListener('click', () => sla(lees())); restKnop.addEventListener('click', () => { const cc = F.restHier(r, ym); if (cc == null) toast('Er is niets meer te plannen.'); else sla(cc); });
@@ -870,7 +872,7 @@ th.num .mtf-sortknop .mtf-sortpijl{position:absolute;left:-9px;top:50%;margin:-5
       mag && !uit && menuMogelijk(r).length ? h('button', { type: 'button', class: 'mtf-rijmenu', 'aria-haspopup': 'menu', 'aria-label': 'Acties voor ' + r.naam, title: 'Acties voor deze offerte', data: { rijmenu: r.sleutel } }, ico('meer') || '…') : null)));
     tr.append(h('td', { class: 'zd' }, h('label', { class: 'mtf-sw', title: 'Zet aan als deze offerte zeker doorgaat; telt dan mee hier en in Financiën' },
       h('input', { type: 'checkbox', role: 'switch', checked: r.aan, disabled: !mag || uit || !!r.uitbeeld, 'aria-label': 'Gaat zeker door: ' + r.naam, data: { aan: r.sleutel } }), h('span', { class: 'mtf-sw-spoor', 'aria-hidden': 'true' }))));
-    tr.append(h('td', { class: 'num' + (r.afwijkt ? ' mtf-n' : ''), title: r.nvt ? NVT_TIP : r.afwijkt ? 'Prognose rekent met ' + F.fmt(r.totaalC) + '; Moneybird: ' + F.fmt(r.mbTotaalC) : null }, r.nvt ? h('span', { class: 'mtf-0' }, '–') : F.fmt(r.afwijkt ? r.mbTotaalC : r.totaalC)),
+    tr.append(h('td', { class: 'num' + (r.afwijkt ? ' mtf-n' : ''), title: r.nvt ? NVT_TIP : (r.afwijkt ? 'Prognose rekent met ' + F.fmt(r.totaalC) + '; Moneybird: ' + F.fmt(r.mbTotaalC) : '') + (r.excl ? (r.afwijkt ? ' ' : '') + 'Excl. btw, per offerte omgerekend uit het opgeslagen incl.-bedrag. Afzonderlijk afgeronde excl.-bedragen kunnen samen een paar cent afwijken van het excl.-totaal.' : '') || null }, r.nvt ? h('span', { class: 'mtf-0' }, '–') : F.fmt(r.afwijkt ? r.mbTotaalC : r.totaalC)),
       h('td', { class: 'num kol-gef', title: r.gecrediteerd ? 'Netto, na creditnota’s' : null }, r.gefNettoC ? h('span', { class: r.gefNettoC < 0 ? 'mtf-n' : null }, gefTekst(r, F.fmt(r.gefNettoC))) : h('span', { class: 'mtf-0' }, '–'), r.facturen.length > 1 && r.gefNettoC ? h('span', { class: 'mtf-fnr' }, r.facturen.map((id, i) => extLink(factuurUrl(id), String(i + 1), 'Factuur ' + (i + 1) + ' in Moneybird (nieuw tabblad)'))) : null, r.gecrediteerd ? h('div', { class: 'mtf-gef' }, 'gecrediteerd' + (r.creditC ? ' ' + F.fmt(r.creditC) : '')) : null),
       h('td', { class: 'num kol-nog', title: r.nvt ? NVT_TIP : null }, r.nogC > 0 ? F.fmt(r.nogC) : h('span', { class: 'mtf-0' }, r.bestaat && !r.nvt ? 'gepland' : '–')));
     if (st.heeftEerder) tr.append(h('td', { class: 'num' }, r.eerderC ? h('div', { class: 'mtf-cel' }, F.fmt(r.eerderC), mag && r.eerderVrijC ? h('button', { type: 'button', class: 'mtf-schema', disabled: uit || blok, data: { eerder: r.sleutel }, title: 'De factuurdatum is voorbij: zet de open termijnen in de lopende maand' }, 'naar deze maand') : null) : h('span', { class: 'mtf-0' }, '–')));
@@ -1383,7 +1385,8 @@ th.num .mtf-sortknop .mtf-sortpijl{position:absolute;left:-9px;top:50%;margin:-5
         let cc = F.parseBedrag(t.value); if (cc == null) { toast('Dit is geen bedrag. Typ bijvoorbeeld 2.500 of 2500,50.'); teken(); return; }
         if (st.btw === 'excl') {                                                                                  // getypt bedrag is excl: naar incl. met de verhouding van deze offerte
           if (!rj || !rj.verh) { toast(NVT_TIP); teken(); return; }
-          const m0 = rj.maanden.find(x => x.ym === t.dataset.ym); cc = F.exclNaarIncl(cc, rj.verh, rj.nogC + (m0 ? m0.vrijC : 0));
+          const m0 = rj.maanden.find(x => x.ym === t.dataset.ym); cc = F.exclNaarIncl(cc, rj.verh, rj.nogC + (m0 ? m0.vrijC : 0), m0 ? m0.vrijC : 0);
+          if (m0 && cc === m0.vrijC) { teken(); return; }                                                         // zelfde bedrag als getoond: niets opslaan, het incl.-bedrag blijft exact
         }
         wijzig(t.dataset.sl, (it, ov) => F.zetCel(it, ov, t.dataset.ym, cc, st.data.vandaag, { behoudAan: !!rj && behoudAanVoor(rj) }), 'Opgeslagen — Financiën rekent mee');
       } else if (t.dataset && t.dataset.aan) {
