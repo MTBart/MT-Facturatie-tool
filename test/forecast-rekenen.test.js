@@ -27,7 +27,7 @@ test('fmt: hele euro zonder, anders met centen; negatief met minteken', () => {
 });
 test('schatNorm: bedrag incl. btw in centen, naam uit contact', () => {
   const s = F.schatNorm({ id: 444888999777, estimate_id: '2026-0123', contact_id: 888999, reference: 'Keuken', total_price_incl_tax_base: '12100.00', contact: { company_name: 'Voorbeeld BV' } });
-  assert.deepStrictEqual(s, { id: '444888999777', nummer: '2026-0123', naam: 'Voorbeeld BV', ref: 'Keuken', contact_id: '888999', totaalC: 1210000, datum: '', status: 'geaccepteerd' });
+  assert.deepStrictEqual(s, { id: '444888999777', nummer: '2026-0123', naam: 'Voorbeeld BV', ref: 'Keuken', contact_id: '888999', totaalC: 1210000, exclC: null, datum: '', status: 'geaccepteerd' });
   assert.strictEqual(F.schatNorm({ id: 5, total_price_incl_tax_base: '1', estimate_date: '2026-10-20' }).datum, '2026-10-20');            // offertedatum uit Moneybird
   assert.strictEqual(F.schatNorm({ id: 5, total_price_incl_tax_base: '1', estimate_date: null, created_at: '2026-09-03T08:00:00.000Z' }).datum, '2026-09-03'); assert.strictEqual(F.schatNorm({ id: 5, total_price_incl_tax_base: '1' }).datum, '');
   assert.strictEqual(F.schatNorm({ id: 1, total_price_incl_tax: '0' }), null); assert.strictEqual(F.schatNorm(null), null);
@@ -183,6 +183,68 @@ test('betaalvertraging: uit een bestaand prognose-event; zonder event (eerste pl
   assert.strictEqual(F.vertragingUit([], 'p:x', it), null);
   assert.strictEqual(F.vertragingUit([{ bron: 'prognose', prognose: 'p:andere', termijn_id: 't1', ontvangst_na: 20 }], 'p:x', it), null);
   assert.strictEqual(F.vertragingUit([{ bron: 'verkoop', prognose: 'p:x', ontvangst_na: 20 }], 'p:x', it), null);
+});
+// ── incl./excl. btw ──
+const offBtw = (id, incl, excl) => F.schatNorm({ id, estimate_id: '2026-9' + String(id).slice(-2), contact_id: 900000000031, total_price_incl_tax_base: incl, total_price_excl_tax_base: excl, state: 'accepted', contact: { company_name: 'Btw BV' } });
+test('btw: verhouding per offerte uit Moneybird (21%, 9%, 0%), geen vaste 21%; ontbrekend of onzinnig = geen verhouding', () => {
+  const rijen = F.bouwRijen({ schatten: [offBtw(300000000031, '12100.00', '10000.00'), offBtw(300000000032, '10900.00', '10000.00'), offBtw(300000000033, '5000.00', '5000.00'), offBtw(300000000034, '5000.00', undefined), offBtw(300000000035, '5000.00', '0'), offBtw(300000000036, '5000.00', '99999'), offBtw(300000000037, '100.00', '150.00')], items: {}, posten: [], projecten: [], vandaag: V, maanden: 6 });
+  const v = id => rijen.find(r => r.estimateId === String(id)).verh;
+  assert.deepStrictEqual(v(300000000031), { excl: 1000000, incl: 1210000 }); assert.deepStrictEqual(v(300000000032), { excl: 1000000, incl: 1090000 }); assert.deepStrictEqual(v(300000000033), { excl: 500000, incl: 500000 });
+  assert.strictEqual(v(300000000034), null); assert.strictEqual(v(300000000035), null); assert.strictEqual(v(300000000036), null); assert.strictEqual(v(300000000037), null, '150 excl bij 100 incl is ongeldig');
+  assert.strictEqual(F.naarExcl(1210000, v(300000000031)), 1000000); assert.strictEqual(F.naarExcl(1090000, v(300000000032)), 1000000); assert.strictEqual(F.naarExcl(100, null), null); assert.strictEqual(F.naarIncl(100, null), null);
+});
+test('btw: rijExcl rekent elk bedrag per offerte om; zonder verhouding nvt met nullen', () => {
+  const sch = [offBtw(300000000041, '12100.00', '10000.00'), offBtw(300000000042, '5000.00', undefined)];
+  const it = F.nieuwItem({ naam: 'a', estimateId: '300000000041', contactId: '900000000031', totaalC: 1210000, status: 'geaccepteerd' }, 14, V);
+  const gepl = F.zetCel(it, null, '2026-11', 605000, V).item;
+  const r = F.bouwRijen({ schatten: sch, items: { 'p:e300000000041': gepl }, posten: [], projecten: [], vandaag: V, maanden: 6 }).find(x => x.estimateId === '300000000041'), x = F.rijExcl(r);
+  assert.strictEqual(x.totaalC, 1000000); assert.strictEqual(x.geplandC, 500000); assert.strictEqual(x.nogC, 500000); assert.strictEqual(x.maanden[1].vrijC, 500000);
+  assert.strictEqual(r.totaalC, 1210000, 'het origineel blijft incl.');
+  const n = F.rijExcl(F.bouwRijen({ schatten: sch, items: {}, posten: [], projecten: [], vandaag: V, maanden: 6 }).find(y => y.estimateId === '300000000042'));
+  assert.strictEqual(n.nvt, true); assert.strictEqual(n.totaalC, 0); assert.ok(n.maanden.every(m => m.vrijC === 0));
+});
+test('btw: invoer in excl naar incl op hele centen; de som blijft het incl.-totaal, geen restcent (drie keer een derde)', () => {
+  const v = { excl: 1000000, incl: 1210000 };                              // 10.000 excl = 12.100 incl
+  assert.strictEqual(F.exclNaarIncl(333333, v, 0), 403333);                // 3.333,33 excl → 4.033,33 incl (afgerond)
+  let it = F.nieuwItem({ naam: 'a', estimateId: '300000000051', contactId: '900000000031', totaalC: 1210000, status: 'geaccepteerd' }, 14, V);
+  let max = 1210000;
+  for (const [ym, exclC] of [['2026-11', 333333], ['2026-12', 333333], ['2027-01', 333334]]) {
+    const inc = F.exclNaarIncl(exclC, v, max), res = F.zetCel(it, null, ym, inc, V); assert.ok(res.item, res.fout); it = res.item; max -= inc;
+  }
+  assert.strictEqual(somC(it), 1210000); valideer('p:e300000000051', it, V);
+  assert.ok(it.termijnen.every(t => t.aan !== false) || it.termijnen.filter(t => t.aan === false).every(t => Math.round(t.bedrag * 100) === 0), 'geen losse rest als alles is geplant');
+  // het hele excl-bedrag in één keer: precies het incl-totaal
+  assert.strictEqual(F.exclNaarIncl(1000000, v, 1210000), 1210000);
+  // tarief 9% en 0%
+  assert.strictEqual(F.exclNaarIncl(1000000, { excl: 1000000, incl: 1090000 }, 1090000), 1090000); assert.strictEqual(F.exclNaarIncl(123456, { excl: 500000, incl: 500000 }, 0), 123456);
+  // een bedrag van 1 cent excl. kan een cent verschil geven, maar nooit meer dan het beschikbare deel via de snap
+  assert.strictEqual(F.exclNaarIncl(1, v, 0), 1);
+});
+test('btw: roundtrip incl → excl → incl is idempotent (21%, 9%, 0%), ook 10x herhaald en bij grote en kleine bedragen', () => {
+  const verhs = [{ excl: 100000, incl: 121000 }, { excl: 100000, incl: 109000 }, { excl: 77777, incl: 77777 }, { excl: 1234567, incl: 1493827 }];
+  for (const v of verhs) for (const inc0 of [1, 2, 3, 4, 5, 7, 49, 99, 100, 333, 1234, 9999, 100001, 1210000, 98765432]) {
+    let inc = inc0;
+    for (let i = 0; i < 10; i++) { const ex = F.naarExcl(inc, v), terug = F.exclNaarIncl(ex, v, inc + 5000, inc); assert.strictEqual(terug, inc, `incl ${inc0} (${v.excl}/${v.incl}) ronde ${i}`); inc = terug; }
+    assert.strictEqual(inc, inc0, 'na 10 keer opnieuw niets veranderd');
+  }
+  // het voorbeeld uit de review: 0,03 incl. bij 21% is 0,02 excl.; opnieuw opslaan blijft 0,03 incl.
+  const v21 = { excl: 10000, incl: 12100 }; assert.strictEqual(F.naarExcl(3, v21), 2); assert.strictEqual(F.exclNaarIncl(2, v21, 100, 3), 3);
+  // een echt ander bedrag wordt wél omgerekend
+  assert.strictEqual(F.exclNaarIncl(5, v21, 100, 3), 6);
+});
+test('btw: totalen Te factureren in excl = som van de omgerekende rijen; kas (binnen) blijft ongewijzigd incl.', () => {
+  const sch = [offBtw(300000000061, '12100.00', '10000.00'), offBtw(300000000062, '10900.00', '10000.00'), offBtw(300000000063, '5000.00', undefined)];
+  const items = {}; const itA = F.zetCel(F.nieuwItem({ naam: 'a', estimateId: '300000000061', contactId: '1', totaalC: 1210000, status: 'geaccepteerd' }, 14, V), null, '2026-11', 605000, V).item;
+  const itB = F.zetCel(F.nieuwItem({ naam: 'b', estimateId: '300000000062', contactId: '2', totaalC: 1090000, status: 'geaccepteerd' }, 14, V), null, '2026-11', 545000, V).item;
+  const itC = F.zetCel(F.nieuwItem({ naam: 'c', estimateId: '300000000063', contactId: '3', totaalC: 500000, status: 'geaccepteerd' }, 14, V), null, '2026-11', 100000, V).item;
+  items['p:e300000000061'] = itA; items['p:e300000000062'] = itB; items['p:e300000000063'] = itC;
+  const events = [{ id: 'prognose:p:e300000000061:t1', bron: 'prognose', richting: 'in', delta: 6050, bedrag: 6050, datum: '2026-12-03', prognose: 'p:e300000000061', termijn_id: 't1' }];
+  const rijen = F.bouwRijen({ schatten: sch, items, posten: [], projecten: [], vandaag: V, maanden: 6 });
+  const incl = F.totalen({ rijen, events, vandaag: V, maanden: 6 }), rx = rijen.map(F.rijExcl).map(r => r.nvt ? Object.assign({}, r, { aan: false }) : r);
+  const excl = F.totalen({ rijen: rx, events: [], vandaag: V, maanden: 6 });
+  assert.strictEqual(incl.gepland[1], 605000 + 545000 + 100000);
+  assert.strictEqual(excl.gepland[1], 500000 + 500000, 'A en B omgerekend, C (geen verhouding) telt niet mee');
+  assert.deepStrictEqual(incl.binnen, F.totalen({ rijen: rijen.map(F.rijExcl), events, vandaag: V, maanden: 6 }).binnen, 'binnen komt uit de events en is dus altijd incl.');
 });
 test('zetAan: alleen het vinkje, termijnen blijven; ts en door worden niet teruggestuurd', () => {
   const it = Object.assign(itemVast(), { ts: 5, door: 'X' }); const r = F.zetAan(it, false).item;
