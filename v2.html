@@ -17220,16 +17220,13 @@ function forecastOpen(){
   el.dataset.gestart='1';
   MTForecast.start(el,{bron:{haal:geldHaal},magWijzigen:MTRol.magGeld('wijzigen'),wie:(typeof mtMijEmail==='function'&&mtMijEmail())||'',projecten:geldProjecten,schatten:forecastSchatten});
 }
-// Goedgekeurde (geaccepteerde) offertes uit Moneybird, alleen lezen; hooguit 5 pagina's van 100.
-async function forecastSchatten(){
-  const uit=[];
-  for(let p=1;p<=5;p++){
+// Goedgekeurde (geaccepteerde) offertes uit Moneybird, alleen lezen; pagineert tot een lege of korte pagina (plafond 50 pagina's; daarna meldt de Forecast "lijst afgekapt").
+function forecastSchatten(){
+  return MTForecast.pagineer(async p=>{
     const r=await mbGet(`${getAdmin()}/estimates?filter=state:accepted&per_page=100&page=${p}`);
     if(!r.ok) throw new Error('Moneybird: offertes niet te lezen (HTTP '+r.status+')');
-    const j=await r.json(); if(!Array.isArray(j)) break;
-    uit.push(...j); if(j.length<100) break;
-  }
-  return uit;
+    return r.json();
+  },{max:50,per:100});
 }
 // Projecten voor de prognose (geen interne): naam, klant (Moneybird-contact), offerte en planning (start/oplevering).
 function geldProjecten(){

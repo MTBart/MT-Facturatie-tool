@@ -180,4 +180,85 @@ test('12 maanden over de jaargrens', () => {
   assert.strictEqual(r.maanden.length, 12); assert.strictEqual(r.maanden[0].ym, '2026-11'); assert.strictEqual(r.maanden[2].ym, '2027-01'); assert.strictEqual(r.maanden[11].ym, '2027-10');
 });
 
-console.log(`\n${n} tests geslaagd${process.exitCode ? ' — er zijn fouten' : ''}`);
+// ── dubbele offertes, afwijkend totaal, creditnota's, paginering ──
+const E1 = '300000000011', itm = (eid, o) => Object.assign({ soort: 'project', naam: 'Voorbeeld ' + eid.slice(-2), estimate_id: eid, totaal: 10000, aan: true, betaaltermijn: 14, k: [], x: [],
+  termijnen: [{ id: 't1', label: 'a', bedrag: 4000, factuurdatum: '2026-11-10', aan: true }, { id: 't2', label: REST(), bedrag: 6000, factuurdatum: '2026-11-10', aan: false }] }, o || {});
+function REST() { return 'nog niet gepland'; }
+test('dubbele estimate_id: één rij, het andere actieve item staat als dubbel erbij en telt niet mee', () => {
+  const items = { 'p:aaa': itm(E1), ['p:e' + E1]: itm(E1) };
+  const rijen = F.bouwRijen({ schatten: [schat(E1, 'Dubbel', 10000)], items, posten: [], projecten: [], vandaag: V, maanden: 6 });
+  assert.strictEqual(rijen.length, 1); assert.strictEqual(rijen[0].sleutel, 'p:aaa'); assert.deepStrictEqual(rijen[0].dubbelen.map(d => d.sleutel), ['p:e' + E1]);
+  const ev = [{ id: 'a', bron: 'prognose', termijn_id: 't1', prognose: 'p:aaa', datum: '2026-12-01', delta: 4000 }, { id: 'b', bron: 'prognose', termijn_id: 't1', prognose: 'p:e' + E1, datum: '2026-12-01', delta: 4000 }];
+  const t = F.totalen({ rijen, events: ev, vandaag: V, maanden: 3, uitgesloten: rijen[0].dubbelen.map(d => d.sleutel) }); assert.deepStrictEqual(t.binnen, [0, 0, 400000]);   // niet 800000
+  assert.deepStrictEqual(F.totalen({ rijen, events: ev, vandaag: V, maanden: 3 }).binnen, [0, 0, 800000]);                                                          // zonder uitsluiting zou het dubbel zijn
+  // het hoofd-item uitzetten: een inactief duplicaat wordt niet meer als dubbel gemeld
+  const uit = Object.assign({}, items, { ['p:e' + E1]: Object.assign({}, items['p:e' + E1], { aan: false }) });
+  assert.strictEqual(F.bouwRijen({ schatten: [schat(E1, 'Dubbel', 10000)], items: uit, posten: [], projecten: [], vandaag: V, maanden: 6 })[0].dubbelen.length, 0);
+});
+test('dubbel: het item van het gekoppelde project wint; gefactureerd item wint van een ander', () => {
+  const items = { 'p:aaa': itm(E1), 'p:prj9': itm(E1) };
+  const r1 = F.bouwRijen({ schatten: [schat(E1, 'X', 10000)], items, posten: [], projecten: [{ project_id: 'prj9', label: 'P9', offerte_mb_id: E1 }], vandaag: V, maanden: 6 });
+  assert.strictEqual(r1[0].sleutel, 'p:prj9'); assert.deepStrictEqual(r1[0].dubbelen.map(d => d.sleutel), ['p:aaa']);
+  const r2 = F.bouwRijen({ schatten: [schat(E1, 'X', 10000)], items, posten: [{ sleutel: 'p:aaa', soort: 'project', gefactureerd: 4000, termijnen: [] }], projecten: [], vandaag: V, maanden: 6 });
+  assert.strictEqual(r2[0].sleutel, 'p:aaa');
+});
+test('dubbel uitzetten: aan:false, termijnen blijven (niet verwijderen)', () => {
+  const r = F.zetAan(itm(E1), false).item; assert.strictEqual(r.aan, false); assert.strictEqual(r.termijnen.length, 2);
+});
+test('afwijkend Moneybird-totaal: rij geeft afwijkt + mbTotaalC; planning blijft op het oude totaal tot bijwerken', () => {
+  const it = itm(E1, { totaal: 10000 });
+  const r = F.bouwRijen({ schatten: [schat(E1, 'Afw', 12100)], items: { 'p:aaa': it }, posten: [], projecten: [], vandaag: V, maanden: 6 })[0];
+  assert.strictEqual(r.afwijkt, true); assert.strictEqual(r.mbTotaalC, 1210000); assert.strictEqual(r.totaalC, 1000000);
+});
+test('bijwerkTotaal: verschil gaat in "nog niet gepland"; niets geplands verandert; worker accepteert', () => {
+  const it = itm(E1, { totaal: 10000 });
+  const r = F.bijwerkTotaal(it, null, 1210000, V).item;
+  assert.strictEqual(r.totaal, 12100); assert.strictEqual(somC(r), 1210000); valideer('p:aaa', r, V);
+  assert.strictEqual(r.termijnen.find(t => t.aan).bedrag, 4000); assert.strictEqual(r.termijnen.find(t => !t.aan).bedrag, 8100);
+  // verhogen als er geen rest-termijn was (alles gepland)
+  const vol = { soort: 'project', naam: 'V', estimate_id: E1, totaal: 4000, aan: true, betaaltermijn: 14, k: [], x: [], termijnen: [{ id: 't1', label: 'a', bedrag: 4000, factuurdatum: '2026-11-10', aan: true }] };
+  const r2 = F.bijwerkTotaal(vol, null, 500000, V).item; assert.strictEqual(r2.termijnen.length, 2); assert.strictEqual(r2.termijnen.find(t => !t.aan).bedrag, 1000); assert.strictEqual(somC(r2), 500000);
+});
+test('bijwerkTotaal: lager dan gepland of gefactureerd wordt geblokkeerd met uitleg, nooit stil verlaagd', () => {
+  const it = itm(E1, { totaal: 10000 });
+  const lager = F.bijwerkTotaal(it, null, 300000, V); assert.ok(lager.fout && /niets stil verlaagd/.test(lager.fout) && !lager.item);
+  const gelijk = F.bijwerkTotaal(it, null, 400000, V); assert.ok(gelijk.item && gelijk.item.termijnen.length === 1 && gelijk.item.termijnen[0].aan);   // precies de planning: rest verdwijnt
+  const ov = { termijnen: [{ id: 't1', bedrag: 4000, gefactureerd: 4000, open: 0 }] };
+  assert.ok(F.bijwerkTotaal(it, ov, 399999, V).fout);
+  assert.ok(F.bijwerkTotaal(it, null, 0, V).fout);
+});
+test('creditnota: netto gefactureerd wordt niet op 0 geklemd; status gecrediteerd; volledig gecrediteerde termijn is niet meer vast', () => {
+  const it = itm(E1, { totaal: 6000, termijnen: [{ id: 't1', label: 'a', bedrag: 3000, factuurdatum: '2026-10-05', aan: true }, { id: 't2', label: 'b', bedrag: 3000, factuurdatum: '2026-12-10', aan: true }] });
+  // factuur van 3000 volledig gecrediteerd: de worker geeft dekking 0 (pool 0) — termijn t1 weer open en vrij
+  const ovVol = { sleutel: 'p:aaa', soort: 'project', gefactureerd: 0, facturen: ['f1', 'c1'], termijnen: [{ id: 't1', bedrag: 3000, gefactureerd: 0, open: 3000 }, { id: 't2', bedrag: 3000, gefactureerd: 0, open: 3000 }] };
+  const ev = [{ id: 'verkoop:c1', bron: 'verkoop', document_id: 'c1', delta: -3000, datum: '2026-11-20' }];
+  const r0 = F.bouwRijen({ schatten: [], items: { 'p:aaa': it }, posten: [ovVol], projecten: [], events: ev, vandaag: V, maanden: 6 })[0];
+  assert.strictEqual(r0.termijnen.find(t => t.id === 't1').vast, false); assert.strictEqual(r0.creditC, 300000); assert.strictEqual(r0.gecrediteerd, true); assert.strictEqual(r0.maanden[0].vrijC, 300000);
+  // creditnota groter dan wat gefactureerd is: netto negatief wordt getoond (niet 0), de planning rekent met dekking 0
+  const ovNeg = Object.assign({}, ovVol, { gefactureerd: -1000 });
+  const r1 = F.bouwRijen({ schatten: [], items: { 'p:aaa': it }, posten: [ovNeg], projecten: [], events: ev, vandaag: V, maanden: 6 })[0];
+  assert.strictEqual(r1.gefNettoC, -100000); assert.strictEqual(r1.gefC, 0); assert.strictEqual(r1.gecrediteerd, true); assert.strictEqual(r1.nogC, 0);
+  // deels gecrediteerd: factuur 3000, credit 1000 → pool 2000: t1 deels gefactureerd, vast
+  const ovDeel = { sleutel: 'p:aaa', soort: 'project', gefactureerd: 2000, facturen: ['f1', 'c1'], termijnen: [{ id: 't1', bedrag: 3000, gefactureerd: 2000, open: 1000 }, { id: 't2', bedrag: 3000, gefactureerd: 0, open: 3000 }] };
+  const r2 = F.bouwRijen({ schatten: [], items: { 'p:aaa': it }, posten: [ovDeel], projecten: [], events: [{ id: 'x', bron: 'verkoop', document_id: 'c1', delta: -1000, datum: '2026-11-20' }], vandaag: V, maanden: 6 })[0];
+  assert.strictEqual(r2.termijnen.find(t => t.id === 't1').vast, true); assert.strictEqual(r2.creditC, 100000); assert.strictEqual(r2.gefNettoC, 200000);
+  // geen creditnota → niet gecrediteerd; credit van een niet-gekoppelde factuur telt niet mee
+  const r3 = F.bouwRijen({ schatten: [], items: { 'p:aaa': it }, posten: [ovDeel], projecten: [], events: [{ id: 'y', bron: 'verkoop', document_id: 'andere', delta: -500, datum: '2026-11-20' }], vandaag: V, maanden: 6 })[0];
+  assert.strictEqual(r3.creditC, 0); assert.strictEqual(r3.gecrediteerd, false);
+});
+let async_ = Promise.resolve();
+const atest = (naam, fn) => { async_ = async_.then(async () => { try { await fn(); n++; console.log('ok  - ' + naam); } catch (e) { console.log('FOUT - ' + naam + '\n' + (e.stack || e)); process.exitCode = 1; } }); };
+const pagina = (totaal, per) => async p => { const start = (p - 1) * per; return Array.from({ length: Math.max(0, Math.min(per, totaal - start)) }, (_, i) => ({ id: start + i })); };
+atest('pagineer: stopt bij een korte pagina; leest verder dan pagina 5 (501 offertes)', async () => {
+  const r = await F.pagineer(pagina(501, 100), { max: 50, per: 100 }); assert.strictEqual(r.lijst.length, 501); assert.strictEqual(r.afgekapt, false);
+});
+atest('pagineer: exact 500 (laatste pagina vol) stopt bij de lege pagina daarna; precies 0 offertes geeft lege lijst', async () => {
+  const r = await F.pagineer(pagina(500, 100), { max: 50, per: 100 }); assert.strictEqual(r.lijst.length, 500); assert.strictEqual(r.afgekapt, false);
+  assert.deepStrictEqual(await F.pagineer(pagina(0, 100), { max: 50, per: 100 }), { lijst: [], afgekapt: false });
+});
+atest('pagineer: veiligheidsplafond geraakt = lijst afgekapt, en de fout van een pagina breekt de hele lijst (geen stille helft)', async () => {
+  const r = await F.pagineer(pagina(10000, 100), { max: 3, per: 100 }); assert.strictEqual(r.lijst.length, 300); assert.strictEqual(r.afgekapt, true);
+  const vol = await F.pagineer(pagina(300, 100), { max: 3, per: 100 }); assert.strictEqual(vol.afgekapt, false);   // precies het plafond maar niet meer
+  await assert.rejects(F.pagineer(async p => { if (p === 2) throw new Error('HTTP 429'); return pagina(1000, 100)(p); }, { max: 50 }), /429/);
+});
+async_.then(() => console.log(`\n${n} tests geslaagd${process.exitCode ? ' — er zijn fouten' : ''}`));
