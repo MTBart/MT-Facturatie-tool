@@ -1542,9 +1542,13 @@ export class MtTeller {
     if (!b || !b.norm || typeof b.norm !== 'object' || !Number.isInteger(b.verwacht) || !Number.isFinite(b.ts)) return antw({ error: 'ongeldig' }, 400);
     return await this.state.blockConcurrencyWhile(async () => {
       const ruw = await env.MT_ROLLEN.get('geld:config'), oudDoc = ruw ? JSON.parse(ruw) : null, huidig = geldConfigNorm(oudDoc);
-      if ((huidig.revisie || 0) !== b.verwacht) return antw({ error: 'instellingen zijn intussen gewijzigd — herlaad en probeer opnieuw', revisie: huidig.revisie || 0 }, 409);
-      await kvZet(env, `geld:config:historie:${String(9e15 - b.ts).padStart(16, '0')}:${randHex(4)}`, oudDoc || huidig);   // vorige stand bewaard
-      await kvZet(env, 'geld:config', b.norm);
+      // KV is eventually consistent: een lees kan een oudere revisie geven dan er al geschreven is. Daarom houdt de DO de laatst geschreven revisie zelf bij
+      // (sterk consistent) en geldt als huidige revisie het maximum van beide: een verouderde KV-lees kan zo nooit meer een nieuwere stand overschrijven.
+      const doRev = Number(await this.state.storage.get('gc:rev')) || 0, nu = Math.max(huidig.revisie || 0, doRev);
+      if (nu !== b.verwacht) return antw({ error: 'instellingen zijn intussen gewijzigd — herlaad en probeer opnieuw', revisie: nu }, 409);
+      await kvZet(env, 'geld:config', b.norm);                                                      // eerst de config
+      await this.state.storage.put('gc:rev', Number.isInteger(b.norm.revisie) ? b.norm.revisie : nu + 1);
+      try { await kvZet(env, `geld:config:historie:${String(9e15 - b.ts).padStart(16, '0')}:${randHex(4)}`, oudDoc || huidig); } catch { }   // dan pas de historie: bij een crash ontbreekt hooguit een historie-regel, nooit een spook-regel
       return antw({ ok: true });
     });
   }

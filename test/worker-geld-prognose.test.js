@@ -12,7 +12,7 @@ const { pathToFileURL } = require('url');
   const kv = () => { const m = new Map(); return { m, async get(k) { return m.has(k) ? m.get(k).v : null; }, async put(k, v, o) { m.set(k, { v, meta: (o && o.metadata) || null }); }, async delete(k) { m.delete(k); },
     async list({ prefix }) { return { keys: [...m.keys()].filter(k => k.startsWith(prefix || '')).sort().map(name => ({ name, metadata: m.get(name).meta })), list_complete: true }; } }; };
   const json0 = (b, s) => ({ status: s || 200, body: b });
-  const fakeState = () => { let ketting = Promise.resolve(); return { storage: new Map(), async blockConcurrencyWhile(fn) { const vorige = ketting; let los; ketting = new Promise(r => { los = r; }); await vorige; try { return await fn(); } finally { los(); } } }; };
+  const fakeState = () => { let ketting = Promise.resolve(); const opslag = new Map(); return { storage: { async get(k) { return opslag.get(k); }, async put(k, v) { opslag.set(k, v); } }, async blockConcurrencyWhile(fn) { const vorige = ketting; let los; ketting = new Promise(r => { los = r; }); await vorige; try { return await fn(); } finally { los(); } } }; };
   const maakNs = env => { const dos = {}; return { idFromName: n => n, get: id => { dos[id] = dos[id] || new MtTeller(fakeState(), env); return { fetch: (url, init) => dos[id].fetch(new Request(url, init)) }; } }; };
   const roep = async (env, rol, pad, methode, body) => {
     if (!env.MT_TELLER && !env.zonderDO) env.MT_TELLER = maakNs(env);
@@ -193,6 +193,29 @@ const { pathToFileURL } = require('url');
     const env3 = metConfig(), g3 = (await roep(env3, 'eigenaar', '/geld/config', 'GET')).body.config;
     const vier = await Promise.all([1, 2, 3, 4].map(i => roep(env3, 'eigenaar', '/geld/config', 'POST', { kredietlimiet: 1000 + i, revisie: g3.revisie })));
     assert.strictEqual(vier.filter(x => x.status === 200).length, 1); assert.strictEqual(vier.filter(x => x.status === 409).length, 3);
+  });
+  await test('verouderde KV-lees: de DO onthoudt de laatst geschreven revisie; een oude revisie krijgt 409 en overschrijft nooit een nieuwere stand', async () => {
+    const env = metConfig(), g = (await roep(env, 'eigenaar', '/geld/config', 'GET')).body.config, oudeDoc = env.MT_ROLLEN.m.get('geld:config').v;      // revisie 4
+    const w1 = await roep(env, 'eigenaar', '/geld/config', 'POST', { kredietlimiet: 2000, revisie: g.revisie }); assert.strictEqual(w1.status, 200);                  // nu revisie 5, DO onthoudt 5
+    const nieuweDoc = env.MT_ROLLEN.m.get('geld:config').v; assert.strictEqual(JSON.parse(nieuweDoc).revisie, g.revisie + 1);
+    env.MT_ROLLEN.m.set('geld:config', { v: oudeDoc, meta: null });                                                                                              // KV geeft een VEROUDERDE stand terug (revisie 4)
+    const stale = await roep(env, 'eigenaar', '/geld/config', 'POST', { fictieve_buffer: 999, revisie: g.revisie }); assert.strictEqual(stale.status, 409, JSON.stringify(stale.body));
+    assert.strictEqual(env.MT_ROLLEN.m.get('geld:config').v, oudeDoc, 'er is niets geschreven door de verouderde aanvraag');
+    // direct op de DO: verwacht 4 (verouderd) → 409, verwacht 5 (de echte stand) → 200 ondanks de oude KV-lees
+    const doe = (body) => env.MT_TELLER.get('geldconfig').fetch('https://mt-teller/gc-schrijf', { method: 'POST', body: JSON.stringify(body) });
+    const norm5 = Object.assign({}, JSON.parse(nieuweDoc), { revisie: g.revisie + 2 });
+    assert.strictEqual((await doe({ verwacht: g.revisie, norm: norm5, ts: Date.now() })).status, 409);
+    assert.strictEqual((await doe({ verwacht: g.revisie + 1, norm: norm5, ts: Date.now() })).status, 200);
+    assert.strictEqual(JSON.parse(env.MT_ROLLEN.m.get('geld:config').v).revisie, g.revisie + 2);
+    assert.strictEqual((await doe({ verwacht: g.revisie + 1, norm: norm5, ts: Date.now() })).status, 409);                                                     // de revisie is verder: nog eens dezelfde kan niet
+  });
+  await test('config schrijven: eerst de config, dan de historie (een falende historie verliest de config niet; geen spook-historie)', async () => {
+    const env = metConfig(), g = (await roep(env, 'eigenaar', '/geld/config', 'GET')).body.config, put0 = env.MT_ROLLEN.put.bind(env.MT_ROLLEN), volgorde = [];
+    env.MT_ROLLEN.put = async (k, v, o) => { volgorde.push(k.startsWith('geld:config:historie:') ? 'historie' : k); if (k.startsWith('geld:config:historie:')) throw new Error('KV historie stuk'); return put0(k, v, o); };
+    const r = await roep(env, 'eigenaar', '/geld/config', 'POST', { kredietlimiet: 3000, revisie: g.revisie }); assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+    assert.ok(volgorde.indexOf('geld:config') >= 0 && volgorde.indexOf('geld:config') < volgorde.indexOf('historie'), volgorde.join());
+    assert.strictEqual(JSON.parse(env.MT_ROLLEN.m.get('geld:config').v).kredietlimiet, 3000);
+    assert.strictEqual([...env.MT_ROLLEN.m.keys()].filter(k => k.startsWith('geld:config:historie:')).length, 0);
   });
   await test('config-POST zonder Durable Object (of een DO die faalt): 503 en niets geschreven, nooit een terugval zonder slot', async () => {
     const env = metConfig(); env.zonderDO = true; const voor = env.MT_ROLLEN.m.get('geld:config').v;
