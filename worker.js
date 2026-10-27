@@ -4108,7 +4108,9 @@ async function handleGeld(p, request, env, ik, json0) {
       if (n.fout) return json({ error: n.fout }, 400);
       // Eén actief prognose-item per Moneybird-offerte: anders telt dezelfde offerte dubbel mee in de kaslijn. Een item uitzetten (aan:false) mag altijd.
       if (n.item.soort === 'project' && n.item.estimate_id && n.item.aan) {
-        const andere = Object.entries((await geldKvLijst(env, GELD_PROG, 3)).items).find(([k, x]) => k !== sleutel && x && x.soort === 'project' && x.aan !== false && String(x.estimate_id || '') === n.item.estimate_id);
+        let lijst = null; try { lijst = await geldKvLijst(env, GELD_PROG, 200); } catch { }
+        if (!lijst || !lijst.compleet) return json({ error: 'kon niet controleren op dubbele offerte — probeer het zo opnieuw', reden: 'prognoselijst-onvolledig' }, 503);   // nooit doorlaten zonder volledige lijst
+        const andere = Object.entries(lijst.items).find(([k, x]) => k !== sleutel && x && x.soort === 'project' && x.aan !== false && String(x.estimate_id || '') === n.item.estimate_id);
         if (andere) return json({ error: `deze offerte staat al als actief prognose-item (${String(andere[1].naam || andere[0]).slice(0, 40)}) — zet dat item eerst uit of gebruik het bestaande item`, dubbel: andere[0] }, 409);
       }
       item = Object.assign(n.item, { door: String((ik.rec && ik.rec.naam) || ik.email || ik.oid).slice(0, 20), ts: Date.now() });

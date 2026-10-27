@@ -94,5 +94,22 @@ const { pathToFileURL } = require('url');
     assert.strictEqual((await roep(env, 'administratie', '/geld/config', 'POST', { factuurschemas: schema(), revisie: rev })).status, 403);
     assert.deepStrictEqual((await roep(env, 'eigenaar', '/geld/config', 'GET')).body.config.factuurschemas, {});
     const afronding = await roep(env, 'eigenaar', '/geld/config', 'POST', { factuurschemas: schema([{ label: 'a', pct: 33.33 }, { label: 'b', pct: 33.33 }, { label: 'c', pct: 33.34 }]), revisie: rev }); assert.strictEqual(afronding.status, 200);
+  });  const kvPag = (per, oneindig) => { const k = kv(); k.list = async ({ prefix, cursor }) => { const alle = [...k.m.keys()].filter(x => x.startsWith(prefix || '')).sort(), van = Number(cursor || 0), stuk = alle.slice(van, van + per);
+    const klaar = !oneindig && van + per >= alle.length; return { keys: stuk.map(name => ({ name, metadata: k.m.get(name).meta })), list_complete: klaar, cursor: klaar ? undefined : String(van + per) }; }; return k; };
+  const zaai = (env, n) => { for (let i = 0; i < n; i++) { const it = Object.assign({ soort: 'project', ts: 1 + i, door: 'x' }, item('300000000' + String(100 + i))); it.naam = 'Zaad ' + i; env.MT_ROLLEN.m.set('geld:prognose:p:z' + String(i).padStart(3, '0'), { v: JSON.stringify(it), meta: it }); } };
+  await test('dubbele offerte wordt ook gevonden als de prognoselijst uit meer dan 3 pagina\u2019s bestaat', async () => {
+    const env = { MT_ROLLEN: kvPag(2) }; zaai(env, 9);                                   // 5 pagina's van 2; de dubbele offerte staat op de laatste pagina
+    const dubbel = await roep(env, 'eigenaar', '/geld/prognose', 'POST', { sleutel: 'p:nieuw', item: item('300000000108'), vorige_ts: null });
+    assert.strictEqual(dubbel.status, 409, JSON.stringify(dubbel.body)); assert.strictEqual(dubbel.body.dubbel, 'p:z008');
+    const eerste = await roep(env, 'eigenaar', '/geld/prognose', 'POST', { sleutel: 'p:nieuw2', item: item('300000000100'), vorige_ts: null }); assert.strictEqual(eerste.status, 409);
+    const vrij = await roep(env, 'eigenaar', '/geld/prognose', 'POST', { sleutel: 'p:nieuw3', item: item('300000000999'), vorige_ts: null }); assert.strictEqual(vrij.status, 200, JSON.stringify(vrij.body));
+  });
+  await test('onvolledige prognoselijst: weigeren met 503, nooit doorlaten; uitzetten (aan:false) mag wel', async () => {
+    const env = { MT_ROLLEN: kvPag(2, true) }; zaai(env, 3);                               // de lijst meldt nooit "klaar"
+    const r = await roep(env, 'eigenaar', '/geld/prognose', 'POST', { sleutel: 'p:nieuw', item: item('300000000555'), vorige_ts: null });
+    assert.strictEqual(r.status, 503); assert.match(r.body.error, /kon niet controleren op dubbele offerte/); assert.ok(!env.MT_ROLLEN.m.has('geld:prognose:p:nieuw'));
+    const uit = await roep(env, 'eigenaar', '/geld/prognose', 'POST', { sleutel: 'p:nieuw', item: item('300000000555', { aan: false }), vorige_ts: null }); assert.strictEqual(uit.status, 200);
+    const kapot = kv(); kapot.list = async () => { throw new Error('KV stuk'); };
+    const r2 = await roep({ MT_ROLLEN: kapot }, 'eigenaar', '/geld/prognose', 'POST', { sleutel: 'p:nieuw', item: item('300000000555'), vorige_ts: null }); assert.strictEqual(r2.status, 503);
   });  console.log(`\n${n} worker-tests geslaagd${process.exitCode ? ' — er zijn fouten' : ''}`);
 })();

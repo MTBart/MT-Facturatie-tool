@@ -398,11 +398,32 @@ test('statusfilter: tellen per status, zichtbare rijen en de totalen (alleen zic
   const events = ['a', 'b', 'c'].map(k => ({ id: k, bron: 'prognose', termijn_id: 't1', prognose: 'p:' + k, datum: '2026-12-01', delta: 1000 }));
   const alles = F.zichtbaar(rijen, F.STATUSSEN); assert.strictEqual(alles.zichtbaar.length, 4); assert.deepStrictEqual(alles.uitgesloten, []);
   const t1 = F.totalen({ rijen: alles.zichtbaar, events, vandaag: V, maanden: 3, uitgesloten: alles.uitgesloten }); assert.deepStrictEqual(t1.gepland, [0, 200000, 0]); assert.deepStrictEqual(t1.binnen, [0, 0, 300000]);
-  const zonderOpen = F.zichtbaar(rijen, ['geaccepteerd', 'concept']); assert.deepStrictEqual(zonderOpen.zichtbaar.map(r => r.status), ['geaccepteerd', 'concept', 'concept']); assert.deepStrictEqual(zonderOpen.uitgesloten, ['p:b']);
-  const t2 = F.totalen({ rijen: zonderOpen.zichtbaar, events, vandaag: V, maanden: 3, uitgesloten: zonderOpen.uitgesloten }); assert.deepStrictEqual(t2.gepland, [0, 100000, 0]); assert.deepStrictEqual(t2.binnen, [0, 0, 200000]);   // p:c staat uit maar levert een event; 'aan' telt in Financiën
-  const geen = F.zichtbaar(rijen, []); assert.strictEqual(geen.zichtbaar.length, 0);
+  const zonderOpen = F.zichtbaar(rijen, ['geaccepteerd', 'concept']); assert.deepStrictEqual(zonderOpen.zichtbaar.map(r => r.status), ['geaccepteerd', 'concept', 'concept']); assert.strictEqual(zonderOpen.verborgen, 1); assert.deepStrictEqual(zonderOpen.uitgesloten, []);
+  const t2 = F.totalen({ rijen, events, vandaag: V, maanden: 3, uitgesloten: zonderOpen.uitgesloten }); assert.deepStrictEqual(t2, t1);   // het filter verbergt alleen rijen: de totalen blijven gelijk aan Financiën (alle actieve prognose-items)
+  assert.deepStrictEqual(t2.gepland, [0, 200000, 0]); assert.deepStrictEqual(t2.binnen, [0, 0, 300000]);   // p:c staat uit maar levert een event; 'aan' telt in Financiën
+  const geen = F.zichtbaar(rijen, []); assert.strictEqual(geen.zichtbaar.length, 0); assert.strictEqual(geen.verborgen, 4); assert.deepStrictEqual(F.totalen({ rijen, events, vandaag: V, maanden: 3, uitgesloten: geen.uitgesloten }), t1);
   // rijen zonder status (prognose-project zonder offerte) blijven altijd zichtbaar; dubbelen tellen nooit mee
   const extra = F.bouwRijen({ schatten: [], items: { 'p:z': mk('300000000099', true) }, posten: [], projecten: [], vandaag: V, maanden: 6 }); assert.strictEqual(F.zichtbaar(extra, []).zichtbaar.length, 1);
+});
+test('dubbele items tellen nooit mee, ook niet als de rij door het filter verborgen is', () => {
+  const mk = (eid, aan) => ({ soort: 'project', naam: 'D', estimate_id: eid, totaal: 1000, aan, betaaltermijn: 14, k: [], x: [], termijnen: [{ id: 't1', label: 'a', bedrag: 1000, factuurdatum: '2026-11-10', aan: true }] });
+  const s = Object.assign(schat('300000000061', 'Dub', 1000), { status: 'concept' }), items = { 'p:a': mk('300000000061', true), 'p:b': mk('300000000061', true) };
+  const rijen = F.bouwRijen({ schatten: [s], items, posten: [], projecten: [], vandaag: V, maanden: 3 }), zv = F.zichtbaar(rijen, ['geaccepteerd']);
+  assert.strictEqual(zv.verborgen, 1); assert.deepStrictEqual(zv.uitgesloten, ['p:b']);
+  const ev = ['a', 'b'].map(k => ({ id: k, bron: 'prognose', termijn_id: 't1', prognose: 'p:' + k, datum: '2026-12-01', delta: 1000 }));
+  assert.deepStrictEqual(F.totalen({ rijen, events: ev, vandaag: V, maanden: 3, uitgesloten: zv.uitgesloten }).binnen, [0, 0, 100000]);
+});
+test('Gaat zeker door bij een afwijkend Moneybird-totaal: alleen uitzetten, aanzetten wordt in het schrijfpad geweigerd', () => {
+  const uit = { soort: 'project', naam: 'A', totaal: 1000, aan: false, termijnen: [] }, aan = Object.assign({}, uit, { aan: true });
+  assert.ok(/wijkt af/.test(F.aanZetFout(uit, F.zetAan(uit, true).item, 120000)));                    // uit → aan, Moneybird 1.200 ≠ 1.000: geweigerd
+  assert.strictEqual(F.aanZetFout(aan, F.zetAan(aan, false).item, 120000), null);                      // aan → uit mag altijd
+  assert.strictEqual(F.aanZetFout(uit, F.zetAan(uit, true).item, 100000), null);                       // geen afwijking: aanzetten mag
+  assert.strictEqual(F.aanZetFout(uit, F.zetAan(uit, false).item, 120000), null);                      // blijft uit: geen verandering
+  assert.strictEqual(F.aanZetFout(aan, aan, 120000), null);                                           // blijft aan (bv. bijwerken van het totaal)
+  assert.strictEqual(F.aanZetFout(null, aan, 120000), null); assert.strictEqual(F.aanZetFout(uit, F.zetAan(uit, true).item, null), null);     // nieuw item of geen Moneybird-bedrag bekend
+  // plannen (zetCel) op een uitstaande rij met afwijking zet het vinkje aan: het schrijfpad vangt dat af
+  const planAan = F.zetCel(Object.assign({}, uit, { termijnen: [{ id: 't1', label: 'x', bedrag: 1000, factuurdatum: '2026-11-10', aan: false }] }), null, '2026-11', 50000, V).item;
+  assert.strictEqual(planAan.aan, true); assert.ok(F.aanZetFout(uit, planAan, 120000));
 });
 test('statusfilter: een niet-geaccepteerde offerte met een prognose die aan staat telt mee zodra "gaat zeker door" aan staat', () => {
   const s = Object.assign(schat('300000000051', 'Concept BV', 5000), { status: 'concept' });
