@@ -139,6 +139,27 @@ test('restHier: vrije cel + nog niet gepland; null als alles gepland is', () => 
   const vol = F.zetCel(it, null, '2026-12', F.restHier(r, '2026-12'), V).item;
   const r2 = F.bouwRijen({ schatten: [], items: { 'p:x': vol }, posten: [], projecten: [], vandaag: V, maanden: 6 })[0]; assert.strictEqual(r2.nogC, 0); assert.strictEqual(F.restHier(r2, '2027-01'), null);
 });
+const mkItem = (est, totaalC) => F.nieuwItem({ naam: 'Test BV', estimateId: est, contactId: '700000000001', totaalC, status: 'geaccepteerd' }, 14, V);
+test('schema-voorbeeld schrijft niets; schemaToepassen en ongedaan maken geven exact de vorige termijnen terug', () => {
+  const it = JSON.parse(JSON.stringify(mkItem('300000000091', 1000000))), voor = JSON.stringify(it);
+  const sch = { bron: 'standaard', rijen: [{ label: 'aanbetaling', pct: 50 }, { label: 'oplevering', pct: 50 }] };
+  const plan = F.schemaPlan(it, null, sch, V, {}); assert.ok(plan.delen.length === 2);
+  assert.strictEqual(JSON.stringify(it), voor, 'voorbeeld wijzigt het item niet');
+  const tekst = F.schemaVoorbeeld(plan, 1000000); assert.ok(/^aanbetaling: 50% · 5\.000 · okt 2026$/.test(tekst[0]), tekst[0]);
+  const res = F.schemaToepassen(it, null, sch, V, {}); assert.ok(res.item); assert.strictEqual(somC(res.item), 1000000); valideer('p:sv', res.item, V);
+  const vorig = F.bewaarPlanning(it), terug = F.herstelPlanning(res.item, vorig).item;
+  assert.deepStrictEqual(terug.termijnen, it.termijnen); valideer('p:sv', terug, V);
+});
+test('planning wissen: vrije termijnen terug naar nog niet gepland, gefactureerde blijven, ongedaan maken herstelt', () => {
+  const it = itemVast(), ov = ovVast;
+  const w = F.wisPlanning(it, ov, V); assert.ok(w.item); assert.strictEqual(w.aantal, 1); assert.strictEqual(w.bedragC, 300000);
+  assert.deepStrictEqual(w.item.termijnen.map(t => [t.id, t.label, t.aan, t.bedrag]), [['t1', 'aanbetaling', true, 3000], ['t2', 'nog niet gepland', false, 3000]]);
+  assert.strictEqual(somC(w.item), 600000); valideer('p:vast', w.item, V);
+  assert.deepStrictEqual(F.herstelPlanning(w.item, w.vorig).item.termijnen, it.termijnen);
+  assert.ok(F.wisPlanning(w.item, ov, V).fout, 'niets meer te wissen');
+  const zonder = F.wisPlanning(zetItem(), null, V); assert.ok(zonder.item && zonder.item.termijnen.length === 1 && zonder.item.termijnen[0].aan === false && somC(zonder.item) === 500000); valideer('p:z', zonder.item, V);
+  function zetItem() { const x = mkItem('300000000092', 500000); return F.zetCel(F.zetCel(x, null, '2026-11', 200000, V).item, null, '2026-12', 100000, V).item; }
+});
 test('zetAan: alleen het vinkje, termijnen blijven; ts en door worden niet teruggestuurd', () => {
   const it = Object.assign(itemVast(), { ts: 5, door: 'X' }); const r = F.zetAan(it, false).item;
   assert.strictEqual(r.aan, false); assert.strictEqual(r.ts, undefined); assert.strictEqual(r.door, undefined); assert.strictEqual(r.termijnen.length, 2);

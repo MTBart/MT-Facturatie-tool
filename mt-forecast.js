@@ -277,6 +277,27 @@
     for (const d of plan.delen) { const r = F.zetCel(it, ov, d.ym, d.bedragC, vandaag, { label: d.label, behoudAan: !!(o && o.behoudAan) }); if (r.fout) return r; it = r.item; }
     return { item: it, delen: plan.delen };
   };
+  // Planning wissen: alle vrije (niet gefactureerde) geplande termijnen terug naar "nog niet gepland"; gefactureerde (vaste) blijven.
+  // Geeft {item, aantal, bedragC, vorig} (vorig = wat nodig is om te herstellen) of {fout}.
+  F.wisPlanning = function (item, ov, vandaag) {
+    const info = F.termijnInfo(item, ov), vast = info.filter(t => t.vast), vrij = info.filter(t => !t.vast && t.aan), uit = info.filter(t => !t.vast && !t.aan);
+    if (!vrij.length) return { fout: 'Er staat geen planning om te wissen.' };
+    const bedragC = vrij.reduce((a, t) => a + t.bedragC, 0), restC = c(item.totaal) - vast.reduce((a, t) => a + t.bedragC, 0);
+    const lijst = vast.map(t => ({ id: t.id, label: t.label, bedrag: t.bedragC / 100, factuurdatum: t.factuurdatum, aan: t.aan }));
+    if (restC > 0) {
+      const gebruikt = new Set(lijst.map(t => t.id)), oud = uit[0] && !gebruikt.has(uit[0].id) ? uit[0] : null, id = oud ? oud.id : nieuwId(gebruikt); if (!id) return { fout: 'Te veel termijnen.' };
+      const laatste = vast.reduce((a, t) => t.factuurdatum > a ? t.factuurdatum : a, vandaag);
+      lijst.push({ id, label: REST_LABEL, bedrag: restC / 100, factuurdatum: oud ? oud.factuurdatum : laatste, aan: false });
+    }
+    if (!lijst.length) return { fout: 'Er is geen termijn over.' };
+    lijst.sort((a, b) => String(a.factuurdatum).localeCompare(String(b.factuurdatum)) || a.id.localeCompare(b.id));
+    return { item: Object.assign(schoon(item), { termijnen: lijst }), aantal: vrij.length, bedragC, vorig: F.bewaarPlanning(item) };
+  };
+  // Wat nodig is om de planning van een item terug te zetten (ongedaan maken) en het terugzetten zelf.
+  F.bewaarPlanning = item => ({ termijnen: JSON.parse(JSON.stringify(item.termijnen || [])), aan: item.aan !== false });
+  F.herstelPlanning = (item, vorig) => ({ item: Object.assign(schoon(item), { termijnen: JSON.parse(JSON.stringify(vorig.termijnen)), aan: vorig.aan }) });
+  // Tekstregels voor het voorbeeld van een schema: per deel label, percentage, bedrag, maand.
+  F.schemaVoorbeeld = (plan, totaalC) => plan.delen.map(d => `${d.label}: ${String(F.centenNaarPct(totaalC, d.bedragC)).replace('.', ',')}% · ${F.fmt(d.bedragC)} · ${maandTekst(d.ym)}`);
   // ── Statusfilter (geaccepteerd / openstaand / concept) ───────────────────────────
   F.STATUSSEN = ['geaccepteerd', 'openstaand', 'concept'];
   F.telStatus = (lijst, uitbeeld) => { const t = { geaccepteerd: 0, openstaand: 0, concept: 0, uitbeeld: 0 }; for (const s of lijst || []) { if (uitbeeld && uitbeeld[s.id]) t.uitbeeld++; else if (t[s.status] != null) t[s.status]++; } return t; };
@@ -549,6 +570,7 @@
 .mtf input:disabled,.mtf button:disabled{opacity:.5;cursor:not-allowed}
 .mtf-bezig{opacity:.6;pointer-events:none}
 .mtf-voet{font-size:12px;color:var(--m-ink3);padding:0 2px}
+.mtf-toast-knop{margin-left:12px;border:0;background:none;color:var(--m-primary,#2f6b4f);font:inherit;font-weight:600;cursor:pointer;padding:0;text-decoration:underline}
 .mtf-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--m-surface);color:var(--m-ink);border:1px solid var(--m-line);box-shadow:var(--m-pop);padding:10px 16px;border-radius:var(--m-rp);font-size:13px;z-index:9999;max-width:90vw}
 .mtf-pop{position:fixed;z-index:9000;width:300px;max-width:calc(100vw - 16px);background:var(--m-surface);border:1px solid var(--m-line);border-radius:var(--m-rp);box-shadow:var(--m-pop);padding:var(--space-4,16px);font-family:var(--m-ui);font-size:13px;color:var(--m-ink)}
 .mtf-pop.blad{left:0;right:0;bottom:0;top:auto;width:auto;max-width:none;border-radius:var(--m-rp) var(--m-rp) 0 0;padding:var(--space-4,16px) var(--space-4,16px) var(--space-6,24px)}
@@ -596,7 +618,14 @@ th.num .mtf-sortknop .mtf-sortpijl{position:absolute;left:-9px;top:50%;margin:-5
 `;
     document.head.appendChild(s);
   }
-  function toast(t) { document.querySelectorAll('.mtf-toast').forEach(x => x.remove()); const o = h('div', { class: 'mtf-toast', role: 'status' }, t); document.body.appendChild(o); setTimeout(() => o.remove(), 4500); }
+  // actie = {label, fn}: een knop in de melding (bv. Ongedaan maken); zo'n melding blijft langer staan.
+  function toast(t, actie) {
+    document.querySelectorAll('.mtf-toast').forEach(x => x.remove());
+    const knop = actie ? h('button', { type: 'button', class: 'mtf-toast-knop', data: { toastactie: '1' } }, actie.label) : null;
+    const o = h('div', { class: 'mtf-toast', role: 'status' }, t, knop); document.body.appendChild(o);
+    if (knop) knop.addEventListener('click', () => { o.remove(); actie.fn(); });
+    setTimeout(() => o.remove(), actie ? 12000 : 4500);
+  }
 
   function maakKnop(tekst, attr) { return h('button', Object.assign({ type: 'button', class: 'ui-knop' }, attr), tekst); }
   const bedragTd = (cc, klasse) => h('td', { class: 'num ' + (klasse || ''), title: cc ? F.fmt(cc, { altijdCenten: true }) : null }, cc ? [h('span', { class: 'vol' }, F.fmt(cc)), h('span', { class: 'kort' }, F.fmtKort(cc))] : h('span', { class: 'mtf-0' }, '–'));
@@ -688,7 +717,7 @@ th.num .mtf-sortknop .mtf-sortpijl{position:absolute;left:-9px;top:50%;margin:-5
       const keuze = h('select', { class: 'mtf-pop-bedrag mtf-sel-contact', 'aria-label': 'Klant' }, [...namen.entries()].sort((a, b) => a[1].localeCompare(b[1])).map(([k, n]) => h('option', { value: k, selected: k === gekozen }, n + (werk[k] ? ' (eigen schema)' : ' (standaard)'))));
       keuze.addEventListener('change', () => { gekozen = keuze.value; toonIn(); });
       const lijst = gekozen ? (werk[gekozen] || null) : null, terugval = gekozen ? F.kiesSchema(gekozen, 0, {}, st.cfg && st.cfg.prognose_schema) : null;
-      const inhoud = [h('h3', null, 'Factuurschema’s'), h('p', { class: 'mtf-pop-hint' }, 'Per klant (Moneybird-contact) een vaste verdeling van de factuur, bijvoorbeeld aanbetaling en oplevering. De knop "Schema toepassen" bij een offerte vult dit in op het nog niet geplande deel. Zonder eigen schema geldt het standaardschema (klein, middel of groot).')];
+      const inhoud = [h('h3', null, 'Factuurschema’s'), h('p', { class: 'mtf-pop-hint' }, 'Per klant (Moneybird-contact) een vaste verdeling van de factuur, bijvoorbeeld aanbetaling en oplevering. ‘Schema toepassen…’ in het …-menu van een offerte toont eerst een voorbeeld en vult dit dan in op het nog niet geplande deel. Zonder eigen schema geldt het standaardschema (klein, middel of groot).')];
       if (!gekozen) inhoud.push(h('p', null, 'Er zijn nog geen klanten met offertes.'));
       else {
         inhoud.push(keuze);
@@ -746,13 +775,12 @@ th.num .mtf-sortknop .mtf-sortpijl{position:absolute;left:-9px;top:50%;margin:-5
       r.uitbeeld && mag && !uit ? h('button', { type: 'button', class: 'ui-knop mtf-sm', data: { terug: r.sleutel }, title: 'Zet de offerte terug in de lijst; ‘Gaat zeker door’ blijft uit' }, 'Terugzetten') : null,
       r.afwijkt ? vlag('Bedrag wijkt af', 'In Moneybird staat ' + F.fmt(r.mbTotaalC) + ', de prognose rekent met ' + F.fmt(r.totaalC) + '. Zie Aandacht.') : null,
       r.dubbelen.length ? vlag('Dubbel', 'Nog een prognose-item voor deze offerte. Zie Aandacht.') : null,
-      nietAcc && r.aan ? vlag('Nog niet geaccepteerd', 'Deze offerte is nog niet geaccepteerd, maar gaat zeker door. Zie Aandacht.', 'let') : null,
-      mag && !uit && !blok && r.nogC > 0 && r.geplandC === 0 && r.gefC === 0 ? h('button', { type: 'button', class: 'mtf-schema', data: { schema: r.sleutel }, title: 'Vul de standaardverdeling van deze klant in op het nog niet geplande deel' }, 'Schema toepassen') : null);
+      nietAcc && r.aan ? vlag('Nog niet geaccepteerd', 'Deze offerte is nog niet geaccepteerd, maar gaat zeker door. Zie Aandacht.', 'let') : null);
     tr.append(h('td', { class: 's' }, h('div', { class: 'mtf-naam' },
       st.keuze ? h('input', { type: 'checkbox', checked: st.keuze.has(r.sleutel), disabled: !r.estimateId || !!r.uitbeeld, 'aria-label': 'Selecteer: ' + r.naam, data: { kies: r.sleutel } })
         : h('input', { type: 'checkbox', checked: r.aan, disabled: !mag || uit || !!r.uitbeeld, 'aria-label': 'Gaat zeker door: ' + r.naam, title: 'Vink aan als deze offerte zeker doorgaat; telt dan mee hier en in Financiën', data: { aan: r.sleutel } }),
       h('span', null, h('b', { title: r.naam }, r.naam), meta),
-      mag && !uit && st.ubBeschikbaar && !st.keuze && r.estimateId && !r.uitbeeld ? h('button', { type: 'button', class: 'mtf-rijmenu', 'aria-haspopup': 'menu', 'aria-label': 'Acties voor ' + r.naam, title: 'Uit beeld zetten', data: { rijmenu: r.sleutel } }, ico('meer') || '…') : null)));
+      mag && !uit && !st.keuze && menuMogelijk(r).length ? h('button', { type: 'button', class: 'mtf-rijmenu', 'aria-haspopup': 'menu', 'aria-label': 'Acties voor ' + r.naam, title: 'Acties voor deze offerte', data: { rijmenu: r.sleutel } }, ico('meer') || '…') : null)));
     tr.append(h('td', { class: 'num' + (r.afwijkt ? ' mtf-n' : ''), title: r.afwijkt ? 'Prognose rekent met ' + F.fmt(r.totaalC) + '; Moneybird: ' + F.fmt(r.mbTotaalC) : null }, F.fmt(r.afwijkt ? r.mbTotaalC : r.totaalC)),
       h('td', { class: 'num kol-gef', title: r.gecrediteerd ? 'Netto, na creditnota’s' : null }, r.gefNettoC ? h('span', { class: r.gefNettoC < 0 ? 'mtf-n' : null }, F.fmt(r.gefNettoC)) : h('span', { class: 'mtf-0' }, '–'), r.gecrediteerd ? h('div', { class: 'mtf-gef' }, 'gecrediteerd' + (r.creditC ? ' ' + F.fmt(r.creditC) : '')) : null),
       h('td', { class: 'num kol-nog' }, r.nogC > 0 ? F.fmt(r.nogC) : h('span', { class: 'mtf-0' }, r.bestaat ? 'gepland' : '–')));
@@ -1048,7 +1076,7 @@ th.num .mtf-sortknop .mtf-sortpijl{position:absolute;left:-9px;top:50%;margin:-5
         if (w.ks) st.ks = st.ks.filter(x => x.k !== w.ks && Date.now() - x.t < 180000).concat({ k: w.ks, t: Date.now() }).slice(-10);
         if (w.item) st.vers[sleutel] = { item: w.item, t: Date.now() };
         const G = root.MTGeld; if (G && G._st) { if (w.cachever) G._st.cv = w.cachever; if (w.ks) G._st.ks = (G._st.ks || []).filter(x => x.k !== w.ks).concat({ k: w.ks, t: Date.now() }).slice(-10); }
-        if (ok) toast(ok);
+        if (typeof ok === 'function') ok(); else if (ok) toast(ok);
       } catch (e) { toast('Niet opgeslagen: ' + (e.message || e) + (/aangepast|gewijzigd/.test(String(e.message)) ? ' — herlaad' : '')); }
       await F.laad(true);
     });
@@ -1134,6 +1162,45 @@ th.num .mtf-sortknop .mtf-sortpijl{position:absolute;left:-9px;top:50%;margin:-5
     const reden = st.bulkReden || 'verkeerd';
     if (!(await bevestigUitBeeld(rijen, reden))) return; st.keuze = null; uitBeeldZetten(rijen.map(r => r.sleutel), reden);
   }
+  // Welke acties heeft het "…"-menu van een rij?
+  function menuMogelijk(r) {
+    const m = [], blok = r.afwijkt || !!r.uitbeeld;
+    if (!st.mag || st.verouderd) return m;
+    if (!blok && r.nogC > 0 && r.geplandC === 0 && r.gefC === 0) m.push('schema');
+    if (!blok && r.geplandC > 0) m.push('wissen');
+    if (st.ubBeschikbaar && r.estimateId && !r.uitbeeld) m.push('uitbeeld');
+    return m;
+  }
+  function itemEnOv(rij) {
+    const bron = st.itemsEff || st.items || {}, it = bron[rij.sleutel];
+    const item = it && it.soort !== 'post' ? it : F.nieuwItem(rij, st.bt == null ? 14 : st.bt, st.data.vandaag);
+    const ov = ((st.data.prognose && st.data.prognose.posten) || []).find(x => x.sleutel === rij.sleutel && x.soort === 'project') || null;
+    return { item, ov };
+  }
+  async function schemaFlow(sleutel) {
+    const rij = st.rijen.find(r => r.sleutel === sleutel); if (!rij || rij.afwijkt || !st.mag || st.verouderd || !st.data) return;
+    if (!root.mtDialog) { toast('Het bevestigingsvenster is niet beschikbaar.'); return; }
+    const { item, ov } = itemEnOv(rij), sch = F.kiesSchema(rij.contactId, rij.totaalC, st.fs, st.cfg && st.cfg.prognose_schema);
+    const plan = F.schemaPlan(item, ov, sch, st.data.vandaag, { opleverYm: rij.opleverYm }); if (plan.fout) { toast(plan.fout); return; }
+    const bron = sch.bron === 'klant' ? 'schema van deze klant' : 'standaardschema';
+    const ja = await root.mtDialog.confirm({ title: 'Schema toepassen', message: `${rij.naam}\nDit wordt ingevuld (${bron}):\n` + F.schemaVoorbeeld(plan, rij.totaalC).join('\n') + '\nEr wordt niets geschreven voor je Toepassen kiest.', okLabel: 'Toepassen' });
+    if (!ja) return;
+    let vorig = null;
+    wijzig(sleutel, (it, o) => {
+      const res = F.schemaToepassen(it, o, sch, st.data.vandaag, { opleverYm: rij.opleverYm, behoudAan: behoudAanVoor(rij) });
+      if (res.item) vorig = F.bewaarPlanning(it); return res;
+    }, () => toast(`Schema toegepast (${bron}): ${plan.delen.map(x => x.label).join(', ')}`, { label: 'Ongedaan maken', fn: () => vorig && wijzig(sleutel, it => F.herstelPlanning(it, vorig), 'Teruggezet.') }));
+  }
+  async function wisFlow(sleutel) {
+    const rij = st.rijen.find(r => r.sleutel === sleutel); if (!rij || rij.afwijkt || !st.mag || st.verouderd || !st.data) return;
+    if (!root.mtDialog) { toast('Het bevestigingsvenster is niet beschikbaar.'); return; }
+    const { item, ov } = itemEnOv(rij), probe = F.wisPlanning(item, ov, st.data.vandaag); if (probe.fout) { toast(probe.fout); return; }
+    const ja = await root.mtDialog.confirm({ title: 'Planning wissen', message: `${rij.naam}\n${probe.aantal} ${probe.aantal === 1 ? 'geplande termijn' : 'geplande termijnen'} (${F.fmt(probe.bedragC)}) gaan terug naar ‘nog niet gepland’.\nGefactureerde termijnen blijven staan. Je kunt het daarna ongedaan maken.`, okLabel: 'Planning wissen', danger: true });
+    if (!ja) return;
+    let vorig = null, res0 = null;
+    wijzig(sleutel, (it, o) => { const res = F.wisPlanning(it, o, st.data.vandaag); if (res.item) { vorig = res.vorig; res0 = res; } return res; },
+      () => toast(`Planning gewist (${res0.aantal}, ${F.fmt(res0.bedragC)}).`, { label: 'Ongedaan maken', fn: () => wijzig(sleutel, it => F.herstelPlanning(it, vorig), 'Teruggezet.') }));
+  }
   function focusSel(sel) { const e = sel && st.el && st.el.querySelector(sel); if (e && !e.disabled) { try { e.focus({ preventScroll: true }); } catch (x) { } } }
   function closeRijMenu(focus) {
     const sel = st.rijmenuSel; if (st.rijmenu) { st.rijmenu.remove(); st.rijmenu = null; }
@@ -1141,9 +1208,18 @@ th.num .mtf-sortknop .mtf-sortpijl{position:absolute;left:-9px;top:50%;margin:-5
   }
   function openRijMenu(knop, r) {
     closeRijMenu(); st.rijmenuSel = '[data-rijmenu="' + r.sleutel + '"]';
-    const menu = h('div', { class: 'mtf-rijmenu-lijst', role: 'menu', 'aria-label': 'Uit beeld zetten: ' + r.naam }, h('div', { class: 'mtf-rm-kop' }, 'Uit beeld zetten'),
-      Object.keys(F.UITBEELD_REDENEN).map(k => h('button', { type: 'button', role: 'menuitem', data: { reden: k } }, F.UITBEELD_REDENEN[k])));
-    menu.addEventListener('click', async e => { const b = e.target.closest('button'); if (!b) return; const reden = b.dataset.reden; closeRijMenu(true); if (await bevestigUitBeeld([r], reden)) uitBeeldZetten([r.sleutel], reden); });
+    const mog = menuMogelijk(r);
+    const menu = h('div', { class: 'mtf-rijmenu-lijst', role: 'menu', 'aria-label': 'Acties voor ' + r.naam },
+      mog.includes('schema') ? h('button', { type: 'button', role: 'menuitem', data: { actie: 'schema' }, title: 'Vul de standaardverdeling van deze klant in op het nog niet geplande deel' }, 'Schema toepassen…') : null,
+      mog.includes('wissen') ? h('button', { type: 'button', role: 'menuitem', data: { actie: 'wissen' }, title: 'Zet alle nog niet gefactureerde planning terug naar ‘nog niet gepland’' }, 'Planning wissen…') : null,
+      mog.includes('uitbeeld') ? h('div', { class: 'mtf-rm-kop' }, 'Uit beeld zetten') : null,
+      mog.includes('uitbeeld') ? Object.keys(F.UITBEELD_REDENEN).map(k => h('button', { type: 'button', role: 'menuitem', data: { reden: k } }, F.UITBEELD_REDENEN[k])) : null);
+    menu.addEventListener('click', async e => {
+      const b = e.target.closest('button'); if (!b) return; closeRijMenu(true);
+      if (b.dataset.actie === 'schema') return schemaFlow(r.sleutel);
+      if (b.dataset.actie === 'wissen') return wisFlow(r.sleutel);
+      const reden = b.dataset.reden; if (await bevestigUitBeeld([r], reden)) uitBeeldZetten([r.sleutel], reden);
+    });
     menu.addEventListener('keydown', e => { if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { const bs = [...menu.querySelectorAll('button')], i = bs.indexOf(document.activeElement); const n = bs[(i + (e.key === 'ArrowDown' ? 1 : bs.length - 1)) % bs.length]; if (n) { n.focus(); e.preventDefault(); } } });
     document.body.append(menu); st.rijmenu = menu;
     const b = knop.getBoundingClientRect(), W = window.innerWidth, pw = menu.offsetWidth || 220;
@@ -1211,11 +1287,6 @@ th.num .mtf-sortknop .mtf-sortpijl{position:absolute;left:-9px;top:50%;margin:-5
       else if (d.weergave) { st.weergave = st.weergave === 'vast' ? 'lang' : 'vast'; ls.set('mtg:fc:weergave:' + st.wie, st.weergave); teken(); }
       else if (d.filter) { if (st.filter.has(d.filter)) st.filter.delete(d.filter); else st.filter.add(d.filter); ls.set('mtg:fc:filter:' + st.wie, [...st.filter].join(',')); teken(); }
       else if (d.schemas) { zetMenu(false); openSchemaPaneel(); }
-      else if (d.schema && st.mag && !st.verouderd) {
-        const rij = st.rijen.find(r => r.sleutel === d.schema); if (!rij || rij.afwijkt) return;
-        const sch = F.kiesSchema(rij.contactId, rij.totaalC, st.fs, st.cfg && st.cfg.prognose_schema);
-        wijzig(d.schema, (it, ov) => { const res = F.schemaToepassen(it, ov, sch, st.data.vandaag, { opleverYm: rij.opleverYm, behoudAan: behoudAanVoor(rij) }); if (res.item) toast(`Schema toegepast (${sch.bron === 'klant' ? 'schema van deze klant' : 'standaardschema'}): ${res.delen.map(x => x.label).join(', ')}`); return res; });
-      }
       else if (d.eenheid) { if (st.data) { st.sel = F.selNaarEenheid(st.sel, st.data.vandaag.slice(0, 7), d.eenheid); bewaarSel(); teken(); } }
       else if (d.spring) { const nu = st.data.vandaag.slice(0, 7), kol = F.kolommen(F.eenheden(nu, st.sel.eenheid), st.sel)[Number(d.spring)]; if (kol) { st.sel = F.selSchoon({ eenheid: 'maand', i0: kol.van, i1: kol.tot }, F.eenheden(nu, 'maand')); bewaarSel(); teken(); } }
       else if (d.menu) zetMenu(!st.menu)
