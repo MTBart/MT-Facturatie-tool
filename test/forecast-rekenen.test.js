@@ -27,7 +27,9 @@ test('fmt: hele euro zonder, anders met centen; negatief met minteken', () => {
 });
 test('schatNorm: bedrag incl. btw in centen, naam uit contact', () => {
   const s = F.schatNorm({ id: 444888999777, estimate_id: '2026-0123', contact_id: 888999, reference: 'Keuken', total_price_incl_tax_base: '12100.00', contact: { company_name: 'Voorbeeld BV' } });
-  assert.deepStrictEqual(s, { id: '444888999777', nummer: '2026-0123', naam: 'Voorbeeld BV', ref: 'Keuken', contact_id: '888999', totaalC: 1210000, status: 'geaccepteerd' });
+  assert.deepStrictEqual(s, { id: '444888999777', nummer: '2026-0123', naam: 'Voorbeeld BV', ref: 'Keuken', contact_id: '888999', totaalC: 1210000, datum: '', status: 'geaccepteerd' });
+  assert.strictEqual(F.schatNorm({ id: 5, total_price_incl_tax_base: '1', estimate_date: '2026-10-20' }).datum, '2026-10-20');            // offertedatum uit Moneybird
+  assert.strictEqual(F.schatNorm({ id: 5, total_price_incl_tax_base: '1', estimate_date: null, created_at: '2026-09-03T08:00:00.000Z' }).datum, '2026-09-03'); assert.strictEqual(F.schatNorm({ id: 5, total_price_incl_tax_base: '1' }).datum, '');
   assert.strictEqual(F.schatNorm({ id: 1, total_price_incl_tax: '0' }), null); assert.strictEqual(F.schatNorm(null), null);
 });
 
@@ -509,6 +511,56 @@ test('passendBreedte: alle maanden in beeld met een minimum van 64 px; compact o
   assert.deepStrictEqual(F.passendBreedte(500, 25), { w: 64, compact: true, past: false });
   assert.deepStrictEqual(F.passendBreedte(500, 0), { w: 110, compact: false, past: true }); assert.strictEqual(F.passendBreedte(2000, 3).w, 110);
   assert.strictEqual(F.passendBreedte(960, 10, { min: 80, compactOnder: 100 }).w, 96);
+});
+
+// ── sorteren ──
+const rij = (naam, o) => Object.assign({ sleutel: 'p:' + naam, naam, datum: '', totaalC: 0, mbTotaalC: null, afwijkt: false, gefNettoC: 0, nogC: 0, status: null, maanden: Array.from({ length: 4 }, () => ({ vrijC: 0, vastOpenC: 0, vastGefC: 0 })) }, o || {});
+const namen = (lijst, sort) => F.sorteerRijen(lijst, sort).map(r => r.naam).join(',');
+test('sorteren: standaard = offertedatum, nieuwste eerst; lege datum onderaan; gelijke datum op naam', () => {
+  const l = [rij('B', { datum: '2026-10-01' }), rij('A', { datum: '2026-10-20' }), rij('Leeg'), rij('C', { datum: '2026-10-20' }), rij('Oud', { datum: '2025-12-31' })];
+  assert.strictEqual(namen(l, null), 'A,C,B,Oud,Leeg'); assert.strictEqual(namen(l, undefined), 'A,C,B,Oud,Leeg'); assert.strictEqual(namen(l, { sleutel: 'onzin', richting: 'op' }), 'A,C,B,Oud,Leeg');
+  assert.strictEqual(namen(l, { sleutel: 'datum', richting: 'op' }), 'Oud,B,A,C,Leeg');                    // oplopend: oudste eerst; leeg nog steeds onderaan; gelijk (A, C) op naam A-Z
+});
+test('sorteren: bedrag, gefactureerd en nog te plannen in hele centen, beide richtingen, 0 en afwijkend bedrag', () => {
+  const l = [rij('A', { totaalC: 100001, gefNettoC: 1, nogC: 5 }), rij('B', { totaalC: 100000, gefNettoC: 0, nogC: 0 }), rij('C', { totaalC: 99999, gefNettoC: -250, nogC: 7 }), rij('D', { totaalC: 100000, afwijkt: true, mbTotaalC: 120000, gefNettoC: 1, nogC: 5 })];
+  assert.strictEqual(namen(l, { sleutel: 'bedrag', richting: 'op' }), 'C,B,A,D'); assert.strictEqual(namen(l, { sleutel: 'bedrag', richting: 'af' }), 'D,A,B,C');                // D telt met het getoonde Moneybird-bedrag
+  assert.strictEqual(namen(l, { sleutel: 'gefactureerd', richting: 'op' }), 'C,A,D,B'); assert.strictEqual(namen(l, { sleutel: 'gefactureerd', richting: 'af' }), 'A,D,C,B');   // negatief (creditnota) is een waarde; 0 is leeg en blijft onderaan
+  assert.strictEqual(namen(l, { sleutel: 'nog', richting: 'op' }), 'A,D,C,B'); assert.strictEqual(namen(l, { sleutel: 'nog', richting: 'af' }), 'C,A,D,B');                     // gelijke waarden (A, D): op naam
+});
+test('sorteren: offerte (naam, natuurlijke volgorde, hoofdletterongevoelig), status, en stabiel bij gelijke waarden', () => {
+  const l = [rij('offerte 10'), rij('Offerte 2'), rij('beta'), rij('Alfa'), rij('', { sleutel: 'p:leeg' })];
+  assert.strictEqual(namen(l, { sleutel: 'offerte', richting: 'op' }), 'Alfa,beta,Offerte 2,offerte 10,'); assert.strictEqual(namen(l, { sleutel: 'offerte', richting: 'af' }), 'offerte 10,Offerte 2,beta,Alfa,');   // naamloze rij altijd onderaan
+  const st = [rij('C', { status: 'concept' }), rij('X', { status: 'geaccepteerd' }), rij('B', { status: 'concept' }), rij('Y', { status: null }), rij('O', { status: 'openstaand' })];
+  assert.strictEqual(namen(st, { sleutel: 'status', richting: 'op' }), 'X,O,B,C,Y'); assert.strictEqual(namen(st, { sleutel: 'status', richting: 'af' }), 'B,C,O,X,Y');
+  const gelijk = [rij('Zelfde', { sleutel: 'p:1', totaalC: 5 }), rij('Zelfde', { sleutel: 'p:2', totaalC: 5 }), rij('Zelfde', { sleutel: 'p:3', totaalC: 5 })];
+  assert.deepStrictEqual(F.sorteerRijen(gelijk, { sleutel: 'bedrag', richting: 'af' }).map(r => r.sleutel), ['p:1', 'p:2', 'p:3']);        // geen willekeur: de bestaande volgorde blijft
+  const invoer = [rij('B', { totaalC: 1 }), rij('A', { totaalC: 2 })]; const kopie = invoer.slice(); F.sorteerRijen(invoer, { sleutel: 'bedrag', richting: 'op' }); assert.deepStrictEqual(invoer, kopie);   // de invoer blijft ongewijzigd
+});
+test('sorteren: maand- en periodekolom (bedrag in die kolom, in centen), uit-beeld-rijen en rijen met een melding sorteren gewoon mee', () => {
+  const m = (a, b, c) => Array.from({ length: 4 }, (_, i) => ({ vrijC: i === 1 ? a : 0, vastOpenC: i === 1 ? b : 0, vastGefC: i === 1 ? c : 0 }));
+  const l = [rij('A', { maanden: m(100, 0, 0) }), rij('B', { maanden: m(0, 50, 25), uitbeeld: { reden: 'weg' } }), rij('C', { maanden: m(0, 0, 0) }), rij('D', { maanden: m(1, 1, 1), afwijkt: true, dubbelen: [{ sleutel: 'x' }] })];
+  assert.strictEqual(namen(l, { sleutel: 'kol:1:1', richting: 'af' }), 'A,B,D,C'); assert.strictEqual(namen(l, { sleutel: 'kol:1:1', richting: 'op' }), 'D,B,A,C');       // B: 50 + 25; C is leeg en staat onderaan
+  const l2 = [rij('A', { maanden: [{ vrijC: 10, vastOpenC: 0, vastGefC: 0 }, { vrijC: 0, vastOpenC: 5, vastGefC: 0 }, { vrijC: 0, vastOpenC: 0, vastGefC: 0 }, { vrijC: 0, vastOpenC: 0, vastGefC: 0 }] }), rij('B', { maanden: [{ vrijC: 0, vastOpenC: 0, vastGefC: 0 }, { vrijC: 12, vastOpenC: 0, vastGefC: 0 }, { vrijC: 0, vastOpenC: 0, vastGefC: 0 }, { vrijC: 0, vastOpenC: 0, vastGefC: 0 }] })];
+  assert.strictEqual(namen(l2, { sleutel: 'kol:0:1', richting: 'af' }), 'A,B'); assert.strictEqual(namen(l2, { sleutel: 'kol:1:1', richting: 'af' }), 'B,A');                // kwartaal/jaarkolom = som over de maanden
+  assert.strictEqual(F.sorteerRijen(l, { sleutel: 'bedrag', richting: 'af' }).length, 4);                                                                                // geen rij valt weg of wordt vastgepind
+});
+test('sorteren: klikcyclus (op, af, standaard), opslaan/lezen en aria-sort', () => {
+  let s = null; s = F.volgendeSortering(s, 'bedrag'); assert.deepStrictEqual(s, { sleutel: 'bedrag', richting: 'op' });
+  s = F.volgendeSortering(s, 'bedrag'); assert.deepStrictEqual(s, { sleutel: 'bedrag', richting: 'af' }); assert.strictEqual(F.volgendeSortering(s, 'bedrag'), null);
+  assert.deepStrictEqual(F.volgendeSortering({ sleutel: 'bedrag', richting: 'af' }, 'nog'), { sleutel: 'nog', richting: 'op' });                      // een andere kolom begint weer oplopend
+  assert.deepStrictEqual(F.volgendeSortering(null, 'datum'), { sleutel: 'datum', richting: 'op' });                                                  // de standaard (datum aflopend) is niet "expliciet": eerste klik is oplopend
+  assert.strictEqual(F.sortTekst({ sleutel: 'kol:2:4', richting: 'af' }), 'kol:2:4:af'); assert.deepStrictEqual(F.sortLees('kol:2:4:af'), { sleutel: 'kol:2:4', richting: 'af' });
+  for (const t of ['offerte:op', 'datum:af', 'bedrag:op', 'gefactureerd:af', 'nog:op', 'status:af']) assert.strictEqual(F.sortTekst(F.sortLees(t)), t);
+  for (const t of ['', null, 'bedrag', 'bedrag:omhoog', 'x:op', 'kol:a:b:op', 'datum:af;drop']) assert.strictEqual(F.sortLees(t), null);
+  assert.strictEqual(F.sortStaat(null, 'datum'), 'descending'); assert.strictEqual(F.sortStaat(null, 'bedrag'), 'none');
+  assert.strictEqual(F.sortStaat({ sleutel: 'bedrag', richting: 'op' }, 'bedrag'), 'ascending'); assert.strictEqual(F.sortStaat({ sleutel: 'bedrag', richting: 'af' }, 'bedrag'), 'descending'); assert.strictEqual(F.sortStaat({ sleutel: 'bedrag', richting: 'af' }, 'datum'), 'none');
+});
+test('sorteren: de totalen hangen niet van de volgorde af', () => {
+  const items = { 'p:a': itemU(EU[0]), 'p:b': itemU(EU[1]) };
+  const rijen = F.bouwRijen({ schatten: [schU(EU[0]), schU(EU[1])], items, posten: [], projecten: [], vandaag: V, maanden: 3 });
+  const ev = ['a', 'b'].map(k => ({ id: k, bron: 'prognose', termijn_id: 't1', prognose: 'p:' + k, datum: '2026-12-01', delta: 400 }));
+  const t0 = F.totalen({ rijen, events: ev, vandaag: V, maanden: 3 }), t1 = F.totalen({ rijen: F.sorteerRijen(rijen, { sleutel: 'bedrag', richting: 'op' }).reverse(), events: ev, vandaag: V, maanden: 3 });
+  assert.deepStrictEqual(t1, t0);
 });
 
 let async_ = Promise.resolve();

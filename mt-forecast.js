@@ -61,6 +61,7 @@
     if (!isFinite(t) || t <= 0) return null;
     const k = e.contact || {}, naam = String(k.company_name || [k.firstname, k.lastname].filter(Boolean).join(' ') || '').trim();
     return { id: String(e.id), nummer: String(e.estimate_id || ''), naam, ref: String(e.reference || '').trim(), contact_id: e.contact_id != null ? String(e.contact_id) : '', totaalC: c(t),
+      datum: String(e.estimate_date || String(e.created_at || '').slice(0, 10) || ''),
       status: { accepted: 'geaccepteerd', open: 'openstaand', late: 'openstaand', draft: 'concept' }[String(e.state || 'accepted')] || 'overig' };
   };
 
@@ -100,7 +101,7 @@
       const pool = ov ? c(ov.gefactureerd) : 0;                // netto, na creditnota's: kan negatief zijn
       const r = { sleutel, naam: basis.naam || (item && (item.naam || item.code)) || sleutel, offertenr: basis.offertenr || (item && item.offertenr) || '', code: basis.code || (item && item.code) || '', estimateId: basis.estimateId || (item && item.estimate_id) || '',
         contactId: basis.contactId || (item && item.contact_id) || '', schatTotaalC: basis.totaalC != null ? basis.totaalC : null, extra: !!basis.extra, bestaat: !!item, aan: !!(item && item.aan !== false), totaalC,
-        status: basis.status || null, opleverYm: basis.opleverYm || null, gefNettoC: pool, gefC: Math.max(0, pool), creditC: 0, gecrediteerd: false, dubbelen: [], termijnen: info, maanden: [], eerderC: 0, laterC: 0, eerderVrijC: 0, geplandC: 0 };
+        datum: basis.datum || '', status: basis.status || null, opleverYm: basis.opleverYm || null, gefNettoC: pool, gefC: Math.max(0, pool), creditC: 0, gecrediteerd: false, dubbelen: [], termijnen: info, maanden: [], eerderC: 0, laterC: 0, eerderVrijC: 0, geplandC: 0 };
       // Creditnota's: het netto gefactureerde bedrag wordt niet weggeklemd getoond; de gecrediteerde bedragen komen uit de openstaande creditregels van de gekoppelde facturen.
       if (ov && Array.isArray(ov.facturen) && ov.facturen.length) for (const e of o.events || []) if (e && e.bron === 'verkoop' && typeof e.delta === 'number' && e.delta < 0 && e.document_id != null && ov.facturen.map(String).includes(String(e.document_id))) r.creditC += -c(e.delta);
       r.gecrediteerd = r.creditC > 0 || pool < 0;
@@ -127,7 +128,7 @@
       if (!sleutel) sleutel = 'p:e' + s.id;
       gebruikt.add(sleutel);
       const naam = (pr && pr.label) || [s.naam, s.ref].filter(Boolean).join(' — ') || s.nummer || s.id;
-      rijen.push(maak(sleutel, { naam, offertenr: s.nummer, code: pr ? pr.code : '', estimateId: s.id, contactId: s.contact_id, totaalC: s.totaalC, status: s.status || 'geaccepteerd', opleverYm: pr && pr.oplevering ? String(pr.oplevering).slice(0, 7) : null }));
+      rijen.push(maak(sleutel, { naam, offertenr: s.nummer, code: pr ? pr.code : '', estimateId: s.id, contactId: s.contact_id, totaalC: s.totaalC, datum: s.datum || '', status: s.status || 'geaccepteerd', opleverYm: pr && pr.oplevering ? String(pr.oplevering).slice(0, 7) : null }));
     }
     // Prognose-projecten die meetellen in Financiën maar geen openstaande offerte hebben: toch tonen, anders klopt het totaal niet.
     for (const k of Object.keys(items).sort()) {
@@ -323,6 +324,41 @@
   };
   F.terugzetMap = function (map, ids) { const n = Object.assign({}, map); for (const id of ids) delete n[String(id)]; return n; };
 
+  // ── Sorteren van de offertelijst ───────────────────────────────────────────────
+  // Sleutels: offerte (naam), datum (offertedatum), bedrag, gefactureerd, nog (nog te plannen), status, kol:<van>:<tot> (bedrag in een maand- of periodekolom).
+  // Lege waarden (getoond als –) staan altijd onderaan, in beide richtingen. Gelijke waarden vallen terug op de naam (A-Z), daarna op de bestaande
+  // volgorde (stabiel). Rijen met een melding worden niet vastgepind; de totalen hangen niet van de volgorde af. Bedragen in hele centen.
+  F.SORT_STANDAARD = { sleutel: 'datum', richting: 'af' };                      // offertedatum, nieuwste eerst
+  const SORT_RE = /^(offerte|datum|bedrag|gefactureerd|nog|status|kol:\d{1,2}:\d{1,2}):(op|af)$/;
+  F.sortLees = t => { const m = SORT_RE.exec(String(t || '')); return m ? { sleutel: m[1], richting: m[2] } : null; };
+  F.sortTekst = s => s ? s.sleutel + ':' + s.richting : '';
+  // Eén klik oplopend, nog een klik aflopend, de derde klik zet de standaard terug (null).
+  F.volgendeSortering = (huidig, sleutel) => !huidig || huidig.sleutel !== sleutel ? { sleutel, richting: 'op' } : huidig.richting === 'op' ? { sleutel, richting: 'af' } : null;
+  F.sortStaat = function (sort, sleutel) {                                     // voor aria-sort
+    const s = sort || F.SORT_STANDAARD; return s.sleutel === sleutel ? (s.richting === 'op' ? 'ascending' : 'descending') : 'none';
+  };
+  const STATUS_VOLGORDE = ['geaccepteerd', 'openstaand', 'concept'];
+  F.sorteerWaarde = function (r, sleutel) {                                    // → { w } of null (leeg)
+    if (sleutel === 'offerte') { const n = String(r.naam || '').trim(); return n ? { w: n } : null; }
+    if (sleutel === 'datum') return /^\d{4}-\d{2}-\d{2}/.test(String(r.datum || '')) ? { w: String(r.datum).slice(0, 10) } : null;
+    if (sleutel === 'bedrag') { const cc = r.afwijkt && r.mbTotaalC != null ? r.mbTotaalC : r.totaalC; return cc ? { w: cc } : null; }
+    if (sleutel === 'gefactureerd') return r.gefNettoC ? { w: r.gefNettoC } : null;
+    if (sleutel === 'nog') return r.nogC > 0 ? { w: r.nogC } : null;
+    if (sleutel === 'status') { const i = STATUS_VOLGORDE.indexOf(r.status); return i < 0 ? null : { w: i }; }
+    const m = /^kol:(\d+):(\d+)$/.exec(sleutel);
+    if (m) { let t = 0; for (let i = Number(m[1]); i <= Number(m[2]); i++) { const x = r.maanden && r.maanden[i]; if (x) t += x.vrijC + x.vastOpenC + x.vastGefC; } return t ? { w: t } : null; }
+    return null;
+  };
+  F.sorteerRijen = function (rijen, sort) {
+    const s = sort && SORT_RE.test(F.sortTekst(sort)) ? sort : F.SORT_STANDAARD, f = s.richting === 'op' ? 1 : -1;
+    const nl = (a, b) => String(a).localeCompare(String(b), 'nl', { numeric: true, sensitivity: 'base' });
+    return rijen.map((r, i) => ({ r, i, v: F.sorteerWaarde(r, s.sleutel) })).sort((a, b) => {
+      if (!a.v !== !b.v) return a.v ? -1 : 1;                                                         // leeg altijd onderaan, ongeacht de richting
+      if (a.v && b.v && a.v.w !== b.v.w) return (typeof a.v.w === 'string' ? nl(a.v.w, b.v.w) : a.v.w - b.v.w) * f;
+      return nl(a.r.naam || '', b.r.naam || '') || a.i - b.i;                                           // gelijk: op naam (altijd A-Z), dan de oude volgorde
+    }).map(x => x.r);
+  };
+
   // ── Periodekeuze: maand, kwartaal of jaar, over de lopende maand t/m +24 maanden ────────────────────
   // Een eenheid is een lijst blokken (elk met de maand-offsets van t/m); de selectie is {eenheid, i0, i1} (indexen in die lijst).
   // Kwartaal en jaar zijn kalenderkwartalen en -jaren; het eerste blok begint bij de lopende maand, het laatste eindigt bij +24.
@@ -423,7 +459,7 @@
     return e;
   };
   const ls = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { } } };
-  const st = F._st = { el: null, bron: null, mag: false, wie: '', data: null, items: {}, schatten: null, schattenT: 0, projecten: null, haalSchatten: null, rijen: [], sel: null, menu: false, ub: {}, ubInfo: null, ubOverlay: {}, ubBeschikbaar: true, fs: {}, fsBeschikbaar: true, uitbeeldMelding: null, focusTerug: null, rijmenuSel: null, keuze: null, rijmenu: null, weergave: 'vast', aandachtOpen: null, bulkReden: 'verkeerd', filter: null, cfg: null, pop: null, popBezig: false, kostenAan: true, overigAan: true, openAan: true, verouderd: false, afgekapt: false, bezig: false, fout: null, uitleg: false, wachtrij: Promise.resolve(), vers: {}, ks: [], cv: '', bt: null };
+  const st = F._st = { el: null, bron: null, mag: false, wie: '', data: null, items: {}, schatten: null, schattenT: 0, projecten: null, haalSchatten: null, rijen: [], sel: null, sort: null, scrollNaarBoven: false, menu: false, ub: {}, ubInfo: null, ubOverlay: {}, ubBeschikbaar: true, fs: {}, fsBeschikbaar: true, uitbeeldMelding: null, focusTerug: null, rijmenuSel: null, keuze: null, rijmenu: null, weergave: 'vast', aandachtOpen: null, bulkReden: 'verkeerd', filter: null, cfg: null, pop: null, popBezig: false, kostenAan: true, overigAan: true, openAan: true, verouderd: false, afgekapt: false, bezig: false, fout: null, uitleg: false, wachtrij: Promise.resolve(), vers: {}, ks: [], cv: '', bt: null };
   const UITLEG = 'Links staan de goedgekeurde offertes uit Moneybird (incl. btw). Typ in een maand het bedrag dat je dan wilt factureren, in zijn geheel of in delen; "rest" zet wat nog niet gepland is in die maand. De planning is dezelfde als de prognose in Financiën (de termijnen van de offerte): de kaslijn, de Factuurplanning en deze tabel rekenen meteen mee. Het vinkje ‘Gaat zeker door’ is hetzelfde vinkje als in Financiën: alleen die offertes tellen mee. Met ‘…’ achter een offerte (of Selecteren voor meerdere tegelijk) zet je een offerte uit beeld, met een reden; het vinkje Gaat zeker door gaat dan uit en de planning blijft bewaard. Bij het filter Uit beeld zet je ze terug. Met Uitklappen kies je de lange paginaweergave. Staan er meer maanden in beeld dan er passen, dan scrolt de tabel zijwaarts (Shift+muiswiel, slepen of de pijlknoppen); Passend maken maakt de maandkolommen smaller zodat alles in beeld past. Met de chips boven de tabel kies je welke offertes je ziet (geaccepteerd, openstaand, concept); het filter verbergt alleen rijen, de totalen blijven gelijk aan Financiën. Een niet-geaccepteerde offerte staat standaard op ‘Gaat zeker door’ uit. Klik in een maandcel voor een paneel met bedrag of percentage en een label; ‘Schema toepassen’ vult de standaardverdeling van de klant in op het nog niet geplande deel. "Binnen" is de verwachte betaling: factuurdatum plus betaaltermijn en het gewone betaalgedrag van de klant. "Openstaande facturen" zijn de al verstuurde, nog niet betaalde verkoopfacturen per verwachte betaalmaand. Vink die, "lopende kosten" en "overige voorspelling" (btw, weekinleg, handmatige posten) aan of uit om het netto per maand te zien. Een deel dat al in Moneybird gefactureerd is, staat vast. Een offerte kan in hoogstens 6 delen. Er gaat nooit iets naar Moneybird.';
   function css() {
     if (document.getElementById('mtf-css')) return;
@@ -526,6 +562,11 @@
 .mtf-modal-in .mtf-pop-rij{margin:6px 0}.mtf-sel-contact{text-align:left;margin:6px 0 8px}
 .mtf-naam>span{flex:1}
 .mtf-fout button{margin-left:6px}
+.mtf-sortknop{border:0;background:none;font:inherit;color:inherit;cursor:pointer;padding:0 4px;border-radius:var(--m-r);position:relative;white-space:nowrap}.mtf-sortknop:hover{color:var(--m-ink);background:var(--m-surface2)}
+.mtf-sortknop.actief{color:var(--m-ink);font-weight:600}.mtf-sortknop.standaard{font-weight:500}
+.mtf-sortpijl{display:inline-block;width:10px;height:10px;margin-left:2px;vertical-align:-1px}.mtf-sortpijl .ui-ico{width:10px;height:10px}.mtf-sortpijl.op{transform:rotate(180deg)}
+th.num .mtf-sortknop .mtf-sortpijl{position:absolute;left:-9px;top:50%;margin:-5px 0 0}.mtf-sortrij{display:flex;gap:4px;align-items:center;margin-top:1px}.mtf-sortrij .mtf-sortknop{font-size:12px;color:var(--m-ink2)}.mtf-sortrij .mtf-sortknop.actief{color:var(--m-ink)}
+.mtf-sorteer-select{display:none;height:28px;border:1px solid var(--m-strong);border-radius:var(--m-r);background:var(--m-surface);color:var(--m-ink);font:inherit;font-size:12px;padding:0 6px;max-width:55vw}
 .mtf-rijmenu{flex:none;border:0;background:none;width:24px;height:24px;display:inline-grid;place-items:center;color:var(--m-ink3);cursor:pointer;border-radius:var(--m-r);opacity:0}
 .mtf-rij:hover .mtf-rijmenu,.mtf-rijmenu:focus-visible,.mtf-rijmenu[aria-expanded=true]{opacity:1}.mtf-rijmenu:hover{background:var(--m-surface2)}
 .mtf-rijmenu-lijst{position:fixed;z-index:9100;min-width:220px;background:var(--m-surface);border:1px solid var(--m-line);border-radius:var(--m-rp);box-shadow:var(--m-pop);padding:4px;font-family:var(--m-ui);font-size:13px;color:var(--m-ink)}
@@ -547,7 +588,7 @@
 .mtf-strook,.mtf-kaart-kop,.mtf-aandacht-rij{padding-left:var(--space-4,16px);padding-right:var(--space-4,16px)}
 .mtf-kern{grid-template-columns:repeat(2,1fr);padding:var(--space-4,16px)}
 .mtf-tabel .s{min-width:170px;max-width:180px;box-shadow:1px 0 0 var(--m-soft)}.mtf-naam b{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;max-width:130px}
-.kol-gef,.kol-nog{display:none}.mtf-fact.netto{grid-column:1/-1}.mtf-pijlen{display:none}
+.kol-gef,.kol-nog{display:none}.mtf-fact.netto{grid-column:1/-1}.mtf-pijlen{display:none}.mtf-sorteer-select{display:inline-block}
 .mtf-seg .k{display:none}.mtf-seg .l{display:inline}.mtf-spoor.kwartaal .mtf-seg .k,.mtf-spoor.jaar .mtf-seg .k{display:inline}.mtf-spoor.kwartaal .mtf-seg .l,.mtf-spoor.jaar .mtf-seg .l{display:none}.mtf-spoor.kwartaal .mtf-seg{font-size:10px}
 .mtf-verborgen{margin-left:0;width:100%}
 .mtf-aandacht-rij{flex-wrap:wrap}
@@ -689,10 +730,19 @@
     toonIn(); document.body.append(modal);
   }
 
+  const dagTekst = d => Number(d.slice(8, 10)) + ' ' + MND_K[Number(d.slice(5, 7)) - 1] + ' ' + d.slice(0, 4);
+  function sorteerKnop(sleutel, label) {
+    const staat = F.sortStaat(st.sort, sleutel), actief = staat !== 'none';
+    return h('button', { type: 'button', class: 'mtf-sortknop' + (actief ? ' actief' + (st.sort ? '' : ' standaard') : ''), 'aria-label': 'Sorteer op ' + label.toLowerCase() + (actief ? (staat === 'ascending' ? ', nu oplopend' : ', nu aflopend') : ''), title: 'Klik: oplopend, nog een klik: aflopend, daarna de standaard', data: { sorteer: sleutel } },
+      label, actief ? h('span', { class: 'mtf-sortpijl ' + (staat === 'ascending' ? 'op' : 'af') }, ico('chevron') || (staat === 'ascending' ? '▲' : '▼')) : null);
+  }
+  const SORT_OPTIES = [['standaard', 'Standaard: offertedatum, nieuwste eerst'], ['offerte:op', 'Offerte A-Z'], ['offerte:af', 'Offerte Z-A'], ['datum:af', 'Datum offerte, nieuwste eerst'], ['datum:op', 'Datum offerte, oudste eerst'],
+    ['bedrag:af', 'Bedrag, hoogste eerst'], ['bedrag:op', 'Bedrag, laagste eerst'], ['gefactureerd:af', 'Gefactureerd, hoogste eerst'], ['gefactureerd:op', 'Gefactureerd, laagste eerst'],
+    ['nog:af', 'Nog te plannen, hoogste eerst'], ['nog:op', 'Nog te plannen, laagste eerst'], ['status:op', 'Status: geaccepteerd eerst'], ['status:af', 'Status: concept eerst']];
   function rijEl(r, nu, kols, edit) {
     const mag = st.mag, uit = st.verouderd, blok = r.afwijkt || !!r.uitbeeld, tr = h('tr', { class: 'mtf-rij' + (r.aan ? '' : ' uit'), data: { sl: r.sleutel } });
     const nietAcc = !!(r.status && r.status !== 'geaccepteerd');
-    const meta = h('span', { class: 'mtf-meta' }, r.offertenr ? 'offerte ' + r.offertenr : null, r.extra ? 'geen openstaande offerte' : null, statusPil(r.status), r.uitbeeld ? uitbeeldPil(r) : null,
+    const meta = h('span', { class: 'mtf-meta' }, r.offertenr ? 'offerte ' + r.offertenr : null, r.datum ? h('span', { title: 'Offertedatum' }, dagTekst(r.datum)) : null, r.extra ? 'geen openstaande offerte' : null, statusPil(r.status), r.uitbeeld ? uitbeeldPil(r) : null,
       r.uitbeeld && mag && !uit ? h('button', { type: 'button', class: 'ui-knop mtf-sm', data: { terug: r.sleutel }, title: 'Zet de offerte terug in de lijst; ‘Gaat zeker door’ blijft uit' }, 'Terugzetten') : null,
       r.afwijkt ? vlag('Bedrag wijkt af', 'In Moneybird staat ' + F.fmt(r.mbTotaalC) + ', de prognose rekent met ' + F.fmt(r.totaalC) + '. Zie Aandacht.') : null,
       r.dubbelen.length ? vlag('Dubbel', 'Nog een prognose-item voor deze offerte. Zie Aandacht.') : null,
@@ -829,6 +879,7 @@
     const vast = st.weergave === 'vast';
     const vandaag = st.data.vandaag, nu = vandaag.slice(0, 7), zv = F.zichtbaar(st.rijen, [...st.filter]), rijen = st.rijen, edit = st.sel.eenheid === 'maand';
     const lijst = F.eenheden(nu, st.sel.eenheid), kols = F.kolommen(lijst, st.sel);
+    if (st.sort && /^kol:/.test(st.sort.sleutel) && !kols.some(k => st.sort.sleutel === 'kol:' + k.van + ':' + k.tot)) { st.sort = null; ls.set('mtg:fc:sort:' + st.wie, ''); }   // die kolom staat niet meer in beeld: terug naar de standaard
     st.heeftEerder = rijen.some(r => r.aan && r.eerderC);
     const G = root.MTGeld, groep = G && G.groep ? G.groep(st.data) : null;
     const tot = F.totalen({ rijen, events: st.data.events, vandaag, maanden: F.HORIZON + 1, uitgesloten: zv.uitgesloten, openAan: st.openAan, kostenAan: st.kostenAan, overigAan: st.overigAan, effect: G && G.effect && groep ? (e => c(G.effect(e, 'lopend', groep))) : null });
@@ -842,9 +893,9 @@
       h('div', { class: 'mtf-kern' }, fact('Te factureren', som(g.gepland), null, 'Wat je in deze periode factureert, van de offertes die zeker doorgaan'), fact('Binnen', som(g.binnen), null, 'Verwachte betalingen van die facturen in deze periode'),
         fact('Nog niet gepland', nogTot, null, 'Deel van de offertes dat zeker doorgaat en nog in geen enkele maand staat'),
         fact('Verwacht netto', netto, netto < 0 ? 'mtf-n' : netto > 0 ? 'mtf-p' : '', 'Binnen min de aangevinkte kosten, in deze periode', 'netto')));
-    const kop = h('tr', null, h('th', { class: 's', title: 'Vink aan als deze offerte zeker doorgaat; telt dan mee hier en in Financiën' }, h('span', { class: 'mtf-pijlen' }, h('button', { type: 'button', class: 'mtf-pijl', 'aria-label': 'Kolommen naar links (Shift: een pagina)', title: 'Een kolom naar links; met Shift een pagina', data: { scroll: '-1' } }, '‹'), h('button', { type: 'button', class: 'mtf-pijl', 'aria-label': 'Kolommen naar rechts (Shift: een pagina)', title: 'Een kolom naar rechts; met Shift een pagina', data: { scroll: '1' } }, '›')), h('span', { class: 'mtf-zk' }, 'Gaat zeker door'), 'Offerte'), h('th', { class: 'num' }, 'Bedrag'), h('th', { class: 'num kol-gef' }, 'Gefactureerd'), h('th', { class: 'num kol-nog' }, 'Nog te plannen'),
+    const kop = h('tr', null, h('th', { class: 's', 'aria-sort': ['offerte', 'datum', 'status'].map(k => F.sortStaat(st.sort, k)).find(x => x !== 'none') || 'none', title: 'Vink aan als deze offerte zeker doorgaat; telt dan mee hier en in Financiën' }, h('span', { class: 'mtf-pijlen' }, h('button', { type: 'button', class: 'mtf-pijl', 'aria-label': 'Kolommen naar links (Shift: een pagina)', title: 'Een kolom naar links; met Shift een pagina', data: { scroll: '-1' } }, '‹'), h('button', { type: 'button', class: 'mtf-pijl', 'aria-label': 'Kolommen naar rechts (Shift: een pagina)', title: 'Een kolom naar rechts; met Shift een pagina', data: { scroll: '1' } }, '›')), h('span', { class: 'mtf-zk' }, 'Gaat zeker door'), h('span', { class: 'mtf-sortrij' }, sorteerKnop('offerte', 'Offerte'), sorteerKnop('datum', 'Datum'), sorteerKnop('status', 'Status'))), h('th', { class: 'num', 'aria-sort': F.sortStaat(st.sort, 'bedrag') }, sorteerKnop('bedrag', 'Bedrag')), h('th', { class: 'num kol-gef', 'aria-sort': F.sortStaat(st.sort, 'gefactureerd') }, sorteerKnop('gefactureerd', 'Gefactureerd')), h('th', { class: 'num kol-nog', 'aria-sort': F.sortStaat(st.sort, 'nog') }, sorteerKnop('nog', 'Nog te plannen')),
       st.heeftEerder ? h('th', { class: 'num', title: 'Factuurdatum voorbij, nog niet gefactureerd' }, 'Eerder') : null,
-      kols.map((k, ki) => h('th', { class: 'num mnd' + (k.van === 0 ? ' nu' : ''), title: edit ? null : k.maanden[0] + ' t/m ' + k.maanden[k.maanden.length - 1] }, edit ? k.label : h('button', { type: 'button', class: 'mtf-agg mtf-kopknop', data: { spring: String(ki) }, title: 'Per maand bekijken en bewerken' }, k.label))),
+      kols.map((k, ki) => h('th', { class: 'num mnd' + (k.van === 0 ? ' nu' : ''), 'aria-sort': F.sortStaat(st.sort, 'kol:' + k.van + ':' + k.tot), title: edit ? null : k.maanden[0] + ' t/m ' + k.maanden[k.maanden.length - 1] }, edit ? sorteerKnop('kol:' + k.van + ':' + k.tot, k.label) : [h('button', { type: 'button', class: 'mtf-agg mtf-kopknop', data: { spring: String(ki) }, title: 'Per maand bekijken en bewerken' }, k.label), sorteerKnop('kol:' + k.van + ':' + k.tot, '↕')])),
       st.heeftLater ? h('th', { class: 'num', title: 'Alles na de gekozen periode' }, 'Later') : null);
     const foot = [];
     const regel = (label, cellen, eerder, later, klasse, extra) => h('tr', { class: klasse || '' }, h('th', { class: 's' }, extra || label), h('td'), h('td', { class: 'kol-gef' }), h('td', { class: 'kol-nog' }), st.heeftEerder ? (eerder != null ? getalTd(eerder) : h('td')) : null, cellen, st.heeftLater ? (later != null ? getalTd(later) : h('td')) : null);
@@ -854,7 +905,7 @@
     foot.push(regel('', g.kosten.map(v => getalTd(v, 'mnd')), null, g.later.kosten, '', h('label', { title: 'Inkoopfacturen en vaste patronen uit Financiën' }, h('input', { type: 'checkbox', checked: st.kostenAan, data: { kosten: '1' } }), 'Lopende kosten')));
     foot.push(regel('', g.overig.map(v => getalTd(v, 'mnd')), null, g.later.overig, '', h('label', { title: 'Btw-aangifte, weekinleg en handmatige posten uit Financiën' }, h('input', { type: 'checkbox', checked: st.overigAan, data: { overig: '1' } }), 'Overige voorspelling')));
     foot.push(regel('Netto', g.netto.map(v => getalTd(v, 'mnd')), null, g.later.netto, 'netto', h('span', { title: 'Binnen, min de aangevinkte kosten' }, 'Netto per ' + eenheidWoord)));
-    const tab = h('table', { class: 'mtf-tabel' + (vast ? ' vast' : '') }, h('thead', null, kop), h('tbody', null, zv.zichtbaar.map(r => rijEl(r, nu, kols, edit))), h('tfoot', null, foot));
+    const tab = h('table', { class: 'mtf-tabel' + (vast ? ' vast' : '') }, h('thead', null, kop), h('tbody', null, F.sorteerRijen(zv.zichtbaar, st.sort).map(r => rijEl(r, nu, kols, edit))), h('tfoot', null, foot));
     if (vast) { const hs = [28, 28, 28, 28, 28, 34]; foot.forEach((tr, i) => { const b = hs.slice(i + 1).reduce((a, x) => a + x, 0); [...tr.children].forEach(cel => { cel.style.bottom = b + 'px'; }); }); }   // totalen blijven onderaan in beeld
     const nKeuze = st.keuze ? st.keuze.size : 0, magSel = st.mag && !st.verouderd;
     const kopActies = st.keuze ? h('div', { class: 'mtf-bulk' }, h('span', null, nKeuze + ' geselecteerd'), h('button', { type: 'button', class: 'mtf-schema', data: { kiesalle: '1' } }, 'Alles'),
@@ -862,7 +913,7 @@
         h('button', { type: 'button', class: 'ui-knop ui-knop--primair mtf-sm', disabled: nKeuze === 0, data: { bulk: '1' } }, `Uit beeld zetten (${nKeuze})`), h('button', { type: 'button', class: 'ui-knop mtf-sm', data: { keuzeuit: '1' } }, 'Annuleren'))
       : (magSel && st.ubBeschikbaar ? h('button', { type: 'button', class: 'ui-knop mtf-sm', title: 'Meerdere offertes tegelijk uit beeld zetten', data: { selecteren: '1' } }, 'Selecteren') : null);
     const passendKnop = h('button', { type: 'button', class: 'ui-knop mtf-sm', 'aria-pressed': String(!!st.passend), title: st.passend ? 'Terug naar de normale kolombreedte' : 'Maak de maandkolommen smaller zodat alle gekozen maanden in beeld passen', data: { passend: '1' } }, st.passend ? 'Normale breedte' : 'Passend maken');
-    const kaart = h('section', { class: 'mtf-kaart mtf-tabelkaart', 'aria-label': 'Offertes' }, h('div', { class: 'mtf-kaart-kop' }, h('h2', null, 'Offertes'), h('span', { class: 'mtf-getal' }, String(zv.zichtbaar.length)), passendKnop, kopActies), edit && st.mag ? h('div', { class: 'mtf-hint' }, 'Klik op een maand om een factuurbedrag te plannen') : null, scrollWrap(tab));
+    const kaart = h('section', { class: 'mtf-kaart mtf-tabelkaart', 'aria-label': 'Offertes' }, h('div', { class: 'mtf-kaart-kop' }, h('h2', null, 'Offertes'), h('span', { class: 'mtf-getal' }, String(zv.zichtbaar.length)), h('select', { class: 'mtf-sorteer-select', 'aria-label': 'Sorteer op', data: { sorteerkeuze: '1' } }, SORT_OPTIES.map(([v, l]) => h('option', { value: v, selected: (st.sort ? F.sortTekst(st.sort) : 'standaard') === v }, l))), passendKnop, kopActies), edit && st.mag ? h('div', { class: 'mtf-hint' }, 'Klik op een maand om een factuurbedrag te plannen') : null, scrollWrap(tab));
     return [kern, kaart];
   }
 
@@ -904,7 +955,7 @@
       w.append(h('div', { class: 'mtf-voet' }, 'De totalen tellen alle offertes waar ‘Gaat zeker door’ aan staat, ook als het filter ze verbergt (zoals Financiën).' + (st.sel.eenheid === 'maand' ? '' : ' Kwartaal en jaar zijn sommen: klik op een periode om per maand te bewerken.') + (st.mag ? '' : ' Je mag lezen, niet wijzigen.') + (waarsch ? ' Let op: niet alle bronnen van Financiën zijn volledig geladen; de bedragen kunnen afwijken.' : '')));
     }
     closePop(); closeRijMenu();
-    const oudSc = el.querySelector('.mtf-scroll'), pos = oudSc && !st.scrollNaarBegin ? [oudSc.scrollLeft, oudSc.scrollTop] : null; st.scrollNaarBegin = false;   // na een andere periode naar het begin, anders de plek behouden
+    const oudSc = el.querySelector('.mtf-scroll'), pos = oudSc && !st.scrollNaarBegin ? [oudSc.scrollLeft, st.scrollNaarBoven ? 0 : oudSc.scrollTop] : null; st.scrollNaarBegin = false; st.scrollNaarBoven = false;   // na een andere periode naar het begin, anders de plek behouden
     el.replaceChildren(w); pasHoogte();
     if (st.focusTerug && !st.bezig) { focusSel(st.focusTerug); st.focusTerug = null; }
     if (pos) { const nsc = el.querySelector('.mtf-scroll'); if (nsc) { nsc.scrollLeft = pos[0]; nsc.scrollTop = pos[1]; } if (st.scrollBij) st.scrollBij(); }
@@ -961,7 +1012,7 @@
     st.kostenAan = ls.get('mtg:fc:kosten:' + st.wie) !== '0'; st.overigAan = ls.get('mtg:fc:overig:' + st.wie) !== '0'; st.openAan = ls.get('mtg:fc:open:' + st.wie) !== '0';
     st.sel = F.selStandaard();
     { const f = ls.get('mtg:fc:filter:' + st.wie); st.filter = new Set(f == null ? F.STATUSSEN : f.split(',').filter(x => F.FILTERS.includes(x))); }
-    st.passend = ls.get('mtg:fc:passend:' + st.wie) === '1';
+    st.passend = ls.get('mtg:fc:passend:' + st.wie) === '1'; st.sort = F.sortLees(ls.get('mtg:fc:sort:' + st.wie));
     { const wg = ls.get('mtg:fc:weergave:' + st.wie); st.weergave = wg === 'vast' || wg === 'lang' ? wg : (window.innerWidth <= 700 ? 'lang' : 'vast'); }   // telefoon: lange pagina, een vast vak met eigen scroll werkt daar slecht met touch
     css(); koppel(); teken(); await F.laad();
   };
@@ -1113,7 +1164,9 @@
   function koppel() {
     const el = st.el; if (el._mtfKoppel) return; el._mtfKoppel = true;
     el.addEventListener('change', e => {
-      const t = e.target; if (!st.mag || st.verouderd) return;
+      const t = e.target;
+      if (t.dataset && t.dataset.sorteerkeuze) { st.sort = t.value === 'standaard' ? null : F.sortLees(t.value); ls.set('mtg:fc:sort:' + st.wie, F.sortTekst(st.sort)); st.scrollNaarBoven = true; teken(); return; }
+      if (!st.mag || st.verouderd) return;
       if (t.matches && t.matches('input.mtf-in')) {
         if (st.popBezig) { if (st.pop && st.pop.el) { const b = st.pop.el.querySelector('.mtf-pop-bedrag'); if (b) { b.value = t.value; b.dispatchEvent(new Event('input')); } } return; }   // klik in het paneel: niet opslaan, de waarde gaat mee naar het paneel
         const rj = st.rijen.find(r => r.sleutel === t.dataset.sl); if (rj && rj.uitbeeld) { toast('Deze offerte staat uit beeld: zet hem eerst terug.'); teken(); return; }
@@ -1143,7 +1196,8 @@
       const inv = e.target.closest && e.target.closest('input.mtf-in'); if (inv && st.mag && !st.verouderd) { if (!st.pop || st.pop.sl !== inv.dataset.sl || st.pop.ym !== inv.dataset.ym) openPop(inv); return; }
       const k = e.target.closest && e.target.closest('button'); if (!k) return;
       const d = k.dataset;
-      if (d.ubopnieuw && st.mag && !st.verouderd) ubOpnieuw();
+      if (d.sorteer) { st.sort = F.volgendeSortering(st.sort, d.sorteer); ls.set('mtg:fc:sort:' + st.wie, F.sortTekst(st.sort)); st.scrollNaarBoven = true; teken(); }
+      else if (d.ubopnieuw && st.mag && !st.verouderd) ubOpnieuw();
       else if (d.ubsluit) { st.uitbeeldMelding = null; teken(); }
       else if (d.scroll) { const sc = st.el.querySelector('.mtf-scroll'); if (sc) { const kol = sc.querySelector('thead th.mnd'), vastB = (sc.querySelector('thead th.s') || {}).offsetWidth || 0, stap = e.shiftKey ? Math.max(120, sc.clientWidth - vastB - 40) : (kol ? kol.offsetWidth : 110); sc.scrollBy({ left: Number(d.scroll) * stap, behavior: 'smooth' }); } }
       else if (d.passend) { st.passend = !st.passend; ls.set('mtg:fc:passend:' + st.wie, st.passend ? '1' : '0'); teken(); }
