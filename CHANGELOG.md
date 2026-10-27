@@ -5,8 +5,38 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-27 — Release v2.25.0: nieuw tabblad Forecast — facturatie per maand plannen
+- Commit: `b7fb604` | Auteur: Bart Witte
+
+## 2026-10-27 — Forecast: ontwerpfeedback Codex (klikbaarheid, mobiel, kerncijfers, statusrij, tijdbalk, popover)
+- Commit: `a14b284` | Auteur: Bart Witte
+
+## 2026-10-27 — Forecast: rustpas (kaarten, kerncijfers, Aandacht-kaart, stille tabel)
+- Commit: `6e4ae1d` | Auteur: Bart Witte
+
 ## 2026-10-27 — Backup = v2.24.1
 - Commit: `1546518` | Auteur: Bart Witte
+
+## 2026-10-27 — Forecast: Codex ronde 2 (dubbelencontrole op alle keys, afwijkend totaal, netto gelijk aan Financien)
+- Commit: `f1e491a` | Auteur: Bart Witte
+
+## 2026-10-27 — Forecast: polijst (rustiger rijen, popover met sluitkruisje)
+- Commit: `8630114` | Auteur: Bart Witte
+
+## 2026-10-27 — Forecast: Gaat zeker door, statusfilter, popover met bedrag/percentage/label, factuurschema's per klant
+- Commit: `2bca04e` | Auteur: Bart Witte
+
+## 2026-10-27 — Forecast: periodekeuze Maand | Kwartaal | Jaar met klikbare tijdbalk
+- Commit: `73aca8c` | Auteur: Bart Witte
+
+## 2026-10-27 — Forecast: review-fixes (dubbele offertes, afwijkend totaal, creditnota's, paginering, verouderde gegevens)
+- Commit: `2fb8552` | Auteur: Bart Witte
+
+## 2026-10-27 — Forecast: regel Openstaande facturen onder Binnen, vinkjes in huisstijlgroen
+- Commit: `1c37e09` | Auteur: Bart Witte
+
+## 2026-10-27 — Forecast: nieuw tabblad voor facturatieplanning per maand (v2.25.0)
+- Commit: `5abf150` | Auteur: Bart Witte
 
 ## 2026-10-24 — Release v2.24.1: nieuw logo gelijk aan de website (lijn-beeldmerk pen-en-gat + woordmerk in Jost) in tool, mobiel, uren, tv en Outlook-paneel; nieuwe favicons en app-iconen (bosgroen/linnen); backup = v2.24.0
 - Commit: `62c2b13` | Auteur: Bart Witte

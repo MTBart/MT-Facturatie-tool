@@ -18,6 +18,7 @@
   var DEF = {
     attentie: { l: 'Vandaag', i: 'vandaag', o: 10 },
     geld: { l: 'Financiën', i: 'dash', o: 20 },
+    forecast: { l: 'Forecast', i: 'forecast', o: 25 },
     inbox: { l: 'Inbox', i: 'inbox', o: 30 },
     projecten: { l: 'Projecten', i: 'projecten', o: 40 },
     agenda: { l: 'Planning', i: 'planning', o: 50 },

@@ -21,7 +21,7 @@
 </script>
 <meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BACKUP v2.24.1 — M&T Bedrijfstool v2 bèta</title>
+<title>BACKUP v2.25.0 — M&T Bedrijfstool v2 bèta</title>
 <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <!-- msal-browser lokaal gevendord (was jsdelivr @2 = 2.39.0, laatste v2-release).
@@ -89,6 +89,7 @@
 <script src="mt-iconen.js?v=2026-10-24z" defer></script>
 <script src="mt-zijbalk.js?v=2026-10-24z" defer></script>
 <script src="mt-geld.js?v=2026-10-23a"></script>
+<script src="mt-forecast.js?v=2026-10-27a"></script>
 <script src="mt-koers.js?v=2026-10-23a"></script>
 <script src="mt-schulden.js?v=2026-10-12a"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
@@ -901,7 +902,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <link rel="stylesheet" href="mt-telefoon.css?v=2026-10-23z">
 </head>
 <body>
-<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.24.1, 2026-10-27). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
+<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.25.0, 2026-10-27). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
 
 <!-- ═══ LOGIN SCHERM ═══ -->
 <div id="login-screen">
@@ -922,7 +923,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1 class="mt-merkrij"><svg class="mt-merk" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><rect x="2" y="2" width="96" height="96"/><path d="M55.4 2 V31.3 H34.2 V67.3 H55.4 V98"/></svg><b class="mt-woord">mortise <em>&amp;</em> tenon</b></h1>
-    <span class="header-version">v2.24.1</span>
+    <span class="header-version">v2.25.0</span>
     <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
@@ -950,6 +951,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 
 <div class="tabs-wrap">
   <button class="tab-btn" id="tab-btn-geld" style="display:none" onclick="showTab('geld',this)">Financiën</button>
+  <button class="tab-btn" id="tab-btn-forecast" style="display:none" onclick="showTab('forecast',this)">Forecast</button>
   <button class="tab-btn active" id="tab-btn-dashboard-oud" style="display:none" data-recht="moneybird" onclick="showTab('dashboard',this)">Oud dashboard</button>
   <button class="tab-btn" id="tab-btn-rapporten" style="display:none" onclick="showTab('rapporten',this)">Rapporten<span id="rapport-badge" hidden style="margin-left:6px;background:#B4412F;color:#fff;border-radius:10px;padding:0 7px;font-size:11px;font-weight:600"></span></button>
   <button class="tab-btn" data-recht="inbox" onclick="showTab('inbox',this)">Inbox</button>
@@ -1159,6 +1161,8 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 
   <!-- ═══ TAB: GELD (geldtijdlijn, mt-geld.js) ═══ -->
   <div id="tab-geld" class="tab-content"><div id="geld-root"></div></div>
+  <!-- ═══ TAB: FORECAST (facturatieplanning per maand, mt-forecast.js) ═══ -->
+  <div id="tab-forecast" class="tab-content"><div id="forecast-root"></div></div>
   <!-- ═══ TAB: RAPPORTEN (CEO-avond, mt-rapport.js) ═══ -->
   <div id="tab-rapporten" class="tab-content"><div id="rapport-root"></div></div>
 
@@ -3510,6 +3514,7 @@ function showTab(name,btn){
   if(name==='admin'){ adminOpen(); admSub(sub); }
   if(name==='verbeterpunten') verbLaadTab();
   if(name==='geld') geldOpen();
+  if(name==='forecast') forecastOpen();
   if(name==='rapporten') rapportOpen();
   // Houd de URL-hash gelijk aan de actieve tab (tabwissel = replaceState) → deep-link + "apart venster".
   // Toont Projecten een project, dan is dát de route (#projecten/<CODE>).
@@ -16829,6 +16834,7 @@ async function capHerstel(w,opt){
 //   Larry leest die bestanden via Graph voor het verbeterplan.
 // ═══════════════════════════════════════════════════════════════════════════
 const TAB_HELP={
+  forecast:{naam:'Forecast',uitleg:'De facturatieplanning per maand. Links de goedgekeurde offertes uit Moneybird met hun bedrag (incl. btw), kolommen zijn de komende maanden. Typ in een maand wat je dan wilt factureren, in zijn geheel of in delen; "rest hier" zet het nog niet geplande deel in die maand. Onderaan zie je per maand wat er gefactureerd wordt, wat er binnenkomt (factuurdatum plus betaaltermijn en betaalgedrag van de klant) en het netto, met of zonder lopende kosten en overige voorspelling. De planning is dezelfde als de prognose in Financiën, dus de kaslijn rekent meteen mee. Er gaat nooit iets naar Moneybird.'},
   dashboard:{naam:'Dashboard',uitleg:'Het overzicht: omzet dit jaar, openstaande debiteuren en crediteuren en netto resultaat — live uit Moneybird. Daaronder de ouderdom van openstaande posten, de top-leveranciers qua uitgaven en de "nog te doen"-lijst. Alles is klikbaar waar een cijfer dieper gaat.'},
   inbox:{naam:'Inbox',uitleg:'De smart-inbox van info@. Mappenboom, zoeken over de hele postbus en — met de schakelaar "💬 Gesprekken" — mailwisselingen gebundeld als één thread (zoals Outlook). Mails lezen, aan een project of klant koppelen, factuur-bijlagen direct laten analyseren (✨) en per mail met Larry chatten. Verplaatsingen die je hier doet leren het sorteersysteem bij.'},
   projecten:{naam:'Projecten',uitleg:'Alle lopende projecten met hun projectcode (KLANT-LOCATIE-PRODUCT). Via "+ Nieuw project" opent de projectaanmaker: die stelt de code voor en maakt de SharePoint-mappenstructuur aan. De code is de sleutel die overal terugkomt: stickers, uren, mail, Moneybird.'},
@@ -17159,11 +17165,12 @@ function geldTabZet(){
   const ja=geldNieuw()&&MTRol.magGeld();
   b.style.display=ja?'':'none';
   const t=document.getElementById('tab-geld'); if(t&&t.classList.contains('active')&&ja) geldOpen();
+  forecastTabZet(ja);
   rapportTabZet(ja);
   // Geld/Rapporten net verborgen terwijl je erop stond (bv. recht ingetrokken): naar de eerste vrije tab. Andere verborgen tabs
   // (het oude dashboard bij het opstarten) laat geldTabZet aan de startpagina en de terugval in rolToepassen.
   const act=document.querySelector('.tabs-wrap .tab-btn.active');
-  if(window.MTRol&&MTRol.me&&act&&(act.id==='tab-btn-geld'||act.id==='tab-btn-rapporten')&&act.style.display==='none'&&typeof _eersteVrijeTab==='function') _eersteVrijeTab();
+  if(window.MTRol&&MTRol.me&&act&&(act.id==='tab-btn-geld'||act.id==='tab-btn-forecast'||act.id==='tab-btn-rapporten')&&act.style.display==='none'&&typeof _eersteVrijeTab==='function') _eersteVrijeTab();
 }
 // ── Rapporten (CEO-avond): zelfde recht als Geld; de eigenaar vinkt acties af, de administratie leest en stelt vragen ──
 function rapportBadge(n){
@@ -17200,6 +17207,29 @@ function geldOpen(){
   el.dataset.gestart='1';
   Promise.resolve(MTGeld.start(el,{bron:{haal:geldHaal},magWijzigen:MTRol.magGeld('wijzigen'),wie:(typeof mtMijEmail==='function'&&mtMijEmail())||'',
     projecten:geldProjecten,offerteBedrag:geldOfferteBedrag})).then(()=>{ if(geldOpen._na){ const f=geldOpen._na; geldOpen._na=null; f(); } });
+}
+// ── Forecast (facturatieplanning per maand): zelfde recht als Financiën, zelfde opslag (de prognose-termijnen) ──
+function forecastTabZet(ja){
+  const b=document.getElementById('tab-btn-forecast'); if(!b) return;
+  b.style.display=ja&&window.MTForecast?'':'none';
+  const t=document.getElementById('tab-forecast'); if(t&&t.classList.contains('active')&&ja) forecastOpen();
+}
+function forecastOpen(){
+  const el=document.getElementById('forecast-root'); if(!el||!window.MTForecast) return;
+  if(!window.MTRol||!MTRol.me){ if(!forecastOpen._wacht){ forecastOpen._wacht=true; window.addEventListener('mt-rol',()=>{ forecastOpen._wacht=false; geldTabZet(); },{once:true}); } el.textContent='Laden…'; return; }
+  if(!geldNieuw()||!MTRol.magGeld()){ el.textContent='Forecast is alleen voor eigenaren en de administratie.'; return; }
+  if(el.dataset.gestart){ MTForecast.laad(); return; }
+  el.dataset.gestart='1';
+  MTForecast.start(el,{bron:{haal:geldHaal},magWijzigen:MTRol.magGeld('wijzigen'),wie:(typeof mtMijEmail==='function'&&mtMijEmail())||'',projecten:geldProjecten,schatten:forecastSchatten});
+}
+// Offertes uit Moneybird met de drie statussen (geaccepteerd, openstaand = open|late, concept), alleen lezen; per status gepagineerd
+// tot een lege of korte pagina (plafond 50 pagina's; daarna meldt de Forecast "lijst afgekapt").
+function forecastSchatten(){
+  return MTForecast.haalOffertes(async (filter,p)=>{
+    const r=await mbGet(`${getAdmin()}/estimates?filter=state:${filter}&per_page=100&page=${p}`);
+    if(!r.ok) throw new Error('Moneybird: offertes niet te lezen (HTTP '+r.status+')');
+    return r.json();
+  },{max:50,per:100});
 }
 // Projecten voor de prognose (geen interne): naam, klant (Moneybird-contact), offerte en planning (start/oplevering).
 function geldProjecten(){
