@@ -68,5 +68,31 @@ const { pathToFileURL } = require('url');
     await roep(env, 'eigenaar', '/geld/prognose', 'POST', { sleutel: 'p:abc', item: item('300000000001'), vorige_ts: null });
     const r = await roep(env, 'eigenaar', '/geld/prognose', 'POST', { sleutel: 'p:abc', item: item('300000000001'), vorige_ts: 5 }); assert.strictEqual(r.status, 409); assert.match(r.body.error, /intussen aangepast/);
   });
-  console.log(`\n${n} worker-tests geslaagd${process.exitCode ? ' — er zijn fouten' : ''}`);
+  await test('termijnlabel komt ongewijzigd terug uit de worker (label-roundtrip, max 24 tekens)', async () => {
+    const env = { MT_ROLLEN: kv() };
+    const r = await roep(env, 'eigenaar', '/geld/prognose', 'POST', { sleutel: 'p:lab', item: item('300000000031', { totaal: 3000, termijnen: [{ id: 't1', label: 'aanbetaling', bedrag: 1000, factuurdatum: plus(20), aan: true }, { id: 't2', label: 'tussentijds termijn die veel te lang is', bedrag: 2000, factuurdatum: plus(40), aan: false }] }), vorige_ts: null });
+    assert.strictEqual(r.status, 200, JSON.stringify(r.body)); assert.deepStrictEqual(r.body.item.termijnen.map(t => t.label), ['aanbetaling', 'tussentijds termijn die ']);
+    const lijst = await roep(env, 'eigenaar', '/geld/prognose', 'GET'); assert.strictEqual(lijst.body.items['p:lab'].termijnen[0].label, 'aanbetaling');
+  });
+  const schema = (x) => ({ '700000000001': x || [{ label: 'aanbetaling', pct: 50 }, { label: 'oplevering', pct: 50 }] });
+  await test('factuurschema\u2019s per klant: opslaan in de geld-config, teruglezen, ook door een lezer', async () => {
+    const env = { MT_ROLLEN: kv() };
+    const c0 = await roep(env, 'eigenaar', '/geld/config', 'GET'); assert.strictEqual(c0.status, 200); assert.deepStrictEqual(c0.body.config.factuurschemas, {});
+    const w = await roep(env, 'eigenaar', '/geld/config', 'POST', { factuurschemas: schema(), revisie: c0.body.config.revisie }); assert.strictEqual(w.status, 200, JSON.stringify(w.body));
+    assert.deepStrictEqual(w.body.config.factuurschemas, schema());
+    const les = await roep(env, 'administratie', '/geld/config', 'GET'); assert.deepStrictEqual(les.body.config.factuurschemas, schema());
+    const nogmaals = await roep(env, 'eigenaar', '/geld/config', 'POST', { factuurschemas: schema([{ label: 'factuur', pct: 100 }]), revisie: w.body.config.revisie }); assert.strictEqual(nogmaals.status, 200);
+    const leeg = await roep(env, 'eigenaar', '/geld/config', 'POST', { factuurschemas: null, revisie: nogmaals.body.config.revisie }); assert.deepStrictEqual(leeg.body.config.factuurschemas, {});
+  });
+  await test('factuurschema\u2019s: ongeldig wordt geweigerd (som, label, aantal, contact-id), oude revisie 409, lezer 403', async () => {
+    const env = { MT_ROLLEN: kv() }; const rev = (await roep(env, 'eigenaar', '/geld/config', 'GET')).body.config.revisie;
+    const slecht = [schema([{ label: 'a', pct: 40 }, { label: 'b', pct: 40 }]), schema([{ label: '', pct: 100 }]), schema([{ label: 'a', pct: 0 }, { label: 'b', pct: 100 }]), { 'abc': [{ label: 'a', pct: 100 }] },
+      schema(Array.from({ length: 7 }, (_, i) => ({ label: 'd' + i, pct: i < 6 ? 14 : 16 }))), schema([]), { '700000000001': 'x' }];
+    for (const s of slecht) { const r = await roep(env, 'eigenaar', '/geld/config', 'POST', { factuurschemas: s, revisie: rev }); assert.strictEqual(r.status, 400, JSON.stringify(s)); }
+    assert.strictEqual((await roep(env, 'eigenaar', '/geld/config', 'POST', { factuurschemas: [], revisie: rev })).status, 400);
+    assert.strictEqual((await roep(env, 'eigenaar', '/geld/config', 'POST', { factuurschemas: schema(), revisie: rev + 5 })).status, 409);
+    assert.strictEqual((await roep(env, 'administratie', '/geld/config', 'POST', { factuurschemas: schema(), revisie: rev })).status, 403);
+    assert.deepStrictEqual((await roep(env, 'eigenaar', '/geld/config', 'GET')).body.config.factuurschemas, {});
+    const afronding = await roep(env, 'eigenaar', '/geld/config', 'POST', { factuurschemas: schema([{ label: 'a', pct: 33.33 }, { label: 'b', pct: 33.33 }, { label: 'c', pct: 33.34 }]), revisie: rev }); assert.strictEqual(afronding.status, 200);
+  });  console.log(`\n${n} worker-tests geslaagd${process.exitCode ? ' — er zijn fouten' : ''}`);
 })();

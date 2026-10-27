@@ -27,7 +27,7 @@ test('fmt: hele euro zonder, anders met centen; negatief met minteken', () => {
 });
 test('schatNorm: bedrag incl. btw in centen, naam uit contact', () => {
   const s = F.schatNorm({ id: 444888999777, estimate_id: '2026-0123', contact_id: 888999, reference: 'Keuken', total_price_incl_tax_base: '12100.00', contact: { company_name: 'Voorbeeld BV' } });
-  assert.deepStrictEqual(s, { id: '444888999777', nummer: '2026-0123', naam: 'Voorbeeld BV', ref: 'Keuken', contact_id: '888999', totaalC: 1210000 });
+  assert.deepStrictEqual(s, { id: '444888999777', nummer: '2026-0123', naam: 'Voorbeeld BV', ref: 'Keuken', contact_id: '888999', totaalC: 1210000, status: 'geaccepteerd' });
   assert.strictEqual(F.schatNorm({ id: 1, total_price_incl_tax: '0' }), null); assert.strictEqual(F.schatNorm(null), null);
 });
 
@@ -310,6 +310,112 @@ test('groeperen per kwartaal en jaar: centen exact, grenzen, jaarwisseling; alle
   assert.strictEqual(F.rijLater(rij, F.kolommen(L, { i0: 0, i1: 1 })), 11 + maanden.slice(5).reduce((a, m) => a + m.vrijC + m.vastOpenC, 0));
 });
 
+// ── percentages, schema's, statusfilter, labels ──
+const E2 = '300000000021';
+const leegItem = (o) => F.nieuwItem(Object.assign({ naam: 'Schema BV — kast', estimateId: E2, contactId: '700000000001', totaalC: 1000000, status: 'geaccepteerd' }, o || {}), 14, V);   // 10.000,00
+test('percentage naar centen: afronden op hele centen; laatste cent naar het restdeel', () => {
+  assert.strictEqual(F.pctNaarCenten(1000000, 40), 400000); assert.strictEqual(F.pctNaarCenten(10001, 50), 5001); assert.strictEqual(F.pctNaarCenten(10001, 33.33), 3333); assert.strictEqual(F.pctNaarCenten(0, 50), 0); assert.strictEqual(F.pctNaarCenten(10000, 0.01), 1);
+  assert.strictEqual(F.parsePct('33,33'), 33.33); assert.strictEqual(F.parsePct('50%'), 50); assert.strictEqual(F.parsePct(' 12 '), 12); assert.strictEqual(F.parsePct(''), 0); assert.strictEqual(F.parsePct('101'), null); assert.strictEqual(F.parsePct('1,234'), null); assert.strictEqual(F.parsePct('-5'), null);
+  assert.strictEqual(F.centenNaarPct(1000000, 400000), 40); assert.strictEqual(F.centenNaarPct(30000, 10000), 33.33);
+  // percentage in een cel van een offerte van 100,01: het restdeel krijgt de cent die overblijft, de som blijft exact
+  const it = F.nieuwItem({ naam: 'x', totaalC: 10001 }, 14, V), r = F.zetCel(it, null, '2026-11', F.pctNaarCenten(10001, 50), V).item;
+  assert.deepStrictEqual(r.termijnen.map(t => [t.aan, Math.round(t.bedrag * 100)]), [[true, 5001], [false, 5000]]); assert.strictEqual(somC(r), 10001); valideer('p:x', r, V);
+});
+test('pctVerdeel / verdeelOver: som precies het totaal, de laatste krijgt de rest', () => {
+  assert.deepStrictEqual(F.pctVerdeel(10000, [33.33, 33.33, 33.34]), [3333, 3333, 3334]); assert.deepStrictEqual(F.pctVerdeel(10001, [33.33, 33.33, 33.34]), [3333, 3333, 3335]);
+  assert.deepStrictEqual(F.pctVerdeel(10001, [50, 50]), [5001, 5000]); assert.deepStrictEqual(F.pctVerdeel(10001, [30, 30]), [3000, 3000]);           // som ≠ 100: niets verrekend
+  for (const tot of [1, 2, 3, 99, 10001, 123457, 999999]) for (const p of [[50, 50], [50, 40, 10], [33.33, 33.33, 33.34], [10, 20, 30, 40], [100]]) assert.strictEqual(F.pctVerdeel(tot, p).reduce((a, b) => a + b, 0), tot);
+  assert.deepStrictEqual(F.verdeelOver(6000, [40, 10]), [4800, 1200]); assert.deepStrictEqual(F.verdeelOver(7, [1, 1, 1]), [2, 2, 3]); assert.deepStrictEqual(F.verdeelOver(5, [0, 0]), [0, 0]);
+});
+test('zetCel: label wordt het termijnlabel (en overleeft de worker); lege label behoudt het oude; behoudAan laat het vinkje staan', () => {
+  let it = leegItem({ status: 'concept' }); assert.strictEqual(it.aan, false);                                // niet-geaccepteerd begint op "gaat zeker door" uit
+  assert.strictEqual(leegItem().aan, true); assert.strictEqual(leegItem({ status: 'openstaand' }).aan, false); assert.strictEqual(leegItem({ status: undefined }).aan, true);
+  it = F.zetCel(it, null, '2026-12', 300000, V, { label: '  aanbetaling ', behoudAan: true }).item;
+  assert.strictEqual(it.aan, false); assert.strictEqual(it.termijnen.find(t => t.aan).label, 'aanbetaling');
+  const geld = valideer('p:e' + E2, Object.assign({}, it), V); assert.strictEqual(geld.termijnen.find(t => t.aan).label, 'aanbetaling');   // label-roundtrip via geldPrognoseNorm
+  const nog = F.zetCel(it, null, '2026-12', 350000, V, { label: '', behoudAan: true }).item; assert.strictEqual(nog.termijnen.find(t => t.aan).label, 'aanbetaling');
+  const lang = F.zetCel(it, null, '2027-01', 100000, V, { label: 'een veel te lange labeltekst voor een termijn', behoudAan: true }).item; assert.ok(lang.termijnen.every(t => t.label.length <= 24));
+  valideer('p:e' + E2, lang, V);
+  assert.strictEqual(F.zetCel(it, null, '2026-12', 300000, V).item.aan, true);                                 // zonder behoudAan: plannen zet het vinkje aan (geaccepteerde offerte)
+  assert.strictEqual(F.zetCel(leegItem(), null, '2026-12', 0, V, { behoudAan: true }).item.aan, true);
+});
+test('schema toepassen op een lege offerte: percentages naar centen, laatste deel de rest, maanden volgen de oplevering', () => {
+  const groot = { bron: 'klant', rijen: [{ label: 'aanbetaling', pct: 50 }, { label: 'tussentijds', pct: 40 }, { label: 'oplevering', pct: 10 }] };
+  const a = F.schemaToepassen(leegItem(), null, groot, V, { opleverYm: '2027-03' });                                  // oplevering maart 2027: okt, dec, mrt
+  assert.deepStrictEqual(a.item.termijnen.map(t => [t.label, t.factuurdatum.slice(0, 7), Math.round(t.bedrag * 100), t.aan]), [['aanbetaling', '2026-10', 500000, true], ['tussentijds', '2026-12', 400000, true], ['oplevering', '2027-03', 100000, true]]);
+  assert.strictEqual(somC(a.item), 1000000); valideer('p:e' + E2, a.item, V);
+  const b = F.schemaToepassen(leegItem(), null, groot, V, {});                                                        // geen opleverdatum: de maanden erna
+  assert.deepStrictEqual(b.item.termijnen.map(t => t.factuurdatum.slice(0, 7)), ['2026-10', '2026-11', '2026-12']);
+  const c1 = F.schemaToepassen(leegItem({ totaalC: 10001 }), null, { rijen: [{ label: 'a', pct: 33.33 }, { label: 'b', pct: 33.33 }, { label: 'c', pct: 33.34 }] }, V, {});
+  assert.strictEqual(somC(c1.item), 10001); assert.deepStrictEqual(c1.item.termijnen.map(t => Math.round(t.bedrag * 100)), [3333, 3333, 3335]); assert.ok(c1.item.termijnen.every(t => t.aan));
+  const kort = F.schemaToepassen(leegItem(), null, groot, V, { opleverYm: '2026-11' });                              // oplevering te dichtbij: toch drie verschillende maanden
+  assert.strictEqual(new Set(kort.item.termijnen.map(t => t.factuurdatum.slice(0, 7))).size, 3);
+  const verleden = F.schemaToepassen(leegItem(), null, groot, V, { opleverYm: '2026-05' }); assert.deepStrictEqual(verleden.item.termijnen.map(t => t.factuurdatum.slice(0, 7)), ['2026-10', '2026-11', '2026-12']);
+});
+test('schema toepassen op een deels geplande offerte: alleen het open deel, nooit over geplande of gefactureerde termijnen heen', () => {
+  const groot = { rijen: [{ label: 'aanbetaling', pct: 50 }, { label: 'tussentijds', pct: 40 }, { label: 'oplevering', pct: 10 }] };
+  let it = F.zetCel(leegItem(), null, '2026-11', 400000, V, { label: 'Aanbetaling' }).item;                          // aanbetaling 4.000 staat al in november
+  const r = F.schemaToepassen(it, null, groot, V, { opleverYm: '2027-03' });
+  assert.ok(r.item, r.fout); const per = Object.fromEntries(r.item.termijnen.map(t => [t.label, [t.factuurdatum.slice(0, 7), Math.round(t.bedrag * 100), t.aan]]));
+  assert.deepStrictEqual(per['Aanbetaling'], ['2026-11', 400000, true]);                                               // onaangeroerd
+  assert.deepStrictEqual(per.tussentijds, ['2026-10', 480000, true]); assert.deepStrictEqual(per.oplevering, ['2027-03', 120000, true]);   // 40:10 herverdeeld over de resterende 6.000
+  assert.strictEqual(somC(r.item), 1000000); valideer('p:e' + E2, r.item, V);
+  // een gefactureerde termijn blijft vast en telt niet als open
+  const ov = { termijnen: [{ id: 't1', bedrag: 3000, gefactureerd: 3000, open: 0 }] };
+  const met = { soort: 'project', naam: 'V', estimate_id: E2, totaal: 10000, aan: true, betaaltermijn: 14, k: [], x: [], termijnen: [{ id: 't1', label: 'bevestiging', bedrag: 3000, factuurdatum: '2026-10-05', aan: true }, { id: 't2', label: 'nog niet gepland', bedrag: 7000, factuurdatum: '2026-10-05', aan: false }] };
+  const g = F.schemaToepassen(met, ov, { rijen: [{ label: 'a', pct: 50 }, { label: 'b', pct: 50 }] }, V, {});
+  assert.deepStrictEqual(g.item.termijnen.map(t => [t.id === 't1' ? 'vast' : t.label, Math.round(t.bedrag * 100)]).sort(), [['a', 350000], ['b', 350000], ['vast', 300000]].sort()); assert.strictEqual(g.item.termijnen.find(t => t.id === 't1').bedrag, 3000);
+  assert.strictEqual(somC(g.item), 1000000);
+});
+test('schema toepassen: niets over, alles al gepland, te veel delen en niet-geaccepteerd behoudt het vinkje', () => {
+  const vol = F.zetCel(leegItem(), null, '2026-11', 1000000, V).item;
+  assert.ok(F.schemaToepassen(vol, null, { rijen: [{ label: 'a', pct: 100 }] }, V, {}).fout);
+  const half = F.zetCel(leegItem(), null, '2026-11', 500000, V, { label: 'factuur' }).item;
+  assert.ok(/al gepland/.test(F.schemaToepassen(half, null, { rijen: [{ label: 'Factuur', pct: 100 }] }, V, {}).fout));
+  let zes = leegItem({ totaalC: 600000 }); for (const m of ['2026-11', '2026-12', '2027-01', '2027-02', '2027-03']) zes = F.zetCel(zes, null, m, 10000, V, { label: 'x' + m }).item;
+  assert.ok(/hoogstens 6/.test(F.schemaToepassen(zes, null, { rijen: [{ label: 'a', pct: 50 }, { label: 'b', pct: 50 }] }, V, {}).fout));
+  const concept = F.schemaToepassen(leegItem({ status: 'concept' }), null, { rijen: [{ label: 'a', pct: 50 }, { label: 'b', pct: 50 }] }, V, { behoudAan: true });
+  assert.strictEqual(concept.item.aan, false); assert.strictEqual(F.schemaToepassen(leegItem(), null, { rijen: [{ label: 'a', pct: 100 }] }, V, {}).item.aan, true);
+});
+test('kiesSchema: schema van de klant (contact-id), anders standaard op grootte, anders het voorstel', () => {
+  const eigen = { '700000000001': [{ label: 'aanbetaling', pct: 30 }, { label: 'oplevering', pct: 70 }] };
+  assert.deepStrictEqual(F.kiesSchema('700000000001', 500000, eigen, null), { bron: 'klant', rijen: eigen['700000000001'] });
+  assert.strictEqual(F.kiesSchema('700000000002', 500000, eigen, null).bron, 'standaard');
+  assert.strictEqual(F.kiesSchema('700000000002', 50000, {}, { grens_klein: 1000, grens_groot: 20000 }).maat, 'klein');
+  assert.strictEqual(F.kiesSchema('7', 500000, {}, { grens_klein: 1000, grens_groot: 20000 }).maat, 'middel'); assert.strictEqual(F.kiesSchema('7', 5000000, {}, { grens_klein: 1000, grens_groot: 20000 }).maat, 'groot');
+  assert.deepStrictEqual(F.kiesSchema('7', 500000, {}, { grens_klein: 1000, grens_groot: 20000, middel: [{ label: 'x', pct: 100, dagen: 7 }] }).rijen, [{ label: 'x', pct: 100 }]);   // het standaardschema uit de instellingen gaat voor
+  assert.strictEqual(F.kiesSchema('7', 500000, null, {}).maat, 'middel'); assert.deepStrictEqual(F.kiesSchema('7', 500000, null, null).rijen.map(r => r.pct), [50, 50]);
+  for (const k of ['klein', 'middel', 'groot']) assert.strictEqual(F.SCHEMA_VOORSTEL[k].reduce((a, r) => a + r.pct, 0), 100);
+});
+test('statusfilter: tellen per status, zichtbare rijen en de totalen (alleen zichtbaar én gaat zeker door)', () => {
+  const sch = (id, st) => Object.assign(schat(id, 'N' + id.slice(-2), 1000), { status: st });
+  const lijst = [sch('300000000041', 'geaccepteerd'), sch('300000000042', 'openstaand'), sch('300000000043', 'concept'), sch('300000000044', 'concept')];
+  assert.deepStrictEqual(F.telStatus(lijst), { geaccepteerd: 1, openstaand: 1, concept: 2 }); assert.deepStrictEqual(F.telStatus(null), { geaccepteerd: 0, openstaand: 0, concept: 0 });
+  const mk = (eid, aan) => ({ soort: 'project', naam: 'I' + eid.slice(-2), estimate_id: eid, totaal: 1000, aan, betaaltermijn: 14, k: [], x: [], termijnen: [{ id: 't1', label: 'a', bedrag: 1000, factuurdatum: '2026-11-10', aan: true }] });
+  const items = { 'p:a': mk('300000000041', true), 'p:b': mk('300000000042', true), 'p:c': mk('300000000043', false) };       // concept 44 heeft geen item: "gaat zeker door" uit
+  const rijen = F.bouwRijen({ schatten: lijst, items, posten: [], projecten: [], vandaag: V, maanden: 3 });
+  assert.deepStrictEqual(rijen.map(r => [r.status, r.aan]), [['geaccepteerd', true], ['openstaand', true], ['concept', false], ['concept', false]]);
+  const events = ['a', 'b', 'c'].map(k => ({ id: k, bron: 'prognose', termijn_id: 't1', prognose: 'p:' + k, datum: '2026-12-01', delta: 1000 }));
+  const alles = F.zichtbaar(rijen, F.STATUSSEN); assert.strictEqual(alles.zichtbaar.length, 4); assert.deepStrictEqual(alles.uitgesloten, []);
+  const t1 = F.totalen({ rijen: alles.zichtbaar, events, vandaag: V, maanden: 3, uitgesloten: alles.uitgesloten }); assert.deepStrictEqual(t1.gepland, [0, 200000, 0]); assert.deepStrictEqual(t1.binnen, [0, 0, 300000]);
+  const zonderOpen = F.zichtbaar(rijen, ['geaccepteerd', 'concept']); assert.deepStrictEqual(zonderOpen.zichtbaar.map(r => r.status), ['geaccepteerd', 'concept', 'concept']); assert.deepStrictEqual(zonderOpen.uitgesloten, ['p:b']);
+  const t2 = F.totalen({ rijen: zonderOpen.zichtbaar, events, vandaag: V, maanden: 3, uitgesloten: zonderOpen.uitgesloten }); assert.deepStrictEqual(t2.gepland, [0, 100000, 0]); assert.deepStrictEqual(t2.binnen, [0, 0, 200000]);   // p:c staat uit maar levert een event; 'aan' telt in Financiën
+  const geen = F.zichtbaar(rijen, []); assert.strictEqual(geen.zichtbaar.length, 0);
+  // rijen zonder status (prognose-project zonder offerte) blijven altijd zichtbaar; dubbelen tellen nooit mee
+  const extra = F.bouwRijen({ schatten: [], items: { 'p:z': mk('300000000099', true) }, posten: [], projecten: [], vandaag: V, maanden: 6 }); assert.strictEqual(F.zichtbaar(extra, []).zichtbaar.length, 1);
+});
+test('statusfilter: een niet-geaccepteerde offerte met een prognose die aan staat telt mee zodra "gaat zeker door" aan staat', () => {
+  const s = Object.assign(schat('300000000051', 'Concept BV', 5000), { status: 'concept' });
+  let it = F.zetCel(leegItem({ estimateId: '300000000051', totaalC: 500000, status: 'concept' }), null, '2026-11', 200000, V, { label: 'aanbetaling', behoudAan: true }).item; assert.strictEqual(it.aan, false);
+  const uit = F.totalen({ rijen: F.bouwRijen({ schatten: [s], items: { 'p:q': it }, posten: [], projecten: [], vandaag: V, maanden: 3 }), events: [], vandaag: V, maanden: 3 }); assert.deepStrictEqual(uit.gepland, [0, 0, 0]);
+  it = F.zetAan(it, true).item;
+  const aan = F.totalen({ rijen: F.bouwRijen({ schatten: [s], items: { 'p:q': it }, posten: [], projecten: [], vandaag: V, maanden: 3 }), events: [], vandaag: V, maanden: 3 }); assert.deepStrictEqual(aan.gepland, [0, 200000, 0]);
+});
+test('schatNorm: status uit de Moneybird-state; afgewezen of gefactureerde offertes vallen buiten de drie statussen', () => {
+  const norm = state => F.schatNorm({ id: 1234567, estimate_id: 'x', total_price_incl_tax_base: '100', state }).status;
+  assert.deepStrictEqual(['accepted', 'open', 'late', 'draft', 'rejected', 'billed', 'archived', undefined].map(norm), ['geaccepteerd', 'openstaand', 'openstaand', 'concept', 'overig', 'overig', 'overig', 'geaccepteerd']);
+});
+
 let async_ = Promise.resolve();
 const atest = (naam, fn) => { async_ = async_.then(async () => { try { await fn(); n++; console.log('ok  - ' + naam); } catch (e) { console.log('FOUT - ' + naam + '\n' + (e.stack || e)); process.exitCode = 1; } }); };
 const pagina = (totaal, per) => async p => { const start = (p - 1) * per; return Array.from({ length: Math.max(0, Math.min(per, totaal - start)) }, (_, i) => ({ id: start + i })); };
@@ -325,4 +431,13 @@ atest('pagineer: veiligheidsplafond geraakt = lijst afgekapt, en de fout van een
   const vol = await F.pagineer(pagina(300, 100), { max: 3, per: 100 }); assert.strictEqual(vol.afgekapt, false);   // precies het plafond maar niet meer
   await assert.rejects(F.pagineer(async p => { if (p === 2) throw new Error('HTTP 429'); return pagina(1000, 100)(p); }, { max: 50 }), /429/);
 });
-async_.then(() => console.log(`\n${n} tests geslaagd${process.exitCode ? ' — er zijn fouten' : ''}`));
+atest('haalOffertes: drie statussen apart gepagineerd, samengevoegd zonder dubbelen; afgekapt als één status het plafond raakt', async () => {
+  const gezien = [];
+  const data = { accepted: 250, 'open|late': 40, draft: 3 };
+  const haal = (filter, p) => { gezien.push(filter + '#' + p); const per = 100, totaal = data[filter], start = (p - 1) * per; return Promise.resolve(Array.from({ length: Math.max(0, Math.min(per, totaal - start)) }, (_, i) => ({ id: filter + (start + i), state: filter.split('|')[0] }))); };
+  const r = await F.haalOffertes(haal, { max: 50, per: 100 });
+  assert.strictEqual(r.lijst.length, 293); assert.strictEqual(r.afgekapt, false); assert.strictEqual(new Set(r.lijst.map(e => e.id)).size, 293);
+  assert.deepStrictEqual(gezien.filter(x => x.startsWith('accepted')), ['accepted#1', 'accepted#2', 'accepted#3']); assert.ok(gezien.includes('draft#1') && gezien.includes('open|late#1'));
+  const dubbel = await F.haalOffertes(() => Promise.resolve([{ id: 7 }, { id: 8 }]), { max: 5, per: 100 }); assert.deepStrictEqual(dubbel.lijst.map(e => e.id), [7, 8]);   // dezelfde offerte in meerdere lijsten telt één keer
+  const afgekapt = await F.haalOffertes((f, p) => Promise.resolve(f === 'draft' ? Array.from({ length: 100 }, (_, i) => ({ id: 'd' + p + '_' + i })) : []), { max: 2, per: 100 }); assert.strictEqual(afgekapt.afgekapt, true);
+});async_.then(() => console.log(`\n${n} tests geslaagd${process.exitCode ? ' — er zijn fouten' : ''}`));

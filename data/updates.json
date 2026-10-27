@@ -5,7 +5,9 @@
     "titel": "Forecast: facturatie per maand plannen",
     "voor": "geld",
     "punten": [
-      "Nieuw tabblad Forecast: links de goedgekeurde offertes uit Moneybird, kolommen zijn de komende maanden (6 of 12). Typ in een maand wat je dan wilt factureren, in zijn geheel of in delen, of zet met \"rest hier\" wat nog niet gepland is in die maand.",
+      "Nieuw tabblad Forecast: links de offertes uit Moneybird, kolommen zijn maanden, kwartalen of jaren (kies met de knoppen en de tijdbalk). Typ in een maand wat je dan wilt factureren, in zijn geheel of in delen, of zet met \"rest hier\" wat nog niet gepland is in die maand.",
+      "Klik in een maandcel voor een klein paneel: bedrag of percentage, een label (aanbetaling, oplevering) en opslaan, rest hier of verwijderen. \"Schema toepassen\" vult de vaste verdeling van de klant in; die stel je in bij \"Factuurschema's\".",
+      "Filter op geaccepteerd, openstaand of concept. Een offerte telt alleen mee als \"Gaat zeker door\" aan staat, hetzelfde vinkje als in Financiën.",
       "Onderaan zie je per maand wat er gefactureerd wordt, wat er binnenkomt (factuurdatum plus betaaltermijn en betaalgedrag van de klant) en het netto, met of zonder lopende kosten en overige voorspelling.",
       "De planning is dezelfde als de prognose in Financiën: de kaslijn en de Factuurplanning rekenen meteen mee. Er gaat niets naar Moneybird."
     ]

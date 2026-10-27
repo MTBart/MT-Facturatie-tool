@@ -2248,6 +2248,16 @@ function geldSchuldenNorm(l) {
   const ids = new Set();
   return (Array.isArray(l) ? l : []).filter(x => !geldSchuldFout(x) && !ids.has(x.id) && ids.add(x.id)).slice(0, GELD_SCHULD_MAX).map(geldSchuldNorm);
 }
+// Standaard factuurschema per klant (Moneybird-contact-id): 1 tot 6 delen {label, pct}, samen 100%. Alleen geldige schema's blijven staan.
+function geldFactuurschemasNorm(x) {
+  const uit = {}; if (!x || typeof x !== 'object' || Array.isArray(x)) return uit;
+  for (const k of Object.keys(x).slice(0, 200)) {
+    if (!/^\d{6,25}$/.test(k) || !Array.isArray(x[k]) || x[k].length < 1 || x[k].length > 6) continue;
+    const rijen = x[k].map(r => ({ label: String((r && r.label) || '').trim().slice(0, 24), pct: typeof (r && r.pct) === 'number' && isFinite(r.pct) && r.pct > 0 && r.pct <= 100 ? Math.round(r.pct * 100) / 100 : null }));
+    if (rijen.every(r => r.label && r.pct != null) && Math.abs(rijen.reduce((a, r) => a + r.pct, 0) - 100) < 0.01) uit[k] = rijen;
+  }
+  return uit;
+}
 function geldConfigNorm(c) {
   c = c && typeof c === 'object' ? c : {};
   const getal = (x, min, max) => (typeof x === 'number' && isFinite(x) && x >= min && x <= max) ? x : null;
@@ -2267,7 +2277,7 @@ function geldConfigNorm(c) {
     id: String(g.id), naam: String(g.naam || g.id).slice(0, 60), prefix: String(g.prefix || '').trim().slice(0, 60),
     contact_ids: (Array.isArray(g.contact_ids) ? g.contact_ids : []).map(String).filter(x => /^\d{6,25}$/.test(x)).slice(0, 200) }))
     .filter(g => g.prefix.length >= 3 || g.contact_ids.length);
-  const uit = { kredietlimiet: getal(c.kredietlimiet, 0, 1e9), potten: uniek, klantgroepen: groepen, lopend_streef: geldStreefNorm(c.lopend_streef), prognose_schema: geldSchemaNorm(c.prognose_schema),
+  const uit = { kredietlimiet: getal(c.kredietlimiet, 0, 1e9), potten: uniek, klantgroepen: groepen, lopend_streef: geldStreefNorm(c.lopend_streef), prognose_schema: geldSchemaNorm(c.prognose_schema), factuurschemas: geldFactuurschemasNorm(c.factuurschemas),
     // buffer_lopend (eigen ondergrens) is samengevoegd met de fictieve buffer: een gezet oud veld wordt het eigen bedrag (negatief → 0). Eén release lang schrijven we beide velden
     // (dual-write) zodat een terugdraaiing van de front-end niets verliest: buffer_lopend = de fictieve buffer, of de oude waarde zolang er nog geen fictieve buffer is.
     buffer_lopend: null,   // hieronder gelijkgetrokken met fictieve_buffer (dual-write)
@@ -4232,6 +4242,13 @@ async function handleGeld(p, request, env, ik, json0) {
       const n = geldSchemaNorm(b.prognose_schema);
       if (b.prognose_schema !== null && (!n || ['klein', 'middel', 'groot'].some(k => Array.isArray(b.prognose_schema[k]) && b.prognose_schema[k].length && !n[k].length))) return json({ error: 'standaardschema: per grootte percentages die samen 100 zijn' }, 400);
       nieuw.prognose_schema = b.prognose_schema; gewijzigd.push('prognose_schema');
+    }
+    if ('factuurschemas' in b) {
+      const fs = b.factuurschemas;
+      if (fs !== null && (typeof fs !== 'object' || Array.isArray(fs) || Object.keys(fs).length > 200)) return json({ error: 'factuurschemas: object per klant (contact-id) of null' }, 400);
+      const n = geldFactuurschemasNorm(fs);
+      if (fs !== null && Object.keys(n).length !== Object.keys(fs).length) return json({ error: 'factuurschema: per klant (contact-id, alleen cijfers) 1 tot 6 delen met een label en een percentage, samen precies 100' }, 400);
+      nieuw.factuurschemas = n; gewijzigd.push('factuurschemas');
     }
     if ('reserve' in b) {
       if (b.reserve !== null && !(b.reserve && typeof b.reserve === 'object' && typeof b.reserve.bedrag === 'number' && isFinite(b.reserve.bedrag) && b.reserve.bedrag >= 0)) return json({ error: 'reserve: {bedrag ≥ 0, pot} of null' }, 400);

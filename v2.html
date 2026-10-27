@@ -17220,10 +17220,11 @@ function forecastOpen(){
   el.dataset.gestart='1';
   MTForecast.start(el,{bron:{haal:geldHaal},magWijzigen:MTRol.magGeld('wijzigen'),wie:(typeof mtMijEmail==='function'&&mtMijEmail())||'',projecten:geldProjecten,schatten:forecastSchatten});
 }
-// Goedgekeurde (geaccepteerde) offertes uit Moneybird, alleen lezen; pagineert tot een lege of korte pagina (plafond 50 pagina's; daarna meldt de Forecast "lijst afgekapt").
+// Offertes uit Moneybird met de drie statussen (geaccepteerd, openstaand = open|late, concept), alleen lezen; per status gepagineerd
+// tot een lege of korte pagina (plafond 50 pagina's; daarna meldt de Forecast "lijst afgekapt").
 function forecastSchatten(){
-  return MTForecast.pagineer(async p=>{
-    const r=await mbGet(`${getAdmin()}/estimates?filter=state:accepted&per_page=100&page=${p}`);
+  return MTForecast.haalOffertes(async (filter,p)=>{
+    const r=await mbGet(`${getAdmin()}/estimates?filter=state:${filter}&per_page=100&page=${p}`);
     if(!r.ok) throw new Error('Moneybird: offertes niet te lezen (HTTP '+r.status+')');
     return r.json();
   },{max:50,per:100});
