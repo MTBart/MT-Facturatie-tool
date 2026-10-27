@@ -2,11 +2,15 @@
   {
     "versie": "2.25.2",
     "datum": "2026-10-28",
-    "titel": "Forecast: sorteren",
+    "titel": "Forecast: sorteren, sneller opslaan, schema en links",
     "voor": "geld",
     "punten": [
       "De offertelijst is te sorteren: klik op een kolomkop (Offerte, Datum, Status, Bedrag, Gefactureerd, Nog te plannen of een maand). Een klik sorteert oplopend, nog een klik aflopend, de derde klik zet de standaard terug: offertedatum, nieuwste eerst. Lege waarden staan altijd onderaan. De totalen veranderen niet.",
-      "De offertedatum uit Moneybird staat klein onder de offertenaam. Op de telefoon kies je de volgorde met \"Sorteer op\" in de kop van de offertekaart. Je keuze wordt onthouden."
+      "De offertedatum uit Moneybird staat klein onder de offertenaam. Op de telefoon kies je de volgorde met \"Sorteer op\" in de kop van de offertekaart. Je keuze wordt onthouden.",
+      "Schema toepassen staat nu in het ...-menu van de rij en toont eerst een voorbeeld (deel, percentage, bedrag, maand); pas bij Toepassen wordt er iets opgeslagen. Nieuw: Planning wissen... zet alle nog niet gefactureerde planning terug naar nog niet gepland. Beide geven een melding met Ongedaan maken.",
+      "Een bedrag invullen gaat veel sneller: alleen die offerte wordt opnieuw berekend. Financiën rekent het precies bij Vernieuwen of vanzelf na 20 seconden zonder wijzigingen; tot dan staat bij Binnen dat het bijgewerkt wordt bij verversen.",
+      "De offertenaam opent de offerte in Moneybird, het gefactureerde bedrag opent de factuur (bij meer facturen genummerde links) en het projectnummer staat klein achter de naam en opent het project.",
+      "Elke rij heeft links een selectievinkje: vink er een of meer aan en er verschijnt een balk om ze uit beeld te zetten. Gaat zeker door is nu een schakelaar in een eigen kolom."
     ]
   },
   {
