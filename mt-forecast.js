@@ -193,6 +193,68 @@
     }
   };
 
+  // ── Periodekeuze: maand, kwartaal of jaar, over de lopende maand t/m +24 maanden ────────────────────
+  // Een eenheid is een lijst blokken (elk met de maand-offsets van t/m); de selectie is {eenheid, i0, i1} (indexen in die lijst).
+  // Kwartaal en jaar zijn kalenderkwartalen en -jaren; het eerste blok begint bij de lopende maand, het laatste eindigt bij +24.
+  const HORIZON = 24;
+  F.HORIZON = HORIZON; F.EENHEDEN = ['maand', 'kwartaal', 'jaar'];
+  F.eenheden = function (nu, eenheid) {
+    const lijst = [];
+    for (let i = 0; i <= HORIZON; i++) {
+      const ym = maandPlus(nu, i), jr = ym.slice(0, 4), kw = Math.floor((Number(ym.slice(5, 7)) - 1) / 3) + 1;
+      const sleutel = eenheid === 'jaar' ? jr : eenheid === 'kwartaal' ? jr + '-K' + kw : ym, l = lijst[lijst.length - 1];
+      if (l && l.sleutel === sleutel) { l.tot = i; l.maanden.push(ym); }
+      else lijst.push({ sleutel, label: eenheid === 'jaar' ? jr : eenheid === 'kwartaal' ? 'K' + kw + ' ' + jr : maandTekst(ym), van: i, tot: i, maanden: [ym] });
+    }
+    return lijst;
+  };
+  F.eenheidBijMaand = (lijst, m) => lijst.findIndex(u => m >= u.van && m <= u.tot);
+  F.selStandaard = () => ({ eenheid: 'maand', i0: 0, i1: 5 });                      // lopende maand + 5
+  F.selSchoon = function (sel, lijst) {
+    const k = v => Math.max(0, Math.min(lijst.length - 1, Math.round(Number(v) || 0)));
+    let a = k(sel.i0), b = k(sel.i1); if (b < a) [a, b] = [b, a];
+    return { eenheid: sel.eenheid, i0: a, i1: b };
+  };
+  F.selKies = (sel, lijst, idx) => F.selSchoon({ eenheid: sel.eenheid, i0: idx, i1: idx }, lijst);                              // klik op één blok
+  F.selNieuw = (sel, lijst, a, b) => F.selSchoon({ eenheid: sel.eenheid, i0: Math.min(a, b), i1: Math.max(a, b) }, lijst);       // sleep over leeg spoor
+  F.selGreep = (sel, lijst, greep, idx) => greep === 'van' ? F.selSchoon({ eenheid: sel.eenheid, i0: Math.min(idx, sel.i1), i1: sel.i1 }, lijst) : F.selSchoon({ eenheid: sel.eenheid, i0: sel.i0, i1: Math.max(idx, sel.i0) }, lijst);
+  F.selVerschuif = function (sel, lijst, d) {                                                                                     // het hele bereik schuiven, breedte blijft gelijk
+    const breed = sel.i1 - sel.i0, i0 = Math.max(0, Math.min(lijst.length - 1 - breed, sel.i0 + d));
+    return { eenheid: sel.eenheid, i0, i1: i0 + breed };
+  };
+  // Andere eenheid: dezelfde maanden, vastgeklikt op de nieuwe blokken.
+  F.selNaarEenheid = function (sel, nu, nieuw) {
+    const oud = F.eenheden(nu, sel.eenheid), lijst = F.eenheden(nu, nieuw), s = oud[Math.min(sel.i0, oud.length - 1)], e = oud[Math.min(sel.i1, oud.length - 1)];
+    return F.selSchoon({ eenheid: nieuw, i0: F.eenheidBijMaand(lijst, s.van), i1: F.eenheidBijMaand(lijst, e.tot) }, lijst);
+  };
+  // Positie op het spoor (0..1) → het blok daaronder.
+  F.indexBijPositie = (frac, lijst) => F.eenheidBijMaand(lijst, Math.min(HORIZON, Math.max(0, Math.floor((Number(frac) || 0) * (HORIZON + 1)))));
+  F.kolommen = (lijst, sel) => lijst.slice(sel.i0, sel.i1 + 1);
+  F.selTekst = sel => `${sel.eenheid}:${sel.i0}:${sel.i1}`;
+  F.selLees = function (tekst, nu) {
+    const m = /^(maand|kwartaal|jaar):(\d{1,2}):(\d{1,2})$/.exec(String(tekst || '')); if (!m) return F.selStandaard();
+    return F.selSchoon({ eenheid: m[1], i0: Number(m[2]), i1: Number(m[3]) }, F.eenheden(nu, m[1]));
+  };
+  const somVan = (a, k) => { let s = 0; for (let i = k.van; i <= k.tot; i++) s += a[i] || 0; return s; };
+  // De maandtotalen (F.totalen over 25 maanden) per gekozen kolom; alles na de laatste kolom gaat naar "later".
+  F.groepeerTotalen = function (tot, kols) {
+    const laatste = kols.length ? kols[kols.length - 1].tot : -1, na = a => { let s = 0; for (let i = laatste + 1; i < a.length; i++) s += a[i] || 0; return s; };
+    const uit = { kolommen: kols, later: {}, eerder: tot.eerder };
+    for (const k of ['gepland', 'binnen', 'open', 'kosten', 'overig', 'netto']) { uit[k] = kols.map(x => somVan(tot[k], x)); uit.later[k] = na(tot[k]) + ((tot.later && tot.later[k]) || 0); }
+    return uit;
+  };
+  // Eén rij over een kolom (som van de maanden): vrij gepland, al gefactureerd (vast) en vast open deel.
+  F.rijKolom = function (r, kol) {
+    const o = { vrijC: 0, vastGefC: 0, vastOpenC: 0 };
+    for (let i = kol.van; i <= kol.tot; i++) { const m = r.maanden[i]; if (m) { o.vrijC += m.vrijC; o.vastGefC += m.vastGefC; o.vastOpenC += m.vastOpenC; } }
+    return o;
+  };
+  F.rijLater = function (r, kols) {
+    const laatste = kols.length ? kols[kols.length - 1].tot : -1; let s = r.laterC;
+    for (let i = laatste + 1; i < r.maanden.length; i++) s += r.maanden[i].vrijC + r.maanden[i].vastOpenC;
+    return s;
+  };
+
   // ── Maandtotalen ─────────────────────────────────────────────────────────────
   // events: de tijdlijn-events. effect(e) → delta op de lopende rekening (standaard: intern telt niet). Verdeling:
   //   binnen = prognose-ontvangsten van termijnen (factuurdatum + betaaltermijn + betaalgedrag, zoals Financiën)
@@ -231,7 +293,7 @@
     return e;
   };
   const ls = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { } } };
-  const st = F._st = { el: null, bron: null, mag: false, wie: '', data: null, items: {}, schatten: null, schattenT: 0, projecten: null, haalSchatten: null, rijen: [], n: 6, kostenAan: true, overigAan: true, openAan: true, verouderd: false, afgekapt: false, bezig: false, fout: null, uitleg: false, wachtrij: Promise.resolve(), vers: {}, ks: [], cv: '', bt: null };
+  const st = F._st = { el: null, bron: null, mag: false, wie: '', data: null, items: {}, schatten: null, schattenT: 0, projecten: null, haalSchatten: null, rijen: [], sel: null, kostenAan: true, overigAan: true, openAan: true, verouderd: false, afgekapt: false, bezig: false, fout: null, uitleg: false, wachtrij: Promise.resolve(), vers: {}, ks: [], cv: '', bt: null };
   const UITLEG = 'Links staan de goedgekeurde offertes uit Moneybird (incl. btw). Typ in een maand het bedrag dat je dan wilt factureren, in zijn geheel of in delen; "rest" zet wat nog niet gepland is in die maand. De planning is dezelfde als de prognose in Financiën (de termijnen van de offerte): de kaslijn, de Factuurplanning en deze tabel rekenen meteen mee. Het vinkje bij een offerte bepaalt of hij meetelt. "Binnen" is de verwachte betaling: factuurdatum plus betaaltermijn en het gewone betaalgedrag van de klant. "Openstaande facturen" zijn de al verstuurde, nog niet betaalde verkoopfacturen per verwachte betaalmaand. Vink die, "lopende kosten" en "overige voorspelling" (btw, weekinleg, handmatige posten) aan of uit om het netto per maand te zien. Een deel dat al in Moneybird gefactureerd is, staat vast. Een offerte kan in hoogstens 6 delen. Er gaat nooit iets naar Moneybird.';
   function css() {
     if (document.getElementById('mtf-css')) return;
@@ -267,6 +329,20 @@
 .mtf-waarsch{background:#fbe3dd;border:1px solid #f0b8aa;border-radius:6px;padding:6px 8px;font-size:12px;margin-top:6px;line-height:1.4;color:#7a2a1c}
 .mtf-waarsch b{font-weight:600}.mtf-sm{height:26px;font-size:12px;margin-top:4px}
 .mtf input:disabled,.mtf button:disabled{opacity:.5;cursor:not-allowed}
+.mtf-seg-knoppen{display:inline-flex}.mtf-seg-knoppen .ui-knop{border-radius:0;margin-left:-1px}.mtf-seg-knoppen .ui-knop:first-child{border-radius:8px 0 0 8px;margin-left:0}.mtf-seg-knoppen .ui-knop:last-child{border-radius:0 8px 8px 0}
+.mtf-balk{margin:0 0 12px;padding:0 2px}.mtf-jaren{position:relative;height:16px;font-size:11px;color:var(--mtf-zacht)}.mtf-jaren span{position:absolute;top:0;white-space:nowrap}
+.mtf-spoor{position:relative;height:40px;border:1px solid var(--line,#e4e2da);border-radius:8px;background:var(--surface,#fff);touch-action:none;user-select:none;-webkit-user-select:none;cursor:pointer}
+.mtf-seg{position:absolute;top:0;bottom:0;border:0;border-left:1px solid var(--line-soft,#eeece5);background:none;padding:0;font:inherit;font-size:11px;color:var(--mtf-zacht);overflow:hidden;white-space:nowrap;cursor:pointer}
+.mtf-seg:first-child{border-left:0}.mtf-seg.in{color:var(--ink,#1d1d1b)}.mtf-seg .l{display:none}
+.mtf-sel{position:absolute;top:2px;bottom:2px;background:rgba(42,74,56,.13);border:2px solid var(--primary,#2A4A38);border-radius:6px;cursor:grab;z-index:1;pointer-events:auto}
+.mtf-sel:active{cursor:grabbing}
+.mtf-greep{position:absolute;top:50%;width:14px;height:26px;margin-top:-13px;background:var(--primary,#2A4A38);border-radius:5px;cursor:ew-resize;z-index:2}
+.mtf-greep::before{content:"";position:absolute;top:-8px;bottom:-8px;left:-8px;right:-8px}
+.mtf-greep.van{left:-8px}.mtf-greep.tot{right:-8px}
+.mtf-greep:focus-visible{outline:3px solid var(--primary,#2A4A38);outline-offset:3px}
+.mtf-agg{border:0;background:none;font:inherit;color:inherit;cursor:pointer;padding:2px 4px;border-radius:4px;display:flex;flex-direction:column;align-items:flex-end;margin-left:auto}
+.mtf-agg:hover{background:var(--surface-2,#f1f0ea)}.mtf-kopknop{font-weight:500;color:var(--mtf-zacht);display:inline}
+@media (max-width:700px){.mtf-seg .k{display:none}.mtf-seg .l{display:inline}.mtf-spoor.kwartaal .mtf-seg .k,.mtf-spoor.jaar .mtf-seg .k{display:inline}.mtf-spoor.kwartaal .mtf-seg .l,.mtf-spoor.jaar .mtf-seg .l{display:none}.mtf-spoor.kwartaal .mtf-seg{font-size:10px}}
 .mtf-bezig{opacity:.6;pointer-events:none}
 .mtf-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink,#1d1d1b);color:#fff;padding:9px 14px;border-radius:8px;font-size:13px;z-index:9999;max-width:90vw}
 .mtf-voet{font-size:12px;color:var(--mtf-zacht);margin:8px 2px}
@@ -280,7 +356,7 @@
   const bedragTd = (cc, klasse) => h('td', { class: 'num ' + (klasse || '') }, cc ? F.fmt(cc) : h('span', { class: 'mtf-0' }, '—'));
   const getalTd = (cc, klasse) => h('td', { class: 'num ' + (klasse || '') }, cc === 0 ? h('span', { class: 'mtf-0' }, '—') : h('span', { class: cc < 0 ? 'mtf-n' : 'mtf-p' }, F.fmt(cc)));
 
-  function rijEl(r, nu) {
+  function rijEl(r, nu, kols, edit) {
     const mag = st.mag, uit = st.verouderd, blok = r.afwijkt, tr = h('tr', { class: 'mtf-rij' + (r.aan ? '' : ' uit'), data: { sl: r.sleutel } });
     const sub = [r.offertenr && 'offerte ' + r.offertenr, r.extra && 'staat in de prognose, geen openstaande offerte', ].filter(Boolean).join(' · ');
     const waarsch = [];
@@ -292,11 +368,17 @@
       h('input', { type: 'checkbox', checked: r.aan, disabled: !mag || uit, 'aria-label': 'Telt mee in prognose: ' + r.naam, title: 'Telt mee in prognose. Zet ook ‘gaat zeker door’ in Financiën aan of uit.', data: { aan: r.sleutel } }),
       h('span', null, h('b', null, r.naam), sub ? h('small', null, sub) : null)), waarsch));
     tr.append(h('td', { class: 'num' + (r.afwijkt ? ' mtf-n' : ''), title: r.afwijkt ? 'Prognose rekent met ' + F.fmt(r.totaalC) + '; Moneybird: ' + F.fmt(r.mbTotaalC) : null }, F.fmt(r.afwijkt ? r.mbTotaalC : r.totaalC)),
-      h('td', { class: 'num', title: r.gecrediteerd ? 'Netto, na creditnota\u2019s' : null }, r.gefNettoC ? h('span', { class: r.gefNettoC < 0 ? 'mtf-n' : null }, F.fmt(r.gefNettoC)) : h('span', { class: 'mtf-0' }, '—'), r.gecrediteerd ? h('div', { class: 'mtf-gef' }, 'gecrediteerd' + (r.creditC ? ' ' + F.fmt(r.creditC) : '')) : null),
+      h('td', { class: 'num', title: r.gecrediteerd ? 'Netto, na creditnota’s' : null }, r.gefNettoC ? h('span', { class: r.gefNettoC < 0 ? 'mtf-n' : null }, F.fmt(r.gefNettoC)) : h('span', { class: 'mtf-0' }, '—'), r.gecrediteerd ? h('div', { class: 'mtf-gef' }, 'gecrediteerd' + (r.creditC ? ' ' + F.fmt(r.creditC) : '')) : null),
       h('td', { class: 'num' }, r.nogC > 0 ? F.fmt(r.nogC) : h('span', { class: 'mtf-0' }, r.bestaat ? 'gepland' : '—')));
     if (st.heeftEerder) tr.append(h('td', { class: 'num' }, r.eerderC ? h('div', { class: 'mtf-cel' }, F.fmt(r.eerderC), mag && r.eerderVrijC ? h('button', { type: 'button', class: 'mtf-rest', disabled: uit || blok, data: { eerder: r.sleutel }, title: 'De factuurdatum is voorbij: zet de open termijnen in de lopende maand' }, 'naar deze maand') : null) : h('span', { class: 'mtf-0' }, '—')));
-    for (const m of r.maanden) {
-      const inhoud = h('div', { class: 'mtf-cel' });
+    kols.forEach((kol, ki) => {
+      const nuKol = kol.van === 0;
+      if (!edit) {                                                // kwartaal/jaar: som, alleen lezen; klik = naar de maanden van deze periode
+        const s = F.rijKolom(r, kol), gepl = s.vrijC + s.vastOpenC;
+        const inh = gepl || s.vastGefC ? h('button', { type: 'button', class: 'mtf-agg', data: { spring: String(ki) }, title: 'Klik om deze periode per maand te bewerken' }, gepl ? F.fmt(gepl) : null, s.vastGefC ? h('span', { class: 'mtf-gef' }, 'gefactureerd ' + F.fmt(s.vastGefC)) : null) : h('button', { type: 'button', class: 'mtf-agg mtf-0', data: { spring: String(ki) }, title: 'Klik om deze periode per maand te bewerken' }, '—');
+        tr.append(h('td', { class: 'num' + (nuKol ? ' nu' : '') }, inh)); return;
+      }
+      const m = r.maanden[kol.van], inhoud = h('div', { class: 'mtf-cel' });
       if (m.vastGefC) inhoud.append(h('span', { class: 'mtf-gef', title: 'Al gefactureerd in Moneybird' }, 'gefactureerd ' + F.fmt(m.vastGefC)));
       if (m.vastOpenC) inhoud.append(h('span', { class: 'mtf-vast', title: 'Deel van een termijn die al gedeeltelijk gefactureerd is: vast' }, F.fmt(m.vastOpenC) + ' (vast)'));
       if (mag) {
@@ -304,38 +386,104 @@
         if (r.nogC > 0) inhoud.append(h('button', { type: 'button', class: 'mtf-rest', disabled: uit || blok, data: { rest: r.sleutel, ym: m.ym }, title: 'Zet het nog niet geplande deel (' + F.fmt(r.nogC) + ') in deze maand' }, 'rest hier'));
       } else if (m.vrijC) inhoud.append(F.fmt(m.vrijC));
       tr.append(h('td', { class: 'num' + (m.ym === nu ? ' nu' : '') }, inhoud.childNodes.length ? inhoud : h('span', { class: 'mtf-0' }, '—')));
-    }
-    if (st.heeftLater) tr.append(bedragTd(r.laterC));
+    });
+    if (st.heeftLater) { const l = F.rijLater(r, kols); tr.append(bedragTd(l)); }
     return tr;
   }
 
+  // Tijdbalk: lopende maand t/m +24 maanden, met de gekozen periode gemarkeerd. Klik = dat blok kiezen, grepen slepen = bereik
+  // groter/kleiner (klikt vast op het blok), het gemarkeerde stuk slepen = verschuiven. Pijltjes en Shift+pijltjes op de grepen.
+  const bewaarSel = () => ls.set('mtg:fc:per:' + st.wie, F.selTekst(st.sel));
+  function posSel(spoor, lijst) {
+    const N = F.HORIZON + 1, s = st.sel, a = lijst[s.i0].van, b = lijst[s.i1].tot, sel = spoor.querySelector('.mtf-sel');
+    if (sel) { sel.style.left = (a / N * 100) + '%'; sel.style.width = ((b - a + 1) / N * 100) + '%'; }
+    spoor.querySelectorAll('.mtf-seg').forEach((x, i) => x.classList.toggle('in', i >= s.i0 && i <= s.i1));
+    [['van', s.i0], ['tot', s.i1]].forEach(([g, i]) => { const e = spoor.querySelector('.mtf-greep.' + g); if (e) { e.setAttribute('aria-valuenow', String(i)); e.setAttribute('aria-valuetext', lijst[i].label); } });
+  }
+  function sliderEl(nu) {
+    const N = F.HORIZON + 1, lijst = F.eenheden(nu, st.sel.eenheid), s = st.sel;
+    const spoor = h('div', { class: 'mtf-spoor ' + st.sel.eenheid, data: { slider: '1' } });
+    lijst.forEach((u, i) => {
+      const seg = h('button', { type: 'button', class: 'mtf-seg', tabindex: '-1', 'aria-label': u.label, data: { seg: String(i) } }, h('span', { class: 'k' }, u.label.replace(/ \d{4}$/, '')), h('span', { class: 'l' }, st.sel.eenheid === 'maand' ? u.label.charAt(0) : u.label.replace(/ \d{4}$/, '')));
+      seg.style.left = (u.van / N * 100) + '%'; seg.style.width = ((u.tot - u.van + 1) / N * 100) + '%'; spoor.append(seg);
+    });
+    const greep = (g, i) => h('div', { class: 'mtf-greep ' + g, role: 'slider', tabindex: '0', 'aria-orientation': 'horizontal', 'aria-label': g === 'van' ? 'Begin van de periode' : 'Einde van de periode', 'aria-valuemin': '0', 'aria-valuemax': String(lijst.length - 1), 'aria-valuenow': String(i), 'aria-valuetext': lijst[i].label, data: { greep: g } });
+    spoor.append(h('div', { class: 'mtf-sel', title: 'Sleep om de periode te verschuiven' }, greep('van', s.i0), greep('tot', s.i1)));
+    // jaarlabels boven het spoor
+    const jaren = h('div', { class: 'mtf-jaren', 'aria-hidden': 'true' });
+    F.eenheden(nu, 'jaar').forEach(u => { const e = h('span', null, u.label); e.style.left = (u.van / N * 100) + '%'; jaren.append(e); });
+    const wrap = h('div', { class: 'mtf-balk' }, jaren, spoor);
+    posSel(spoor, lijst);
+    bindSpoor(spoor, lijst);
+    return wrap;
+  }
+  function bindSpoor(spoor, lijst) {
+    spoor.addEventListener('pointerdown', ev => {
+      if (ev.button > 0 || st.slidermodus) return;
+      const r = spoor.getBoundingClientRect(), idxBij = x => F.indexBijPositie((x - r.left) / r.width, lijst);
+      const greep = ev.target.closest('.mtf-greep'), inSel = ev.target.closest('.mtf-sel');
+      const modus = greep ? greep.dataset.greep : inSel ? 'schuif' : 'nieuw', start = { x: ev.clientX, idx: idxBij(ev.clientX), sel: Object.assign({}, st.sel) };
+      let bewogen = false; st.slidermodus = modus;
+      try { spoor.setPointerCapture(ev.pointerId); } catch (e) { }
+      ev.preventDefault();
+      const beweeg = e => {
+        if (Math.abs(e.clientX - start.x) > 3) bewogen = true; if (!bewogen) return;
+        const idx = idxBij(e.clientX);
+        st.sel = modus === 'van' || modus === 'tot' ? F.selGreep(start.sel, lijst, modus, idx) : modus === 'schuif' ? F.selVerschuif(start.sel, lijst, idx - start.idx) : F.selNieuw(start.sel, lijst, start.idx, idx);
+        posSel(spoor, lijst);
+      };
+      const klaar = () => {
+        spoor.removeEventListener('pointermove', beweeg); spoor.removeEventListener('pointerup', klaar); spoor.removeEventListener('pointercancel', klaar); st.slidermodus = null;
+        if (!bewogen && !greep) st.sel = F.selKies(start.sel, lijst, start.idx);        // een klik kiest dat blok
+        bewaarSel(); teken();
+      };
+      spoor.addEventListener('pointermove', beweeg); spoor.addEventListener('pointerup', klaar); spoor.addEventListener('pointercancel', klaar);
+    });
+    spoor.addEventListener('keydown', ev => {
+      const g = ev.target.closest && ev.target.closest('.mtf-greep'); if (!g) return;
+      const dir = ev.key === 'ArrowRight' || ev.key === 'ArrowUp' ? 1 : ev.key === 'ArrowLeft' || ev.key === 'ArrowDown' ? -1 : 0, bound = g.dataset.greep;
+      let s = null;
+      if (dir) s = ev.shiftKey ? F.selVerschuif(st.sel, lijst, dir) : F.selGreep(st.sel, lijst, bound, (bound === 'van' ? st.sel.i0 : st.sel.i1) + dir);
+      else if (ev.key === 'Home') s = F.selGreep(st.sel, lijst, bound, 0); else if (ev.key === 'End') s = F.selGreep(st.sel, lijst, bound, lijst.length - 1);
+      if (!s) return; ev.preventDefault(); st.sel = s; st.focusGreep = bound; bewaarSel(); teken();
+    });
+    spoor.addEventListener('click', ev => {                       // toetsenbord (Enter/spatie op een blok); muis en touch gaan via pointerdown
+      const b = ev.target.closest && ev.target.closest('.mtf-seg'); if (!b || ev.detail !== 0) return;
+      st.sel = F.selKies(st.sel, lijst, Number(b.dataset.seg)); bewaarSel(); teken();
+    });
+  }
+
   function tekenTabel() {
-    const vandaag = st.data.vandaag, nu = vandaag.slice(0, 7), rijen = st.rijen;
-    st.heeftEerder = rijen.some(r => r.aan && r.eerderC); st.heeftLater = rijen.some(r => r.aan && r.laterC);
+    const vandaag = st.data.vandaag, nu = vandaag.slice(0, 7), rijen = st.rijen, edit = st.sel.eenheid === 'maand';
+    const lijst = F.eenheden(nu, st.sel.eenheid), kols = F.kolommen(lijst, st.sel);
+    st.heeftEerder = rijen.some(r => r.aan && r.eerderC);
     const G = root.MTGeld, groep = G && G.groep ? G.groep(st.data) : null;
-    const tot = F.totalen({ rijen, events: st.data.events, vandaag, maanden: st.n, uitgesloten: st.rijen.reduce((a, r) => a.concat(r.dubbelen.map(d => d.sleutel)), []), openAan: st.openAan, kostenAan: st.kostenAan, overigAan: st.overigAan, effect: G && G.effect && groep ? (e => c(G.effect(e, 'lopend', groep))) : null });
-    const mnd = tot.maanden;
+    const tot = F.totalen({ rijen, events: st.data.events, vandaag, maanden: F.HORIZON + 1, uitgesloten: st.rijen.reduce((a, r) => a.concat(r.dubbelen.map(d => d.sleutel)), []), openAan: st.openAan, kostenAan: st.kostenAan, overigAan: st.overigAan, effect: G && G.effect && groep ? (e => c(G.effect(e, 'lopend', groep))) : null });
+    const g = F.groepeerTotalen(tot, kols);
+    st.heeftLater = rijen.some(r => r.aan && F.rijLater(r, kols) > 0) || ['gepland', 'binnen', 'open', 'kosten', 'overig'].some(k => g.later[k] !== 0);
     const kop = h('tr', null, h('th', { class: 's', title: 'Het vinkje bepaalt of de offerte meetelt in de prognose (zelfde als ‘gaat zeker door’ in Financiën)' }, 'Goedgekeurde offertes'), h('th', { class: 'num' }, 'Offerte'), h('th', { class: 'num' }, 'Gefactureerd'), h('th', { class: 'num' }, 'Nog te plannen'),
       st.heeftEerder ? h('th', { class: 'num', title: 'Factuurdatum voorbij, nog niet gefactureerd' }, 'Eerder') : null,
-      mnd.map(ym => h('th', { class: 'num' + (ym === nu ? ' nu' : '') }, maandTekst(ym))), st.heeftLater ? h('th', { class: 'num' }, 'Later') : null);
+      kols.map((k, ki) => h('th', { class: 'num' + (k.van === 0 ? ' nu' : ''), title: edit ? null : k.maanden[0] + ' t/m ' + k.maanden[k.maanden.length - 1] }, edit ? k.label : h('button', { type: 'button', class: 'mtf-agg mtf-kopknop', data: { spring: String(ki) }, title: 'Per maand bekijken en bewerken' }, k.label))),
+      st.heeftLater ? h('th', { class: 'num', title: 'Alles na de gekozen periode' }, 'Later') : null);
     const foot = [];
     const regel = (label, cellen, eerder, later, klasse, extra) => h('tr', { class: klasse || '' }, h('th', { class: 's' }, extra || label), h('td'), h('td'), h('td'), st.heeftEerder ? (eerder != null ? getalTd(eerder) : h('td')) : null, cellen, st.heeftLater ? (later != null ? getalTd(later) : h('td')) : null);
-    foot.push(regel('Gefactureerd (gepland)', tot.gepland.map(v => bedragTd(v, 'mtf-p')), tot.eerder.gepland, tot.later.gepland, '', h('span', { title: 'Wat je in die maand factureert, van de offertes die meetellen' }, 'Gefactureerd (gepland)')));
-    foot.push(regel('Binnen', tot.binnen.map(v => getalTd(v)), null, tot.later.binnen, '', h('span', { title: 'Verwachte betaling: factuurdatum plus betaaltermijn en het gewone betaalgedrag van de klant, zoals in Financiën' }, 'Binnen (betaaldatum)')));
-    foot.push(regel('', tot.open.map(v => getalTd(v)), null, tot.later.open, '', h('label', { title: 'Al verstuurde verkoopfacturen die nog niet betaald zijn, per verwachte betaalmaand (dezelfde bron als de kaslijn in Financi\u00ebn)' }, h('input', { type: 'checkbox', checked: st.openAan, data: { open: '1' } }), 'Openstaande facturen')));
-    foot.push(regel('', tot.kosten.map(v => getalTd(v)), null, tot.later.kosten, '', h('label', { title: 'Inkoopfacturen en vaste patronen uit Financiën' }, h('input', { type: 'checkbox', checked: st.kostenAan, data: { kosten: '1' } }), 'Lopende kosten')));
-    foot.push(regel('', tot.overig.map(v => getalTd(v)), null, tot.later.overig, '', h('label', { title: 'Btw-aangifte, weekinleg en handmatige posten uit Financiën' }, h('input', { type: 'checkbox', checked: st.overigAan, data: { overig: '1' } }), 'Overige voorspelling')));
-    foot.push(regel('Netto', tot.netto.map(v => getalTd(v)), null, tot.later.netto, 'netto', h('span', { title: 'Binnen, min de aangevinkte kosten' }, 'Netto per maand')));
-    const tab = h('table', { class: 'mtf-tabel' }, h('thead', null, kop), h('tbody', null, rijen.map(r => rijEl(r, nu))), h('tfoot', null, foot));
+    foot.push(regel('Gefactureerd (gepland)', g.gepland.map(v => bedragTd(v, 'mtf-p')), tot.eerder.gepland, g.later.gepland, '', h('span', { title: 'Wat je in die periode factureert, van de offertes die meetellen' }, 'Gefactureerd (gepland)')));
+    foot.push(regel('Binnen', g.binnen.map(v => getalTd(v)), null, g.later.binnen, '', h('span', { title: 'Verwachte betaling: factuurdatum plus betaaltermijn en het gewone betaalgedrag van de klant, zoals in Financiën' }, 'Binnen (betaaldatum)')));
+    foot.push(regel('', g.open.map(v => getalTd(v)), null, g.later.open, '', h('label', { title: 'Al verstuurde verkoopfacturen die nog niet betaald zijn, per verwachte betaalmaand (dezelfde bron als de kaslijn in Financiën)' }, h('input', { type: 'checkbox', checked: st.openAan, data: { open: '1' } }), 'Openstaande facturen')));
+    foot.push(regel('', g.kosten.map(v => getalTd(v)), null, g.later.kosten, '', h('label', { title: 'Inkoopfacturen en vaste patronen uit Financiën' }, h('input', { type: 'checkbox', checked: st.kostenAan, data: { kosten: '1' } }), 'Lopende kosten')));
+    foot.push(regel('', g.overig.map(v => getalTd(v)), null, g.later.overig, '', h('label', { title: 'Btw-aangifte, weekinleg en handmatige posten uit Financiën' }, h('input', { type: 'checkbox', checked: st.overigAan, data: { overig: '1' } }), 'Overige voorspelling')));
+    foot.push(regel('Netto', g.netto.map(v => getalTd(v)), null, g.later.netto, 'netto', h('span', { title: 'Binnen, min de aangevinkte kosten' }, 'Netto per ' + (st.sel.eenheid === 'maand' ? 'maand' : st.sel.eenheid))));
+    const tab = h('table', { class: 'mtf-tabel' }, h('thead', null, kop), h('tbody', null, rijen.map(r => rijEl(r, nu, kols, edit))), h('tfoot', null, foot));
     return h('div', { class: 'mtf-scroll' }, tab);
   }
 
   function teken() {
     const el = st.el; if (!el) return;
-    const kop = h('div', { class: 'mtf-kop' }, h('h2', null, 'Forecast'), h('span', { class: 'mtf-chip' }, 'incl. btw'), h('span', { class: 'ruim' }),
-      maakKnop('6 maanden', { class: 'ui-knop' + (st.n === 6 ? ' ui-knop--primair' : ''), data: { mnd: '6' } }), maakKnop('12 maanden', { class: 'ui-knop' + (st.n === 12 ? ' ui-knop--primair' : ''), data: { mnd: '12' } }),
+    const eenh = h('div', { class: 'mtf-seg-knoppen', role: 'group', 'aria-label': 'Periode-eenheid' }, F.EENHEDEN.map(x => h('button', { type: 'button', class: 'ui-knop' + (st.sel.eenheid === x ? ' ui-knop--primair' : ''), 'aria-pressed': String(st.sel.eenheid === x), data: { eenheid: x } }, x.charAt(0).toUpperCase() + x.slice(1))));
+    const kop = h('div', { class: 'mtf-kop' }, h('h2', null, 'Forecast'), h('span', { class: 'mtf-chip' }, 'incl. btw'), h('span', { class: 'ruim' }), eenh,
       maakKnop('Vernieuwen', { data: { vernieuw: '1' } }), maakKnop('Uitleg', { 'aria-expanded': String(st.uitleg), data: { uitleg: '1' } }));
     const w = h('div', { class: 'mtf' + (st.bezig ? ' mtf-bezig' : '') }, kop, st.uitleg ? h('div', { class: 'mtf-uitleg' }, UITLEG) : null);
+    if (st.data) w.append(sliderEl(st.data.vandaag.slice(0, 7)));
     if (st.verouderd) w.append(h('div', { class: 'mtf-fout' }, h('b', null, 'Gegevens verouderd — Vernieuwen. '), 'Wijzigen is uitgeschakeld tot het verversen lukt.'));
     if (st.fout) w.append(h('div', { class: 'mtf-fout' }, st.fout));
     if (st.afgekapt) w.append(h('div', { class: 'mtf-fout' }, h('b', null, 'Lijst afgekapt. '), 'Er zijn meer geaccepteerde offertes in Moneybird dan hier getoond worden; de lijst is dus niet volledig.'));
@@ -344,9 +492,10 @@
     else {
       w.append(tekenTabel());
       const waarsch = (st.data.waarschuwingen || []).filter(x => x && x.onvolledig).length;
-      w.append(h('div', { class: 'mtf-voet' }, 'Wat je hier plant, staat ook in de prognose van Financiën.' + (st.mag ? '' : ' Je mag lezen, niet wijzigen.') + (waarsch ? ' Let op: niet alle bronnen van Financiën zijn volledig geladen; de bedragen onderaan kunnen afwijken.' : '')));
+      w.append(h('div', { class: 'mtf-voet' }, 'Wat je hier plant, staat ook in de prognose van Financiën.' + (st.sel.eenheid === 'maand' ? '' : ' Kwartaal en jaar zijn sommen: klik op een periode om per maand te bewerken.') + (st.mag ? '' : ' Je mag lezen, niet wijzigen.') + (waarsch ? ' Let op: niet alle bronnen van Financiën zijn volledig geladen; de bedragen onderaan kunnen afwijken.' : '')));
     }
     el.replaceChildren(w);
+    if (st.focusGreep) { const g = el.querySelector('.mtf-greep.' + st.focusGreep); if (g) g.focus(); st.focusGreep = null; }
   }
 
   // ── Laden en opslaan ─────────────────────────────────────────────────────────
@@ -355,7 +504,7 @@
     const items = Object.assign({}, st.items);
     for (const k of Object.keys(st.vers)) { const v = st.vers[k]; if (Date.now() - v.t < 120000 && (!items[k] || (items[k].ts || 0) < (v.item.ts || 0))) items[k] = v.item; else if (Date.now() - v.t >= 120000) delete st.vers[k]; }
     st.itemsEff = items;
-    st.rijen = F.bouwRijen({ schatten: st.schatten || [], events: (st.data && st.data.events) || [], items, posten: (st.data && st.data.prognose && st.data.prognose.posten) || [], projecten: st.projecten ? st.projecten() : [], vandaag: st.data.vandaag, maanden: st.n });
+    st.rijen = F.bouwRijen({ schatten: st.schatten || [], events: (st.data && st.data.events) || [], items, posten: (st.data && st.data.prognose && st.data.prognose.posten) || [], projecten: st.projecten ? st.projecten() : [], vandaag: st.data.vandaag, maanden: F.HORIZON + 1 });
   }
   const tijdlijnPad = vers => { const v = st.data ? st.data.vandaag : new Date().toISOString().slice(0, 10); return `/geld/tijdlijn?van=${dagPlus(v, -35)}&tot=${dagPlus(v, 364)}&historie=1${vers ? '&vers=1' : ''}${st.cv ? '&cv=' + encodeURIComponent(st.cv) : ''}${verseKs().length ? '&ks=' + encodeURIComponent(verseKs().join(',')) : ''}`; };
   F.laad = async function (vers) {
@@ -369,6 +518,7 @@
       if (!p || p.error) throw new Error(p && p.error || 'prognose niet te lezen');
       if (s) { st.schatten = (Array.isArray(s) ? s : s.lijst || []).map(F.schatNorm).filter(Boolean); st.afgekapt = !Array.isArray(s) && !!s.afgekapt; st.schattenT = Date.now(); }
       st.data = d; st.items = p.items || {}; st.verouderd = false;
+      if (!st.selGelezen) { st.selGelezen = true; st.sel = F.selLees(ls.get('mtg:fc:per:' + st.wie), d.vandaag.slice(0, 7)); }
       rekenRijen();
     } catch (e) {
       if (st.data) st.verouderd = true;                          // nooit wijzigen op oude context
@@ -379,7 +529,8 @@
   };
   F.start = async function (el, o) {
     st.el = el; st.bron = o.bron; st.mag = !!o.magWijzigen; st.wie = o.wie || ''; st.projecten = o.projecten || null; st.haalSchatten = o.schatten;
-    st.n = ls.get('mtg:fc:mnd:' + st.wie) === '12' ? 12 : 6; st.kostenAan = ls.get('mtg:fc:kosten:' + st.wie) !== '0'; st.overigAan = ls.get('mtg:fc:overig:' + st.wie) !== '0'; st.openAan = ls.get('mtg:fc:open:' + st.wie) !== '0';
+    st.kostenAan = ls.get('mtg:fc:kosten:' + st.wie) !== '0'; st.overigAan = ls.get('mtg:fc:overig:' + st.wie) !== '0'; st.openAan = ls.get('mtg:fc:open:' + st.wie) !== '0';
+    st.sel = F.selStandaard();
     css(); koppel(); teken(); await F.laad();
   };
   // Eén wijziging tegelijk (de prognose heeft een versiecontrole per item). fn(item, overzicht) → {item} of {fout}.
@@ -438,7 +589,8 @@
     el.addEventListener('click', e => {
       const k = e.target.closest && e.target.closest('button'); if (!k) return;
       const d = k.dataset;
-      if (d.mnd) { st.n = d.mnd === '12' ? 12 : 6; ls.set('mtg:fc:mnd:' + st.wie, String(st.n)); if (st.data) rekenRijen(); teken(); }
+      if (d.eenheid) { if (st.data) { st.sel = F.selNaarEenheid(st.sel, st.data.vandaag.slice(0, 7), d.eenheid); bewaarSel(); teken(); } }
+      else if (d.spring) { const nu = st.data.vandaag.slice(0, 7), kol = F.kolommen(F.eenheden(nu, st.sel.eenheid), st.sel)[Number(d.spring)]; if (kol) { st.sel = F.selSchoon({ eenheid: 'maand', i0: kol.van, i1: kol.tot }, F.eenheden(nu, 'maand')); bewaarSel(); teken(); } }
       else if (d.uitleg) { st.uitleg = !st.uitleg; teken(); }
       else if (d.vernieuw) { st.bezig = true; teken(); F.laad('schatten'); }
       else if (d.bijwerk && st.mag && !st.verouderd) { const rij = st.rijen.find(r => r.sleutel === d.bijwerk); if (rij && rij.afwijkt) wijzig(d.bijwerk, (it, ov) => F.bijwerkTotaal(it, ov, rij.mbTotaalC, st.data.vandaag), 'Totaal bijgewerkt naar het Moneybird-bedrag'); }

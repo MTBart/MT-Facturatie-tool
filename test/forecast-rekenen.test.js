@@ -246,6 +246,70 @@ test('creditnota: netto gefactureerd wordt niet op 0 geklemd; status gecrediteer
   const r3 = F.bouwRijen({ schatten: [], items: { 'p:aaa': it }, posten: [ovDeel], projecten: [], events: [{ id: 'y', bron: 'verkoop', document_id: 'andere', delta: -500, datum: '2026-11-20' }], vandaag: V, maanden: 6 })[0];
   assert.strictEqual(r3.creditC, 0); assert.strictEqual(r3.gecrediteerd, false);
 });
+// ── periodekeuze: eenheden, selectie vastklikken, groeperen ──
+test('eenheden: kwartaal en jaar over de jaarwisseling; alle 25 maanden precies één keer gedekt; laatste blok afgekapt', () => {
+  for (const nu of ['2026-10', '2026-11', '2026-12', '2027-01']) for (const e of F.EENHEDEN) {
+    const l = F.eenheden(nu, e), alle = [].concat(...l.map(u => u.maanden));
+    assert.strictEqual(alle.length, 25); assert.strictEqual(new Set(alle).size, 25); assert.strictEqual(l[0].van, 0); assert.strictEqual(l[l.length - 1].tot, 24);
+    l.forEach((u, i) => { assert.strictEqual(u.maanden.length, u.tot - u.van + 1); if (i) assert.strictEqual(u.van, l[i - 1].tot + 1); });
+  }
+  assert.deepStrictEqual(F.eenheden('2026-11', 'kwartaal').slice(0, 3).map(u => [u.label, u.van, u.tot]), [['K4 2026', 0, 1], ['K1 2027', 2, 4], ['K2 2027', 5, 7]]);
+  assert.deepStrictEqual(F.eenheden('2026-10', 'jaar').map(u => [u.label, u.van, u.tot]), [['2026', 0, 2], ['2027', 3, 14], ['2028', 15, 24]]);
+  assert.deepStrictEqual(F.eenheden('2026-12', 'jaar').map(u => [u.label, u.van, u.tot]), [['2026', 0, 0], ['2027', 1, 12], ['2028', 13, 24]]);
+  assert.strictEqual(F.eenheden('2026-10', 'maand')[3].label, 'jan 2027');
+});
+test('selectie: klik, greep slepen, verschuiven en vastklikken op de eenheid', () => {
+  const L = F.eenheden('2026-10', 'kwartaal'), s = { eenheid: 'kwartaal', i0: 2, i1: 4 };
+  assert.deepStrictEqual(F.selKies(s, L, 5), { eenheid: 'kwartaal', i0: 5, i1: 5 });
+  assert.deepStrictEqual(F.selGreep(s, L, 'van', 0), { eenheid: 'kwartaal', i0: 0, i1: 4 });
+  assert.deepStrictEqual(F.selGreep(s, L, 'van', 7), { eenheid: 'kwartaal', i0: 4, i1: 4 });          // grepen kruisen niet
+  assert.deepStrictEqual(F.selGreep(s, L, 'tot', 1), { eenheid: 'kwartaal', i0: 2, i1: 2 });
+  assert.deepStrictEqual(F.selGreep(s, L, 'tot', 99), { eenheid: 'kwartaal', i0: 2, i1: L.length - 1 });   // begrensd op het einde
+  assert.deepStrictEqual(F.selVerschuif(s, L, 2), { eenheid: 'kwartaal', i0: 4, i1: 6 });
+  assert.deepStrictEqual(F.selVerschuif(s, L, -9), { eenheid: 'kwartaal', i0: 0, i1: 2 });            // breedte blijft, tegen de rand gestopt
+  assert.deepStrictEqual(F.selVerschuif(s, L, 99), { eenheid: 'kwartaal', i0: L.length - 3, i1: L.length - 1 });
+  assert.deepStrictEqual(F.selNieuw(s, L, 6, 3), { eenheid: 'kwartaal', i0: 3, i1: 6 });
+  assert.deepStrictEqual(F.selSchoon({ eenheid: 'jaar', i0: 9, i1: -3 }, F.eenheden('2026-10', 'jaar')), { eenheid: 'jaar', i0: 0, i1: 2 });
+});
+test('positie op het spoor klikt vast op het blok eronder (maand, kwartaal, jaar)', () => {
+  const M = F.eenheden('2026-10', 'maand'), K = F.eenheden('2026-10', 'kwartaal'), J = F.eenheden('2026-10', 'jaar');
+  assert.strictEqual(F.indexBijPositie(0, M), 0); assert.strictEqual(F.indexBijPositie(1, M), 24); assert.strictEqual(F.indexBijPositie(0.039, M), 0); assert.strictEqual(F.indexBijPositie(0.04, M), 1);
+  assert.strictEqual(F.indexBijPositie(0.1, K), 0);                    // maand 2 → nog K4 2026
+  assert.strictEqual(F.indexBijPositie(0.12, K), 1);                   // maand 3 → K1 2027
+  assert.strictEqual(F.indexBijPositie(0.5, J), 1); assert.strictEqual(F.indexBijPositie(0.99, J), 2); assert.strictEqual(F.indexBijPositie(-5, J), 0); assert.strictEqual(F.indexBijPositie(9, J), 2);
+});
+test('eenheid wisselen: dezelfde maanden, vastgeklikt op de nieuwe blokken; bewaren en terugkrijgen', () => {
+  const std = F.selStandaard(); assert.deepStrictEqual(std, { eenheid: 'maand', i0: 0, i1: 5 });
+  assert.deepStrictEqual(F.selNaarEenheid(std, '2026-10', 'kwartaal'), { eenheid: 'kwartaal', i0: 0, i1: 1 });        // okt-dec en jan-mrt
+  assert.deepStrictEqual(F.selNaarEenheid(std, '2026-10', 'jaar'), { eenheid: 'jaar', i0: 0, i1: 1 });                 // 2026 en 2027
+  assert.deepStrictEqual(F.selNaarEenheid({ eenheid: 'kwartaal', i0: 2, i1: 2 }, '2026-10', 'maand'), { eenheid: 'maand', i0: 6, i1: 8 });
+  assert.deepStrictEqual(F.selNaarEenheid({ eenheid: 'jaar', i0: 2, i1: 2 }, '2026-10', 'kwartaal'), { eenheid: 'kwartaal', i0: 5, i1: 8 });
+  const s = { eenheid: 'kwartaal', i0: 1, i1: 3 }; assert.strictEqual(F.selTekst(s), 'kwartaal:1:3'); assert.deepStrictEqual(F.selLees('kwartaal:1:3', '2026-10'), s);
+  assert.deepStrictEqual(F.selLees('rommel', '2026-10'), std); assert.deepStrictEqual(F.selLees(null, '2026-10'), std); assert.deepStrictEqual(F.selLees('jaar:7:9', '2026-10'), { eenheid: 'jaar', i0: 2, i1: 2 });
+});
+test('groeperen per kwartaal en jaar: centen exact, grenzen, jaarwisseling; alles na het bereik naar later', () => {
+  const nu = '2026-11', maanden = Array.from({ length: 25 }, (_, i) => ({ vrijC: i % 2 ? 1 : 3, vastGefC: i === 1 ? 7 : 0, vastOpenC: i === 3 ? 5 : 0 }));
+  const rij = { aan: true, eerderC: 0, laterC: 11, maanden };
+  const ev = [];   // elke maand een prognose-ontvangst van 0,01 + een kostenpost van -0,03, plus een ontvangst ver na het bereik
+  for (let i = 0; i < 25; i++) { const ym = F.maandPlus(nu, i); ev.push({ id: 'b' + i, bron: 'prognose', termijn_id: 't1', datum: ym + '-15', delta: 0.01 }, { id: 'k' + i, bron: 'patroon', datum: ym + '-16', delta: -0.03 }); }
+  ev.push({ id: 'ver', bron: 'prognose', termijn_id: 't1', datum: '2030-01-10', delta: 0.07 });
+  const tot = F.totalen({ rijen: [rij], events: ev, vandaag: '2026-11-27', maanden: 25 });
+  const tel = (a, v, t) => a.slice(v, t + 1).reduce((x, y) => x + y, 0);
+  for (const eenheid of ['kwartaal', 'jaar']) {
+    const L = F.eenheden(nu, eenheid), g = F.groepeerTotalen(tot, F.kolommen(L, { i0: 0, i1: L.length - 1 }));
+    L.forEach((u, i) => { assert.strictEqual(g.binnen[i], u.maanden.length); assert.strictEqual(g.kosten[i], -3 * u.maanden.length); assert.strictEqual(g.gepland[i], tel(tot.gepland, u.van, u.tot)); assert.strictEqual(g.netto[i], g.binnen[i] + g.kosten[i]); });
+    assert.strictEqual(g.later.binnen, 7); assert.strictEqual(g.later.gepland, 11);                              // alleen wat buiten 25 maanden valt
+    assert.strictEqual(g.binnen.reduce((a, b) => a + b, 0) + g.later.binnen, 25 + 7);                           // niets kwijt of dubbel
+  }
+  const K = F.eenheden(nu, 'kwartaal'), een = F.groepeerTotalen(tot, F.kolommen(K, { i0: 0, i1: 1 }));                // K4 2026 (2 mnd) + K1 2027 (3 mnd)
+  assert.deepStrictEqual(een.binnen, [2, 3]); assert.strictEqual(een.later.binnen, (25 - 5) + 7); assert.strictEqual(een.later.kosten, -3 * 20);       // de rest gaat naar later
+  assert.strictEqual(een.later.gepland, tel(tot.gepland, 5, 24) + 11);
+  // rij per kolom en later per rij (centen)
+  const L = F.eenheden(nu, 'kwartaal'), k0 = F.rijKolom(rij, L[0]);
+  assert.deepStrictEqual(k0, { vrijC: 3 + 1, vastGefC: 7, vastOpenC: 0 }); assert.deepStrictEqual(F.rijKolom(rij, L[1]), { vrijC: 3 + 1 + 3, vastGefC: 0, vastOpenC: 5 });
+  assert.strictEqual(F.rijLater(rij, F.kolommen(L, { i0: 0, i1: 1 })), 11 + maanden.slice(5).reduce((a, m) => a + m.vrijC + m.vastOpenC, 0));
+});
+
 let async_ = Promise.resolve();
 const atest = (naam, fn) => { async_ = async_.then(async () => { try { await fn(); n++; console.log('ok  - ' + naam); } catch (e) { console.log('FOUT - ' + naam + '\n' + (e.stack || e)); process.exitCode = 1; } }); };
 const pagina = (totaal, per) => async p => { const start = (p - 1) * per; return Array.from({ length: Math.max(0, Math.min(per, totaal - start)) }, (_, i) => ({ id: start + i })); };
