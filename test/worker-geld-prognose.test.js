@@ -7,12 +7,15 @@ const { pathToFileURL } = require('url');
 (async () => {
   const bron = fs.readFileSync(path.join(__dirname, '..', 'worker.js'), 'utf8') + '\nexport { handleGeld };\n';
   const tmp = path.join(os.tmpdir(), `mt-worker-test-${process.pid}.mjs`); fs.writeFileSync(tmp, bron, 'utf8');
-  let handleGeld; try { ({ handleGeld } = await import(pathToFileURL(tmp).href)); } finally { try { fs.unlinkSync(tmp); } catch { } }
+  let handleGeld, MtTeller; try { ({ handleGeld, MtTeller } = await import(pathToFileURL(tmp).href)); } finally { try { fs.unlinkSync(tmp); } catch { } }
 
   const kv = () => { const m = new Map(); return { m, async get(k) { return m.has(k) ? m.get(k).v : null; }, async put(k, v, o) { m.set(k, { v, meta: (o && o.metadata) || null }); }, async delete(k) { m.delete(k); },
     async list({ prefix }) { return { keys: [...m.keys()].filter(k => k.startsWith(prefix || '')).sort().map(name => ({ name, metadata: m.get(name).meta })), list_complete: true }; } }; };
   const json0 = (b, s) => ({ status: s || 200, body: b });
+  const fakeState = () => { let ketting = Promise.resolve(); return { storage: new Map(), async blockConcurrencyWhile(fn) { const vorige = ketting; let los; ketting = new Promise(r => { los = r; }); await vorige; try { return await fn(); } finally { los(); } } }; };
+  const maakNs = env => { const dos = {}; return { idFromName: n => n, get: id => { dos[id] = dos[id] || new MtTeller(fakeState(), env); return { fetch: (url, init) => dos[id].fetch(new Request(url, init)) }; } }; };
   const roep = async (env, rol, pad, methode, body) => {
+    if (!env.MT_TELLER && !env.zonderDO) env.MT_TELLER = maakNs(env);
     const req = { method: methode, url: 'https://x.test' + pad, json: async () => body || {} };
     return handleGeld(pad.split('?')[0], req, env, { rol, oid: 'oid-' + rol, email: rol + '@voorbeeld.test', rec: { naam: 'Test' } }, json0);
   };
@@ -125,7 +128,6 @@ const { pathToFileURL } = require('url');
   await test('uit beeld: maximum aantal sleutels (5000), controle en echte schrijfactie weigeren; terugzetten blijft mogelijk', async () => {
     const env = { MT_ROLLEN: kvPag(1000) };
     for (let i = 0; i < 5000; i++) { const r = { reden: 'weg', door: 'x', ts: 1 }; env.MT_ROLLEN.m.set('geld:uitbeeld:' + idn(i), { v: JSON.stringify(r), meta: r }); }
-    env.MT_ROLLEN.m.set('geld:uitbeeld-migratie', { v: '{"ts":1}', meta: null });
     const vol = await roep(env, 'eigenaar', '/geld/uitbeeld', 'POST', { ids: [idn(9000)], reden: 'weg' }); assert.strictEqual(vol.status, 400); assert.match(vol.body.error, /vol/);
     assert.strictEqual((await roep(env, 'eigenaar', '/geld/uitbeeld', 'POST', { ids: [idn(9000)], reden: 'weg', controle: true })).status, 400);
     assert.strictEqual((await roep(env, 'eigenaar', '/geld/uitbeeld', 'POST', { ids: [idn(5)], reden: 'verkeerd' })).status, 200);                   // een bestaande aanpassen mag
@@ -146,33 +148,22 @@ const { pathToFileURL } = require('url');
   });
   await test('uit beeld: een lijst van meer dan 3 pagina’s wordt helemaal gelezen', async () => {
     const env = { MT_ROLLEN: kvPag(2) }; for (let i = 0; i < 9; i++) { const r = { reden: 'weg', door: 'x', ts: 1 }; env.MT_ROLLEN.m.set('geld:uitbeeld:' + idn(i), { v: JSON.stringify(r), meta: r }); }
-    env.MT_ROLLEN.m.set('geld:uitbeeld-migratie', { v: '{"ts":1}', meta: null });
     assert.strictEqual((await roep(env, 'administratie', '/geld/uitbeeld', 'GET')).body.aantal, 9);
   });
   const leg = { revisie: 4, kredietlimiet: 1000, fictieve_buffer: 500, uitbeeld: { [idn(21)]: { reden: 'weg', door: 'Oud', ts: 7 } }, factuurschemas: { '700000000001': [{ label: 'aanbetaling', pct: 40 }, { label: 'oplevering', pct: 60 }] },
     potten: [{ id: 'spaar1', naam: 'Spaarpot', doel: 'buffer', actief: true, weekinleg: 25 }], prognose_schema: { grens_klein: 1000, grens_groot: 20000, betaaltermijn: 14, middel: [{ pct: 50, dagen: 7, label: 'aanbetaling', anker: 'akkoord' }, { pct: 50, dagen: 60, label: 'oplevering', anker: 'oplevering' }] } };
   const metConfig = () => { const env = { MT_ROLLEN: kv() }; env.MT_ROLLEN.m.set('geld:config', { v: JSON.stringify(leg), meta: null }); return env; };
-  await test('legacy: het oude config.uitbeeld wordt gelezen en bij de eerste schrijfactie lui overgenomen; de config zelf blijft ongemoeid', async () => {
+  await test('factuurschema’s per klant: eigen sleutel per contact; teruglezen; geen terugval of migratie uit de config; config ongemoeid', async () => {
     const env = metConfig(), voor = env.MT_ROLLEN.m.get('geld:config').v;
-    assert.deepStrictEqual(Object.keys((await roep(env, 'administratie', '/geld/uitbeeld', 'GET')).body.items), [idn(21)]);                              // terugval
-    await roep(env, 'eigenaar', '/geld/uitbeeld', 'POST', { ids: [idn(22)], reden: 'verkeerd' });
-    assert.deepStrictEqual(ub(env).sort(), ['geld:uitbeeld:' + idn(21), 'geld:uitbeeld:' + idn(22)].sort()); assert.ok(env.MT_ROLLEN.m.has('geld:uitbeeld-migratie'));
-    assert.strictEqual(JSON.parse(env.MT_ROLLEN.m.get('geld:uitbeeld:' + idn(21)).v).door, 'Oud');
-    await roep(env, 'eigenaar', '/geld/uitbeeld', 'POST', { ids: [idn(21)], reden: null });                                                           // een overgenomen offerte terugzetten
-    assert.deepStrictEqual(Object.keys((await roep(env, 'administratie', '/geld/uitbeeld', 'GET')).body.items), [idn(22)]);                              // komt niet terug uit de oude config
-    assert.strictEqual(env.MT_ROLLEN.m.get('geld:config').v, voor, 'niets uit de config gewist');
-  });
-  await test('factuurschema’s per klant: eigen sleutel per contact; teruglezen; terugval op de oude config en lui overnemen; config ongemoeid', async () => {
-    const env = metConfig(), voor = env.MT_ROLLEN.m.get('geld:config').v;
-    assert.deepStrictEqual((await roep(env, 'administratie', '/geld/fschemas', 'GET')).body.schemas, leg.factuurschemas);                                // terugval
+    assert.deepStrictEqual((await roep(env, 'administratie', '/geld/fschemas', 'GET')).body.schemas, {});                                              // geen terugval op config.factuurschemas
     const w = await roep(env, 'eigenaar', '/geld/fschema', 'POST', { contact_id: '700000000002', rijen: [{ label: 'factuur', pct: 100 }] }); assert.strictEqual(w.status, 200, JSON.stringify(w.body));
-    const g = (await roep(env, 'administratie', '/geld/fschemas', 'GET')).body.schemas; assert.deepStrictEqual(Object.keys(g).sort(), ['700000000001', '700000000002']);
-    assert.ok(env.MT_ROLLEN.m.has('geld:fschema:700000000001') && env.MT_ROLLEN.m.has('geld:fschema:700000000002') && env.MT_ROLLEN.m.has('geld:fschema-migratie'));
-    await roep(env, 'eigenaar', '/geld/fschema', 'POST', { contact_id: '700000000001', rijen: null });
-    assert.deepStrictEqual(Object.keys((await roep(env, 'administratie', '/geld/fschemas', 'GET')).body.schemas), ['700000000002']);
+    const g = (await roep(env, 'administratie', '/geld/fschemas', 'GET')).body.schemas; assert.deepStrictEqual(Object.keys(g), ['700000000002']);
+    assert.ok(env.MT_ROLLEN.m.has('geld:fschema:700000000002') && ![...env.MT_ROLLEN.m.keys()].some(k => /migratie/.test(k)), 'geen migratievlaggen');
+    await roep(env, 'eigenaar', '/geld/fschema', 'POST', { contact_id: '700000000002', rijen: null });
+    assert.deepStrictEqual((await roep(env, 'administratie', '/geld/fschemas', 'GET')).body.schemas, {});
     assert.strictEqual(env.MT_ROLLEN.m.get('geld:config').v, voor, 'niets uit de config gewist');
     const [x, y] = await Promise.all([roep(env, 'eigenaar', '/geld/fschema', 'POST', { contact_id: '700000000003', rijen: [{ label: 'a', pct: 100 }] }), roep(env, 'eigenaar', '/geld/fschema', 'POST', { contact_id: '700000000004', rijen: [{ label: 'b', pct: 100 }] })]);
-    assert.strictEqual(x.status + y.status, 400); assert.deepStrictEqual(Object.keys((await roep(env, 'eigenaar', '/geld/fschemas', 'GET')).body.schemas).sort(), ['700000000002', '700000000003', '700000000004']);
+    assert.strictEqual(x.status + y.status, 400); assert.deepStrictEqual(Object.keys((await roep(env, 'eigenaar', '/geld/fschemas', 'GET')).body.schemas).sort(), ['700000000003', '700000000004']);
   });
   await test('factuurschema’s: ongeldig (som, label, aantal, contact-id), rechten server-side', async () => {
     const env = { MT_ROLLEN: kv() };
@@ -191,11 +182,28 @@ const { pathToFileURL } = require('url');
     assert.deepStrictEqual(c.uitbeeld, leg.uitbeeld); assert.deepStrictEqual(c.factuurschemas, leg.factuurschemas); assert.strictEqual(c.revisie, g.revisie + 1);
     for (const b of [{ uitbeeld: { [idn(30)]: { reden: 'weg' } } }, { factuurschemas: {} }]) { const x = await roep(env, 'eigenaar', '/geld/config', 'POST', Object.assign({ revisie: c.revisie }, b)); assert.strictEqual(x.status, 400); }
     const na = (await roep(env, 'eigenaar', '/geld/config', 'GET')).body.config; assert.deepStrictEqual(na.uitbeeld, leg.uitbeeld); assert.deepStrictEqual(na.factuurschemas, leg.factuurschemas); assert.strictEqual(na.revisie, c.revisie);
-    // verse oude stand, niet een kopie van de client: een tussentijdse wijziging in KV (andere revisie) wordt niet overschreven
-    const env2 = metConfig(), g2 = (await roep(env2, 'eigenaar', '/geld/config', 'GET')).body.config, put0 = env2.MT_ROLLEN.put.bind(env2.MT_ROLLEN);
-    env2.MT_ROLLEN.put = async (k, v, o) => { if (k.startsWith('geld:config:historie:')) { const nu = JSON.parse(env2.MT_ROLLEN.m.get('geld:config').v); nu.revisie += 1; nu.kredietlimiet = 777; env2.MT_ROLLEN.m.set('geld:config', { v: JSON.stringify(nu), meta: null }); } return put0(k, v, o); };
-    const botsing = await roep(env2, 'eigenaar', '/geld/config', 'POST', { fictieve_buffer: 900, revisie: g2.revisie }); assert.strictEqual(botsing.status, 409);
-    const nu2 = JSON.parse(env2.MT_ROLLEN.m.get('geld:config').v); assert.strictEqual(nu2.kredietlimiet, 777); assert.strictEqual(nu2.fictieve_buffer, 500);     // de tussentijdse wijziging staat er nog, de onze is niet geschreven
+    // gelijktijdig, zelfde revisie: precies een 200 en een 409; de tweede wijziging overschrijft de eerste niet
+    const env2 = metConfig(), g2 = (await roep(env2, 'eigenaar', '/geld/config', 'GET')).body.config;
+    const [a, b] = await Promise.all([roep(env2, 'eigenaar', '/geld/config', 'POST', { kredietlimiet: 111, revisie: g2.revisie }), roep(env2, 'eigenaar', '/geld/config', 'POST', { fictieve_buffer: 900, revisie: g2.revisie })]);
+    assert.deepStrictEqual([a.status, b.status].sort(), [200, 409], JSON.stringify([a.body, b.body]));
+    const nu2 = JSON.parse(env2.MT_ROLLEN.m.get('geld:config').v), winnaar = a.status === 200 ? { kredietlimiet: 111, fictieve_buffer: 500 } : { kredietlimiet: 1000, fictieve_buffer: 900 };
+    assert.strictEqual(nu2.kredietlimiet, winnaar.kredietlimiet); assert.strictEqual(nu2.fictieve_buffer, winnaar.fictieve_buffer); assert.strictEqual(nu2.revisie, g2.revisie + 1);     // niet allebei, geen halve mix
+    assert.strictEqual([...env2.MT_ROLLEN.m.keys()].filter(k => k.startsWith('geld:config:historie:')).length, 1, 'één historie-stand, van de stand die echt is vervangen');
+    // viervoudig tegelijk: nog steeds precies één winnaar
+    const env3 = metConfig(), g3 = (await roep(env3, 'eigenaar', '/geld/config', 'GET')).body.config;
+    const vier = await Promise.all([1, 2, 3, 4].map(i => roep(env3, 'eigenaar', '/geld/config', 'POST', { kredietlimiet: 1000 + i, revisie: g3.revisie })));
+    assert.strictEqual(vier.filter(x => x.status === 200).length, 1); assert.strictEqual(vier.filter(x => x.status === 409).length, 3);
+  });
+  await test('config-POST zonder Durable Object (of een DO die faalt): 503 en niets geschreven, nooit een terugval zonder slot', async () => {
+    const env = metConfig(); env.zonderDO = true; const voor = env.MT_ROLLEN.m.get('geld:config').v;
+    const r = await roep(env, 'eigenaar', '/geld/config', 'POST', { kredietlimiet: 5, revisie: 4 }); assert.strictEqual(r.status, 503); assert.strictEqual(env.MT_ROLLEN.m.get('geld:config').v, voor);
+    assert.strictEqual([...env.MT_ROLLEN.m.keys()].filter(k => k.startsWith('geld:config:historie:')).length, 0);
+    const env2 = metConfig(); env2.MT_TELLER = { idFromName: n => n, get: () => ({ fetch: async () => { throw new Error('DO stuk'); } }) };
+    const r2 = await roep(env2, 'eigenaar', '/geld/config', 'POST', { kredietlimiet: 5, revisie: 4 }); assert.strictEqual(r2.status, 503); assert.strictEqual(env2.MT_ROLLEN.m.get('geld:config').v, voor);
+    const env3 = metConfig(); env3.MT_TELLER = { idFromName: n => n, get: () => ({ fetch: async () => new Response('{"error":"kapot"}', { status: 500 }) }) };
+    assert.strictEqual((await roep(env3, 'eigenaar', '/geld/config', 'POST', { kredietlimiet: 5, revisie: 4 })).status, 500);
+    assert.strictEqual(env3.MT_ROLLEN.m.get('geld:config').v, voor);
+    assert.strictEqual((await roep(env, 'administratie', '/geld/config', 'GET')).status, 200);       // lezen kan zonder DO gewoon
   });
   console.log(`\n${n} worker-tests geslaagd${process.exitCode ? ' — er zijn fouten' : ''}`);
 })();

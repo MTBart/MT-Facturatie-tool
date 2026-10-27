@@ -941,7 +941,7 @@
       else if (weg(ubR)) { st.ubBeschikbaar = false; st.ub = {}; st.ubInfo = null; }
       else throw new Error(ubR.error || 'de uit-beeld-lijst is niet te lezen');                          // fail-closed: nooit werken met een halve lijst
       if (fsR && !fsR.error && fsR.schemas) { st.fsBeschikbaar = true; st.fs = fsR.schemas; }
-      else if (weg(fsR)) { st.fsBeschikbaar = false; st.fs = (st.cfg && st.cfg.factuurschemas) || {}; }
+      else if (weg(fsR)) { st.fsBeschikbaar = false; st.fs = {}; }
       else throw new Error(fsR.error || 'de factuurschema’s zijn niet te lezen');
       if (!d || d.error) throw new Error(d && d.error || 'geen antwoord van Financiën');
       if (!p || p.error) throw new Error(p && p.error || 'prognose niet te lezen');

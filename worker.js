@@ -1495,6 +1495,7 @@ export class MtTeller {
     if (op.startsWith('csp-')) return await this.csp(op, b);
     if (op.startsWith('nr-')) return await this.nummers(op, b);
     if (op.startsWith('sig-')) return await SigDO.ops(this, op, b);   // signalen (L3), instantie 'signalen'
+    if (op.startsWith('gc-')) return await this.geldConfig(op, b);   // geld-config schrijven, instantie 'geldconfig'
     if (op === 'alle') {
       const m = await st.list({ prefix: 'pid:' }), werkcodes = {}, nummers = {}, aliassen = {};
       for (const [k, w] of m) {
@@ -1532,6 +1533,20 @@ export class MtTeller {
     }).catch(e => ({ fout: String(e.message || e) }));
     if (uit && uit.fout) return antw({ error: uit.fout }, 400);
     return antw({ uit, proef: op === 'proef' || undefined });
+  }
+  // Geld-config (Forecast, ronde 5): lezen van de huidige revisie, controle en schrijven in één geserialiseerd blok; de historie wordt hier ook geschreven.
+  async geldConfig(op, b) {
+    const antw = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json' } });
+    if (op !== 'gc-schrijf') return antw({ error: 'onbekend' }, 404);
+    const env = this.env; if (!env.MT_ROLLEN) return antw({ error: 'geen-opslag', uitleg: 'KV-binding MT_ROLLEN ontbreekt' }, 503);
+    if (!b || !b.norm || typeof b.norm !== 'object' || !Number.isInteger(b.verwacht) || !Number.isFinite(b.ts)) return antw({ error: 'ongeldig' }, 400);
+    return await this.state.blockConcurrencyWhile(async () => {
+      const ruw = await env.MT_ROLLEN.get('geld:config'), oudDoc = ruw ? JSON.parse(ruw) : null, huidig = geldConfigNorm(oudDoc);
+      if ((huidig.revisie || 0) !== b.verwacht) return antw({ error: 'instellingen zijn intussen gewijzigd — herlaad en probeer opnieuw', revisie: huidig.revisie || 0 }, 409);
+      await kvZet(env, `geld:config:historie:${String(9e15 - b.ts).padStart(16, '0')}:${randHex(4)}`, oudDoc || huidig);   // vorige stand bewaard
+      await kvZet(env, 'geld:config', b.norm);
+      return antw({ ok: true });
+    });
   }
   // Projectnummers (brok B): zie de uitleg bij NR_START. Lezen buiten het slot; alles wat schrijft in één geserialiseerd blok.
   async nummers(op, b) {
@@ -2270,35 +2285,31 @@ function geldUitbeeldNorm(x) {
 }
 // Forecast-gegevens met een eigen KV-sleutel per offerte of klant (nooit meer één gedeeld document): elke sleutel is los, dus gelijktijdige
 // acties op verschillende offertes of klanten kunnen elkaar niet wissen; voor dezelfde sleutel geldt de laatste schrijver. Metadata = de waarde,
-// zodat de lijst in één list()-aanroep komt. Het oude config.uitbeeld / config.factuurschemas wordt tot de eerste schrijfactie als terugval gelezen
-// en dan lui overgenomen (de config zelf wordt daarbij nooit aangepast).
-const GELD_UB = 'geld:uitbeeld:', GELD_FS = 'geld:fschema:', GELD_UB_MAX = 5000, GELD_FS_MAX = 2000, GELD_UB_VLAG = 'geld:uitbeeld-migratie', GELD_FS_VLAG = 'geld:fschema-migratie';
+// zodat de lijst in één list()-aanroep komt. Er is geen terugval op config.uitbeeld / config.factuurschemas (die bestaan in de live config niet); een
+// eventueel oud veld in de config blijft wel ongemoeid staan.
+const GELD_UB = 'geld:uitbeeld:', GELD_FS = 'geld:fschema:', GELD_UB_MAX = 5000, GELD_FS_MAX = 2000;
 async function geldForecastLijst(env, prefix) {
   const l = await geldKvLijst(env, prefix, 500);          // volledige paginering; compleet:false = niet alles gelezen
   return { items: l.items, compleet: !!l.compleet };
 }
 async function geldUitbeeldAlles(env) {
-  const l = await geldForecastLijst(env, GELD_UB); if (!l.compleet) return null;
-  if (await kvJson(env, GELD_UB_VLAG)) return l.items;
-  return Object.assign({}, geldUitbeeldNorm((await geldConfig(env)).uitbeeld), l.items);
-}
-async function geldUitbeeldMigreer(env) {
-  if (await kvJson(env, GELD_UB_VLAG)) return;
-  const leg = geldUitbeeldNorm((await geldConfig(env)).uitbeeld);
-  for (const [k, rec] of Object.entries(leg)) if (!(await kvJson(env, GELD_UB + k))) await kvZet(env, GELD_UB + k, rec, { metadata: rec });
-  await kvZet(env, GELD_UB_VLAG, { ts: Date.now() });
+  const l = await geldForecastLijst(env, GELD_UB); return l.compleet ? l.items : null;
 }
 async function geldFschemasAlles(env) {
   const l = await geldForecastLijst(env, GELD_FS); if (!l.compleet) return null;
   const uit = {}; for (const [k, v] of Object.entries(l.items)) if (v && Array.isArray(v.rijen)) uit[k] = v.rijen;
-  if (await kvJson(env, GELD_FS_VLAG)) return uit;
-  return Object.assign({}, geldFactuurschemasNorm((await geldConfig(env)).factuurschemas), uit);
+  return uit;
 }
-async function geldFschemaMigreer(env) {
-  if (await kvJson(env, GELD_FS_VLAG)) return;
-  const leg = geldFactuurschemasNorm((await geldConfig(env)).factuurschemas);
-  for (const [k, rijen] of Object.entries(leg)) if (!(await kvJson(env, GELD_FS + k))) { const rec = { rijen, door: 'migratie', ts: Date.now() }; await kvZet(env, GELD_FS + k, rec, { metadata: rec }); }
-  await kvZet(env, GELD_FS_VLAG, { ts: Date.now() });
+// Alle schrijfacties op geld:config lopen via één Durable Object-instantie ('geldconfig' van MT_TELLER): controle op de revisie en schrijven
+// gebeuren daar exclusief (KV heeft geen compare-and-swap). Zonder die DO wordt er NIET geschreven (503), nooit een terugval zonder slot.
+async function geldConfigDO(env, body) {
+  const ns = env.MT_TELLER;
+  if (!ns || !ns.idFromName) return { ok: false, status: 503, body: { error: 'geen-config-slot', uitleg: 'Durable Object-binding MT_TELLER ontbreekt: de instellingen worden niet zonder slot geschreven' } };
+  try {
+    const r = await ns.get(ns.idFromName('geldconfig')).fetch('https://mt-teller/gc-schrijf', { method: 'POST', body: JSON.stringify(body) });
+    const j = await r.json().catch(() => null);
+    return { ok: r.status === 200 && !!(j && j.ok), status: r.status, body: j || { error: 'geen antwoord van het config-slot' } };
+  } catch (e) { return { ok: false, status: 503, body: { error: 'config-slot niet bereikbaar — probeer het zo opnieuw' } }; }
 }
 function geldConfigNorm(c) {
   c = c && typeof c === 'object' ? c : {};
@@ -4362,12 +4373,11 @@ async function handleGeld(p, request, env, ik, json0) {
     if (!gewijzigd.length) return json({ error: 'niets te wijzigen' }, 400);
     const ts = Date.now(), norm = geldConfigNorm(Object.assign(nieuw, { gewijzigd: new Date(ts).toISOString(), door: (ik.rec && ik.rec.naam) || ik.email || ik.oid, revisie: oud.revisie + 1 }));
     if ('btw' in b) for (const k of ['spaarpot', 'aangifte_van', 'terugboeking_van']) if (b.btw && b.btw[k] != null && norm.btw[k] !== b.btw[k]) return json({ error: `btw.${k}: onbekende rekening/pot` }, 400);
-    await kvZet(env, `geld:config:historie:${String(9e15 - ts).padStart(16, '0')}:${randHex(4)}`, oud);   // vorige stand bewaard
     // G7: wijzigt een streefbedrag (of de keuze eigen bedrag ↔ advies), leg datum en naam vast
     { const vb = geldStreefBedragen(oud), nb = geldStreefBedragen(norm);
       for (const k of Object.keys(nb)) if (JSON.stringify(vb[k]) !== JSON.stringify(nb[k])) norm.streef_herkomst[k] = { bron: norm.streef_herkomst[k].bron, datum: geldVandaag(), door: norm.door || null }; }
-    { const vers = geldConfigNorm(await kvJson(env, 'geld:config')); if ((vers.revisie || 0) !== (oud.revisie || 0)) return json({ error: 'instellingen zijn intussen gewijzigd — herlaad en probeer opnieuw', revisie: vers.revisie }, 409); }   // kleinst mogelijk venster tussen lezen en schrijven
-    await kvZet(env, 'geld:config', norm);
+    const gc = await geldConfigDO(env, { verwacht: oud.revisie || 0, norm, ts });         // exclusief: revisiecontrole + schrijven in één blok (409 bij een tussentijdse wijziging, 503 zonder slot)
+    if (!gc.ok) return json(gc.body, gc.status);
     await geldZetVersie(env, `${ts}-c${randHex(3)}`, ctx);
     await audit(env, { door: ik.oid, doorNaam: (ik.rec && ik.rec.naam) || ik.email || '', actie: 'geld-config', doel: 'geld', doelNaam: 'instellingen: ' + gewijzigd.join(', ') });   // geen bedragen
     return json({ ok: true, config: norm });
@@ -4390,7 +4400,6 @@ async function handleGeld(p, request, env, ik, json0) {
     const na = new Set(Object.keys(bestaand)); for (const id of ids) { if (wissen) na.delete(id); else na.add(id); }
     if (na.size > GELD_UB_MAX) return json({ error: `de uit-beeld-lijst is vol (${GELD_UB_MAX}); zet er eerst een paar terug`, max: GELD_UB_MAX }, 400);
     if (b.controle === true) return json({ ok: true, controle: true, aantal: na.size, max: GELD_UB_MAX });          // alleen controleren: niets schrijven
-    await geldUitbeeldMigreer(env);
     const ts = Date.now(), door = String((ik.rec && ik.rec.naam) || ik.email || ik.oid).slice(0, 60), gezet = {}, verwijderd = [];
     for (const id of ids) {
       if (wissen) { await env.MT_ROLLEN.delete(GELD_UB + id); verwijderd.push(id); continue; }
@@ -4420,7 +4429,6 @@ async function handleGeld(p, request, env, ik, json0) {
     let bestaand = null; try { bestaand = await geldFschemasAlles(env); } catch { }
     if (!bestaand) return json({ error: 'kon niet controleren of de lijst vol is — probeer het zo opnieuw', reden: 'lijst-onvolledig' }, 503);
     if (!wissen && !(id in bestaand) && Object.keys(bestaand).length >= GELD_FS_MAX) return json({ error: `hooguit ${GELD_FS_MAX} klanten met een eigen schema`, max: GELD_FS_MAX }, 400);
-    await geldFschemaMigreer(env);
     if (wissen) await env.MT_ROLLEN.delete(GELD_FS + id);
     else { const rec = { rijen, door: String((ik.rec && ik.rec.naam) || ik.email || ik.oid).slice(0, 60), ts: Date.now() }; await kvZet(env, GELD_FS + id, rec, { metadata: rec }); }
     await audit(env, { door: ik.oid, doorNaam: (ik.rec && ik.rec.naam) || ik.email || '', actie: 'geld-fschema', doel: 'klant', doelNaam: wissen ? 'schema gewist' : 'schema gezet' });
