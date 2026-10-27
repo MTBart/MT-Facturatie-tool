@@ -6,7 +6,8 @@
     "voor": "geld",
     "punten": [
       "Offertes uit beeld zetten, zonder ze te verwijderen: met het menu \"…\" achter een offerte, of met Selecteren voor meerdere tegelijk, met een reden (verkeerd of vervallen, al gefactureerd, weg). \"Gaat zeker door\" gaat dan uit; de planning blijft bewaard. Bij het filter \"Uit beeld\" zie je ze en zet je ze terug. Er verandert niets in Moneybird.",
-      "De Forecast vult nu het venster: de kop, het filter, de tijdbalk en de kerncijfers staan vast, de tabel scrolt in een eigen vak en de totalen blijven onderaan in beeld. Met \"Uitklappen\" kies je de lange paginaweergave. Aandacht klapt in tot één regel."
+      "De Forecast vult nu het venster: de kop, het filter, de tijdbalk en de kerncijfers staan vast, de tabel scrolt in een eigen vak en de totalen blijven onderaan in beeld. Met \"Uitklappen\" kies je de lange paginaweergave. Aandacht klapt in tot één regel.",
+      "De tabel vult de volle breedte. Zijn er meer maanden gekozen dan er passen, dan scrolt de tabel zijwaarts (Shift en muiswiel, slepen, of de pijlen ‹ ›), met de offertenamen en de totalen die blijven staan. Met \"Passend maken\" worden de maandkolommen smaller, tot alle maanden in beeld passen."
     ]
   },
   {

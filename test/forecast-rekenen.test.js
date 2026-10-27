@@ -491,6 +491,23 @@ test('uit beeld: totalen blijven gelijk aan Financiën (alleen items die aan sta
   assert.strictEqual(F.zichtbaar(na.rijen, F.STATUSSEN).verborgen, 1);                                                                          // p:a is verborgen, maar het totaal klopt met Financiën
 });
 
+// ── brede tabel: compacte bedragen en passende kolombreedte ──
+test('fmtKort: 950 · 1,2k · 12k · 1,2M, negatief met minteken, afgerond', () => {
+  const k = e => F.fmtKort(Math.round(e * 100));
+  assert.strictEqual(k(0), '0'); assert.strictEqual(k(950), '950'); assert.strictEqual(k(999.4), '999'); assert.strictEqual(k(1000), '1k'); assert.strictEqual(k(1200), '1,2k'); assert.strictEqual(k(9950), '10k');
+  assert.strictEqual(k(12100), '12k'); assert.strictEqual(k(18150), '18k'); assert.strictEqual(k(999499), '999k'); assert.strictEqual(k(1200000), '1,2M'); assert.strictEqual(k(25000000), '25M');
+  assert.strictEqual(k(-12100), '−12k'); assert.strictEqual(k(-1250), '−1,3k'); assert.strictEqual(F.fmtKort(-7), '−0');
+});
+test('passendBreedte: alle maanden in beeld met een minimum van 64 px; compact onder 96 px', () => {
+  assert.deepStrictEqual(F.passendBreedte(720, 6), { w: 110, compact: false, past: true });             // genoeg ruimte: gewone breedte (maximum)
+  assert.deepStrictEqual(F.passendBreedte(720, 8), { w: 90, compact: true, past: true });                 // smaller en compacte bedragen
+  assert.deepStrictEqual(F.passendBreedte(768, 12), { w: 64, compact: true, past: true });                // precies het minimum
+  assert.deepStrictEqual(F.passendBreedte(767, 12), { w: 64, compact: true, past: false });               // past niet meer: minimum, het vak blijft zijwaarts scrollen
+  assert.deepStrictEqual(F.passendBreedte(500, 25), { w: 64, compact: true, past: false });
+  assert.deepStrictEqual(F.passendBreedte(500, 0), { w: 110, compact: false, past: true }); assert.strictEqual(F.passendBreedte(2000, 3).w, 110);
+  assert.strictEqual(F.passendBreedte(960, 10, { min: 80, compactOnder: 100 }).w, 96);
+});
+
 let async_ = Promise.resolve();
 const atest = (naam, fn) => { async_ = async_.then(async () => { try { await fn(); n++; console.log('ok  - ' + naam); } catch (e) { console.log('FOUT - ' + naam + '\n' + (e.stack || e)); process.exitCode = 1; } }); };
 const pagina = (totaal, per) => async p => { const start = (p - 1) * per; return Array.from({ length: Math.max(0, Math.min(per, totaal - start)) }, (_, i) => ({ id: start + i })); };
