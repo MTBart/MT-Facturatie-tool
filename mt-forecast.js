@@ -408,28 +408,33 @@
 .mtf-kaart-kop h2{margin:0 auto 0 0;font-size:15px;line-height:22px;font-weight:600}.mtf-getal{font-family:var(--m-mono);font-size:12px;color:var(--m-ink3)}
 .mtf-strook{padding:var(--space-3,12px) var(--space-6,24px) var(--space-4,16px)}
 .mtf-filter{display:flex;align-items:center;gap:var(--space-2,8px);flex-wrap:wrap;margin-bottom:var(--space-3,12px)}.mtf-zacht{color:var(--m-ink3);font-size:12px}
-.mtf-fchip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:var(--m-r);border:1px solid var(--m-line);background:var(--m-surface);color:var(--m-ink2);font-size:12px;font-weight:500;cursor:pointer}
+.mtf-kopje{font-size:11px;font-weight:500;color:var(--m-ink3);margin-right:4px}.mtf-fchip .ui-ico{opacity:.5}.mtf-fchip[aria-pressed=true] .ui-ico{opacity:1}.mtf-dot{opacity:.5}
+.mtf-fchip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:var(--m-r);border:1px solid var(--m-line);background:var(--m-surface);color:var(--m-ink3);font-size:12px;font-weight:500;cursor:pointer}
 .mtf-fchip:hover{background:var(--m-surface2)}.mtf-fchip[aria-pressed=true]{background:var(--m-psoft);border-color:var(--m-psoft);color:var(--m-ptext)}
 .mtf-tel{font-family:var(--m-mono);font-size:11px;opacity:.75}.mtf-verborgen{font-size:12px;color:var(--m-ink3);margin-left:auto}
 .mtf-balk{padding:0}.mtf-jaren{position:relative;height:14px;font-size:11px;color:var(--m-ink3)}.mtf-jaren span{position:absolute;top:0;white-space:nowrap}
 .mtf-spoor{position:relative;height:28px;border-top:1px solid var(--m-line);border-bottom:1px solid var(--m-line);touch-action:none;user-select:none;-webkit-user-select:none;cursor:pointer}
 .mtf-seg{position:absolute;top:0;bottom:0;border:0;border-left:1px solid var(--m-soft);background:none;padding:0;font-size:11px;color:var(--m-ink3);overflow:hidden;white-space:nowrap;cursor:pointer}
 .mtf-seg:first-child{border-left:0}.mtf-seg.in{color:var(--m-ptext)}.mtf-seg .l{display:none}
-.mtf-sel{position:absolute;top:0;bottom:0;background:var(--m-psoft);background:color-mix(in srgb,var(--m-psoft) 55%,transparent);border-left:2px solid var(--m-primary);border-right:2px solid var(--m-primary);cursor:grab;z-index:1}.mtf-sel:active{cursor:grabbing}
-.mtf-greep{position:absolute;top:50%;width:8px;height:18px;margin-top:-9px;background:var(--m-primary);border-radius:2px;cursor:ew-resize;z-index:2;opacity:1}
-.mtf-greep::before{content:"";position:absolute;top:-10px;bottom:-10px;left:-10px;right:-10px}.mtf-greep.van{left:-5px}.mtf-greep.tot{right:-5px}
+.mtf-sel{position:absolute;top:0;bottom:0;background:var(--m-psoft);background:color-mix(in srgb,var(--m-psoft) 70%,transparent);border-top:2px solid var(--m-primary);border-bottom:2px solid var(--m-primary);cursor:grab;z-index:1}.mtf-sel:active{cursor:grabbing}
+.mtf-greep{position:absolute;top:50%;width:6px;height:14px;margin-top:-7px;background:var(--m-primary);border-radius:2px;cursor:ew-resize;z-index:2;opacity:.4}.mtf-spoor:hover .mtf-greep,.mtf-greep:focus-visible{opacity:1;height:22px;margin-top:-11px}
+.mtf-periode{font-size:12px;color:var(--m-ink2);margin-bottom:4px}
+.mtf-scrollwrap{position:relative}.mtf-scrollwrap::after{content:"";display:none;position:absolute;top:0;bottom:0;right:0;width:36px;pointer-events:none;background:linear-gradient(to right,transparent,var(--m-surface))}
+.mtf-zk{display:block;font-size:11px;font-weight:400;color:var(--m-ink3)}
+@media (hover:none){.mtf-greep{opacity:1}}
+.mtf-greep::before{content:"";position:absolute;top:-10px;bottom:-10px;left:-10px;right:-10px}.mtf-greep.van{left:-4px}.mtf-greep.tot{right:-4px}
 .mtf-greep:focus-visible{outline:2px solid var(--focus,var(--m-primary));outline-offset:2px}
 .mtf-aandacht{padding:0}.mtf-aandacht-rij{display:flex;align-items:center;gap:var(--space-3,12px);padding:var(--space-3,12px) var(--space-6,24px);border-bottom:1px solid var(--m-soft);font-size:13px}.mtf-aandacht-rij:last-child{border-bottom:0}
 .mtf-aandacht-rij .ui-ico{color:var(--m-warn)}.mtf-aandacht-rij p{margin:0;flex:1;color:var(--m-ink)}
 .mtf-kern{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-4,16px);padding:var(--space-4,16px) var(--space-6,24px)}
-.mtf-fact{display:flex;flex-direction:column;gap:2px;min-width:0}.mtf-fact .label{font-size:12px;line-height:16px;font-weight:500;color:var(--m-ink2)}.mtf-fact .v{font-family:var(--m-mono);font-size:18px;line-height:24px;font-weight:500;font-variant-numeric:tabular-nums}
+.mtf-fact{display:flex;flex-direction:column;gap:2px;min-width:0}.mtf-fact .label{font-size:12px;line-height:16px;font-weight:500;color:var(--m-ink2)}.mtf-fact.netto{background:var(--m-surface2);border-radius:var(--m-r);padding:8px 12px}.mtf-fact .v{font-family:var(--m-mono);font-size:18px;line-height:24px;font-weight:500;font-variant-numeric:tabular-nums}
 .mtf-sm{height:28px;padding:0 10px;font-size:12px;white-space:nowrap}
 .mtf-melding{padding:var(--space-6,24px);color:var(--m-ink2)}.mtf-fout{padding:var(--space-3,12px) var(--space-4,16px);border:1px solid var(--m-err);background:var(--m-errbg);color:var(--m-err);border-radius:var(--m-rp);font-size:13px}
 .mtf-scroll{overflow-x:auto;border-radius:0 0 var(--m-rp) var(--m-rp)}
 .mtf-tabel{border-collapse:separate;border-spacing:0;min-width:100%;font-size:13px}
 .mtf-tabel th,.mtf-tabel td{padding:4px 10px;border-bottom:1px solid var(--m-soft);vertical-align:middle;white-space:nowrap;text-align:right}
 .mtf-tabel thead th{font-size:12px;font-weight:500;color:var(--m-ink2);background:var(--m-surface);border-bottom:1px solid var(--m-line);height:36px}
-.mtf-tabel .s{text-align:left;position:sticky;left:0;z-index:1;background:var(--m-surface);min-width:320px;max-width:340px;white-space:normal;border-right:1px solid var(--m-soft)}
+.mtf-tabel .s{text-align:left;position:sticky;left:0;z-index:1;background:var(--m-surface);min-width:320px;max-width:340px;white-space:normal}
 .mtf-tabel thead .s{z-index:2}
 .mtf-tabel td.nu,.mtf-tabel th.nu{background:var(--m-surface2)}.mtf-tabel th.nu{color:var(--m-ptext)}
 .mtf-tabel td.num,.mtf-tabel th.num{font-family:var(--m-mono);font-variant-numeric:tabular-nums}
@@ -440,11 +445,13 @@
 .mtf-st{display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 6px 0 4px;border-radius:var(--m-r);font-size:11px;font-weight:500;white-space:nowrap}
 .mtf-st-ok{color:var(--m-ok);background:var(--m-okbg)}.mtf-st-warn{color:var(--m-warn);background:var(--m-warnbg)}.mtf-st-neutraal{color:var(--m-ink2);background:var(--m-surface2)}
 .mtf-vlag{display:inline-flex;align-items:center;gap:4px;color:var(--m-err);font-weight:500;font-size:11px;white-space:nowrap}.mtf-vlag.let{color:var(--m-warn)}
-.mtf-schema{border:0;background:none;padding:0;margin:0;font-size:11px;color:var(--m-ptext);text-decoration:underline;cursor:pointer}.mtf-schema:disabled{opacity:.4;cursor:default}
+.mtf-schema{border:0;background:none;padding:0;margin:0;font-size:11px;color:var(--m-ink3);text-decoration:none;cursor:pointer}.mtf-schema:hover,.mtf-schema:focus-visible{color:var(--m-ptext);text-decoration:underline}.mtf-schema:disabled{opacity:.4;cursor:default}
 .mtf-rij.uit td:not(.s){opacity:.5}.mtf-rij.uit .s .mtf-naam b{color:var(--m-ink2)}
 .mtf-cel{position:relative;display:flex;flex-direction:column;align-items:flex-end;gap:2px;min-width:84px}
 .mtf-in{width:88px;height:28px;text-align:right;border:1px solid transparent;border-radius:var(--m-r);padding:0 8px;background:transparent;color:var(--m-ink);font:inherit;font-family:var(--m-mono);font-variant-numeric:tabular-nums}
-.mtf-in::placeholder{color:var(--m-ink3);opacity:1}.mtf-in:hover:not(:disabled),.mtf-in:focus{border-color:var(--m-strong);background:var(--m-surface)}
+.mtf-in::placeholder{color:var(--m-ink3);opacity:1}.mtf-in:not(:disabled){cursor:pointer}.mtf-cel:hover .mtf-in:not(:disabled){background:var(--m-surface2)}
+.mtf-in:hover:not(:disabled),.mtf-in:focus{border-color:var(--m-strong);background:var(--m-surface);cursor:text}.mtf .mtf-in:disabled{opacity:.3;cursor:not-allowed}
+.mtf-hint{padding:6px var(--space-6,24px);font-size:12px;color:var(--m-ink3);border-bottom:1px solid var(--m-soft)}
 .mtf-in:focus{outline:2px solid var(--focus,var(--m-primary));outline-offset:1px}
 .mtf-gef{font-size:11px;color:var(--m-ink3)}.mtf-vast{font-size:12px}
 .mtf-rest{border:0;background:var(--m-surface);color:var(--m-ptext);font-size:11px;cursor:pointer;padding:0 4px;text-decoration:underline;position:absolute;right:0;bottom:-9px;z-index:2;visibility:hidden;line-height:14px}
@@ -452,7 +459,7 @@
 .mtf-agg{border:0;background:none;font:inherit;color:inherit;cursor:pointer;padding:2px 4px;border-radius:var(--m-r);display:flex;flex-direction:column;align-items:flex-end;margin-left:auto}
 .mtf-agg:hover{background:var(--m-surface2)}.mtf-kopknop{font-weight:500;color:var(--m-ink2);display:inline;font-size:12px}
 .mtf-tabel tfoot td,.mtf-tabel tfoot th{background:var(--m-surface);font-weight:400;border-bottom:1px solid var(--m-soft);height:34px;color:var(--m-ink2)}
-.mtf-tabel tfoot .s{background:var(--m-surface)}
+.mtf-tabel tfoot .s{background:var(--m-surface)}.mtf-tabel tfoot tr:first-child td,.mtf-tabel tfoot tr:first-child th{border-top:1px solid var(--m-line)}
 .mtf-tabel tfoot tr.netto td,.mtf-tabel tfoot tr.netto th{font-weight:600;color:var(--m-ink);border-top:1px solid var(--m-strong);border-bottom:0;height:40px}
 .mtf-tabel tfoot label{display:flex;gap:8px;align-items:center;cursor:pointer}.mtf-tabel tfoot input{width:14px;height:14px}
 .mtf-p{color:var(--m-ok)}.mtf-n{color:var(--m-err)}.mtf-0{color:var(--m-ink3)}
@@ -475,7 +482,8 @@
 .mtf-titel{font-size:24px;line-height:29px}.mtf-kop{align-items:flex-start}
 .mtf-strook,.mtf-kaart-kop,.mtf-aandacht-rij{padding-left:var(--space-4,16px);padding-right:var(--space-4,16px)}
 .mtf-kern{grid-template-columns:repeat(2,1fr);padding:var(--space-4,16px)}
-.mtf-tabel .s{min-width:150px;max-width:160px}.mtf-naam b{max-width:110px}
+.mtf-tabel .s{min-width:170px;max-width:180px;box-shadow:1px 0 0 var(--m-soft)}.mtf-naam b{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;max-width:130px}
+.kol-gef,.kol-nog{display:none}.mtf-fact.netto{grid-column:1/-1}.mtf-scrollwrap:not(.eind)::after{display:block}
 .mtf-seg .k{display:none}.mtf-seg .l{display:inline}.mtf-spoor.kwartaal .mtf-seg .k,.mtf-spoor.jaar .mtf-seg .k{display:inline}.mtf-spoor.kwartaal .mtf-seg .l,.mtf-spoor.jaar .mtf-seg .l{display:none}.mtf-spoor.kwartaal .mtf-seg{font-size:10px}
 .mtf-verborgen{margin-left:0;width:100%}
 .mtf-aandacht-rij{flex-wrap:wrap}
@@ -522,7 +530,8 @@
     const label = h('input', { class: 'mtf-pop-label', type: 'text', maxlength: '24', list: 'mtf-labels', autocomplete: 'off', 'aria-label': 'Label van dit factuurdeel', placeholder: 'bijvoorbeeld aanbetaling', value: m.label && m.label !== REST_LABEL ? m.label : '' });
     const hint = h('div', { class: 'mtf-pop-hint', 'aria-live': 'polite' });
     const lees = () => { if (modus === 'eur') return F.parseBedrag(bedrag.value); const p = F.parsePct(bedrag.value); return p == null ? null : F.pctNaarCenten(totaal, p); };
-    const toon = () => { const cc = lees(); hint.textContent = cc == null ? 'Dit is geen geldig bedrag.' : modus === 'eur' ? `${F.fmt(cc)} is ${String(F.centenNaarPct(totaal, cc)).replace('.', ',')}% van ${F.fmt(totaal)}` : `Dat is € ${F.fmt(cc)} van ${F.fmt(totaal)}`; };
+    const anders = r.geplandC - m.vrijC + r.gefC, pctGepland = cc => String(F.centenNaarPct(totaal, anders + cc)).replace('.', ',');
+    const toon = () => { const cc = lees(); hint.textContent = cc == null ? 'Dit is geen geldig bedrag.' : modus === 'eur' ? `${pctGepland(cc)}% van € ${F.fmt(totaal)} gepland` : `€ ${F.fmt(cc)}; samen ${pctGepland(cc)}% van € ${F.fmt(totaal)} gepland`; };
     const knopEur = h('button', { type: 'button', class: 'ui-knop ui-knop--primair', 'aria-pressed': 'true', data: { modus: 'eur' } }, '€'), knopPct = h('button', { type: 'button', class: 'ui-knop', 'aria-pressed': 'false', data: { modus: 'pct' } }, '%');
     const zetModus = nieuw => {
       if (nieuw === modus) return; const cc = lees(); modus = nieuw;
@@ -533,9 +542,9 @@
     knopEur.addEventListener('click', () => zetModus('eur')); knopPct.addEventListener('click', () => zetModus('pct')); bedrag.addEventListener('input', toon);
     const sla = cc => { if (cc == null) { toast('Vul een bedrag of percentage in.'); return; } closePop(); wijzig(sl, (it, ov) => F.zetCel(it, ov, ym, cc, st.data.vandaag, { label: label.value, behoudAan: behoudAanVoor(r) }), 'Opgeslagen — Financiën rekent mee'); };
     const opslaan = h('button', { type: 'button', class: 'ui-knop ui-knop--primair' }, 'Opslaan'), restKnop = h('button', { type: 'button', class: 'ui-knop', disabled: !(r.nogC > 0) }, 'Rest hier'),
-      weg = h('button', { type: 'button', class: 'ui-knop', disabled: !m.vrijC }, 'Verwijderen'), sluit = h('button', { type: 'button', class: 'mtf-pop-x', 'aria-label': 'Sluiten', title: 'Sluiten (Esc)' }, '×');
+      weg = m.vrijC ? h('button', { type: 'button', class: 'ui-knop' }, 'Verwijderen') : null, sluit = h('button', { type: 'button', class: 'mtf-pop-x', 'aria-label': 'Sluiten', title: 'Sluiten (Esc)' }, '×');
     opslaan.addEventListener('click', () => sla(lees())); restKnop.addEventListener('click', () => { const cc = F.restHier(r, ym); if (cc == null) toast('Er is niets meer te plannen.'); else sla(cc); });
-    weg.addEventListener('click', () => { closePop(); wijzig(sl, (it, ov) => F.zetCel(it, ov, ym, 0, st.data.vandaag), 'Factuurdeel verwijderd'); }); sluit.addEventListener('click', closePop);
+    if (weg) weg.addEventListener('click', () => { closePop(); wijzig(sl, (it, ov) => F.zetCel(it, ov, ym, 0, st.data.vandaag), 'Factuurdeel verwijderd'); }); sluit.addEventListener('click', closePop);
     [bedrag, label].forEach(x => x.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); sla(lees()); } }));
     const el = h('div', { class: 'mtf-pop', role: 'dialog', 'aria-label': 'Factuurdeel plannen: ' + r.naam + ', ' + maandTekst(ym) },
       h('div', { class: 'mtf-pop-kop' }, sluit, h('b', null, r.naam), h('small', null, maandTekst(ym) + ' · offerte ' + F.fmt(totaal) + (r.nogC > 0 ? ' · nog te plannen ' + F.fmt(r.nogC) : ''))),
@@ -612,13 +621,13 @@
       r.afwijkt ? vlag('Bedrag wijkt af', 'In Moneybird staat ' + F.fmt(r.mbTotaalC) + ', de prognose rekent met ' + F.fmt(r.totaalC) + '. Zie Aandacht.') : null,
       r.dubbelen.length ? vlag('Dubbel', 'Nog een prognose-item voor deze offerte. Zie Aandacht.') : null,
       nietAcc && r.aan ? vlag('Nog niet geaccepteerd', 'Deze offerte is nog niet geaccepteerd, maar gaat zeker door. Zie Aandacht.', 'let') : null,
-      mag && !uit && !blok && r.nogC > 0 ? h('button', { type: 'button', class: 'mtf-schema', data: { schema: r.sleutel }, title: 'Vul de standaardverdeling van deze klant in op het nog niet geplande deel' }, 'Schema toepassen') : null);
-    tr.append(h('td', { class: 's' }, h('label', { class: 'mtf-naam' },
-      h('input', { type: 'checkbox', checked: r.aan, disabled: !mag || uit, 'aria-label': 'Gaat zeker door: ' + r.naam, title: 'Gaat zeker door: hetzelfde vinkje als in Financiën. Aan = de offerte telt mee in de prognose en de kaslijn.', data: { aan: r.sleutel } }),
+      mag && !uit && !blok && r.nogC > 0 && r.geplandC === 0 && r.gefC === 0 ? h('button', { type: 'button', class: 'mtf-schema', data: { schema: r.sleutel }, title: 'Vul de standaardverdeling van deze klant in op het nog niet geplande deel' }, 'Schema toepassen') : null);
+    tr.append(h('td', { class: 's' }, h('div', { class: 'mtf-naam' },
+      h('input', { type: 'checkbox', checked: r.aan, disabled: !mag || uit, 'aria-label': 'Gaat zeker door: ' + r.naam, title: 'Vink aan als deze offerte zeker doorgaat; telt dan mee hier en in Financiën', data: { aan: r.sleutel } }),
       h('span', null, h('b', { title: r.naam }, r.naam), meta))));
     tr.append(h('td', { class: 'num' + (r.afwijkt ? ' mtf-n' : ''), title: r.afwijkt ? 'Prognose rekent met ' + F.fmt(r.totaalC) + '; Moneybird: ' + F.fmt(r.mbTotaalC) : null }, F.fmt(r.afwijkt ? r.mbTotaalC : r.totaalC)),
-      h('td', { class: 'num', title: r.gecrediteerd ? 'Netto, na creditnota’s' : null }, r.gefNettoC ? h('span', { class: r.gefNettoC < 0 ? 'mtf-n' : null }, F.fmt(r.gefNettoC)) : h('span', { class: 'mtf-0' }, '–'), r.gecrediteerd ? h('div', { class: 'mtf-gef' }, 'gecrediteerd' + (r.creditC ? ' ' + F.fmt(r.creditC) : '')) : null),
-      h('td', { class: 'num' }, r.nogC > 0 ? F.fmt(r.nogC) : h('span', { class: 'mtf-0' }, r.bestaat ? 'gepland' : '–')));
+      h('td', { class: 'num kol-gef', title: r.gecrediteerd ? 'Netto, na creditnota’s' : null }, r.gefNettoC ? h('span', { class: r.gefNettoC < 0 ? 'mtf-n' : null }, F.fmt(r.gefNettoC)) : h('span', { class: 'mtf-0' }, '–'), r.gecrediteerd ? h('div', { class: 'mtf-gef' }, 'gecrediteerd' + (r.creditC ? ' ' + F.fmt(r.creditC) : '')) : null),
+      h('td', { class: 'num kol-nog' }, r.nogC > 0 ? F.fmt(r.nogC) : h('span', { class: 'mtf-0' }, r.bestaat ? 'gepland' : '–')));
     if (st.heeftEerder) tr.append(h('td', { class: 'num' }, r.eerderC ? h('div', { class: 'mtf-cel' }, F.fmt(r.eerderC), mag && r.eerderVrijC ? h('button', { type: 'button', class: 'mtf-schema', disabled: uit || blok, data: { eerder: r.sleutel }, title: 'De factuurdatum is voorbij: zet de open termijnen in de lopende maand' }, 'naar deze maand') : null) : h('span', { class: 'mtf-0' }, '–')));
     kols.forEach((kol, ki) => {
       const nuKol = kol.van === 0;
@@ -646,6 +655,7 @@
   function posSel(spoor, lijst) {
     const N = F.HORIZON + 1, s = st.sel, a = lijst[s.i0].van, b = lijst[s.i1].tot, sel = spoor.querySelector('.mtf-sel');
     if (sel) { sel.style.left = (a / N * 100) + '%'; sel.style.width = ((b - a + 1) / N * 100) + '%'; }
+    const pl = spoor.parentNode && spoor.parentNode.querySelector('.mtf-periode'); if (pl) pl.textContent = 'Periode: ' + lijst[s.i0].label + (s.i1 > s.i0 ? ' – ' + lijst[s.i1].label : '');
     spoor.querySelectorAll('.mtf-seg').forEach((x, i) => x.classList.toggle('in', i >= s.i0 && i <= s.i1));
     [['van', s.i0], ['tot', s.i1]].forEach(([g, i]) => { const e = spoor.querySelector('.mtf-greep.' + g); if (e) { e.setAttribute('aria-valuenow', String(i)); e.setAttribute('aria-valuetext', lijst[i].label); } });
   }
@@ -661,7 +671,7 @@
     // jaarlabels boven het spoor
     const jaren = h('div', { class: 'mtf-jaren', 'aria-hidden': 'true' });
     F.eenheden(nu, 'jaar').forEach(u => { const e = h('span', null, u.label); e.style.left = (u.van / N * 100) + '%'; jaren.append(e); });
-    const wrap = h('div', { class: 'mtf-balk' }, jaren, spoor);
+    const wrap = h('div', { class: 'mtf-balk' }, h('div', { class: 'mtf-periode' }), jaren, spoor);
     posSel(spoor, lijst);
     bindSpoor(spoor, lijst);
     return wrap;
@@ -702,6 +712,11 @@
     });
   }
 
+  function scrollWrap(tab) {
+    const sc = h('div', { class: 'mtf-scroll' }, tab), wrap = h('div', { class: 'mtf-scrollwrap' }, sc);
+    const bij = () => wrap.classList.toggle('eind', sc.scrollLeft + sc.clientWidth >= sc.scrollWidth - 2);
+    sc.addEventListener('scroll', bij); (root.requestAnimationFrame || setTimeout)(bij); return wrap;
+  }
   function tekenTabel() {
     const vandaag = st.data.vandaag, nu = vandaag.slice(0, 7), zv = F.zichtbaar(st.rijen, [...st.filter]), rijen = st.rijen, edit = st.sel.eenheid === 'maand';
     const lijst = F.eenheden(nu, st.sel.eenheid), kols = F.kolommen(lijst, st.sel);
@@ -713,16 +728,17 @@
     const eenheidWoord = st.sel.eenheid === 'maand' ? 'maand' : st.sel.eenheid;
     // Kerncijfers voor de gekozen periode
     const som = a => a.reduce((x, y) => x + y, 0), nogTot = rijen.reduce((a, r) => a + (r.aan ? r.nogC : 0), 0), netto = som(g.netto);
-    const fact = (label, cc, klasse, titel) => h('div', { class: 'mtf-fact', title: titel }, h('span', { class: 'label' }, label), h('span', { class: 'v ' + (klasse || '') }, cc === 0 ? '–' : '€ ' + F.fmt(cc)));
+    const fact = (label, cc, klasse, titel, extra) => h('div', { class: 'mtf-fact' + (extra ? ' ' + extra : ''), title: titel }, h('span', { class: 'label' }, label), h('span', { class: 'v ' + (klasse || '') }, cc === 0 ? '–' : '€ ' + F.fmt(cc)));
     const kern = h('section', { class: 'mtf-kaart', 'aria-label': 'Kerncijfers' }, h('div', { class: 'mtf-kaart-kop' }, h('h2', null, 'Kerncijfers'), h('span', { class: 'mtf-getal' }, kols.length === 1 ? kols[0].label : kols[0].label + ' t/m ' + kols[kols.length - 1].label)),
       h('div', { class: 'mtf-kern' }, fact('Te factureren', som(g.gepland), null, 'Wat je in deze periode factureert, van de offertes die zeker doorgaan'), fact('Binnen', som(g.binnen), null, 'Verwachte betalingen van die facturen in deze periode'),
-        fact('Netto', netto, netto < 0 ? 'mtf-n' : netto > 0 ? 'mtf-p' : '', 'Binnen min de aangevinkte kosten, in deze periode'), fact('Nog niet gepland', nogTot, null, 'Deel van de offertes dat zeker doorgaat en nog in geen enkele maand staat')));
-    const kop = h('tr', null, h('th', { class: 's', title: 'Het vinkje is hetzelfde als ‘gaat zeker door’ in Financiën: alleen die offertes tellen mee in de totalen en de prognose' }, 'Offerte · vinkje = gaat zeker door'), h('th', { class: 'num' }, 'Bedrag'), h('th', { class: 'num' }, 'Gefactureerd'), h('th', { class: 'num' }, 'Nog te plannen'),
+        fact('Nog niet gepland', nogTot, null, 'Deel van de offertes dat zeker doorgaat en nog in geen enkele maand staat'),
+        fact('Verwacht netto', netto, netto < 0 ? 'mtf-n' : netto > 0 ? 'mtf-p' : '', 'Binnen min de aangevinkte kosten, in deze periode', 'netto')));
+    const kop = h('tr', null, h('th', { class: 's', title: 'Vink aan als deze offerte zeker doorgaat; telt dan mee hier en in Financiën' }, h('span', { class: 'mtf-zk' }, 'Gaat zeker door'), 'Offerte'), h('th', { class: 'num' }, 'Bedrag'), h('th', { class: 'num kol-gef' }, 'Gefactureerd'), h('th', { class: 'num kol-nog' }, 'Nog te plannen'),
       st.heeftEerder ? h('th', { class: 'num', title: 'Factuurdatum voorbij, nog niet gefactureerd' }, 'Eerder') : null,
       kols.map((k, ki) => h('th', { class: 'num' + (k.van === 0 ? ' nu' : ''), title: edit ? null : k.maanden[0] + ' t/m ' + k.maanden[k.maanden.length - 1] }, edit ? k.label : h('button', { type: 'button', class: 'mtf-agg mtf-kopknop', data: { spring: String(ki) }, title: 'Per maand bekijken en bewerken' }, k.label))),
       st.heeftLater ? h('th', { class: 'num', title: 'Alles na de gekozen periode' }, 'Later') : null);
     const foot = [];
-    const regel = (label, cellen, eerder, later, klasse, extra) => h('tr', { class: klasse || '' }, h('th', { class: 's' }, extra || label), h('td'), h('td'), h('td'), st.heeftEerder ? (eerder != null ? getalTd(eerder) : h('td')) : null, cellen, st.heeftLater ? (later != null ? getalTd(later) : h('td')) : null);
+    const regel = (label, cellen, eerder, later, klasse, extra) => h('tr', { class: klasse || '' }, h('th', { class: 's' }, extra || label), h('td'), h('td', { class: 'kol-gef' }), h('td', { class: 'kol-nog' }), st.heeftEerder ? (eerder != null ? getalTd(eerder) : h('td')) : null, cellen, st.heeftLater ? (later != null ? getalTd(later) : h('td')) : null);
     foot.push(regel('Gefactureerd (gepland)', g.gepland.map(v => bedragTd(v)), tot.eerder.gepland, g.later.gepland, '', h('span', { title: 'Wat je in die periode factureert, van de offertes die meetellen' }, 'Gefactureerd (gepland)')));
     foot.push(regel('Binnen', g.binnen.map(v => getalTd(v)), null, g.later.binnen, '', h('span', { title: 'Verwachte betaling: factuurdatum plus betaaltermijn en het gewone betaalgedrag van de klant, zoals in Financiën' }, 'Binnen (betaaldatum)')));
     foot.push(regel('', g.open.map(v => getalTd(v)), null, g.later.open, '', h('label', { title: 'Al verstuurde verkoopfacturen die nog niet betaald zijn, per verwachte betaalmaand (dezelfde bron als de kaslijn in Financiën)' }, h('input', { type: 'checkbox', checked: st.openAan, data: { open: '1' } }), 'Openstaande facturen')));
@@ -730,7 +746,7 @@
     foot.push(regel('', g.overig.map(v => getalTd(v)), null, g.later.overig, '', h('label', { title: 'Btw-aangifte, weekinleg en handmatige posten uit Financiën' }, h('input', { type: 'checkbox', checked: st.overigAan, data: { overig: '1' } }), 'Overige voorspelling')));
     foot.push(regel('Netto', g.netto.map(v => getalTd(v)), null, g.later.netto, 'netto', h('span', { title: 'Binnen, min de aangevinkte kosten' }, 'Netto per ' + eenheidWoord)));
     const tab = h('table', { class: 'mtf-tabel' }, h('thead', null, kop), h('tbody', null, zv.zichtbaar.map(r => rijEl(r, nu, kols, edit))), h('tfoot', null, foot));
-    const kaart = h('section', { class: 'mtf-kaart', 'aria-label': 'Offertes' }, h('div', { class: 'mtf-kaart-kop' }, h('h2', null, 'Offertes'), h('span', { class: 'mtf-getal' }, String(zv.zichtbaar.length))), h('div', { class: 'mtf-scroll' }, tab));
+    const kaart = h('section', { class: 'mtf-kaart', 'aria-label': 'Offertes' }, h('div', { class: 'mtf-kaart-kop' }, h('h2', null, 'Offertes'), h('span', { class: 'mtf-getal' }, String(zv.zichtbaar.length))), edit && st.mag ? h('div', { class: 'mtf-hint' }, 'Klik op een maand om een factuurbedrag te plannen') : null, scrollWrap(tab));
     return [kern, kaart];
   }
 
@@ -749,8 +765,8 @@
     if (st.data) {
       const tel = F.telStatus(st.schatten || []), verb = F.zichtbaar(st.rijen, [...st.filter]).verborgen;
       w.append(h('section', { class: 'mtf-kaart mtf-strook', 'aria-label': 'Filter en periode' },
-        h('div', { class: 'mtf-filter', role: 'group', 'aria-label': 'Status van de offertes' }, h('span', { class: 'mtf-zacht' }, 'Offertes'),
-          F.STATUSSEN.map(x => h('button', { type: 'button', class: 'mtf-fchip', 'aria-pressed': String(st.filter.has(x)), data: { filter: x } }, STATUSLABEL[x][1], h('span', { class: 'mtf-tel' }, String(tel[x])))),
+        h('div', { class: 'mtf-filter', role: 'group', 'aria-label': 'Status van de offertes' }, h('span', { class: 'mtf-kopje' }, 'Offertes'),
+          F.STATUSSEN.map(x => h('button', { type: 'button', class: 'mtf-fchip', 'aria-pressed': String(st.filter.has(x)), data: { filter: x } }, ico(STATUSLABEL[x][0]), h('span', { class: 'mtf-nm' }, STATUSLABEL[x][1]), h('span', { class: 'mtf-dot' }, '·'), h('span', { class: 'mtf-tel' }, String(tel[x])))),
           verb ? h('span', { class: 'mtf-verborgen' }, verb + (verb === 1 ? ' offerte verborgen door filter; totalen tellen hem' : ' offertes verborgen door filter; totalen tellen ze') + ' wel mee (zoals Financiën).') : null),
         sliderEl(st.data.vandaag.slice(0, 7))));
       const ak = aandachtKaart(); if (ak) w.append(ak);
