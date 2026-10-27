@@ -5,8 +5,26 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-27 — Release v2.25.1: Forecast opschonen (offertes uit beeld zetten), beeldvullend scherm, volle breedte met scrollen en Passend maken; geld-config atomair
+- Commit: `592acef` | Auteur: Bart Witte
+
 ## 2026-10-27 — Backup = v2.25.0
 - Commit: `14a062f` | Auteur: Bart Witte
+
+## 2026-10-27 — Forecast: config-slot houdt zelf de laatst geschreven revisie bij (verouderde KV-lees kan niets overschrijven)
+- Commit: `6923221` | Auteur: Bart Witte
+
+## 2026-10-27 — Forecast: geld-config exclusief schrijven via een Durable Object, luie migratie eruit
+- Commit: `b6f52b1` | Auteur: Bart Witte
+
+## 2026-10-27 — Forecast: data-veilige opslag (per offerte en per klant een eigen KV-sleutel) en robuuste uit-beeld-flow
+- Commit: `e7946a6` | Auteur: Bart Witte
+
+## 2026-10-27 — Forecast: volle breedte, zijwaarts scrollen en Passend maken (v2.25.1)
+- Commit: `d71d674` | Auteur: Bart Witte
+
+## 2026-10-27 — Release v2.25.1 (concept): Forecast, offertes uit beeld zetten en beeldvullend scherm
+- Commit: `e41f17e` | Auteur: Bart Witte
 
 ## 2026-10-27 — Release v2.25.0: nieuw tabblad Forecast — facturatie per maand plannen
 - Commit: `b7fb604` | Auteur: Bart Witte
