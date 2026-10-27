@@ -390,7 +390,7 @@ test('kiesSchema: schema van de klant (contact-id), anders standaard op grootte,
 test('statusfilter: tellen per status, zichtbare rijen en de totalen (alleen zichtbaar én gaat zeker door)', () => {
   const sch = (id, st) => Object.assign(schat(id, 'N' + id.slice(-2), 1000), { status: st });
   const lijst = [sch('300000000041', 'geaccepteerd'), sch('300000000042', 'openstaand'), sch('300000000043', 'concept'), sch('300000000044', 'concept')];
-  assert.deepStrictEqual(F.telStatus(lijst), { geaccepteerd: 1, openstaand: 1, concept: 2 }); assert.deepStrictEqual(F.telStatus(null), { geaccepteerd: 0, openstaand: 0, concept: 0 });
+  assert.deepStrictEqual(F.telStatus(lijst), { geaccepteerd: 1, openstaand: 1, concept: 2, uitbeeld: 0 }); assert.deepStrictEqual(F.telStatus(null), { geaccepteerd: 0, openstaand: 0, concept: 0, uitbeeld: 0 });
   const mk = (eid, aan) => ({ soort: 'project', naam: 'I' + eid.slice(-2), estimate_id: eid, totaal: 1000, aan, betaaltermijn: 14, k: [], x: [], termijnen: [{ id: 't1', label: 'a', bedrag: 1000, factuurdatum: '2026-11-10', aan: true }] });
   const items = { 'p:a': mk('300000000041', true), 'p:b': mk('300000000042', true), 'p:c': mk('300000000043', false) };       // concept 44 heeft geen item: "gaat zeker door" uit
   const rijen = F.bouwRijen({ schatten: lijst, items, posten: [], projecten: [], vandaag: V, maanden: 3 });
@@ -435,6 +435,80 @@ test('statusfilter: een niet-geaccepteerde offerte met een prognose die aan staa
 test('schatNorm: status uit de Moneybird-state; afgewezen of gefactureerde offertes vallen buiten de drie statussen', () => {
   const norm = state => F.schatNorm({ id: 1234567, estimate_id: 'x', total_price_incl_tax_base: '100', state }).status;
   assert.deepStrictEqual(['accepted', 'open', 'late', 'draft', 'rejected', 'billed', 'archived', undefined].map(norm), ['geaccepteerd', 'openstaand', 'openstaand', 'concept', 'overig', 'overig', 'overig', 'geaccepteerd']);
+});
+
+// ── uit beeld zetten ──
+const EU = ['300000000071', '300000000072', '300000000073', '300000000074'];
+const itemU = (eid, o) => Object.assign({ soort: 'project', naam: 'U' + eid.slice(-2), estimate_id: eid, totaal: 1000, aan: true, betaaltermijn: 14, ts: 5, door: 'x', k: [], x: [],
+  termijnen: [{ id: 't1', label: 'aanbetaling', bedrag: 400, factuurdatum: '2026-11-10', aan: true }, { id: 't2', label: 'oplevering', bedrag: 600, factuurdatum: '2026-12-10', aan: true }] }, o || {});
+const schU = (id, st) => Object.assign(schat(id, 'N' + id.slice(-2), 1000), { status: st || 'geaccepteerd' });
+test('uit beeld zetten: Gaat zeker door uit, termijnen en bedragen blijven bewaard; terugzetten zet het vinkje niet aan', () => {
+  const it = itemU(EU[0]), ov = { sleutel: 'p:a', soort: 'project', gefactureerd: 400, termijnen: [{ id: 't1', bedrag: 400, gefactureerd: 400, open: 0 }, { id: 't2', bedrag: 600, gefactureerd: 0, open: 600 }] };
+  const nieuw = F.uitBeeldItem(it); assert.strictEqual(nieuw.aan, false); assert.deepStrictEqual(nieuw.termijnen, it.termijnen); assert.strictEqual(nieuw.totaal, 1000); assert.strictEqual(nieuw.ts, undefined);
+  assert.strictEqual(F.uitBeeldItem(itemU(EU[0], { aan: false })), null); assert.strictEqual(F.uitBeeldItem(null), null); assert.strictEqual(F.uitBeeldItem({ soort: 'post', aan: true }), null);   // niets te doen
+  valideer('p:a', nieuw, V);
+  // met al gefactureerd bedrag: de bedragen veranderen niet (de rij houdt zijn gefactureerde deel)
+  const voor = F.bouwRijen({ schatten: [schU(EU[0])], items: { 'p:a': it }, posten: [ov], projecten: [], vandaag: V, maanden: 3 })[0];
+  const na = F.bouwRijen({ schatten: [schU(EU[0])], items: { 'p:a': nieuw }, posten: [ov], projecten: [], vandaag: V, maanden: 3, uitbeeld: { [EU[0]]: { reden: 'gefactureerd', door: 'T', ts: 1 } } })[0];
+  assert.strictEqual(na.uitbeeld.reden, 'gefactureerd'); assert.strictEqual(voor.uitbeeld, null); assert.strictEqual(na.totaalC, voor.totaalC); assert.strictEqual(na.gefC, voor.gefC); assert.strictEqual(na.aan, false); assert.strictEqual(voor.aan, true);
+  assert.deepStrictEqual(na.termijnen.map(t => [t.id, t.bedragC, t.factuurdatum, t.label]), voor.termijnen.map(t => [t.id, t.bedragC, t.factuurdatum, t.label]));   // (de worker geeft voor een item dat uit staat geen termijnoverzicht: alleen het totaal gefactureerd blijft, gelijk aan voor)
+  // terugzetten haalt alleen de markering weg; het item (aan:false) blijft zoals het is
+  const terug = F.bouwRijen({ schatten: [schU(EU[0])], items: { 'p:a': nieuw }, posten: [ov], projecten: [], vandaag: V, maanden: 3, uitbeeld: F.terugzetMap({ [EU[0]]: { reden: 'gefactureerd' } }, [EU[0]]) })[0];
+  assert.strictEqual(terug.uitbeeld, null); assert.strictEqual(terug.aan, false);
+});
+test('uit beeld: bulk per rij (alleen rijen met offerte-id; ALLE actieve items van dezelfde offerte gaan uit; ongeldige reden geweigerd)', () => {
+  const items = { 'p:a': itemU(EU[0]), 'p:a2': itemU(EU[0]), 'p:b': itemU(EU[1], { aan: false }), 'p:c': itemU(EU[2]), 'h:post': { soort: 'post', omschrijving: 'x', aan: true } };
+  const rijen = F.bouwRijen({ schatten: [schU(EU[0]), schU(EU[1]), schU(EU[2], 'concept')], items, posten: [], projecten: [], vandaag: V, maanden: 3 });
+  const geen = { sleutel: 'p:x', estimateId: '' };                                              // prognose-project zonder offerte: overgeslagen
+  const plan = F.bulkUitBeeld(rijen.concat([geen]), items, 'verkeerd');
+  assert.deepStrictEqual(plan.updates.map(u => u.sleutel).sort(), ['p:a', 'p:a2', 'p:c']);        // het hoofd-item en het dubbele item van offerte 1, en offerte 3; het item dat al uit staat niet
+  assert.ok(plan.updates.every(u => u.item.aan === false)); assert.deepStrictEqual(plan.overgeslagen, ['p:x']); assert.deepStrictEqual(plan.ids.sort(), [EU[0], EU[1], EU[2]].sort());
+  const rA = rijen.find(r => r.estimateId === EU[0]); assert.deepStrictEqual(plan.perRij[rA.sleutel].sort(), ['p:a', 'p:a2']);
+  assert.deepStrictEqual(plan.updates.find(u => u.sleutel === 'p:a2').rijen, [rA.sleutel]);      // een mislukte schrijfactie van het dubbele item telt voor de rij van die offerte
+  assert.ok(F.bulkUitBeeld(rijen, items, 'rommel').fout); assert.ok(F.bulkUitBeeld(rijen, items, undefined).fout);
+  assert.deepStrictEqual(F.terugzetMap({ a: 1, b: 2 }, ['a']), { b: 2 });
+  for (const k of Object.keys(F.UITBEELD_REDENEN)) assert.ok(F.bulkUitBeeld(rijen, items, k).ids);
+  assert.deepStrictEqual(F.itemSleutels({ sleutel: 'p:z', estimateId: '' }, { 'p:z': itemU(EU[3]) }), ['p:z']);   // zonder offerte-id alleen het eigen item
+});
+test('uit beeld: filter Uit beeld, tellingen en rijen (standaard verborgen, aan = zichtbaar met reden)', () => {
+  const ub = { [EU[1]]: { reden: 'weg', door: 'T', ts: 1 }, [EU[3]]: { reden: 'verkeerd', door: 'T', ts: 1 } };
+  const lijst = [schU(EU[0]), schU(EU[1]), schU(EU[2], 'concept'), schU(EU[3], 'openstaand')];
+  assert.deepStrictEqual(F.telStatus(lijst, ub), { geaccepteerd: 1, openstaand: 0, concept: 1, uitbeeld: 2 });       // uit beeld telt niet meer mee bij de status
+  const rijen = F.bouwRijen({ schatten: lijst, items: {}, posten: [], projecten: [], vandaag: V, maanden: 3, uitbeeld: ub });
+  assert.deepStrictEqual(rijen.map(r => !!r.uitbeeld), [false, true, false, true]);
+  const std = F.zichtbaar(rijen, F.STATUSSEN); assert.deepStrictEqual(std.zichtbaar.map(r => r.estimateId), [EU[0], EU[2]]); assert.strictEqual(std.verborgen, 2);
+  const mee = F.zichtbaar(rijen, F.FILTERS); assert.strictEqual(mee.zichtbaar.length, 4); assert.strictEqual(mee.verborgen, 0);
+  const alleenUit = F.zichtbaar(rijen, ['uitbeeld']); assert.deepStrictEqual(alleenUit.zichtbaar.map(r => r.estimateId), [EU[1], EU[3]]);          // een uit-beeld-rij volgt het statusfilter niet
+  assert.deepStrictEqual(F.zichtbaar(rijen, []).zichtbaar, []);
+});
+test('uit beeld: totalen blijven gelijk aan Financiën (alleen items die aan staan tellen), ook als de rij verborgen is', () => {
+  const items = { 'p:a': itemU(EU[0]), 'p:b': itemU(EU[1]) };
+  const ev = k => ({ id: k, bron: 'prognose', termijn_id: 't1', prognose: 'p:' + k, datum: '2026-12-01', delta: 400 });
+  const maak = (uitA) => { const it = Object.assign({}, items, uitA ? { 'p:a': F.uitBeeldItem(items['p:a']) } : {});
+    const rijen = F.bouwRijen({ schatten: [schU(EU[0]), schU(EU[1])], items: it, posten: [], projecten: [], vandaag: V, maanden: 3, uitbeeld: uitA ? { [EU[0]]: { reden: 'weg', door: 'T', ts: 1 } } : {} });
+    const events = ['a', 'b'].filter(k => !(uitA && k === 'a')).map(ev);                         // zoals de worker: items die uit staan leveren geen events
+    return { rijen, t: F.totalen({ rijen, events, vandaag: V, maanden: 3, uitgesloten: F.zichtbaar(rijen, F.STATUSSEN).uitgesloten }) }; };
+  const voor = maak(false), na = maak(true);
+  assert.deepStrictEqual(voor.t.gepland, [0, 80000, 60000 * 2]); assert.deepStrictEqual(voor.t.binnen, [0, 0, 80000]);
+  assert.deepStrictEqual(na.t.gepland, [0, 40000, 60000]); assert.deepStrictEqual(na.t.binnen, [0, 0, 40000]);                                    // alleen nog p:b
+  assert.strictEqual(F.zichtbaar(na.rijen, F.STATUSSEN).verborgen, 1);                                                                          // p:a is verborgen, maar het totaal klopt met Financiën
+});
+
+// ── brede tabel: compacte bedragen en passende kolombreedte ──
+test('fmtKort: 950 · 1,2k · 12k · 1,2M, negatief met minteken, afgerond', () => {
+  const k = e => F.fmtKort(Math.round(e * 100));
+  assert.strictEqual(k(0), '0'); assert.strictEqual(k(950), '950'); assert.strictEqual(k(999.4), '999'); assert.strictEqual(k(1000), '1k'); assert.strictEqual(k(1200), '1,2k'); assert.strictEqual(k(9950), '10k');
+  assert.strictEqual(k(12100), '12k'); assert.strictEqual(k(18150), '18k'); assert.strictEqual(k(999499), '999k'); assert.strictEqual(k(1200000), '1,2M'); assert.strictEqual(k(25000000), '25M');
+  assert.strictEqual(k(-12100), '−12k'); assert.strictEqual(k(-1250), '−1,3k'); assert.strictEqual(F.fmtKort(-7), '−0');
+});
+test('passendBreedte: alle maanden in beeld met een minimum van 64 px; compact onder 96 px', () => {
+  assert.deepStrictEqual(F.passendBreedte(720, 6), { w: 110, compact: false, past: true });             // genoeg ruimte: gewone breedte (maximum)
+  assert.deepStrictEqual(F.passendBreedte(720, 8), { w: 90, compact: true, past: true });                 // smaller en compacte bedragen
+  assert.deepStrictEqual(F.passendBreedte(768, 12), { w: 64, compact: true, past: true });                // precies het minimum
+  assert.deepStrictEqual(F.passendBreedte(767, 12), { w: 64, compact: true, past: false });               // past niet meer: minimum, het vak blijft zijwaarts scrollen
+  assert.deepStrictEqual(F.passendBreedte(500, 25), { w: 64, compact: true, past: false });
+  assert.deepStrictEqual(F.passendBreedte(500, 0), { w: 110, compact: false, past: true }); assert.strictEqual(F.passendBreedte(2000, 3).w, 110);
+  assert.strictEqual(F.passendBreedte(960, 10, { min: 80, compactOnder: 100 }).w, 96);
 });
 
 let async_ = Promise.resolve();

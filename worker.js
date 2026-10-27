@@ -1495,6 +1495,7 @@ export class MtTeller {
     if (op.startsWith('csp-')) return await this.csp(op, b);
     if (op.startsWith('nr-')) return await this.nummers(op, b);
     if (op.startsWith('sig-')) return await SigDO.ops(this, op, b);   // signalen (L3), instantie 'signalen'
+    if (op.startsWith('gc-')) return await this.geldConfig(op, b);   // geld-config schrijven, instantie 'geldconfig'
     if (op === 'alle') {
       const m = await st.list({ prefix: 'pid:' }), werkcodes = {}, nummers = {}, aliassen = {};
       for (const [k, w] of m) {
@@ -1532,6 +1533,24 @@ export class MtTeller {
     }).catch(e => ({ fout: String(e.message || e) }));
     if (uit && uit.fout) return antw({ error: uit.fout }, 400);
     return antw({ uit, proef: op === 'proef' || undefined });
+  }
+  // Geld-config (Forecast, ronde 5): lezen van de huidige revisie, controle en schrijven in één geserialiseerd blok; de historie wordt hier ook geschreven.
+  async geldConfig(op, b) {
+    const antw = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json' } });
+    if (op !== 'gc-schrijf') return antw({ error: 'onbekend' }, 404);
+    const env = this.env; if (!env.MT_ROLLEN) return antw({ error: 'geen-opslag', uitleg: 'KV-binding MT_ROLLEN ontbreekt' }, 503);
+    if (!b || !b.norm || typeof b.norm !== 'object' || !Number.isInteger(b.verwacht) || !Number.isFinite(b.ts)) return antw({ error: 'ongeldig' }, 400);
+    return await this.state.blockConcurrencyWhile(async () => {
+      const ruw = await env.MT_ROLLEN.get('geld:config'), oudDoc = ruw ? JSON.parse(ruw) : null, huidig = geldConfigNorm(oudDoc);
+      // KV is eventually consistent: een lees kan een oudere revisie geven dan er al geschreven is. Daarom houdt de DO de laatst geschreven revisie zelf bij
+      // (sterk consistent) en geldt als huidige revisie het maximum van beide: een verouderde KV-lees kan zo nooit meer een nieuwere stand overschrijven.
+      const doRev = Number(await this.state.storage.get('gc:rev')) || 0, nu = Math.max(huidig.revisie || 0, doRev);
+      if (nu !== b.verwacht) return antw({ error: 'instellingen zijn intussen gewijzigd — herlaad en probeer opnieuw', revisie: nu }, 409);
+      await kvZet(env, 'geld:config', b.norm);                                                      // eerst de config
+      await this.state.storage.put('gc:rev', Number.isInteger(b.norm.revisie) ? b.norm.revisie : nu + 1);
+      try { await kvZet(env, `geld:config:historie:${String(9e15 - b.ts).padStart(16, '0')}:${randHex(4)}`, oudDoc || huidig); } catch { }   // dan pas de historie: bij een crash ontbreekt hooguit een historie-regel, nooit een spook-regel
+      return antw({ ok: true });
+    });
   }
   // Projectnummers (brok B): zie de uitleg bij NR_START. Lezen buiten het slot; alles wat schrijft in één geserialiseerd blok.
   async nummers(op, b) {
@@ -2258,6 +2277,44 @@ function geldFactuurschemasNorm(x) {
   }
   return uit;
 }
+// Offertes die in de Forecast "uit beeld" staan (alleen verbergen; Moneybird blijft alleen-lezen): per offerte-id een reden, wie en wanneer.
+const GELD_UITBEELD_REDEN = ['verkeerd', 'gefactureerd', 'weg'], GELD_UITBEELD_MAX = 2000;
+function geldUitbeeldNorm(x) {
+  const uit = {}; if (!x || typeof x !== 'object' || Array.isArray(x)) return uit;
+  for (const k of Object.keys(x).slice(0, GELD_UITBEELD_MAX)) {
+    const v = x[k]; if (!/^\d{6,25}$/.test(k) || !v || typeof v !== 'object' || !GELD_UITBEELD_REDEN.includes(v.reden)) continue;
+    uit[k] = { reden: v.reden, door: String(v.door || '').slice(0, 60), ts: typeof v.ts === 'number' && isFinite(v.ts) ? v.ts : 0 };
+  }
+  return uit;
+}
+// Forecast-gegevens met een eigen KV-sleutel per offerte of klant (nooit meer één gedeeld document): elke sleutel is los, dus gelijktijdige
+// acties op verschillende offertes of klanten kunnen elkaar niet wissen; voor dezelfde sleutel geldt de laatste schrijver. Metadata = de waarde,
+// zodat de lijst in één list()-aanroep komt. Er is geen terugval op config.uitbeeld / config.factuurschemas (die bestaan in de live config niet); een
+// eventueel oud veld in de config blijft wel ongemoeid staan.
+const GELD_UB = 'geld:uitbeeld:', GELD_FS = 'geld:fschema:', GELD_UB_MAX = 5000, GELD_FS_MAX = 2000;
+async function geldForecastLijst(env, prefix) {
+  const l = await geldKvLijst(env, prefix, 500);          // volledige paginering; compleet:false = niet alles gelezen
+  return { items: l.items, compleet: !!l.compleet };
+}
+async function geldUitbeeldAlles(env) {
+  const l = await geldForecastLijst(env, GELD_UB); return l.compleet ? l.items : null;
+}
+async function geldFschemasAlles(env) {
+  const l = await geldForecastLijst(env, GELD_FS); if (!l.compleet) return null;
+  const uit = {}; for (const [k, v] of Object.entries(l.items)) if (v && Array.isArray(v.rijen)) uit[k] = v.rijen;
+  return uit;
+}
+// Alle schrijfacties op geld:config lopen via één Durable Object-instantie ('geldconfig' van MT_TELLER): controle op de revisie en schrijven
+// gebeuren daar exclusief (KV heeft geen compare-and-swap). Zonder die DO wordt er NIET geschreven (503), nooit een terugval zonder slot.
+async function geldConfigDO(env, body) {
+  const ns = env.MT_TELLER;
+  if (!ns || !ns.idFromName) return { ok: false, status: 503, body: { error: 'geen-config-slot', uitleg: 'Durable Object-binding MT_TELLER ontbreekt: de instellingen worden niet zonder slot geschreven' } };
+  try {
+    const r = await ns.get(ns.idFromName('geldconfig')).fetch('https://mt-teller/gc-schrijf', { method: 'POST', body: JSON.stringify(body) });
+    const j = await r.json().catch(() => null);
+    return { ok: r.status === 200 && !!(j && j.ok), status: r.status, body: j || { error: 'geen antwoord van het config-slot' } };
+  } catch (e) { return { ok: false, status: 503, body: { error: 'config-slot niet bereikbaar — probeer het zo opnieuw' } }; }
+}
 function geldConfigNorm(c) {
   c = c && typeof c === 'object' ? c : {};
   const getal = (x, min, max) => (typeof x === 'number' && isFinite(x) && x >= min && x <= max) ? x : null;
@@ -2277,7 +2334,7 @@ function geldConfigNorm(c) {
     id: String(g.id), naam: String(g.naam || g.id).slice(0, 60), prefix: String(g.prefix || '').trim().slice(0, 60),
     contact_ids: (Array.isArray(g.contact_ids) ? g.contact_ids : []).map(String).filter(x => /^\d{6,25}$/.test(x)).slice(0, 200) }))
     .filter(g => g.prefix.length >= 3 || g.contact_ids.length);
-  const uit = { kredietlimiet: getal(c.kredietlimiet, 0, 1e9), potten: uniek, klantgroepen: groepen, lopend_streef: geldStreefNorm(c.lopend_streef), prognose_schema: geldSchemaNorm(c.prognose_schema), factuurschemas: geldFactuurschemasNorm(c.factuurschemas),
+  const uit = { kredietlimiet: getal(c.kredietlimiet, 0, 1e9), potten: uniek, klantgroepen: groepen, lopend_streef: geldStreefNorm(c.lopend_streef), prognose_schema: geldSchemaNorm(c.prognose_schema), factuurschemas: c.factuurschemas && typeof c.factuurschemas === 'object' && !Array.isArray(c.factuurschemas) ? c.factuurschemas : {}, uitbeeld: c.uitbeeld && typeof c.uitbeeld === 'object' && !Array.isArray(c.uitbeeld) ? c.uitbeeld : {},   // oude opslag van Forecast-gegevens: alleen doorgeven, nooit wegnormaliseren (nu eigen sleutels, zie /geld/uitbeeld en /geld/fschema)
     // buffer_lopend (eigen ondergrens) is samengevoegd met de fictieve buffer: een gezet oud veld wordt het eigen bedrag (negatief → 0). Eén release lang schrijven we beide velden
     // (dual-write) zodat een terugdraaiing van de front-end niets verliest: buffer_lopend = de fictieve buffer, of de oude waarde zolang er nog geen fictieve buffer is.
     buffer_lopend: null,   // hieronder gelijkgetrokken met fictieve_buffer (dual-write)
@@ -4245,13 +4302,8 @@ async function handleGeld(p, request, env, ik, json0) {
       if (b.prognose_schema !== null && (!n || ['klein', 'middel', 'groot'].some(k => Array.isArray(b.prognose_schema[k]) && b.prognose_schema[k].length && !n[k].length))) return json({ error: 'standaardschema: per grootte percentages die samen 100 zijn' }, 400);
       nieuw.prognose_schema = b.prognose_schema; gewijzigd.push('prognose_schema');
     }
-    if ('factuurschemas' in b) {
-      const fs = b.factuurschemas;
-      if (fs !== null && (typeof fs !== 'object' || Array.isArray(fs) || Object.keys(fs).length > 200)) return json({ error: 'factuurschemas: object per klant (contact-id) of null' }, 400);
-      const n = geldFactuurschemasNorm(fs);
-      if (fs !== null && Object.keys(n).length !== Object.keys(fs).length) return json({ error: 'factuurschema: per klant (contact-id, alleen cijfers) 1 tot 6 delen met een label en een percentage, samen precies 100' }, 400);
-      nieuw.factuurschemas = n; gewijzigd.push('factuurschemas');
-    }
+    // Forecast-gegevens (uit beeld, factuurschema's) staan niet meer in de config: eigen sleutels per offerte/klant (/geld/uitbeeld, /geld/fschema),
+    // zodat gelijktijdige wijzigingen elkaar niet kunnen wissen. Een oud veld in de config blijft ongemoeid.
     if ('reserve' in b) {
       if (b.reserve !== null && !(b.reserve && typeof b.reserve === 'object' && typeof b.reserve.bedrag === 'number' && isFinite(b.reserve.bedrag) && b.reserve.bedrag >= 0)) return json({ error: 'reserve: {bedrag ≥ 0, pot} of null' }, 400);
       if (b.reserve && b.reserve.pot != null && !(nieuw.potten || oud.potten).some(p => p.id === b.reserve.pot && !p.virtueel)) return json({ error: 'reserve.pot: onbekend potje' }, 400);
@@ -4325,14 +4377,66 @@ async function handleGeld(p, request, env, ik, json0) {
     if (!gewijzigd.length) return json({ error: 'niets te wijzigen' }, 400);
     const ts = Date.now(), norm = geldConfigNorm(Object.assign(nieuw, { gewijzigd: new Date(ts).toISOString(), door: (ik.rec && ik.rec.naam) || ik.email || ik.oid, revisie: oud.revisie + 1 }));
     if ('btw' in b) for (const k of ['spaarpot', 'aangifte_van', 'terugboeking_van']) if (b.btw && b.btw[k] != null && norm.btw[k] !== b.btw[k]) return json({ error: `btw.${k}: onbekende rekening/pot` }, 400);
-    await kvZet(env, `geld:config:historie:${String(9e15 - ts).padStart(16, '0')}:${randHex(4)}`, oud);   // vorige stand bewaard
     // G7: wijzigt een streefbedrag (of de keuze eigen bedrag ↔ advies), leg datum en naam vast
     { const vb = geldStreefBedragen(oud), nb = geldStreefBedragen(norm);
       for (const k of Object.keys(nb)) if (JSON.stringify(vb[k]) !== JSON.stringify(nb[k])) norm.streef_herkomst[k] = { bron: norm.streef_herkomst[k].bron, datum: geldVandaag(), door: norm.door || null }; }
-    await kvZet(env, 'geld:config', norm);
+    const gc = await geldConfigDO(env, { verwacht: oud.revisie || 0, norm, ts });         // exclusief: revisiecontrole + schrijven in één blok (409 bij een tussentijdse wijziging, 503 zonder slot)
+    if (!gc.ok) return json(gc.body, gc.status);
     await geldZetVersie(env, `${ts}-c${randHex(3)}`, ctx);
     await audit(env, { door: ik.oid, doorNaam: (ik.rec && ik.rec.naam) || ik.email || '', actie: 'geld-config', doel: 'geld', doelNaam: 'instellingen: ' + gewijzigd.join(', ') });   // geen bedragen
     return json({ ok: true, config: norm });
+  }
+  if (p === '/geld/uitbeeld' && m === 'GET') {
+    if (!env.MT_ROLLEN) return json({ error: 'geen-opslag', uitleg: 'KV-binding MT_ROLLEN ontbreekt' }, 503);
+    let items = null; try { items = await geldUitbeeldAlles(env); } catch { }
+    if (!items) return json({ error: 'de uit-beeld-lijst is niet compleet gelezen — probeer het zo opnieuw', reden: 'lijst-onvolledig' }, 503);   // nooit een halve lijst
+    return json({ items, aantal: Object.keys(items).length, max: GELD_UB_MAX, compleet: true });
+  }
+  if (p === '/geld/uitbeeld' && m === 'POST') {
+    if (!env.MT_ROLLEN) return json({ error: 'geen-opslag', uitleg: 'KV-binding MT_ROLLEN ontbreekt' }, 503);
+    let b = {}; try { b = await request.json(); } catch {}
+    const ids = Array.isArray(b.ids) ? b.ids.map(String) : null;
+    if (!ids || !ids.length || ids.length > 500 || new Set(ids).size !== ids.length || ids.some(x => !/^\d{6,25}$/.test(x))) return json({ error: 'ids: 1 tot 500 verschillende offerte-id\u2019s (alleen cijfers)' }, 400);
+    const wissen = b.reden === null;
+    if (!wissen && !GELD_UITBEELD_REDEN.includes(b.reden)) return json({ error: 'reden: verkeerd, gefactureerd of weg (of null om terug te zetten)' }, 400);
+    let bestaand = null; try { bestaand = await geldUitbeeldAlles(env); } catch { }
+    if (!bestaand) return json({ error: 'kon niet controleren of de uit-beeld-lijst vol is — probeer het zo opnieuw', reden: 'lijst-onvolledig' }, 503);   // fail-closed
+    const na = new Set(Object.keys(bestaand)); for (const id of ids) { if (wissen) na.delete(id); else na.add(id); }
+    if (na.size > GELD_UB_MAX) return json({ error: `de uit-beeld-lijst is vol (${GELD_UB_MAX}); zet er eerst een paar terug`, max: GELD_UB_MAX }, 400);
+    if (b.controle === true) return json({ ok: true, controle: true, aantal: na.size, max: GELD_UB_MAX });          // alleen controleren: niets schrijven
+    const ts = Date.now(), door = String((ik.rec && ik.rec.naam) || ik.email || ik.oid).slice(0, 60), gezet = {}, verwijderd = [];
+    for (const id of ids) {
+      if (wissen) { await env.MT_ROLLEN.delete(GELD_UB + id); verwijderd.push(id); continue; }
+      const oud = bestaand[id], rec = oud && oud.reden === b.reden ? oud : { reden: b.reden, door, ts };       // dezelfde reden: de oude stempel blijft
+      await kvZet(env, GELD_UB + id, rec, { metadata: rec }); gezet[id] = rec;
+    }
+    await audit(env, { door: ik.oid, doorNaam: (ik.rec && ik.rec.naam) || ik.email || '', actie: 'geld-uitbeeld', doel: 'offertes', doelNaam: `${ids.length}\u00d7 ${wissen ? 'terugzetten' : b.reden}` });   // geen bedragen of namen
+    return json({ ok: true, items: gezet, verwijderd, aantal: na.size, max: GELD_UB_MAX });
+  }
+  if (p === '/geld/fschemas' && m === 'GET') {
+    if (!env.MT_ROLLEN) return json({ error: 'geen-opslag', uitleg: 'KV-binding MT_ROLLEN ontbreekt' }, 503);
+    let schemas = null; try { schemas = await geldFschemasAlles(env); } catch { }
+    if (!schemas) return json({ error: 'de factuurschema\u2019s zijn niet compleet gelezen — probeer het zo opnieuw', reden: 'lijst-onvolledig' }, 503);
+    return json({ schemas, aantal: Object.keys(schemas).length, compleet: true });
+  }
+  if (p === '/geld/fschema' && m === 'POST') {
+    if (!env.MT_ROLLEN) return json({ error: 'geen-opslag', uitleg: 'KV-binding MT_ROLLEN ontbreekt' }, 503);
+    let b = {}; try { b = await request.json(); } catch {}
+    const id = String(b.contact_id || '');
+    if (!/^\d{6,25}$/.test(id)) return json({ error: 'contact_id: alleen cijfers' }, 400);
+    const wissen = b.rijen === null;
+    let rijen = null;
+    if (!wissen) {
+      rijen = geldFactuurschemasNorm({ [id]: b.rijen })[id];
+      if (!rijen) return json({ error: 'factuurschema: 1 tot 6 delen met een label en een percentage, samen precies 100' }, 400);
+    }
+    let bestaand = null; try { bestaand = await geldFschemasAlles(env); } catch { }
+    if (!bestaand) return json({ error: 'kon niet controleren of de lijst vol is — probeer het zo opnieuw', reden: 'lijst-onvolledig' }, 503);
+    if (!wissen && !(id in bestaand) && Object.keys(bestaand).length >= GELD_FS_MAX) return json({ error: `hooguit ${GELD_FS_MAX} klanten met een eigen schema`, max: GELD_FS_MAX }, 400);
+    if (wissen) await env.MT_ROLLEN.delete(GELD_FS + id);
+    else { const rec = { rijen, door: String((ik.rec && ik.rec.naam) || ik.email || ik.oid).slice(0, 60), ts: Date.now() }; await kvZet(env, GELD_FS + id, rec, { metadata: rec }); }
+    await audit(env, { door: ik.oid, doorNaam: (ik.rec && ik.rec.naam) || ik.email || '', actie: 'geld-fschema', doel: 'klant', doelNaam: wissen ? 'schema gewist' : 'schema gezet' });
+    return json({ ok: true, contact_id: id, rijen });
   }
   if (p === '/geld/ijkpunt' && m === 'POST') {
     if (!env.MT_ROLLEN) return json({ error: 'geen-opslag', uitleg: 'KV-binding MT_ROLLEN ontbreekt' }, 503);

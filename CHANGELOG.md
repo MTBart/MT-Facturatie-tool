@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-27 — Backup = v2.25.0
+- Commit: `14a062f` | Auteur: Bart Witte
+
 ## 2026-10-27 — Release v2.25.0: nieuw tabblad Forecast — facturatie per maand plannen
 - Commit: `b7fb604` | Auteur: Bart Witte
 
