@@ -5,8 +5,17 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-27 — Release v2.25.2: Forecast sorteren (offerte, datum, status, bedragen, maanden) en veilig Schema toepassen / Planning wissen met voorbeeld en Ongedaan maken
+- Commit: `72afd50` | Auteur: Bart Witte
+
 ## 2026-10-27 — Backup = v2.25.1
 - Commit: `d62a179` | Auteur: Bart Witte
+
+## 2026-10-27 — Forecast v2.25.2: Schema toepassen en Planning wissen in het rij-menu, met voorbeeld en Ongedaan maken
+- Commit: `7e7bee3` | Auteur: Bart Witte
+
+## 2026-10-27 — Forecast v2.25.2: sorteren van de offertelijst
+- Commit: `7db41d6` | Auteur: Bart Witte
 
 ## 2026-10-27 — Release v2.25.1: Forecast opschonen (offertes uit beeld zetten), beeldvullend scherm, volle breedte met scrollen en Passend maken; geld-config atomair
 - Commit: `592acef` | Auteur: Bart Witte
