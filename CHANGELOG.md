@@ -5,8 +5,14 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-24 — Release v2.24.1: nieuw logo gelijk aan de website (lijn-beeldmerk pen-en-gat + woordmerk in Jost) in tool, mobiel, uren, tv en Outlook-paneel; nieuwe favicons en app-iconen (bosgroen/linnen); backup = v2.24.0
+- Commit: `62c2b13` | Auteur: Bart Witte
+
 ## 2026-10-24 — Backup = v2.24.0
 - Commit: `459027f` | Auteur: Bart Witte
+
+## 2026-10-24 — Nieuw logo, gelijk aan de website (v2.24.1)
+- Commit: `631a7c1` | Auteur: Bart Witte
 
 ## 2026-10-24 — Pages-build: VOORTGANG-C2.md had twee Latin-1-bytes (een); nu geldig UTF-8, anders faalt Jekyll
 - Commit: `3183dd2` | Auteur: Bart Witte
