@@ -5,8 +5,26 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-27 — Release v2.25.3: Forecast snel opslaan (lokaal herrekenen, ≈-schatting tot verversen), links naar Moneybird en project, selectievinkje met bulkbalk en schakelaar Gaat zeker door
+- Commit: `6aabcd8` | Auteur: Bart Witte
+
 ## 2026-10-27 — Backup = v2.25.2
 - Commit: `f87a9a9` | Auteur: Bart Witte
+
+## 2026-10-27 — Forecast v2.25.3: Codex-ronde 7, betaalvertraging niet raden, volledige schattingsmarkering, verversing niet geblokkeerd door een vinkje
+- Commit: `5e1e546` | Auteur: Bart Witte
+
+## 2026-10-27 — Forecast v2.25.3: versielabel, updates-item en cache-parameter voor snel opslaan, links en selectievinkjes
+- Commit: `22b4d90` | Auteur: Bart Witte
+
+## 2026-10-27 — Forecast v2.25.2: selectievinkje per rij, balk voor uit beeld, Gaat zeker door als schakelaar
+- Commit: `1d1fe9f` | Auteur: Bart Witte
+
+## 2026-10-27 — Forecast v2.25.2: links naar offerte, facturen en project vanuit de rij
+- Commit: `944e0aa` | Auteur: Bart Witte
+
+## 2026-10-27 — Forecast v2.25.2: snel opslaan, alleen de gewijzigde offerte lokaal herberekenen
+- Commit: `b4109cb` | Auteur: Bart Witte
 
 ## 2026-10-27 — Release v2.25.2: Forecast sorteren (offerte, datum, status, bedragen, maanden) en veilig Schema toepassen / Planning wissen met voorbeeld en Ongedaan maken
 - Commit: `72afd50` | Auteur: Bart Witte
