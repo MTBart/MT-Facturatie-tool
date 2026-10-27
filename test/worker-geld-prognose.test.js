@@ -5,9 +5,9 @@ const assert = require('assert'), fs = require('fs'), path = require('path'), os
 const { pathToFileURL } = require('url');
 
 (async () => {
-  const bron = fs.readFileSync(path.join(__dirname, '..', 'worker.js'), 'utf8') + '\nexport { handleGeld };\n';
+  const bron = fs.readFileSync(path.join(__dirname, '..', 'worker.js'), 'utf8') + '\nexport { handleGeld, geldPrognoseEvents, geldBankdagNa };\n';
   const tmp = path.join(os.tmpdir(), `mt-worker-test-${process.pid}.mjs`); fs.writeFileSync(tmp, bron, 'utf8');
-  let handleGeld, MtTeller; try { ({ handleGeld, MtTeller } = await import(pathToFileURL(tmp).href)); } finally { try { fs.unlinkSync(tmp); } catch { } }
+  let handleGeld, MtTeller, geldPrognoseEvents, geldBankdagNa; try { ({ handleGeld, MtTeller, geldPrognoseEvents, geldBankdagNa } = await import(pathToFileURL(tmp).href)); } finally { try { fs.unlinkSync(tmp); } catch { } }
 
   const kv = () => { const m = new Map(); return { m, async get(k) { return m.has(k) ? m.get(k).v : null; }, async put(k, v, o) { m.set(k, { v, meta: (o && o.metadata) || null }); }, async delete(k) { m.delete(k); },
     async list({ prefix }) { return { keys: [...m.keys()].filter(k => k.startsWith(prefix || '')).sort().map(name => ({ name, metadata: m.get(name).meta })), list_complete: true }; } }; };
@@ -227,6 +227,41 @@ const { pathToFileURL } = require('url');
     assert.strictEqual((await roep(env3, 'eigenaar', '/geld/config', 'POST', { kredietlimiet: 5, revisie: 4 })).status, 500);
     assert.strictEqual(env3.MT_ROLLEN.m.get('geld:config').v, voor);
     assert.strictEqual((await roep(env, 'administratie', '/geld/config', 'GET')).status, 200);       // lezen kan zonder DO gewoon
+  });
+
+  // De Forecast rekent na een opslag alleen die ene offerte lokaal opnieuw (F.lokaalPrognose). Dat moet exact dezelfde uitkomst geven als de worker.
+  await test('bankdag: dezelfde uitkomst als de worker voor drie jaar aan dagen (weekend, feestdagen)', async () => {
+    const F = require(path.join(__dirname, '..', 'mt-forecast.js'));
+    for (let i = 0, d = '2026-01-01'; i < 3 * 366; i++, d = (x => { x.setUTCDate(x.getUTCDate() + 1); return x.toISOString().slice(0, 10); })(new Date(d + 'T00:00:00Z'))) assert.strictEqual(F.bankdagNa(d), geldBankdagNa(d), d);
+  });
+  await test('lokaal herrekenen = berekening van de worker (gefactureerd, gepland, uit, betaalgedrag)', async () => {
+    const F = require(path.join(__dirname, '..', 'mt-forecast.js')), vandaag = plus(0);
+    const itemW = (eid, termijnen, o) => Object.assign({ soort: 'project', naam: 'Voorbeeld ' + eid, code: '', contact_id: '700000000001', estimate_id: eid, offertenr: '', totaal: termijnen.reduce((a, t) => a + t.bedrag, 0), betaaltermijn: 14, aan: true, termijnen, k: [], x: [] }, o || {});
+    const fac = (id, bedrag, eid) => ({ id, contact_id: '700000000001', datum: plus(-3), bedrag, ref: '', estimate_id: eid, nummer: 'F' + id, orig: null });
+    const profielMet = d => ({ klanten: { '700000000001': { d, naam: 'Voorbeeld' } }, algemeen: { n: 0 } }), cfg = { klantgroepen: [] };
+    const gevallen = [
+      ['niets gefactureerd', itemW('300000000011', [{ id: 't1', label: 'aanbetaling', bedrag: 500, factuurdatum: plus(10), aan: true }, { id: 't2', label: 'oplevering', bedrag: 700.5, factuurdatum: plus(45), aan: true }]), [], null],
+      ['deels gefactureerd over twee termijnen', itemW('300000000012', [{ id: 't1', label: 'aanbetaling', bedrag: 500, factuurdatum: plus(-20), aan: true }, { id: 't2', label: 'oplevering', bedrag: 700, factuurdatum: plus(45), aan: true }, { id: 't3', label: 'nog niet gepland', bedrag: 300, factuurdatum: plus(60), aan: false }]), [fac('900000000001', 650, '300000000012')], null],
+      ['alles uit', itemW('300000000013', [{ id: 't1', label: 'factuur', bedrag: 800, factuurdatum: plus(5), aan: true }], { aan: false }), [fac('900000000002', 100, '300000000013')], null],
+      ['betaalgedrag: 6 dagen later dan de betaaltermijn', itemW('300000000014', [{ id: 't1', label: 'aanbetaling', bedrag: 400.33, factuurdatum: plus(12), aan: true }, { id: 't2', label: 'oplevering', bedrag: 600.67, factuurdatum: plus(80), aan: true }]), [fac('900000000003', 100, '300000000014')], [6, 6, 6]],
+      ['factuurdatum voorbij: vandaag', itemW('300000000015', [{ id: 't1', label: 'factuur', bedrag: 250, factuurdatum: plus(-10), aan: true }]), [], null],
+    ];
+    for (const [naam, it, facturen, d] of gevallen) {
+      const sleutel = 'p:t' + it.estimate_id, ctx = { vandaag, profiel: d ? profielMet(d) : null, cfg }, w = [];
+      // de worker: eerst met het oude item (zonder onze wijziging) om het overzicht van vóór de wijziging te krijgen, dan met het nieuwe item
+      const oudItem = itemW(it.estimate_id, [{ id: 't1', label: 'x', bedrag: it.totaal, factuurdatum: plus(30), aan: true }]);
+      const oud = geldPrognoseEvents({ [sleutel]: oudItem }, facturen, ctx, []), oudOv = oud.overzicht[0];
+      const server = geldPrognoseEvents({ [sleutel]: it }, facturen, ctx, w);
+      const vert = d ? F.vertragingUit(oud.events, sleutel, oudItem) : 0;
+      assert.strictEqual(vert === null ? 0 : vert, d ? d[0] : 0, naam + ': vertraging uit de vorige events');
+      const lok = F.lokaalPrognose(sleutel, it, oudOv, vandaag, vert === null ? 0 : vert);
+      const bank = (x) => { let dd = geldBankdagNa(x.datum); if (dd < vandaag) dd = geldBankdagNa(vandaag); return dd; };
+      server.events.forEach(e => { e.datum = bank(e); e.delta = e.bedrag; });                       // wat de worker daarna met de events doet (bankdagen, delta)
+      const norm = e => ({ id: e.id, bedrag: e.bedrag, delta: e.delta, datum: e.datum, factuurdatum: e.factuurdatum, ontvangst_na: e.ontvangst_na, termijn_id: e.termijn_id, tegenpartij: e.tegenpartij, richting: e.richting, prognose: e.prognose, bron: e.bron });
+      assert.deepStrictEqual(lok.events.map(norm), server.events.map(norm), naam + ': events');
+      const so = server.overzicht[0], nt = o => ({ gefactureerd: o.gefactureerd, totaal: o.totaal, aan: o.aan, termijnen: o.termijnen.map(t => ({ id: t.id, bedrag: t.bedrag, gefactureerd: t.gefactureerd, open: t.open, aan: t.aan, factuurdatum: t.factuurdatum })) });
+      assert.deepStrictEqual(nt(lok.ov), nt(so), naam + ': overzicht (gefactureerd/open per termijn)');
+    }
   });
   console.log(`\n${n} worker-tests geslaagd${process.exitCode ? ' — er zijn fouten' : ''}`);
 })();
