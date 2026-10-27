@@ -1,5 +1,16 @@
 [
   {
+    "versie": "2.25.4",
+    "datum": "2026-10-28",
+    "titel": "Forecast: bedragen incl. of excl. btw",
+    "voor": "geld",
+    "punten": [
+      "Bovenin kies je incl. btw of excl. btw (wordt onthouden). Offertes worden per offerte omgerekend met de verhouding uit Moneybird, dus ook bij 9% of 0%; een offerte zonder die verhouding staat op – en telt dan niet mee in de excl.-bedragen.",
+      "Typ je in de excl.-weergave een bedrag, dan wordt het op hele centen naar incl. omgerekend; het hele resterende excl.-bedrag vult precies het resterende incl.-deel. Opgeslagen wordt altijd incl. btw, net als in Financiën.",
+      "Binnen, openstaande facturen, kosten en netto zijn kas en blijven altijd incl. btw; dat staat erbij als kas, incl. btw."
+    ]
+  },
+  {
     "versie": "2.25.3",
     "datum": "2026-10-28",
     "titel": "Forecast: sneller opslaan, links en selectievinkjes",
