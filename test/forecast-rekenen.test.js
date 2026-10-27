@@ -456,16 +456,19 @@ test('uit beeld zetten: Gaat zeker door uit, termijnen en bedragen blijven bewaa
   const terug = F.bouwRijen({ schatten: [schU(EU[0])], items: { 'p:a': nieuw }, posten: [ov], projecten: [], vandaag: V, maanden: 3, uitbeeld: F.terugzetMap({ [EU[0]]: { reden: 'gefactureerd' } }, [EU[0]]) })[0];
   assert.strictEqual(terug.uitbeeld, null); assert.strictEqual(terug.aan, false);
 });
-test('uit beeld: bulk (alleen rijen met offerte-id, items alleen waar aan, bestaande markeringen blijven, ongeldige reden geweigerd)', () => {
-  const items = { 'p:a': itemU(EU[0]), 'p:b': itemU(EU[1], { aan: false }) };
+test('uit beeld: bulk per rij (alleen rijen met offerte-id; ALLE actieve items van dezelfde offerte gaan uit; ongeldige reden geweigerd)', () => {
+  const items = { 'p:a': itemU(EU[0]), 'p:a2': itemU(EU[0]), 'p:b': itemU(EU[1], { aan: false }), 'p:c': itemU(EU[2]), 'h:post': { soort: 'post', omschrijving: 'x', aan: true } };
   const rijen = F.bouwRijen({ schatten: [schU(EU[0]), schU(EU[1]), schU(EU[2], 'concept')], items, posten: [], projecten: [], vandaag: V, maanden: 3 });
   const geen = { sleutel: 'p:x', estimateId: '' };                                              // prognose-project zonder offerte: overgeslagen
-  const plan = F.bulkUitBeeld(rijen.concat([geen]), items, 'verkeerd', { '300000000999': { reden: 'weg', door: 'A', ts: 3 } });
-  assert.deepStrictEqual(plan.updates.map(u => u.sleutel), ['p:a']); assert.strictEqual(plan.updates[0].item.aan, false); assert.deepStrictEqual(plan.overgeslagen, ['p:x']);
-  assert.deepStrictEqual(Object.keys(plan.map).sort(), [EU[0], EU[1], EU[2], '300000000999'].sort()); assert.strictEqual(plan.map[EU[1]].reden, 'verkeerd'); assert.strictEqual(plan.map['300000000999'].door, 'A');
+  const plan = F.bulkUitBeeld(rijen.concat([geen]), items, 'verkeerd');
+  assert.deepStrictEqual(plan.updates.map(u => u.sleutel).sort(), ['p:a', 'p:a2', 'p:c']);        // het hoofd-item en het dubbele item van offerte 1, en offerte 3; het item dat al uit staat niet
+  assert.ok(plan.updates.every(u => u.item.aan === false)); assert.deepStrictEqual(plan.overgeslagen, ['p:x']); assert.deepStrictEqual(plan.ids.sort(), [EU[0], EU[1], EU[2]].sort());
+  const rA = rijen.find(r => r.estimateId === EU[0]); assert.deepStrictEqual(plan.perRij[rA.sleutel].sort(), ['p:a', 'p:a2']);
+  assert.deepStrictEqual(plan.updates.find(u => u.sleutel === 'p:a2').rijen, [rA.sleutel]);      // een mislukte schrijfactie van het dubbele item telt voor de rij van die offerte
   assert.ok(F.bulkUitBeeld(rijen, items, 'rommel').fout); assert.ok(F.bulkUitBeeld(rijen, items, undefined).fout);
   assert.deepStrictEqual(F.terugzetMap({ a: 1, b: 2 }, ['a']), { b: 2 });
-  for (const k of Object.keys(F.UITBEELD_REDENEN)) assert.ok(F.bulkUitBeeld(rijen, items, k).map);
+  for (const k of Object.keys(F.UITBEELD_REDENEN)) assert.ok(F.bulkUitBeeld(rijen, items, k).ids);
+  assert.deepStrictEqual(F.itemSleutels({ sleutel: 'p:z', estimateId: '' }, { 'p:z': itemU(EU[3]) }), ['p:z']);   // zonder offerte-id alleen het eigen item
 });
 test('uit beeld: filter Uit beeld, tellingen en rijen (standaard verborgen, aan = zichtbaar met reden)', () => {
   const ub = { [EU[1]]: { reden: 'weg', door: 'T', ts: 1 }, [EU[3]]: { reden: 'verkeerd', door: 'T', ts: 1 } };

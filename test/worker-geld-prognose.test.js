@@ -74,27 +74,7 @@ const { pathToFileURL } = require('url');
     assert.strictEqual(r.status, 200, JSON.stringify(r.body)); assert.deepStrictEqual(r.body.item.termijnen.map(t => t.label), ['aanbetaling', 'tussentijds termijn die ']);
     const lijst = await roep(env, 'eigenaar', '/geld/prognose', 'GET'); assert.strictEqual(lijst.body.items['p:lab'].termijnen[0].label, 'aanbetaling');
   });
-  const schema = (x) => ({ '700000000001': x || [{ label: 'aanbetaling', pct: 50 }, { label: 'oplevering', pct: 50 }] });
-  await test('factuurschema\u2019s per klant: opslaan in de geld-config, teruglezen, ook door een lezer', async () => {
-    const env = { MT_ROLLEN: kv() };
-    const c0 = await roep(env, 'eigenaar', '/geld/config', 'GET'); assert.strictEqual(c0.status, 200); assert.deepStrictEqual(c0.body.config.factuurschemas, {});
-    const w = await roep(env, 'eigenaar', '/geld/config', 'POST', { factuurschemas: schema(), revisie: c0.body.config.revisie }); assert.strictEqual(w.status, 200, JSON.stringify(w.body));
-    assert.deepStrictEqual(w.body.config.factuurschemas, schema());
-    const les = await roep(env, 'administratie', '/geld/config', 'GET'); assert.deepStrictEqual(les.body.config.factuurschemas, schema());
-    const nogmaals = await roep(env, 'eigenaar', '/geld/config', 'POST', { factuurschemas: schema([{ label: 'factuur', pct: 100 }]), revisie: w.body.config.revisie }); assert.strictEqual(nogmaals.status, 200);
-    const leeg = await roep(env, 'eigenaar', '/geld/config', 'POST', { factuurschemas: null, revisie: nogmaals.body.config.revisie }); assert.deepStrictEqual(leeg.body.config.factuurschemas, {});
-  });
-  await test('factuurschema\u2019s: ongeldig wordt geweigerd (som, label, aantal, contact-id), oude revisie 409, lezer 403', async () => {
-    const env = { MT_ROLLEN: kv() }; const rev = (await roep(env, 'eigenaar', '/geld/config', 'GET')).body.config.revisie;
-    const slecht = [schema([{ label: 'a', pct: 40 }, { label: 'b', pct: 40 }]), schema([{ label: '', pct: 100 }]), schema([{ label: 'a', pct: 0 }, { label: 'b', pct: 100 }]), { 'abc': [{ label: 'a', pct: 100 }] },
-      schema(Array.from({ length: 7 }, (_, i) => ({ label: 'd' + i, pct: i < 6 ? 14 : 16 }))), schema([]), { '700000000001': 'x' }];
-    for (const s of slecht) { const r = await roep(env, 'eigenaar', '/geld/config', 'POST', { factuurschemas: s, revisie: rev }); assert.strictEqual(r.status, 400, JSON.stringify(s)); }
-    assert.strictEqual((await roep(env, 'eigenaar', '/geld/config', 'POST', { factuurschemas: [], revisie: rev })).status, 400);
-    assert.strictEqual((await roep(env, 'eigenaar', '/geld/config', 'POST', { factuurschemas: schema(), revisie: rev + 5 })).status, 409);
-    assert.strictEqual((await roep(env, 'administratie', '/geld/config', 'POST', { factuurschemas: schema(), revisie: rev })).status, 403);
-    assert.deepStrictEqual((await roep(env, 'eigenaar', '/geld/config', 'GET')).body.config.factuurschemas, {});
-    const afronding = await roep(env, 'eigenaar', '/geld/config', 'POST', { factuurschemas: schema([{ label: 'a', pct: 33.33 }, { label: 'b', pct: 33.33 }, { label: 'c', pct: 33.34 }]), revisie: rev }); assert.strictEqual(afronding.status, 200);
-  });  const kvPag = (per, oneindig) => { const k = kv(); k.list = async ({ prefix, cursor }) => { const alle = [...k.m.keys()].filter(x => x.startsWith(prefix || '')).sort(), van = Number(cursor || 0), stuk = alle.slice(van, van + per);
+  const kvPag = (per, oneindig) => { const k = kv(); k.list = async ({ prefix, cursor }) => { const alle = [...k.m.keys()].filter(x => x.startsWith(prefix || '')).sort(), van = Number(cursor || 0), stuk = alle.slice(van, van + per);
     const klaar = !oneindig && van + per >= alle.length; return { keys: stuk.map(name => ({ name, metadata: k.m.get(name).meta })), list_complete: klaar, cursor: klaar ? undefined : String(van + per) }; }; return k; };
   const zaai = (env, n) => { for (let i = 0; i < n; i++) { const it = Object.assign({ soort: 'project', ts: 1 + i, door: 'x' }, item('300000000' + String(100 + i))); it.naam = 'Zaad ' + i; env.MT_ROLLEN.m.set('geld:prognose:p:z' + String(i).padStart(3, '0'), { v: JSON.stringify(it), meta: it }); } };
   await test('dubbele offerte wordt ook gevonden als de prognoselijst uit meer dan 3 pagina\u2019s bestaat', async () => {
@@ -111,30 +91,111 @@ const { pathToFileURL } = require('url');
     const uit = await roep(env, 'eigenaar', '/geld/prognose', 'POST', { sleutel: 'p:nieuw', item: item('300000000555', { aan: false }), vorige_ts: null }); assert.strictEqual(uit.status, 200);
     const kapot = kv(); kapot.list = async () => { throw new Error('KV stuk'); };
     const r2 = await roep({ MT_ROLLEN: kapot }, 'eigenaar', '/geld/prognose', 'POST', { sleutel: 'p:nieuw', item: item('300000000555'), vorige_ts: null }); assert.strictEqual(r2.status, 503);
-  });  await test('uit beeld: opslaan in de geld-config; wie en wanneer zet de server, niet de client; teruglezen door een lezer', async () => {
-    const env = { MT_ROLLEN: kv() }; const rev = (await roep(env, 'eigenaar', '/geld/config', 'GET')).body.config.revisie;
-    assert.deepStrictEqual((await roep(env, 'administratie', '/geld/config', 'GET')).body.config.uitbeeld, {});
-    const w = await roep(env, 'eigenaar', '/geld/config', 'POST', { uitbeeld: { '300000000201': { reden: 'verkeerd', door: 'Valse Naam', ts: 5 }, '300000000202': { reden: 'weg' } }, revisie: rev });
-    assert.strictEqual(w.status, 200, JSON.stringify(w.body)); const ub = w.body.config.uitbeeld;
-    assert.deepStrictEqual(Object.keys(ub).sort(), ['300000000201', '300000000202']); assert.strictEqual(ub['300000000201'].reden, 'verkeerd');
-    assert.notStrictEqual(ub['300000000201'].door, 'Valse Naam'); assert.ok(ub['300000000201'].ts > 1e12); assert.ok(ub['300000000201'].door.length > 0);
-    assert.deepStrictEqual((await roep(env, 'administratie', '/geld/config', 'GET')).body.config.uitbeeld, ub);
-    // ongewijzigde reden houdt de oorspronkelijke stempel; andere reden krijgt een nieuwe; terugzetten = sleutel weglaten
-    const w2 = await roep(env, 'eigenaar', '/geld/config', 'POST', { uitbeeld: { '300000000201': { reden: 'verkeerd' }, '300000000202': { reden: 'gefactureerd' }, '300000000203': { reden: 'weg' } }, revisie: w.body.config.revisie });
-    assert.deepStrictEqual(w2.body.config.uitbeeld['300000000201'], ub['300000000201']); assert.strictEqual(w2.body.config.uitbeeld['300000000202'].reden, 'gefactureerd');
-    const w3 = await roep(env, 'eigenaar', '/geld/config', 'POST', { uitbeeld: { '300000000203': { reden: 'weg' } }, revisie: w2.body.config.revisie });
-    assert.deepStrictEqual(Object.keys(w3.body.config.uitbeeld), ['300000000203']);
-    const leeg = await roep(env, 'eigenaar', '/geld/config', 'POST', { uitbeeld: {}, revisie: w3.body.config.revisie }); assert.deepStrictEqual(leeg.body.config.uitbeeld, {});
+  });  const ub = (env) => [...env.MT_ROLLEN.m.keys()].filter(k => k.startsWith('geld:uitbeeld:'));
+  const idn = i => '3' + String(10000000000 + i);                                    // verzonnen, geldige offerte-id's
+  await test('uit beeld: per offerte een eigen KV-sleutel; server zet wie en wanneer; de config blijft ongemoeid', async () => {
+    const env = { MT_ROLLEN: kv() }; await roep(env, 'eigenaar', '/geld/config', 'GET');
+    env.MT_ROLLEN.m.set('geld:config', { v: JSON.stringify({ revisie: 4, kredietlimiet: 1234 }), meta: null }); const configVoor = env.MT_ROLLEN.m.get('geld:config').v;
+    const leeg = await roep(env, 'administratie', '/geld/uitbeeld', 'GET'); assert.strictEqual(leeg.status, 200); assert.deepStrictEqual(leeg.body.items, {}); assert.strictEqual(leeg.body.max, 5000);
+    const w = await roep(env, 'eigenaar', '/geld/uitbeeld', 'POST', { ids: [idn(1), idn(2)], reden: 'verkeerd', door: 'Valse Naam', ts: 5 });
+    assert.strictEqual(w.status, 200, JSON.stringify(w.body)); assert.deepStrictEqual(ub(env).sort(), ['geld:uitbeeld:' + idn(1), 'geld:uitbeeld:' + idn(2)]);
+    const rec = w.body.items[idn(1)]; assert.strictEqual(rec.reden, 'verkeerd'); assert.notStrictEqual(rec.door, 'Valse Naam'); assert.ok(rec.ts > 1e12);
+    assert.strictEqual(env.MT_ROLLEN.m.get('geld:config').v, configVoor, 'de config is niet aangeraakt');
+    const lees = await roep(env, 'administratie', '/geld/uitbeeld', 'GET'); assert.deepStrictEqual(Object.keys(lees.body.items).sort(), [idn(1), idn(2)].sort()); assert.strictEqual(lees.body.aantal, 2);
   });
-  await test('uit beeld: ongeldig (reden, offerte-id, type), oude revisie 409 en lees-recht 403 (server)', async () => {
-    const env = { MT_ROLLEN: kv() }; const rev = (await roep(env, 'eigenaar', '/geld/config', 'GET')).body.config.revisie;
-    for (const ub of [{ '300000000201': { reden: 'onzin' } }, { abc: { reden: 'weg' } }, { '300000000201': null }, { '300000000201': 'weg' }, [], null, 'x']) {
-      const r = await roep(env, 'eigenaar', '/geld/config', 'POST', { uitbeeld: ub, revisie: rev }); assert.strictEqual(r.status, 400, JSON.stringify(ub));
-    }
-    assert.strictEqual((await roep(env, 'eigenaar', '/geld/config', 'POST', { uitbeeld: { '300000000201': { reden: 'weg' } }, revisie: rev + 7 })).status, 409);
-    for (const rol of ['administratie', 'beheerder', 'kantoor', 'werkplaats', 'lezen']) assert.strictEqual((await roep(env, rol, '/geld/config', 'POST', { uitbeeld: { '300000000201': { reden: 'weg' } }, revisie: rev })).status, 403, rol);
-    assert.deepStrictEqual((await roep(env, 'eigenaar', '/geld/config', 'GET')).body.config.uitbeeld, {});
-    const veel = {}; for (let i = 0; i < 2001; i++) veel['3' + String(100000000 + i)] = { reden: 'weg' };
-    assert.strictEqual((await roep(env, 'eigenaar', '/geld/config', 'POST', { uitbeeld: veel, revisie: rev })).status, 400);
-  });  console.log(`\n${n} worker-tests geslaagd${process.exitCode ? ' — er zijn fouten' : ''}`);
+  await test('uit beeld: gelijktijdige acties op verschillende offertes wissen elkaar niet; zelfde reden houdt de stempel; terugzetten wist alleen die offerte', async () => {
+    const env = { MT_ROLLEN: kv() };
+    const [a, b] = await Promise.all([roep(env, 'eigenaar', '/geld/uitbeeld', 'POST', { ids: [idn(11)], reden: 'weg' }), roep(env, 'eigenaar', '/geld/uitbeeld', 'POST', { ids: [idn(12)], reden: 'gefactureerd' })]);
+    assert.strictEqual(a.status, 200); assert.strictEqual(b.status, 200); assert.deepStrictEqual(ub(env).sort(), ['geld:uitbeeld:' + idn(11), 'geld:uitbeeld:' + idn(12)]);
+    const eerst = JSON.parse(env.MT_ROLLEN.m.get('geld:uitbeeld:' + idn(11)).v); await new Promise(r => setTimeout(r, 5));
+    const nog = await roep(env, 'eigenaar', '/geld/uitbeeld', 'POST', { ids: [idn(11)], reden: 'weg' }); assert.deepStrictEqual(nog.body.items[idn(11)], eerst);
+    const anders = await roep(env, 'eigenaar', '/geld/uitbeeld', 'POST', { ids: [idn(11)], reden: 'verkeerd' }); assert.strictEqual(anders.body.items[idn(11)].reden, 'verkeerd'); assert.ok(anders.body.items[idn(11)].ts >= eerst.ts);
+    const terug = await roep(env, 'eigenaar', '/geld/uitbeeld', 'POST', { ids: [idn(11)], reden: null }); assert.deepStrictEqual(terug.body.verwijderd, [idn(11)]);
+    assert.deepStrictEqual(ub(env), ['geld:uitbeeld:' + idn(12)]); assert.deepStrictEqual(Object.keys((await roep(env, 'eigenaar', '/geld/uitbeeld', 'GET')).body.items), [idn(12)]);
+  });
+  await test('uit beeld: validatie, rechten (server) en controle zonder schrijven', async () => {
+    const env = { MT_ROLLEN: kv() };
+    for (const b of [{ ids: [], reden: 'weg' }, { ids: ['abc'], reden: 'weg' }, { ids: [idn(1), idn(1)], reden: 'weg' }, { ids: [idn(1)], reden: 'onzin' }, { ids: [idn(1)] }, { reden: 'weg' }, { ids: 'x', reden: 'weg' }, { ids: Array.from({ length: 501 }, (_, i) => idn(i)), reden: 'weg' }])
+      assert.strictEqual((await roep(env, 'eigenaar', '/geld/uitbeeld', 'POST', b)).status, 400, JSON.stringify(b).slice(0, 60));
+    for (const rol of ['administratie', 'beheerder', 'kantoor', 'werkplaats', 'lezen']) assert.strictEqual((await roep(env, rol, '/geld/uitbeeld', 'POST', { ids: [idn(1)], reden: 'weg' })).status, 403, rol);
+    for (const rol of ['beheerder', 'kantoor', 'werkplaats', 'lezen']) assert.strictEqual((await roep(env, rol, '/geld/uitbeeld', 'GET')).status, 403, rol);
+    const c = await roep(env, 'eigenaar', '/geld/uitbeeld', 'POST', { ids: [idn(1)], reden: 'weg', controle: true }); assert.strictEqual(c.status, 200); assert.strictEqual(c.body.controle, true); assert.strictEqual(c.body.aantal, 1);
+    assert.deepStrictEqual(ub(env), [], 'controle schrijft niets');
+  });
+  await test('uit beeld: maximum aantal sleutels (5000), controle en echte schrijfactie weigeren; terugzetten blijft mogelijk', async () => {
+    const env = { MT_ROLLEN: kvPag(1000) };
+    for (let i = 0; i < 5000; i++) { const r = { reden: 'weg', door: 'x', ts: 1 }; env.MT_ROLLEN.m.set('geld:uitbeeld:' + idn(i), { v: JSON.stringify(r), meta: r }); }
+    env.MT_ROLLEN.m.set('geld:uitbeeld-migratie', { v: '{"ts":1}', meta: null });
+    const vol = await roep(env, 'eigenaar', '/geld/uitbeeld', 'POST', { ids: [idn(9000)], reden: 'weg' }); assert.strictEqual(vol.status, 400); assert.match(vol.body.error, /vol/);
+    assert.strictEqual((await roep(env, 'eigenaar', '/geld/uitbeeld', 'POST', { ids: [idn(9000)], reden: 'weg', controle: true })).status, 400);
+    assert.strictEqual((await roep(env, 'eigenaar', '/geld/uitbeeld', 'POST', { ids: [idn(5)], reden: 'verkeerd' })).status, 200);                   // een bestaande aanpassen mag
+    assert.strictEqual((await roep(env, 'eigenaar', '/geld/uitbeeld', 'POST', { ids: [idn(6)], reden: null })).status, 200);                           // terugzetten mag
+    assert.strictEqual((await roep(env, 'eigenaar', '/geld/uitbeeld', 'POST', { ids: [idn(9000)], reden: 'weg' })).status, 200);                       // nu is er weer een plek
+    const g = await roep(env, 'eigenaar', '/geld/uitbeeld', 'GET'); assert.strictEqual(g.body.aantal, 5000);                                         // volledige paginering: 5000 sleutels over 5 pagina's
+  });
+  await test('uit beeld en factuurschema’s: fail-closed bij een onvolledige lijst (503), nooit een halve lijst of schrijven op een gok', async () => {
+    const env = { MT_ROLLEN: kvPag(2, true) };
+    for (let i = 0; i < 3; i++) { const r = { reden: 'weg', door: 'x', ts: 1 }; env.MT_ROLLEN.m.set('geld:uitbeeld:' + idn(i), { v: JSON.stringify(r), meta: r }); }
+    assert.strictEqual((await roep(env, 'eigenaar', '/geld/uitbeeld', 'GET')).status, 503);
+    for (const b of [{ ids: [idn(50)], reden: 'weg' }, { ids: [idn(50)], reden: 'weg', controle: true }, { ids: [idn(1)], reden: null }]) assert.strictEqual((await roep(env, 'eigenaar', '/geld/uitbeeld', 'POST', b)).status, 503);
+    assert.ok(!env.MT_ROLLEN.m.has('geld:uitbeeld:' + idn(50))); assert.ok(env.MT_ROLLEN.m.has('geld:uitbeeld:' + idn(1)));
+    assert.strictEqual((await roep(env, 'eigenaar', '/geld/fschemas', 'GET')).status, 503);
+    const kapot = kv(); kapot.list = async () => { throw new Error('KV stuk'); };
+    assert.strictEqual((await roep({ MT_ROLLEN: kapot }, 'eigenaar', '/geld/uitbeeld', 'GET')).status, 503); assert.strictEqual((await roep({ MT_ROLLEN: kapot }, 'eigenaar', '/geld/fschemas', 'GET')).status, 503);
+    assert.strictEqual((await roep({ MT_ROLLEN: kapot }, 'eigenaar', '/geld/fschema', 'POST', { contact_id: '700000000001', rijen: [{ label: 'a', pct: 100 }] })).status, 503);
+  });
+  await test('uit beeld: een lijst van meer dan 3 pagina’s wordt helemaal gelezen', async () => {
+    const env = { MT_ROLLEN: kvPag(2) }; for (let i = 0; i < 9; i++) { const r = { reden: 'weg', door: 'x', ts: 1 }; env.MT_ROLLEN.m.set('geld:uitbeeld:' + idn(i), { v: JSON.stringify(r), meta: r }); }
+    env.MT_ROLLEN.m.set('geld:uitbeeld-migratie', { v: '{"ts":1}', meta: null });
+    assert.strictEqual((await roep(env, 'administratie', '/geld/uitbeeld', 'GET')).body.aantal, 9);
+  });
+  const leg = { revisie: 4, kredietlimiet: 1000, fictieve_buffer: 500, uitbeeld: { [idn(21)]: { reden: 'weg', door: 'Oud', ts: 7 } }, factuurschemas: { '700000000001': [{ label: 'aanbetaling', pct: 40 }, { label: 'oplevering', pct: 60 }] },
+    potten: [{ id: 'spaar1', naam: 'Spaarpot', doel: 'buffer', actief: true, weekinleg: 25 }], prognose_schema: { grens_klein: 1000, grens_groot: 20000, betaaltermijn: 14, middel: [{ pct: 50, dagen: 7, label: 'aanbetaling', anker: 'akkoord' }, { pct: 50, dagen: 60, label: 'oplevering', anker: 'oplevering' }] } };
+  const metConfig = () => { const env = { MT_ROLLEN: kv() }; env.MT_ROLLEN.m.set('geld:config', { v: JSON.stringify(leg), meta: null }); return env; };
+  await test('legacy: het oude config.uitbeeld wordt gelezen en bij de eerste schrijfactie lui overgenomen; de config zelf blijft ongemoeid', async () => {
+    const env = metConfig(), voor = env.MT_ROLLEN.m.get('geld:config').v;
+    assert.deepStrictEqual(Object.keys((await roep(env, 'administratie', '/geld/uitbeeld', 'GET')).body.items), [idn(21)]);                              // terugval
+    await roep(env, 'eigenaar', '/geld/uitbeeld', 'POST', { ids: [idn(22)], reden: 'verkeerd' });
+    assert.deepStrictEqual(ub(env).sort(), ['geld:uitbeeld:' + idn(21), 'geld:uitbeeld:' + idn(22)].sort()); assert.ok(env.MT_ROLLEN.m.has('geld:uitbeeld-migratie'));
+    assert.strictEqual(JSON.parse(env.MT_ROLLEN.m.get('geld:uitbeeld:' + idn(21)).v).door, 'Oud');
+    await roep(env, 'eigenaar', '/geld/uitbeeld', 'POST', { ids: [idn(21)], reden: null });                                                           // een overgenomen offerte terugzetten
+    assert.deepStrictEqual(Object.keys((await roep(env, 'administratie', '/geld/uitbeeld', 'GET')).body.items), [idn(22)]);                              // komt niet terug uit de oude config
+    assert.strictEqual(env.MT_ROLLEN.m.get('geld:config').v, voor, 'niets uit de config gewist');
+  });
+  await test('factuurschema’s per klant: eigen sleutel per contact; teruglezen; terugval op de oude config en lui overnemen; config ongemoeid', async () => {
+    const env = metConfig(), voor = env.MT_ROLLEN.m.get('geld:config').v;
+    assert.deepStrictEqual((await roep(env, 'administratie', '/geld/fschemas', 'GET')).body.schemas, leg.factuurschemas);                                // terugval
+    const w = await roep(env, 'eigenaar', '/geld/fschema', 'POST', { contact_id: '700000000002', rijen: [{ label: 'factuur', pct: 100 }] }); assert.strictEqual(w.status, 200, JSON.stringify(w.body));
+    const g = (await roep(env, 'administratie', '/geld/fschemas', 'GET')).body.schemas; assert.deepStrictEqual(Object.keys(g).sort(), ['700000000001', '700000000002']);
+    assert.ok(env.MT_ROLLEN.m.has('geld:fschema:700000000001') && env.MT_ROLLEN.m.has('geld:fschema:700000000002') && env.MT_ROLLEN.m.has('geld:fschema-migratie'));
+    await roep(env, 'eigenaar', '/geld/fschema', 'POST', { contact_id: '700000000001', rijen: null });
+    assert.deepStrictEqual(Object.keys((await roep(env, 'administratie', '/geld/fschemas', 'GET')).body.schemas), ['700000000002']);
+    assert.strictEqual(env.MT_ROLLEN.m.get('geld:config').v, voor, 'niets uit de config gewist');
+    const [x, y] = await Promise.all([roep(env, 'eigenaar', '/geld/fschema', 'POST', { contact_id: '700000000003', rijen: [{ label: 'a', pct: 100 }] }), roep(env, 'eigenaar', '/geld/fschema', 'POST', { contact_id: '700000000004', rijen: [{ label: 'b', pct: 100 }] })]);
+    assert.strictEqual(x.status + y.status, 400); assert.deepStrictEqual(Object.keys((await roep(env, 'eigenaar', '/geld/fschemas', 'GET')).body.schemas).sort(), ['700000000002', '700000000003', '700000000004']);
+  });
+  await test('factuurschema’s: ongeldig (som, label, aantal, contact-id), rechten server-side', async () => {
+    const env = { MT_ROLLEN: kv() };
+    for (const b of [{ contact_id: '700000000001', rijen: [{ label: 'a', pct: 40 }, { label: 'b', pct: 40 }] }, { contact_id: '700000000001', rijen: [{ label: '', pct: 100 }] }, { contact_id: '700000000001', rijen: [] },
+      { contact_id: '700000000001', rijen: Array.from({ length: 7 }, (_, i) => ({ label: 'd' + i, pct: i < 6 ? 14 : 16 })) }, { contact_id: 'abc', rijen: [{ label: 'a', pct: 100 }] }, { rijen: [{ label: 'a', pct: 100 }] }, { contact_id: '700000000001' }])
+      assert.strictEqual((await roep(env, 'eigenaar', '/geld/fschema', 'POST', b)).status, 400, JSON.stringify(b).slice(0, 60));
+    for (const rol of ['administratie', 'beheerder', 'kantoor', 'werkplaats', 'lezen']) assert.strictEqual((await roep(env, rol, '/geld/fschema', 'POST', { contact_id: '700000000001', rijen: [{ label: 'a', pct: 100 }] })).status, 403, rol);
+    assert.strictEqual((await roep(env, 'eigenaar', '/geld/fschema', 'POST', { contact_id: '700000000001', rijen: [{ label: 'a', pct: 33.33 }, { label: 'b', pct: 33.33 }, { label: 'c', pct: 33.34 }] })).status, 200);
+    assert.deepStrictEqual(Object.keys((await roep(env, 'administratie', '/geld/fschemas', 'GET')).body.schemas), ['700000000001']);
+  });
+  await test('config-POST: velden die niet in de body staan blijven van de VERSE oude stand (potten, prognose_schema, oude Forecast-velden); ze worden niet meer door de config geschreven', async () => {
+    const env = metConfig(); const g = (await roep(env, 'eigenaar', '/geld/config', 'GET')).body.config;
+    const r = await roep(env, 'eigenaar', '/geld/config', 'POST', { kredietlimiet: 2500, revisie: g.revisie }); assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+    const c = (await roep(env, 'administratie', '/geld/config', 'GET')).body.config;
+    assert.strictEqual(c.kredietlimiet, 2500); assert.strictEqual(c.fictieve_buffer, 500); assert.deepStrictEqual(c.potten.map(p => [p.id, p.weekinleg]), [['spaar1', 25]]); assert.strictEqual(c.prognose_schema.middel.length, 2); assert.strictEqual(c.prognose_schema.grens_groot, 20000);
+    assert.deepStrictEqual(c.uitbeeld, leg.uitbeeld); assert.deepStrictEqual(c.factuurschemas, leg.factuurschemas); assert.strictEqual(c.revisie, g.revisie + 1);
+    for (const b of [{ uitbeeld: { [idn(30)]: { reden: 'weg' } } }, { factuurschemas: {} }]) { const x = await roep(env, 'eigenaar', '/geld/config', 'POST', Object.assign({ revisie: c.revisie }, b)); assert.strictEqual(x.status, 400); }
+    const na = (await roep(env, 'eigenaar', '/geld/config', 'GET')).body.config; assert.deepStrictEqual(na.uitbeeld, leg.uitbeeld); assert.deepStrictEqual(na.factuurschemas, leg.factuurschemas); assert.strictEqual(na.revisie, c.revisie);
+    // verse oude stand, niet een kopie van de client: een tussentijdse wijziging in KV (andere revisie) wordt niet overschreven
+    const env2 = metConfig(), g2 = (await roep(env2, 'eigenaar', '/geld/config', 'GET')).body.config, put0 = env2.MT_ROLLEN.put.bind(env2.MT_ROLLEN);
+    env2.MT_ROLLEN.put = async (k, v, o) => { if (k.startsWith('geld:config:historie:')) { const nu = JSON.parse(env2.MT_ROLLEN.m.get('geld:config').v); nu.revisie += 1; nu.kredietlimiet = 777; env2.MT_ROLLEN.m.set('geld:config', { v: JSON.stringify(nu), meta: null }); } return put0(k, v, o); };
+    const botsing = await roep(env2, 'eigenaar', '/geld/config', 'POST', { fictieve_buffer: 900, revisie: g2.revisie }); assert.strictEqual(botsing.status, 409);
+    const nu2 = JSON.parse(env2.MT_ROLLEN.m.get('geld:config').v); assert.strictEqual(nu2.kredietlimiet, 777); assert.strictEqual(nu2.fictieve_buffer, 500);     // de tussentijdse wijziging staat er nog, de onze is niet geschreven
+  });
+  console.log(`\n${n} worker-tests geslaagd${process.exitCode ? ' — er zijn fouten' : ''}`);
 })();

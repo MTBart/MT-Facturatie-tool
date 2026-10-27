@@ -2268,6 +2268,38 @@ function geldUitbeeldNorm(x) {
   }
   return uit;
 }
+// Forecast-gegevens met een eigen KV-sleutel per offerte of klant (nooit meer één gedeeld document): elke sleutel is los, dus gelijktijdige
+// acties op verschillende offertes of klanten kunnen elkaar niet wissen; voor dezelfde sleutel geldt de laatste schrijver. Metadata = de waarde,
+// zodat de lijst in één list()-aanroep komt. Het oude config.uitbeeld / config.factuurschemas wordt tot de eerste schrijfactie als terugval gelezen
+// en dan lui overgenomen (de config zelf wordt daarbij nooit aangepast).
+const GELD_UB = 'geld:uitbeeld:', GELD_FS = 'geld:fschema:', GELD_UB_MAX = 5000, GELD_FS_MAX = 2000, GELD_UB_VLAG = 'geld:uitbeeld-migratie', GELD_FS_VLAG = 'geld:fschema-migratie';
+async function geldForecastLijst(env, prefix) {
+  const l = await geldKvLijst(env, prefix, 500);          // volledige paginering; compleet:false = niet alles gelezen
+  return { items: l.items, compleet: !!l.compleet };
+}
+async function geldUitbeeldAlles(env) {
+  const l = await geldForecastLijst(env, GELD_UB); if (!l.compleet) return null;
+  if (await kvJson(env, GELD_UB_VLAG)) return l.items;
+  return Object.assign({}, geldUitbeeldNorm((await geldConfig(env)).uitbeeld), l.items);
+}
+async function geldUitbeeldMigreer(env) {
+  if (await kvJson(env, GELD_UB_VLAG)) return;
+  const leg = geldUitbeeldNorm((await geldConfig(env)).uitbeeld);
+  for (const [k, rec] of Object.entries(leg)) if (!(await kvJson(env, GELD_UB + k))) await kvZet(env, GELD_UB + k, rec, { metadata: rec });
+  await kvZet(env, GELD_UB_VLAG, { ts: Date.now() });
+}
+async function geldFschemasAlles(env) {
+  const l = await geldForecastLijst(env, GELD_FS); if (!l.compleet) return null;
+  const uit = {}; for (const [k, v] of Object.entries(l.items)) if (v && Array.isArray(v.rijen)) uit[k] = v.rijen;
+  if (await kvJson(env, GELD_FS_VLAG)) return uit;
+  return Object.assign({}, geldFactuurschemasNorm((await geldConfig(env)).factuurschemas), uit);
+}
+async function geldFschemaMigreer(env) {
+  if (await kvJson(env, GELD_FS_VLAG)) return;
+  const leg = geldFactuurschemasNorm((await geldConfig(env)).factuurschemas);
+  for (const [k, rijen] of Object.entries(leg)) if (!(await kvJson(env, GELD_FS + k))) { const rec = { rijen, door: 'migratie', ts: Date.now() }; await kvZet(env, GELD_FS + k, rec, { metadata: rec }); }
+  await kvZet(env, GELD_FS_VLAG, { ts: Date.now() });
+}
 function geldConfigNorm(c) {
   c = c && typeof c === 'object' ? c : {};
   const getal = (x, min, max) => (typeof x === 'number' && isFinite(x) && x >= min && x <= max) ? x : null;
@@ -2287,7 +2319,7 @@ function geldConfigNorm(c) {
     id: String(g.id), naam: String(g.naam || g.id).slice(0, 60), prefix: String(g.prefix || '').trim().slice(0, 60),
     contact_ids: (Array.isArray(g.contact_ids) ? g.contact_ids : []).map(String).filter(x => /^\d{6,25}$/.test(x)).slice(0, 200) }))
     .filter(g => g.prefix.length >= 3 || g.contact_ids.length);
-  const uit = { kredietlimiet: getal(c.kredietlimiet, 0, 1e9), potten: uniek, klantgroepen: groepen, lopend_streef: geldStreefNorm(c.lopend_streef), prognose_schema: geldSchemaNorm(c.prognose_schema), factuurschemas: geldFactuurschemasNorm(c.factuurschemas), uitbeeld: geldUitbeeldNorm(c.uitbeeld),
+  const uit = { kredietlimiet: getal(c.kredietlimiet, 0, 1e9), potten: uniek, klantgroepen: groepen, lopend_streef: geldStreefNorm(c.lopend_streef), prognose_schema: geldSchemaNorm(c.prognose_schema), factuurschemas: c.factuurschemas && typeof c.factuurschemas === 'object' && !Array.isArray(c.factuurschemas) ? c.factuurschemas : {}, uitbeeld: c.uitbeeld && typeof c.uitbeeld === 'object' && !Array.isArray(c.uitbeeld) ? c.uitbeeld : {},   // oude opslag van Forecast-gegevens: alleen doorgeven, nooit wegnormaliseren (nu eigen sleutels, zie /geld/uitbeeld en /geld/fschema)
     // buffer_lopend (eigen ondergrens) is samengevoegd met de fictieve buffer: een gezet oud veld wordt het eigen bedrag (negatief → 0). Eén release lang schrijven we beide velden
     // (dual-write) zodat een terugdraaiing van de front-end niets verliest: buffer_lopend = de fictieve buffer, of de oude waarde zolang er nog geen fictieve buffer is.
     buffer_lopend: null,   // hieronder gelijkgetrokken met fictieve_buffer (dual-write)
@@ -4255,22 +4287,8 @@ async function handleGeld(p, request, env, ik, json0) {
       if (b.prognose_schema !== null && (!n || ['klein', 'middel', 'groot'].some(k => Array.isArray(b.prognose_schema[k]) && b.prognose_schema[k].length && !n[k].length))) return json({ error: 'standaardschema: per grootte percentages die samen 100 zijn' }, 400);
       nieuw.prognose_schema = b.prognose_schema; gewijzigd.push('prognose_schema');
     }
-    if ('uitbeeld' in b) {
-      const ub = b.uitbeeld;
-      if (!ub || typeof ub !== 'object' || Array.isArray(ub) || Object.keys(ub).length > GELD_UITBEELD_MAX) return json({ error: `uitbeeld: object per offerte-id (hooguit ${GELD_UITBEELD_MAX})` }, 400);
-      for (const [k, v] of Object.entries(ub)) if (!/^\d{6,25}$/.test(k) || !v || typeof v !== 'object' || !GELD_UITBEELD_REDEN.includes(v.reden)) return json({ error: 'uitbeeld: offerte-id (alleen cijfers) met reden verkeerd, gefactureerd of weg', offerte: k.slice(0, 25) }, 400);
-      // wie en wanneer zet de server zelf (niet te vervalsen); een ongewijzigde reden behoudt de oorspronkelijke stempel
-      const wie = String((ik.rec && ik.rec.naam) || ik.email || ik.oid).slice(0, 60), nu = Date.now(), oudU = oud.uitbeeld || {}, nw = {};
-      for (const [k, v] of Object.entries(ub)) nw[k] = oudU[k] && oudU[k].reden === v.reden ? oudU[k] : { reden: v.reden, door: wie, ts: nu };
-      nieuw.uitbeeld = nw; gewijzigd.push('uitbeeld');
-    }
-    if ('factuurschemas' in b) {
-      const fs = b.factuurschemas;
-      if (fs !== null && (typeof fs !== 'object' || Array.isArray(fs) || Object.keys(fs).length > 200)) return json({ error: 'factuurschemas: object per klant (contact-id) of null' }, 400);
-      const n = geldFactuurschemasNorm(fs);
-      if (fs !== null && Object.keys(n).length !== Object.keys(fs).length) return json({ error: 'factuurschema: per klant (contact-id, alleen cijfers) 1 tot 6 delen met een label en een percentage, samen precies 100' }, 400);
-      nieuw.factuurschemas = n; gewijzigd.push('factuurschemas');
-    }
+    // Forecast-gegevens (uit beeld, factuurschema's) staan niet meer in de config: eigen sleutels per offerte/klant (/geld/uitbeeld, /geld/fschema),
+    // zodat gelijktijdige wijzigingen elkaar niet kunnen wissen. Een oud veld in de config blijft ongemoeid.
     if ('reserve' in b) {
       if (b.reserve !== null && !(b.reserve && typeof b.reserve === 'object' && typeof b.reserve.bedrag === 'number' && isFinite(b.reserve.bedrag) && b.reserve.bedrag >= 0)) return json({ error: 'reserve: {bedrag ≥ 0, pot} of null' }, 400);
       if (b.reserve && b.reserve.pot != null && !(nieuw.potten || oud.potten).some(p => p.id === b.reserve.pot && !p.virtueel)) return json({ error: 'reserve.pot: onbekend potje' }, 400);
@@ -4348,10 +4366,65 @@ async function handleGeld(p, request, env, ik, json0) {
     // G7: wijzigt een streefbedrag (of de keuze eigen bedrag ↔ advies), leg datum en naam vast
     { const vb = geldStreefBedragen(oud), nb = geldStreefBedragen(norm);
       for (const k of Object.keys(nb)) if (JSON.stringify(vb[k]) !== JSON.stringify(nb[k])) norm.streef_herkomst[k] = { bron: norm.streef_herkomst[k].bron, datum: geldVandaag(), door: norm.door || null }; }
+    { const vers = geldConfigNorm(await kvJson(env, 'geld:config')); if ((vers.revisie || 0) !== (oud.revisie || 0)) return json({ error: 'instellingen zijn intussen gewijzigd — herlaad en probeer opnieuw', revisie: vers.revisie }, 409); }   // kleinst mogelijk venster tussen lezen en schrijven
     await kvZet(env, 'geld:config', norm);
     await geldZetVersie(env, `${ts}-c${randHex(3)}`, ctx);
     await audit(env, { door: ik.oid, doorNaam: (ik.rec && ik.rec.naam) || ik.email || '', actie: 'geld-config', doel: 'geld', doelNaam: 'instellingen: ' + gewijzigd.join(', ') });   // geen bedragen
     return json({ ok: true, config: norm });
+  }
+  if (p === '/geld/uitbeeld' && m === 'GET') {
+    if (!env.MT_ROLLEN) return json({ error: 'geen-opslag', uitleg: 'KV-binding MT_ROLLEN ontbreekt' }, 503);
+    let items = null; try { items = await geldUitbeeldAlles(env); } catch { }
+    if (!items) return json({ error: 'de uit-beeld-lijst is niet compleet gelezen — probeer het zo opnieuw', reden: 'lijst-onvolledig' }, 503);   // nooit een halve lijst
+    return json({ items, aantal: Object.keys(items).length, max: GELD_UB_MAX, compleet: true });
+  }
+  if (p === '/geld/uitbeeld' && m === 'POST') {
+    if (!env.MT_ROLLEN) return json({ error: 'geen-opslag', uitleg: 'KV-binding MT_ROLLEN ontbreekt' }, 503);
+    let b = {}; try { b = await request.json(); } catch {}
+    const ids = Array.isArray(b.ids) ? b.ids.map(String) : null;
+    if (!ids || !ids.length || ids.length > 500 || new Set(ids).size !== ids.length || ids.some(x => !/^\d{6,25}$/.test(x))) return json({ error: 'ids: 1 tot 500 verschillende offerte-id\u2019s (alleen cijfers)' }, 400);
+    const wissen = b.reden === null;
+    if (!wissen && !GELD_UITBEELD_REDEN.includes(b.reden)) return json({ error: 'reden: verkeerd, gefactureerd of weg (of null om terug te zetten)' }, 400);
+    let bestaand = null; try { bestaand = await geldUitbeeldAlles(env); } catch { }
+    if (!bestaand) return json({ error: 'kon niet controleren of de uit-beeld-lijst vol is — probeer het zo opnieuw', reden: 'lijst-onvolledig' }, 503);   // fail-closed
+    const na = new Set(Object.keys(bestaand)); for (const id of ids) { if (wissen) na.delete(id); else na.add(id); }
+    if (na.size > GELD_UB_MAX) return json({ error: `de uit-beeld-lijst is vol (${GELD_UB_MAX}); zet er eerst een paar terug`, max: GELD_UB_MAX }, 400);
+    if (b.controle === true) return json({ ok: true, controle: true, aantal: na.size, max: GELD_UB_MAX });          // alleen controleren: niets schrijven
+    await geldUitbeeldMigreer(env);
+    const ts = Date.now(), door = String((ik.rec && ik.rec.naam) || ik.email || ik.oid).slice(0, 60), gezet = {}, verwijderd = [];
+    for (const id of ids) {
+      if (wissen) { await env.MT_ROLLEN.delete(GELD_UB + id); verwijderd.push(id); continue; }
+      const oud = bestaand[id], rec = oud && oud.reden === b.reden ? oud : { reden: b.reden, door, ts };       // dezelfde reden: de oude stempel blijft
+      await kvZet(env, GELD_UB + id, rec, { metadata: rec }); gezet[id] = rec;
+    }
+    await audit(env, { door: ik.oid, doorNaam: (ik.rec && ik.rec.naam) || ik.email || '', actie: 'geld-uitbeeld', doel: 'offertes', doelNaam: `${ids.length}\u00d7 ${wissen ? 'terugzetten' : b.reden}` });   // geen bedragen of namen
+    return json({ ok: true, items: gezet, verwijderd, aantal: na.size, max: GELD_UB_MAX });
+  }
+  if (p === '/geld/fschemas' && m === 'GET') {
+    if (!env.MT_ROLLEN) return json({ error: 'geen-opslag', uitleg: 'KV-binding MT_ROLLEN ontbreekt' }, 503);
+    let schemas = null; try { schemas = await geldFschemasAlles(env); } catch { }
+    if (!schemas) return json({ error: 'de factuurschema\u2019s zijn niet compleet gelezen — probeer het zo opnieuw', reden: 'lijst-onvolledig' }, 503);
+    return json({ schemas, aantal: Object.keys(schemas).length, compleet: true });
+  }
+  if (p === '/geld/fschema' && m === 'POST') {
+    if (!env.MT_ROLLEN) return json({ error: 'geen-opslag', uitleg: 'KV-binding MT_ROLLEN ontbreekt' }, 503);
+    let b = {}; try { b = await request.json(); } catch {}
+    const id = String(b.contact_id || '');
+    if (!/^\d{6,25}$/.test(id)) return json({ error: 'contact_id: alleen cijfers' }, 400);
+    const wissen = b.rijen === null;
+    let rijen = null;
+    if (!wissen) {
+      rijen = geldFactuurschemasNorm({ [id]: b.rijen })[id];
+      if (!rijen) return json({ error: 'factuurschema: 1 tot 6 delen met een label en een percentage, samen precies 100' }, 400);
+    }
+    let bestaand = null; try { bestaand = await geldFschemasAlles(env); } catch { }
+    if (!bestaand) return json({ error: 'kon niet controleren of de lijst vol is — probeer het zo opnieuw', reden: 'lijst-onvolledig' }, 503);
+    if (!wissen && !(id in bestaand) && Object.keys(bestaand).length >= GELD_FS_MAX) return json({ error: `hooguit ${GELD_FS_MAX} klanten met een eigen schema`, max: GELD_FS_MAX }, 400);
+    await geldFschemaMigreer(env);
+    if (wissen) await env.MT_ROLLEN.delete(GELD_FS + id);
+    else { const rec = { rijen, door: String((ik.rec && ik.rec.naam) || ik.email || ik.oid).slice(0, 60), ts: Date.now() }; await kvZet(env, GELD_FS + id, rec, { metadata: rec }); }
+    await audit(env, { door: ik.oid, doorNaam: (ik.rec && ik.rec.naam) || ik.email || '', actie: 'geld-fschema', doel: 'klant', doelNaam: wissen ? 'schema gewist' : 'schema gezet' });
+    return json({ ok: true, contact_id: id, rijen });
   }
   if (p === '/geld/ijkpunt' && m === 'POST') {
     if (!env.MT_ROLLEN) return json({ error: 'geen-opslag', uitleg: 'KV-binding MT_ROLLEN ontbreekt' }, 503);
