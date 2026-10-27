@@ -1,5 +1,15 @@
 [
   {
+    "versie": "2.25.2",
+    "datum": "2026-10-28",
+    "titel": "Forecast: sorteren",
+    "voor": "geld",
+    "punten": [
+      "De offertelijst is te sorteren: klik op een kolomkop (Offerte, Datum, Status, Bedrag, Gefactureerd, Nog te plannen of een maand). Een klik sorteert oplopend, nog een klik aflopend, de derde klik zet de standaard terug: offertedatum, nieuwste eerst. Lege waarden staan altijd onderaan. De totalen veranderen niet.",
+      "De offertedatum uit Moneybird staat klein onder de offertenaam. Op de telefoon kies je de volgorde met \"Sorteer op\" in de kop van de offertekaart. Je keuze wordt onthouden."
+    ]
+  },
+  {
     "versie": "2.25.1",
     "datum": "2026-10-28",
     "titel": "Forecast: offertelijst opschonen en beeldvullend scherm",

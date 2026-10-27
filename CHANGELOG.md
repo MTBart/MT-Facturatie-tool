@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-27 — Backup = v2.25.1
+- Commit: `d62a179` | Auteur: Bart Witte
+
 ## 2026-10-27 — Release v2.25.1: Forecast opschonen (offertes uit beeld zetten), beeldvullend scherm, volle breedte met scrollen en Passend maken; geld-config atomair
 - Commit: `592acef` | Auteur: Bart Witte
 
