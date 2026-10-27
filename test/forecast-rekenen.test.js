@@ -160,6 +160,30 @@ test('planning wissen: vrije termijnen terug naar nog niet gepland, gefactureerd
   const zonder = F.wisPlanning(zetItem(), null, V); assert.ok(zonder.item && zonder.item.termijnen.length === 1 && zonder.item.termijnen[0].aan === false && somC(zonder.item) === 500000); valideer('p:z', zonder.item, V);
   function zetItem() { const x = mkItem('300000000092', 500000); return F.zetCel(F.zetCel(x, null, '2026-11', 200000, V).item, null, '2026-12', 100000, V).item; }
 });
+test('links: offerte en factuur alleen met cijfers-ids en een geldige administratie; geen link bij rommel', () => {
+  assert.strictEqual(F.mbUrl('123456789012', 'estimates', '300000000001'), 'https://moneybird.com/123456789012/estimates/300000000001');
+  assert.strictEqual(F.mbUrl(123456789012, 'sales_invoices', 900000000001), 'https://moneybird.com/123456789012/sales_invoices/900000000001');
+  for (const slecht of [[null, 'estimates', '300000000001'], ['12/../x', 'estimates', '300000000001'], ['123456789012', 'estimates', '3000"><b>'], ['123456789012', 'estimates', ''], ['123456789012', 'contacts', '300000000001'], ['123456789012', 'estimates', 'abc']]) assert.strictEqual(F.mbUrl(...slecht), null, JSON.stringify(slecht));
+  assert.deepStrictEqual(F.factuurIds({ facturen: ['900000000001', 900000000002, 'f1', '900000000001', ''] }), ['900000000001', '900000000002']);
+  assert.deepStrictEqual(F.factuurIds(null), []);
+});
+test('bouwRijen: factuur-ids uit het overzicht en projectnummer via offerte of via de prognose-sleutel', () => {
+  const sch = [F.schatNorm({ id: 300000000021, estimate_id: '2026-201', contact_id: 900000000021, total_price_incl_tax_base: '1000.00', state: 'accepted', contact: { company_name: 'Voorbeeld' } })];
+  const it = { soort: 'project', naam: 'Voorbeeld', estimate_id: '300000000021', totaal: 1000, aan: true, betaaltermijn: 14, k: [], x: [], termijnen: [{ id: 't1', label: 'factuur', bedrag: 1000, factuurdatum: '2026-11-15', aan: true }] };
+  const ov = { sleutel: 'p:pr1', soort: 'project', gefactureerd: 0, facturen: ['900000000011'], termijnen: [{ id: 't1', bedrag: 1000, gefactureerd: 0, open: 1000 }] };
+  const a = F.bouwRijen({ schatten: sch, items: { 'p:pr1': it }, posten: [ov], projecten: [{ project_id: 'pr1', code: 'ABC-1', nummer: 'P26-1', offerte_mb_id: '300000000021' }], vandaag: V, maanden: 6 })[0];
+  assert.deepStrictEqual(a.facturen, ['900000000011']); assert.strictEqual(a.projectCode, 'ABC-1'); assert.strictEqual(a.projectNr, 'P26-1');
+  const b = F.bouwRijen({ schatten: sch, items: { 'p:pr1': it }, posten: [ov], projecten: [{ project_id: 'pr1', code: 'ABC-1' }], vandaag: V, maanden: 6 })[0];       // alleen via de prognose-sleutel p:<project_id>
+  assert.strictEqual(b.projectCode, 'ABC-1'); assert.strictEqual(b.projectNr, 'ABC-1');
+  const c0 = F.bouwRijen({ schatten: sch, items: {}, posten: [], projecten: [], vandaag: V, maanden: 6 })[0]; assert.strictEqual(c0.projectNr, ''); assert.deepStrictEqual(c0.facturen, []);
+});
+test('betaalvertraging: uit een bestaand prognose-event; zonder event (eerste planning) onbekend, nooit 0 geraden', () => {
+  const it = { betaaltermijn: 14 };
+  assert.strictEqual(F.vertragingUit([{ bron: 'prognose', prognose: 'p:x', termijn_id: 't1', ontvangst_na: 20 }], 'p:x', it), 6);
+  assert.strictEqual(F.vertragingUit([], 'p:x', it), null);
+  assert.strictEqual(F.vertragingUit([{ bron: 'prognose', prognose: 'p:andere', termijn_id: 't1', ontvangst_na: 20 }], 'p:x', it), null);
+  assert.strictEqual(F.vertragingUit([{ bron: 'verkoop', prognose: 'p:x', ontvangst_na: 20 }], 'p:x', it), null);
+});
 test('zetAan: alleen het vinkje, termijnen blijven; ts en door worden niet teruggestuurd', () => {
   const it = Object.assign(itemVast(), { ts: 5, door: 'X' }); const r = F.zetAan(it, false).item;
   assert.strictEqual(r.aan, false); assert.strictEqual(r.ts, undefined); assert.strictEqual(r.door, undefined); assert.strictEqual(r.termijnen.length, 2);

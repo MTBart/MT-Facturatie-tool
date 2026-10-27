@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-27 — Backup = v2.25.2
+- Commit: `f87a9a9` | Auteur: Bart Witte
+
 ## 2026-10-27 — Release v2.25.2: Forecast sorteren (offerte, datum, status, bedragen, maanden) en veilig Schema toepassen / Planning wissen met voorbeeld en Ongedaan maken
 - Commit: `72afd50` | Auteur: Bart Witte
 

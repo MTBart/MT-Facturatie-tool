@@ -88,7 +88,7 @@
 <script src="mt-iconen.js?v=2026-10-24z" defer></script>
 <script src="mt-zijbalk.js?v=2026-10-24z" defer></script>
 <script src="mt-geld.js?v=2026-10-23a"></script>
-<script src="mt-forecast.js?v=2026-10-28c"></script>
+<script src="mt-forecast.js?v=2026-10-28d"></script>
 <script src="mt-koers.js?v=2026-10-23a"></script>
 <script src="mt-schulden.js?v=2026-10-12a"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
@@ -921,7 +921,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1 class="mt-merkrij"><svg class="mt-merk" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><rect x="2" y="2" width="96" height="96"/><path d="M55.4 2 V31.3 H34.2 V67.3 H55.4 V98"/></svg><b class="mt-woord">mortise <em>&amp;</em> tenon</b></h1>
-    <span class="header-version">v2.25.2</span>
+    <span class="header-version">v2.25.3</span>
     <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
@@ -17218,7 +17218,10 @@ function forecastOpen(){
   if(!geldNieuw()||!MTRol.magGeld()){ el.textContent='Forecast is alleen voor eigenaren en de administratie.'; return; }
   if(el.dataset.gestart){ MTForecast.laad(); return; }
   el.dataset.gestart='1';
-  MTForecast.start(el,{bron:{haal:geldHaal},magWijzigen:MTRol.magGeld('wijzigen'),wie:(typeof mtMijEmail==='function'&&mtMijEmail())||'',projecten:geldProjecten,schatten:forecastSchatten});
+  MTForecast.start(el,{bron:{haal:geldHaal},magWijzigen:MTRol.magGeld('wijzigen'),wie:(typeof mtMijEmail==='function'&&mtMijEmail())||'',projecten:geldProjecten,schatten:forecastSchatten,
+    administratie:getAdmin,   // zelfde administratie als de Moneybird-aanroepen: voor de links naar offerte en facturen
+    projectHref:code=>mtRoute.format({tab:'projecten',code}),
+    openProject:code=>{ const knop=document.querySelector('.tabs-wrap .tab-btn[onclick*="\'projecten\'"]'); showTab('projecten',knop); openProject(code); }});
 }
 // Offertes uit Moneybird met de drie statussen (geaccepteerd, openstaand = open|late, concept), alleen lezen; per status gepagineerd
 // tot een lege of korte pagina (plafond 50 pagina's; daarna meldt de Forecast "lijst afgekapt").
@@ -17235,7 +17238,7 @@ function geldProjecten(){
     let start=null,oplevering=null;
     try{ const pl=typeof planVoor==='function'?planVoor(p.code):null; if(pl&&Array.isArray(pl.fases)&&pl.fases.length){ planBerekenDatums(pl); start=pl.fases[0].start||null; oplevering=pl.fases[pl.fases.length-1].eind||null; } }catch(e){}
     return {project_id:p.project_id,code:p.code,label:(typeof projNaamVol==='function'?projNaamVol(p):p.naam)||p.code,klant:typeof projKlantNaam==='function'?projKlantNaam(p):'',
-      mb_contact_id:typeof resolveMbContact==='function'?resolveMbContact(p):null,offertenr:typeof projOfferteNr==='function'?projOfferteNr(p):(p.offertenr||''),offerte_mb_id:p.offertenr_mb_id||null,start,oplevering};
+      nummer:typeof projLabelCode==='function'?(projLabelCode(p)||p.code):p.code,mb_contact_id:typeof resolveMbContact==='function'?resolveMbContact(p):null,offertenr:typeof projOfferteNr==='function'?projOfferteNr(p):(p.offertenr||''),offerte_mb_id:p.offertenr_mb_id||null,start,oplevering};
   }).sort((a,b)=>a.label.localeCompare(b.label));
 }
 // Voorstel voor het totaal: het offertebedrag incl. btw uit Moneybird (alleen lezen).

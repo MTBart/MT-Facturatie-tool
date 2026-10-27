@@ -1,5 +1,16 @@
 [
   {
+    "versie": "2.25.3",
+    "datum": "2026-10-28",
+    "titel": "Forecast: sneller opslaan, links en selectievinkjes",
+    "voor": "geld",
+    "punten": [
+      "Een bedrag invullen gaat veel sneller: alleen die offerte wordt opnieuw berekend. Financiën rekent het precies bij Vernieuwen of vanzelf na 20 seconden zonder wijzigingen; tot dan staat bij Binnen dat het bijgewerkt wordt bij verversen.",
+      "De offertenaam opent de offerte in Moneybird, het gefactureerde bedrag opent de factuur (bij meer facturen genummerde links) en het projectnummer staat klein achter de naam en opent het project.",
+      "Elke rij heeft links een selectievinkje: vink er een of meer aan en er verschijnt een balk om ze uit beeld te zetten. Gaat zeker door is nu een schakelaar in een eigen kolom."
+    ]
+  },
+  {
     "versie": "2.25.2",
     "datum": "2026-10-28",
     "titel": "Forecast: sorteren",
@@ -56,7 +67,8 @@
       "Voorbereiding (nog niet zichtbaar): de basis om later tijden in Outlook te zetten staat klaar, maar staat uit en doet niets.",
       "Na de update: herlaad de tool een keer op elk apparaat (ook de telefoon en de tv), ook als hij al openstaat. Werk pas aan de planning als iedereen herladen heeft."
     ]
-  },  {
+  },
+  {
     "versie": "2.23.0",
     "datum": "2026-10-24",
     "titel": "Planning met afhankelijkheden en checklists, een rustiger projectscherm en een handigere projectenlijst",
@@ -71,7 +83,8 @@
       "Rustiger uiterlijk in de nieuwe stijl: één groene hoofdknop per scherm en een duidelijk gekozen weergave.",
       "Na de update: herlaad de tool een keer op elk apparaat (ook de telefoon en de tv), ook als hij al openstaat. Werk pas aan de planning als iedereen herladen heeft."
     ]
-  },  {
+  },
+  {
     "versie": "2.22.0",
     "datum": "2026-10-24",
     "titel": "Planning veiliger en flexibeler, materiaal bij taken en een tool die op de telefoon past",
