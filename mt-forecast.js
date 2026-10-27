@@ -384,92 +384,130 @@
     return e;
   };
   const ls = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { } } };
-  const st = F._st = { el: null, bron: null, mag: false, wie: '', data: null, items: {}, schatten: null, schattenT: 0, projecten: null, haalSchatten: null, rijen: [], sel: null, filter: null, cfg: null, pop: null, popBezig: false, kostenAan: true, overigAan: true, openAan: true, verouderd: false, afgekapt: false, bezig: false, fout: null, uitleg: false, wachtrij: Promise.resolve(), vers: {}, ks: [], cv: '', bt: null };
+  const st = F._st = { el: null, bron: null, mag: false, wie: '', data: null, items: {}, schatten: null, schattenT: 0, projecten: null, haalSchatten: null, rijen: [], sel: null, menu: false, filter: null, cfg: null, pop: null, popBezig: false, kostenAan: true, overigAan: true, openAan: true, verouderd: false, afgekapt: false, bezig: false, fout: null, uitleg: false, wachtrij: Promise.resolve(), vers: {}, ks: [], cv: '', bt: null };
   const UITLEG = 'Links staan de goedgekeurde offertes uit Moneybird (incl. btw). Typ in een maand het bedrag dat je dan wilt factureren, in zijn geheel of in delen; "rest" zet wat nog niet gepland is in die maand. De planning is dezelfde als de prognose in Financiën (de termijnen van de offerte): de kaslijn, de Factuurplanning en deze tabel rekenen meteen mee. Het vinkje ‘Gaat zeker door’ is hetzelfde vinkje als in Financiën: alleen die offertes tellen mee. Met de chips boven de tabel kies je welke offertes je ziet (geaccepteerd, openstaand, concept); het filter verbergt alleen rijen, de totalen blijven gelijk aan Financiën. Een niet-geaccepteerde offerte staat standaard op ‘Gaat zeker door’ uit. Klik in een maandcel voor een paneel met bedrag of percentage en een label; ‘Schema toepassen’ vult de standaardverdeling van de klant in op het nog niet geplande deel. "Binnen" is de verwachte betaling: factuurdatum plus betaaltermijn en het gewone betaalgedrag van de klant. "Openstaande facturen" zijn de al verstuurde, nog niet betaalde verkoopfacturen per verwachte betaalmaand. Vink die, "lopende kosten" en "overige voorspelling" (btw, weekinleg, handmatige posten) aan of uit om het netto per maand te zien. Een deel dat al in Moneybird gefactureerd is, staat vast. Een offerte kan in hoogstens 6 delen. Er gaat nooit iets naar Moneybird.';
   function css() {
     if (document.getElementById('mtf-css')) return;
     const s = document.createElement('style'); s.id = 'mtf-css';
     s.textContent = `
-.mtf{--mtf-in:#2A7A4A;--mtf-uit:#B4412F;--mtf-zacht:var(--ink-3,var(--text-faint,#7a786f));font-size:14px;color:var(--ink,#1d1d1b);max-width:1500px;margin:0 auto}
-.mtf-kop{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:4px 0 12px}.mtf-kop h2{margin:0 8px 0 0;font-size:20px;font-weight:600}.mtf-kop .ruim{flex:1}
-.mtf-chip{font-size:11px;border-radius:10px;padding:1px 7px;background:var(--surface-2,#f1f0ea);color:var(--mtf-zacht);white-space:nowrap}
-.mtf-uitleg{font-size:13px;background:var(--surface-2,#f6f5f0);border:1px solid var(--line,#e4e2da);border-radius:8px;padding:10px 12px;margin:0 0 12px;line-height:1.5}
-.mtf-melding{padding:14px;color:var(--mtf-zacht)}.mtf-fout{padding:12px 14px;border:1px solid #f0b8aa;background:#fbe3dd;border-radius:8px;margin-bottom:12px}
-.mtf-scroll{overflow-x:auto;border:1px solid var(--line,#e4e2da);border-radius:10px;background:var(--surface,#fff)}
+.mtf,.mtf-pop,.mtf-modal,.mtf-toast{--m-surface:var(--surface,#fff);--m-surface2:var(--surface-2,#f1ede5);--m-line:var(--line,#dfd8cb);--m-soft:var(--line-soft,#ece7de);--m-strong:var(--line-strong,#9a917f);--m-ink:var(--ink,#1b211e);--m-ink2:var(--ink-2,#5e655f);--m-ink3:var(--ink-3,#8c918a);--m-primary:var(--primary,#17643f);--m-onprimary:var(--on-primary,#fff);--m-psoft:var(--primary-soft,#ddefe3);--m-ptext:var(--primary-text,#17643f);--m-ok:var(--ok,#1a6e3b);--m-okbg:var(--ok-bg,#e3f3e8);--m-warn:var(--warn,#8f5508);--m-warnbg:var(--warn-bg,#fcefd9);--m-err:var(--err,#c4322a);--m-errbg:var(--err-bg,#fce6e4);--m-mono:var(--font-mono,"Geist Mono",ui-monospace,Menlo,monospace);--m-ui:var(--font-ui,"Geist",system-ui,-apple-system,"Segoe UI",sans-serif);--m-head:var(--font-head,"Bricolage Grotesque","Geist",system-ui,sans-serif);--m-r:var(--radius-ctl,4px);--m-rp:var(--radius-panel,8px);--m-pop:var(--shadow-pop,0 24px 60px rgba(40,34,20,.2))}
+.mtf{font-family:var(--m-ui);font-size:14px;line-height:20px;color:var(--m-ink);max-width:1500px;margin:0 auto;display:flex;flex-direction:column;gap:var(--space-4,16px)}
+.mtf .ui-ico,.mtf-pop .ui-ico{width:14px;height:14px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.mtf button,.mtf-pop button,.mtf-modal button{font-family:inherit}
+.mtf-kop{display:flex;align-items:flex-end;gap:var(--space-4,16px);flex-wrap:wrap}.mtf-titelblok{flex:1;min-width:200px}
+.mtf-titel{font-family:var(--m-head);font-size:28px;line-height:32px;font-weight:600;letter-spacing:-.015em;margin:0}
+.mtf-sub{margin:2px 0 0;font-size:13px;color:var(--m-ink2)}
+.mtf-acties{display:flex;align-items:center;gap:var(--space-2,8px)}
+.mtf-seg-knoppen{display:inline-flex}.mtf-seg-knoppen .ui-knop{border-radius:0;margin-left:-1px}.mtf-seg-knoppen .ui-knop:first-child{border-radius:var(--m-r) 0 0 var(--m-r);margin-left:0}.mtf-seg-knoppen .ui-knop:last-child{border-radius:0 var(--m-r) var(--m-r) 0}
+.mtf-stil{width:36px;padding:0}.mtf-menuwrap{position:relative}
+.mtf-menu{display:none;position:absolute;right:0;top:calc(100% + 4px);z-index:50;min-width:190px;background:var(--m-surface);border:1px solid var(--m-line);border-radius:var(--m-rp);box-shadow:var(--m-pop);padding:4px}
+.mtf-menu.open{display:block}.mtf-menu button{display:block;width:100%;text-align:left;border:0;background:none;padding:8px 12px;border-radius:var(--m-r);font-size:13px;color:var(--m-ink);cursor:pointer}.mtf-menu button:hover{background:var(--m-surface2)}.mtf-menu button:disabled{opacity:.45;cursor:default}
+.mtf-uitleg{font-size:13px;line-height:20px;background:var(--m-surface);border:1px solid var(--m-line);border-radius:var(--m-rp);padding:var(--space-4,16px) var(--space-6,24px);color:var(--m-ink2)}
+.mtf-kaart{background:var(--m-surface);border:1px solid var(--m-line);border-radius:var(--m-rp)}
+.mtf-kaart-kop{display:flex;align-items:center;gap:var(--space-3,12px);padding:var(--space-3,12px) var(--space-6,24px);border-bottom:1px solid var(--m-line)}
+.mtf-kaart-kop h2{margin:0 auto 0 0;font-size:15px;line-height:22px;font-weight:600}.mtf-getal{font-family:var(--m-mono);font-size:12px;color:var(--m-ink3)}
+.mtf-strook{padding:var(--space-3,12px) var(--space-6,24px) var(--space-4,16px)}
+.mtf-filter{display:flex;align-items:center;gap:var(--space-2,8px);flex-wrap:wrap;margin-bottom:var(--space-3,12px)}.mtf-zacht{color:var(--m-ink3);font-size:12px}
+.mtf-fchip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:var(--m-r);border:1px solid var(--m-line);background:var(--m-surface);color:var(--m-ink2);font-size:12px;font-weight:500;cursor:pointer}
+.mtf-fchip:hover{background:var(--m-surface2)}.mtf-fchip[aria-pressed=true]{background:var(--m-psoft);border-color:var(--m-psoft);color:var(--m-ptext)}
+.mtf-tel{font-family:var(--m-mono);font-size:11px;opacity:.75}.mtf-verborgen{font-size:12px;color:var(--m-ink3);margin-left:auto}
+.mtf-balk{padding:0}.mtf-jaren{position:relative;height:14px;font-size:11px;color:var(--m-ink3)}.mtf-jaren span{position:absolute;top:0;white-space:nowrap}
+.mtf-spoor{position:relative;height:28px;border-top:1px solid var(--m-line);border-bottom:1px solid var(--m-line);touch-action:none;user-select:none;-webkit-user-select:none;cursor:pointer}
+.mtf-seg{position:absolute;top:0;bottom:0;border:0;border-left:1px solid var(--m-soft);background:none;padding:0;font-size:11px;color:var(--m-ink3);overflow:hidden;white-space:nowrap;cursor:pointer}
+.mtf-seg:first-child{border-left:0}.mtf-seg.in{color:var(--m-ptext)}.mtf-seg .l{display:none}
+.mtf-sel{position:absolute;top:0;bottom:0;background:var(--m-psoft);background:color-mix(in srgb,var(--m-psoft) 55%,transparent);border-left:2px solid var(--m-primary);border-right:2px solid var(--m-primary);cursor:grab;z-index:1}.mtf-sel:active{cursor:grabbing}
+.mtf-greep{position:absolute;top:50%;width:8px;height:18px;margin-top:-9px;background:var(--m-primary);border-radius:2px;cursor:ew-resize;z-index:2;opacity:1}
+.mtf-greep::before{content:"";position:absolute;top:-10px;bottom:-10px;left:-10px;right:-10px}.mtf-greep.van{left:-5px}.mtf-greep.tot{right:-5px}
+.mtf-greep:focus-visible{outline:2px solid var(--focus,var(--m-primary));outline-offset:2px}
+.mtf-aandacht{padding:0}.mtf-aandacht-rij{display:flex;align-items:center;gap:var(--space-3,12px);padding:var(--space-3,12px) var(--space-6,24px);border-bottom:1px solid var(--m-soft);font-size:13px}.mtf-aandacht-rij:last-child{border-bottom:0}
+.mtf-aandacht-rij .ui-ico{color:var(--m-warn)}.mtf-aandacht-rij p{margin:0;flex:1;color:var(--m-ink)}
+.mtf-kern{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-4,16px);padding:var(--space-4,16px) var(--space-6,24px)}
+.mtf-fact{display:flex;flex-direction:column;gap:2px;min-width:0}.mtf-fact .label{font-size:12px;line-height:16px;font-weight:500;color:var(--m-ink2)}.mtf-fact .v{font-family:var(--m-mono);font-size:18px;line-height:24px;font-weight:500;font-variant-numeric:tabular-nums}
+.mtf-sm{height:28px;padding:0 10px;font-size:12px;white-space:nowrap}
+.mtf-melding{padding:var(--space-6,24px);color:var(--m-ink2)}.mtf-fout{padding:var(--space-3,12px) var(--space-4,16px);border:1px solid var(--m-err);background:var(--m-errbg);color:var(--m-err);border-radius:var(--m-rp);font-size:13px}
+.mtf-scroll{overflow-x:auto;border-radius:0 0 var(--m-rp) var(--m-rp)}
 .mtf-tabel{border-collapse:separate;border-spacing:0;min-width:100%;font-size:13px}
-.mtf-tabel th,.mtf-tabel td{padding:6px 10px;border-bottom:1px solid var(--line-soft,#eeece5);vertical-align:middle;white-space:nowrap;text-align:right}
-.mtf-tabel thead th{font-weight:500;color:var(--mtf-zacht);background:var(--surface,#fff);position:sticky;top:0;border-bottom:1px solid var(--line,#e4e2da)}
-.mtf-tabel .s{text-align:left;position:sticky;left:0;z-index:1;background:var(--surface,#fff);min-width:230px;max-width:290px;white-space:normal;border-right:1px solid var(--line-soft,#eeece5)}
+.mtf-tabel th,.mtf-tabel td{padding:4px 10px;border-bottom:1px solid var(--m-soft);vertical-align:middle;white-space:nowrap;text-align:right}
+.mtf-tabel thead th{font-size:12px;font-weight:500;color:var(--m-ink2);background:var(--m-surface);border-bottom:1px solid var(--m-line);height:36px}
+.mtf-tabel .s{text-align:left;position:sticky;left:0;z-index:1;background:var(--m-surface);min-width:320px;max-width:340px;white-space:normal;border-right:1px solid var(--m-soft)}
 .mtf-tabel thead .s{z-index:2}
-.mtf-tabel .nu{background:var(--primary-soft,#e9f1ec);color:var(--ink,#1d1d1b)}
-.mtf-tabel td.num,.mtf-tabel th.num{font-family:var(--font-mono,ui-monospace,Menlo,monospace);font-variant-numeric:tabular-nums}
-.mtf-naam{display:flex;gap:8px;align-items:flex-start}.mtf-naam input{margin-top:3px;width:16px;height:16px;flex:none}.mtf-naam b{font-weight:500;display:block;line-height:1.3}.mtf-naam small{display:block;color:var(--mtf-zacht);font-size:11px;line-height:1.3}
-.mtf-rij.uit td:not(.s){opacity:.45}.mtf-rij.uit .s .mtf-naam b{color:var(--mtf-zacht)}
-.mtf-cel{display:flex;flex-direction:column;align-items:flex-end;gap:2px;min-width:92px}
-.mtf-in{width:92px;height:30px;text-align:right;border:1px solid var(--line-strong,#cfcdc3);border-radius:6px;padding:0 8px;background:var(--surface,#fff);color:var(--ink,#1d1d1b);font:inherit;font-family:var(--font-mono,ui-monospace,Menlo,monospace);font-variant-numeric:tabular-nums}
-.mtf-in:focus{outline:2px solid var(--primary,#2A4A38);outline-offset:-1px}.mtf-in::placeholder{color:#b3b0a4}
-.mtf-gef{font-size:11px;color:var(--mtf-zacht)}.mtf-vast{font-size:12px}
-.mtf-rest{border:0;background:none;color:var(--primary-text,#2A4A38);font-size:11px;cursor:pointer;padding:0;text-decoration:underline}
-.mtf-rest:disabled{opacity:.4;cursor:default}
-.mtf-eerder{font-size:11px}
-.mtf-tabel tfoot td,.mtf-tabel tfoot th{background:var(--surface-2,#f7f6f1);font-weight:500;border-bottom:1px solid var(--line-soft,#eeece5)}
-.mtf-tabel tfoot .s{background:var(--surface-2,#f7f6f1)}.mtf-tabel tfoot tr.netto td,.mtf-tabel tfoot tr.netto th{font-weight:600;border-top:2px solid var(--line-strong,#cfcdc3)}
-.mtf-tabel tfoot label{display:flex;gap:8px;align-items:center;cursor:pointer}.mtf-tabel tfoot input{width:16px;height:16px}
-.mtf-p{color:var(--mtf-in)}.mtf-n{color:var(--mtf-uit)}.mtf-0{color:var(--mtf-zacht)}
-.mtf input[type=checkbox]{accent-color:var(--primary,#2A4A38)}
-.mtf-waarsch{background:#fbe3dd;border:1px solid #f0b8aa;border-radius:6px;padding:6px 8px;font-size:12px;margin-top:6px;line-height:1.4;color:#7a2a1c}
-.mtf-waarsch b{font-weight:600}.mtf-sm{height:26px;font-size:12px;margin-top:4px}
+.mtf-tabel td.nu,.mtf-tabel th.nu{background:var(--m-surface2)}.mtf-tabel th.nu{color:var(--m-ptext)}
+.mtf-tabel td.num,.mtf-tabel th.num{font-family:var(--m-mono);font-variant-numeric:tabular-nums}
+.mtf-tabel tbody tr{height:44px}
+.mtf-naam{display:flex;gap:10px;align-items:flex-start;cursor:default}.mtf-naam input{margin-top:3px;width:16px;height:16px;flex:none}
+.mtf-naam>span{min-width:0;display:flex;flex-direction:column;gap:2px}.mtf-naam b{font-weight:500;line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:290px;display:block}
+.mtf-meta{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;font-size:11px;line-height:16px;color:var(--m-ink3)}
+.mtf-st{display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 6px 0 4px;border-radius:var(--m-r);font-size:11px;font-weight:500;white-space:nowrap}
+.mtf-st-ok{color:var(--m-ok);background:var(--m-okbg)}.mtf-st-warn{color:var(--m-warn);background:var(--m-warnbg)}.mtf-st-neutraal{color:var(--m-ink2);background:var(--m-surface2)}
+.mtf-vlag{display:inline-flex;align-items:center;gap:4px;color:var(--m-err);font-weight:500;font-size:11px;white-space:nowrap}.mtf-vlag.let{color:var(--m-warn)}
+.mtf-schema{border:0;background:none;padding:0;margin:0;font-size:11px;color:var(--m-ptext);text-decoration:underline;cursor:pointer}.mtf-schema:disabled{opacity:.4;cursor:default}
+.mtf-rij.uit td:not(.s){opacity:.5}.mtf-rij.uit .s .mtf-naam b{color:var(--m-ink2)}
+.mtf-cel{position:relative;display:flex;flex-direction:column;align-items:flex-end;gap:2px;min-width:84px}
+.mtf-in{width:88px;height:28px;text-align:right;border:1px solid transparent;border-radius:var(--m-r);padding:0 8px;background:transparent;color:var(--m-ink);font:inherit;font-family:var(--m-mono);font-variant-numeric:tabular-nums}
+.mtf-in::placeholder{color:var(--m-ink3);opacity:1}.mtf-in:hover:not(:disabled),.mtf-in:focus{border-color:var(--m-strong);background:var(--m-surface)}
+.mtf-in:focus{outline:2px solid var(--focus,var(--m-primary));outline-offset:1px}
+.mtf-gef{font-size:11px;color:var(--m-ink3)}.mtf-vast{font-size:12px}
+.mtf-rest{border:0;background:var(--m-surface);color:var(--m-ptext);font-size:11px;cursor:pointer;padding:0 4px;text-decoration:underline;position:absolute;right:0;bottom:-9px;z-index:2;visibility:hidden;line-height:14px}
+.mtf-cel:hover .mtf-rest,.mtf-cel:focus-within .mtf-rest{visibility:visible}.mtf-rest:disabled{opacity:.4;cursor:default}
+.mtf-agg{border:0;background:none;font:inherit;color:inherit;cursor:pointer;padding:2px 4px;border-radius:var(--m-r);display:flex;flex-direction:column;align-items:flex-end;margin-left:auto}
+.mtf-agg:hover{background:var(--m-surface2)}.mtf-kopknop{font-weight:500;color:var(--m-ink2);display:inline;font-size:12px}
+.mtf-tabel tfoot td,.mtf-tabel tfoot th{background:var(--m-surface);font-weight:400;border-bottom:1px solid var(--m-soft);height:34px;color:var(--m-ink2)}
+.mtf-tabel tfoot .s{background:var(--m-surface)}
+.mtf-tabel tfoot tr.netto td,.mtf-tabel tfoot tr.netto th{font-weight:600;color:var(--m-ink);border-top:1px solid var(--m-strong);border-bottom:0;height:40px}
+.mtf-tabel tfoot label{display:flex;gap:8px;align-items:center;cursor:pointer}.mtf-tabel tfoot input{width:14px;height:14px}
+.mtf-p{color:var(--m-ok)}.mtf-n{color:var(--m-err)}.mtf-0{color:var(--m-ink3)}
+.mtf input[type=checkbox],.mtf-modal input[type=checkbox]{accent-color:var(--m-primary)}
 .mtf input:disabled,.mtf button:disabled{opacity:.5;cursor:not-allowed}
-.mtf-seg-knoppen{display:inline-flex}.mtf-seg-knoppen .ui-knop{border-radius:0;margin-left:-1px}.mtf-seg-knoppen .ui-knop:first-child{border-radius:8px 0 0 8px;margin-left:0}.mtf-seg-knoppen .ui-knop:last-child{border-radius:0 8px 8px 0}
-.mtf-balk{margin:0 0 12px;padding:0 2px}.mtf-jaren{position:relative;height:16px;font-size:11px;color:var(--mtf-zacht)}.mtf-jaren span{position:absolute;top:0;white-space:nowrap}
-.mtf-spoor{position:relative;height:40px;border:1px solid var(--line,#e4e2da);border-radius:8px;background:var(--surface,#fff);touch-action:none;user-select:none;-webkit-user-select:none;cursor:pointer}
-.mtf-seg{position:absolute;top:0;bottom:0;border:0;border-left:1px solid var(--line-soft,#eeece5);background:none;padding:0;font:inherit;font-size:11px;color:var(--mtf-zacht);overflow:hidden;white-space:nowrap;cursor:pointer}
-.mtf-seg:first-child{border-left:0}.mtf-seg.in{color:var(--ink,#1d1d1b)}.mtf-seg .l{display:none}
-.mtf-sel{position:absolute;top:2px;bottom:2px;background:rgba(42,74,56,.13);border:2px solid var(--primary,#2A4A38);border-radius:6px;cursor:grab;z-index:1;pointer-events:auto}
-.mtf-sel:active{cursor:grabbing}
-.mtf-greep{position:absolute;top:50%;width:14px;height:26px;margin-top:-13px;background:var(--primary,#2A4A38);border-radius:5px;cursor:ew-resize;z-index:2}
-.mtf-greep::before{content:"";position:absolute;top:-8px;bottom:-8px;left:-8px;right:-8px}
-.mtf-greep.van{left:-8px}.mtf-greep.tot{right:-8px}
-.mtf-greep:focus-visible{outline:3px solid var(--primary,#2A4A38);outline-offset:3px}
-.mtf-agg{border:0;background:none;font:inherit;color:inherit;cursor:pointer;padding:2px 4px;border-radius:4px;display:flex;flex-direction:column;align-items:flex-end;margin-left:auto}
-.mtf-agg:hover{background:var(--surface-2,#f1f0ea)}.mtf-kopknop{font-weight:500;color:var(--mtf-zacht);display:inline}
-@media (max-width:700px){.mtf-seg .k{display:none}.mtf-seg .l{display:inline}.mtf-spoor.kwartaal .mtf-seg .k,.mtf-spoor.jaar .mtf-seg .k{display:inline}.mtf-spoor.kwartaal .mtf-seg .l,.mtf-spoor.jaar .mtf-seg .l{display:none}.mtf-spoor.kwartaal .mtf-seg{font-size:10px}}
-.mtf-filter{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 0 10px}.mtf-zacht{color:var(--mtf-zacht);font-size:12px;margin-right:2px}
-.mtf-fchip{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:15px;border:1px solid var(--line-strong,#cfcdc3);background:var(--surface,#fff);color:var(--ink,#1d1d1b);font:500 13px/18px var(--font-ui,system-ui);cursor:pointer}
-.mtf-fchip[aria-pressed=true]{background:var(--primary-soft,#e9f1ec);border-color:var(--primary,#2A4A38);color:var(--primary-text,#2A4A38)}
-.mtf-tel{font-family:var(--font-mono,ui-monospace,Menlo,monospace);font-size:12px;opacity:.8}
-.mtf-verborgen{font-size:12px;color:var(--mtf-zacht);margin:-4px 0 10px}
-.mtf-status{margin-top:3px;font-size:11px;color:var(--mtf-zacht)}.mtf-zeker{color:var(--ink-2,#444)}
-.mtf-let{background:#fbf3d9;border:1px solid #e8d48a;border-radius:6px;padding:6px 8px;font-size:12px;margin-top:6px;line-height:1.4;color:#5e4b0c;white-space:normal}.mtf-let b{font-weight:600}
-.mtf-schema{border:0;background:none;padding:0 0 0 8px;margin:0;font:inherit;font-size:11px;color:var(--primary-text,#2A4A38);text-decoration:underline;cursor:pointer}.mtf-schema:disabled{opacity:.4;cursor:default}
-.mtf-status{display:flex;align-items:center;flex-wrap:wrap}
-.mtf-pop{position:fixed;z-index:9000;width:300px;max-width:calc(100vw - 16px);background:var(--surface,#fff);border:1px solid var(--line-strong,#cfcdc3);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.18);padding:12px;font-size:13px;color:var(--ink,#1d1d1b)}
-.mtf-pop.blad{left:0;right:0;bottom:0;top:auto;width:auto;max-width:none;border-radius:14px 14px 0 0;padding:16px 16px 20px}
-.mtf-pop-kop{display:flex;flex-direction:column;gap:2px;margin-bottom:8px;padding-right:28px;position:relative}.mtf-pop-x{position:absolute;top:-4px;right:-4px;width:28px;height:28px;border:0;background:none;font-size:20px;line-height:1;color:var(--mtf-zacht,#7a786f);cursor:pointer;border-radius:6px}.mtf-pop-x:hover{background:var(--surface-2,#f1f0ea)}.mtf-pop-kop small,.mtf-pop-hint{color:var(--mtf-zacht,#7a786f);font-size:12px}.mtf-pop-hint{margin:4px 0 8px;min-height:16px}
-.mtf-pop-rij{display:flex;align-items:center;gap:8px}.mtf-pop-veld{display:flex;flex-direction:column;gap:3px;margin-top:6px}.mtf-pop-veld span{font-size:12px;color:var(--mtf-zacht,#7a786f)}
-.mtf-pop-bedrag,.mtf-pop-label{height:34px;border:1px solid var(--line-strong,#cfcdc3);border-radius:6px;padding:0 8px;font:inherit;background:var(--surface,#fff);color:inherit;min-width:0;width:100%;box-sizing:border-box}.mtf-pop-bedrag{text-align:right;font-family:var(--font-mono,ui-monospace,Menlo,monospace)}
-.mtf-pop-acties{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.mtf-pop .ui-knop,.mtf-modal .ui-knop{height:32px}
-.mtf-modal{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:9500;display:flex;align-items:center;justify-content:center;padding:12px}
-.mtf-modal-in{background:var(--surface,#fff);border-radius:12px;padding:16px;width:460px;max-width:100%;max-height:90vh;overflow:auto;font-size:13px;color:var(--ink,#1d1d1b)}.mtf-modal-in h3{margin:0 0 6px;font-size:16px}
-.mtf-modal-in .mtf-pop-rij{margin:6px 0}.mtf-sel-contact{text-align:left;margin:6px 0 8px}
 .mtf-bezig{opacity:.6;pointer-events:none}
-.mtf-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink,#1d1d1b);color:#fff;padding:9px 14px;border-radius:8px;font-size:13px;z-index:9999;max-width:90vw}
-.mtf-voet{font-size:12px;color:var(--mtf-zacht);margin:8px 2px}
-@media (max-width:700px){.mtf-tabel .s{min-width:140px;max-width:150px}.mtf-kop h2{font-size:17px}}
+.mtf-voet{font-size:12px;color:var(--m-ink3);padding:0 2px}
+.mtf-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--m-surface);color:var(--m-ink);border:1px solid var(--m-line);box-shadow:var(--m-pop);padding:10px 16px;border-radius:var(--m-rp);font-size:13px;z-index:9999;max-width:90vw}
+.mtf-pop{position:fixed;z-index:9000;width:300px;max-width:calc(100vw - 16px);background:var(--m-surface);border:1px solid var(--m-line);border-radius:var(--m-rp);box-shadow:var(--m-pop);padding:var(--space-4,16px);font-family:var(--m-ui);font-size:13px;color:var(--m-ink)}
+.mtf-pop.blad{left:0;right:0;bottom:0;top:auto;width:auto;max-width:none;border-radius:var(--m-rp) var(--m-rp) 0 0;padding:var(--space-4,16px) var(--space-4,16px) var(--space-6,24px)}
+.mtf-pop-kop{display:flex;flex-direction:column;gap:2px;margin-bottom:var(--space-3,12px);padding-right:28px;position:relative}.mtf-pop-kop small,.mtf-pop-hint{color:var(--m-ink3);font-size:12px}.mtf-pop-hint{margin:4px 0 8px;min-height:16px}
+.mtf-pop-x{position:absolute;top:-4px;right:-4px;width:28px;height:28px;border:0;background:none;font-size:20px;line-height:1;color:var(--m-ink2);cursor:pointer;border-radius:var(--m-r)}.mtf-pop-x:hover{background:var(--m-surface2)}
+.mtf-pop-rij{display:flex;align-items:center;gap:var(--space-2,8px)}.mtf-pop-veld{display:flex;flex-direction:column;gap:3px;margin-top:6px}.mtf-pop-veld span{font-size:12px;color:var(--m-ink2)}
+.mtf-pop-bedrag,.mtf-pop-label{height:36px;border:1px solid var(--m-strong);border-radius:var(--m-r);padding:0 8px;font:inherit;background:var(--m-surface);color:inherit;min-width:0;width:100%;box-sizing:border-box}.mtf-pop-bedrag{text-align:right;font-family:var(--m-mono)}
+.mtf-pop-acties{display:flex;gap:6px;flex-wrap:wrap;margin-top:var(--space-3,12px)}
+.mtf-modal{position:fixed;inset:0;background:rgba(27,33,30,.35);z-index:9500;display:flex;align-items:center;justify-content:center;padding:12px}
+.mtf-modal-in{background:var(--m-surface);border-radius:var(--m-rp);box-shadow:var(--m-pop);padding:var(--space-6,24px);width:460px;max-width:100%;max-height:90vh;overflow:auto;font-family:var(--m-ui);font-size:13px;color:var(--m-ink)}.mtf-modal-in h3{margin:0 0 6px;font-size:16px;font-weight:600}
+.mtf-modal-in .mtf-pop-rij{margin:6px 0}.mtf-sel-contact{text-align:left;margin:6px 0 8px}
+@media (max-width:700px){
+.mtf-titel{font-size:24px;line-height:29px}.mtf-kop{align-items:flex-start}
+.mtf-strook,.mtf-kaart-kop,.mtf-aandacht-rij{padding-left:var(--space-4,16px);padding-right:var(--space-4,16px)}
+.mtf-kern{grid-template-columns:repeat(2,1fr);padding:var(--space-4,16px)}
+.mtf-tabel .s{min-width:150px;max-width:160px}.mtf-naam b{max-width:110px}
+.mtf-seg .k{display:none}.mtf-seg .l{display:inline}.mtf-spoor.kwartaal .mtf-seg .k,.mtf-spoor.jaar .mtf-seg .k{display:inline}.mtf-spoor.kwartaal .mtf-seg .l,.mtf-spoor.jaar .mtf-seg .l{display:none}.mtf-spoor.kwartaal .mtf-seg{font-size:10px}
+.mtf-verborgen{margin-left:0;width:100%}
+.mtf-aandacht-rij{flex-wrap:wrap}
+}
 `;
     document.head.appendChild(s);
   }
   function toast(t) { document.querySelectorAll('.mtf-toast').forEach(x => x.remove()); const o = h('div', { class: 'mtf-toast', role: 'status' }, t); document.body.appendChild(o); setTimeout(() => o.remove(), 4500); }
 
   function maakKnop(tekst, attr) { return h('button', Object.assign({ type: 'button', class: 'ui-knop' }, attr), tekst); }
-  const bedragTd = (cc, klasse) => h('td', { class: 'num ' + (klasse || '') }, cc ? F.fmt(cc) : h('span', { class: 'mtf-0' }, '—'));
-  const getalTd = (cc, klasse) => h('td', { class: 'num ' + (klasse || '') }, cc === 0 ? h('span', { class: 'mtf-0' }, '—') : h('span', { class: cc < 0 ? 'mtf-n' : 'mtf-p' }, F.fmt(cc)));
+  const bedragTd = (cc, klasse) => h('td', { class: 'num ' + (klasse || '') }, cc ? F.fmt(cc) : h('span', { class: 'mtf-0' }, '–'));
+  const getalTd = (cc, klasse) => h('td', { class: 'num ' + (klasse || '') }, cc === 0 ? h('span', { class: 'mtf-0' }, '–') : h('span', { class: cc < 0 ? 'mtf-n' : 'mtf-p' }, F.fmt(cc)));
 
-  const STATUSLABEL = { geaccepteerd: ['klaar', 'Geaccepteerd'], openstaand: ['wacht', 'Openstaand'], concept: ['open', 'Concept'] };
-  function statusEl(sts, extra) {
-    const d = STATUSLABEL[sts]; if (!d) return extra ? h('div', { class: 'mtf-status' }, extra) : null;
-    let x = null; try { x = root.mtStatus ? root.mtStatus(d[0], d[1]) : null; } catch (e) { }
-    return h('div', { class: 'mtf-status' }, x || d[1], extra);
+  const ico = naam => { try { return root.mtIcoon ? root.mtIcoon(naam) : null; } catch (e) { return null; } };
+  // Status altijd als icoon + woord + kleur (statustaal van de rust-pas): Geaccepteerd = klaar, Openstaand = wacht, Concept = open.
+  const STATUSLABEL = { geaccepteerd: ['stKlaar', 'Geaccepteerd', 'ok'], openstaand: ['stWacht', 'Openstaand', 'warn'], concept: ['stOpen', 'Concept', 'neutraal'] };
+  const statusPil = sts => { const d = STATUSLABEL[sts]; return d ? h('span', { class: 'mtf-st mtf-st-' + d[2] }, ico(d[0]), d[1]) : null; };
+  const vlag = (tekst, titel, klasse) => h('span', { class: 'mtf-vlag' + (klasse ? ' ' + klasse : ''), title: titel }, ico('stProbleem'), tekst);
+  // Wat aandacht vraagt (details en actieknop staan in de kaart "Aandacht"; in de rij staat alleen een klein icoon met een kort woord).
+  function aandachtItems() {
+    const lijst = [];
+    for (const r of st.rijen) {
+      if (r.afwijkt) lijst.push({ tekst: `${r.naam}: in Moneybird staat ${F.fmt(r.mbTotaalC)}, de prognose rekent met ${F.fmt(r.totaalC)}. Plannen is geblokkeerd tot het bedrag is bijgewerkt.`, knop: 'Bijwerken', data: { bijwerk: r.sleutel } });
+      for (const d of r.dubbelen) lijst.push({ tekst: `${r.naam}: nog een prognose-item (${d.naam}, ${F.fmt(d.totaalC)}) hoort bij deze offerte. Het telt hier niet mee, maar wel in Financiën.`, knop: 'Zet dat item uit', data: { dubbeluit: d.sleutel } });
+      if (r.status && r.status !== 'geaccepteerd' && r.aan) lijst.push({ tekst: `${r.naam}: nog niet geaccepteerd (${r.status}), maar gaat zeker door en staat in de prognose van Financiën.` });
+    }
+    return lijst;
+  }
+  function aandachtKaart() {
+    const lijst = aandachtItems(); if (!lijst.length) return null;
+    return h('section', { class: 'mtf-kaart mtf-aandacht', 'aria-label': 'Aandacht' }, h('div', { class: 'mtf-kaart-kop' }, h('h2', null, 'Aandacht'), h('span', { class: 'mtf-getal' }, String(lijst.length))),
+      lijst.map(i => h('div', { class: 'mtf-aandacht-rij' }, ico('stProbleem'), h('p', null, i.tekst), i.knop && st.mag ? h('button', { type: 'button', class: 'ui-knop mtf-sm', disabled: st.verouderd, data: i.data }, i.knop) : null)));
   }
   // ── Popover aan de cel: bedrag of percentage, label, opslaan / rest hier / verwijderen ──────────
   const LABEL_TIPS = ['aanbetaling', 'tussentijds', 'oplevering', 'factuur'];
@@ -569,36 +607,34 @@
 
   function rijEl(r, nu, kols, edit) {
     const mag = st.mag, uit = st.verouderd, blok = r.afwijkt, tr = h('tr', { class: 'mtf-rij' + (r.aan ? '' : ' uit'), data: { sl: r.sleutel } });
-    const sub = [r.offertenr && 'offerte ' + r.offertenr, r.extra && 'staat in de prognose, geen openstaande offerte', ].filter(Boolean).join(' · ');
-    const waarsch = [];
-    if (r.afwijkt) waarsch.push(h('div', { class: 'mtf-waarsch' }, h('b', null, 'Bedrag wijkt af. '), `In Moneybird staat ${F.fmt(r.mbTotaalC)}, de prognose rekent met ${F.fmt(r.totaalC)}. Plannen is geblokkeerd tot dit is bijgewerkt. `,
-      mag ? h('button', { type: 'button', class: 'ui-knop mtf-sm', disabled: uit, data: { bijwerk: r.sleutel } }, 'Bijwerken naar Moneybird-bedrag') : null));
-    for (const d of r.dubbelen) waarsch.push(h('div', { class: 'mtf-waarsch' }, h('b', null, 'Dubbel in Financiën. '), `Nog een prognose-item (${d.naam}, ${F.fmt(d.totaalC)}) hoort bij deze offerte. Het telt hier niet mee, maar wel in Financiën. `,
-      mag ? h('button', { type: 'button', class: 'ui-knop mtf-sm', disabled: uit, data: { dubbeluit: d.sleutel } }, 'Zet dat item uit') : null));
-    if (r.status && r.status !== 'geaccepteerd' && r.aan) waarsch.unshift(h('div', { class: 'mtf-let' }, h('b', null, 'Nog niet geaccepteerd. '), `Deze offerte is ${r.status}. Zet ‘Gaat zeker door’ pas aan als je zeker weet dat hij doorgaat: dan komt hij in de prognose van Financiën.`));
-    const acties = mag && !uit && !blok && r.nogC > 0 ? h('button', { type: 'button', class: 'mtf-schema', data: { schema: r.sleutel }, title: 'Vul de standaardverdeling van deze klant in op het nog niet geplande deel' }, 'Schema toepassen') : null;
+    const nietAcc = !!(r.status && r.status !== 'geaccepteerd');
+    const meta = h('span', { class: 'mtf-meta' }, r.offertenr ? 'offerte ' + r.offertenr : null, r.extra ? 'geen openstaande offerte' : null, statusPil(r.status),
+      r.afwijkt ? vlag('Bedrag wijkt af', 'In Moneybird staat ' + F.fmt(r.mbTotaalC) + ', de prognose rekent met ' + F.fmt(r.totaalC) + '. Zie Aandacht.') : null,
+      r.dubbelen.length ? vlag('Dubbel', 'Nog een prognose-item voor deze offerte. Zie Aandacht.') : null,
+      nietAcc && r.aan ? vlag('Nog niet geaccepteerd', 'Deze offerte is nog niet geaccepteerd, maar gaat zeker door. Zie Aandacht.', 'let') : null,
+      mag && !uit && !blok && r.nogC > 0 ? h('button', { type: 'button', class: 'mtf-schema', data: { schema: r.sleutel }, title: 'Vul de standaardverdeling van deze klant in op het nog niet geplande deel' }, 'Schema toepassen') : null);
     tr.append(h('td', { class: 's' }, h('label', { class: 'mtf-naam' },
       h('input', { type: 'checkbox', checked: r.aan, disabled: !mag || uit, 'aria-label': 'Gaat zeker door: ' + r.naam, title: 'Gaat zeker door: hetzelfde vinkje als in Financiën. Aan = de offerte telt mee in de prognose en de kaslijn.', data: { aan: r.sleutel } }),
-      h('span', null, h('b', null, r.naam), sub ? h('small', null, sub) : null, statusEl(r.status, acties))), waarsch));
+      h('span', null, h('b', { title: r.naam }, r.naam), meta))));
     tr.append(h('td', { class: 'num' + (r.afwijkt ? ' mtf-n' : ''), title: r.afwijkt ? 'Prognose rekent met ' + F.fmt(r.totaalC) + '; Moneybird: ' + F.fmt(r.mbTotaalC) : null }, F.fmt(r.afwijkt ? r.mbTotaalC : r.totaalC)),
-      h('td', { class: 'num', title: r.gecrediteerd ? 'Netto, na creditnota’s' : null }, r.gefNettoC ? h('span', { class: r.gefNettoC < 0 ? 'mtf-n' : null }, F.fmt(r.gefNettoC)) : h('span', { class: 'mtf-0' }, '—'), r.gecrediteerd ? h('div', { class: 'mtf-gef' }, 'gecrediteerd' + (r.creditC ? ' ' + F.fmt(r.creditC) : '')) : null),
-      h('td', { class: 'num' }, r.nogC > 0 ? F.fmt(r.nogC) : h('span', { class: 'mtf-0' }, r.bestaat ? 'gepland' : '—')));
-    if (st.heeftEerder) tr.append(h('td', { class: 'num' }, r.eerderC ? h('div', { class: 'mtf-cel' }, F.fmt(r.eerderC), mag && r.eerderVrijC ? h('button', { type: 'button', class: 'mtf-rest', disabled: uit || blok, data: { eerder: r.sleutel }, title: 'De factuurdatum is voorbij: zet de open termijnen in de lopende maand' }, 'naar deze maand') : null) : h('span', { class: 'mtf-0' }, '—')));
+      h('td', { class: 'num', title: r.gecrediteerd ? 'Netto, na creditnota’s' : null }, r.gefNettoC ? h('span', { class: r.gefNettoC < 0 ? 'mtf-n' : null }, F.fmt(r.gefNettoC)) : h('span', { class: 'mtf-0' }, '–'), r.gecrediteerd ? h('div', { class: 'mtf-gef' }, 'gecrediteerd' + (r.creditC ? ' ' + F.fmt(r.creditC) : '')) : null),
+      h('td', { class: 'num' }, r.nogC > 0 ? F.fmt(r.nogC) : h('span', { class: 'mtf-0' }, r.bestaat ? 'gepland' : '–')));
+    if (st.heeftEerder) tr.append(h('td', { class: 'num' }, r.eerderC ? h('div', { class: 'mtf-cel' }, F.fmt(r.eerderC), mag && r.eerderVrijC ? h('button', { type: 'button', class: 'mtf-schema', disabled: uit || blok, data: { eerder: r.sleutel }, title: 'De factuurdatum is voorbij: zet de open termijnen in de lopende maand' }, 'naar deze maand') : null) : h('span', { class: 'mtf-0' }, '–')));
     kols.forEach((kol, ki) => {
       const nuKol = kol.van === 0;
       if (!edit) {                                                // kwartaal/jaar: som, alleen lezen; klik = naar de maanden van deze periode
         const s = F.rijKolom(r, kol), gepl = s.vrijC + s.vastOpenC;
-        const inh = gepl || s.vastGefC ? h('button', { type: 'button', class: 'mtf-agg', data: { spring: String(ki) }, title: 'Klik om deze periode per maand te bewerken' }, gepl ? F.fmt(gepl) : null, s.vastGefC ? h('span', { class: 'mtf-gef' }, 'gefactureerd ' + F.fmt(s.vastGefC)) : null) : h('button', { type: 'button', class: 'mtf-agg mtf-0', data: { spring: String(ki) }, title: 'Klik om deze periode per maand te bewerken' }, '—');
+        const inh = gepl || s.vastGefC ? h('button', { type: 'button', class: 'mtf-agg', data: { spring: String(ki) }, title: 'Klik om deze periode per maand te bewerken' }, gepl ? F.fmt(gepl) : null, s.vastGefC ? h('span', { class: 'mtf-gef' }, 'gefactureerd ' + F.fmt(s.vastGefC)) : null) : h('button', { type: 'button', class: 'mtf-agg mtf-0', data: { spring: String(ki) }, title: 'Klik om deze periode per maand te bewerken' }, '–');
         tr.append(h('td', { class: 'num' + (nuKol ? ' nu' : '') }, inh)); return;
       }
       const m = r.maanden[kol.van], inhoud = h('div', { class: 'mtf-cel' });
       if (m.vastGefC) inhoud.append(h('span', { class: 'mtf-gef', title: 'Al gefactureerd in Moneybird' }, 'gefactureerd ' + F.fmt(m.vastGefC)));
       if (m.vastOpenC) inhoud.append(h('span', { class: 'mtf-vast', title: 'Deel van een termijn die al gedeeltelijk gefactureerd is: vast' }, F.fmt(m.vastOpenC) + ' (vast)'));
       if (mag) {
-        inhoud.append(h('input', { class: 'mtf-in', type: 'text', inputmode: 'decimal', autocomplete: 'off', value: m.vrijC ? F.fmt(m.vrijC) : '', placeholder: '—', disabled: uit || blok, 'aria-label': r.naam + ', facturatie ' + maandTekst(m.ym), title: m.datum ? 'Factuurdatum ' + m.datum : 'Bedrag dat je in deze maand factureert', data: { sl: r.sleutel, ym: m.ym } }));
+        inhoud.append(h('input', { class: 'mtf-in', type: 'text', inputmode: 'decimal', autocomplete: 'off', value: m.vrijC ? F.fmt(m.vrijC) : '', placeholder: '–', disabled: uit || blok, 'aria-label': r.naam + ', facturatie ' + maandTekst(m.ym), title: m.datum ? 'Factuurdatum ' + m.datum : 'Bedrag dat je in deze maand factureert', data: { sl: r.sleutel, ym: m.ym } }));
         if (r.nogC > 0) inhoud.append(h('button', { type: 'button', class: 'mtf-rest', disabled: uit || blok, data: { rest: r.sleutel, ym: m.ym }, title: 'Zet het nog niet geplande deel (' + F.fmt(r.nogC) + ') in deze maand' }, 'rest hier'));
       } else if (m.vrijC) inhoud.append(F.fmt(m.vrijC));
-      tr.append(h('td', { class: 'num' + (m.ym === nu ? ' nu' : '') }, inhoud.childNodes.length ? inhoud : h('span', { class: 'mtf-0' }, '—')));
+      tr.append(h('td', { class: 'num' + (m.ym === nu ? ' nu' : '') }, inhoud.childNodes.length ? inhoud : h('span', { class: 'mtf-0' }, '–')));
     });
     if (st.heeftLater) { const l = F.rijLater(r, kols); tr.append(bedragTd(l)); }
     return tr;
@@ -674,47 +710,58 @@
     const tot = F.totalen({ rijen, events: st.data.events, vandaag, maanden: F.HORIZON + 1, uitgesloten: zv.uitgesloten, openAan: st.openAan, kostenAan: st.kostenAan, overigAan: st.overigAan, effect: G && G.effect && groep ? (e => c(G.effect(e, 'lopend', groep))) : null });
     const g = F.groepeerTotalen(tot, kols);
     st.heeftLater = rijen.some(r => r.aan && F.rijLater(r, kols) > 0) || ['gepland', 'binnen', 'open', 'kosten', 'overig'].some(k => g.later[k] !== 0);
-    const kop = h('tr', null, h('th', { class: 's', title: 'Het vinkje is hetzelfde als ‘gaat zeker door’ in Financiën: alleen die offertes tellen mee in de totalen en de prognose' }, 'Offertes · vinkje = gaat zeker door'), h('th', { class: 'num' }, 'Offerte'), h('th', { class: 'num' }, 'Gefactureerd'), h('th', { class: 'num' }, 'Nog te plannen'),
+    const eenheidWoord = st.sel.eenheid === 'maand' ? 'maand' : st.sel.eenheid;
+    // Kerncijfers voor de gekozen periode
+    const som = a => a.reduce((x, y) => x + y, 0), nogTot = rijen.reduce((a, r) => a + (r.aan ? r.nogC : 0), 0), netto = som(g.netto);
+    const fact = (label, cc, klasse, titel) => h('div', { class: 'mtf-fact', title: titel }, h('span', { class: 'label' }, label), h('span', { class: 'v ' + (klasse || '') }, cc === 0 ? '–' : '€ ' + F.fmt(cc)));
+    const kern = h('section', { class: 'mtf-kaart', 'aria-label': 'Kerncijfers' }, h('div', { class: 'mtf-kaart-kop' }, h('h2', null, 'Kerncijfers'), h('span', { class: 'mtf-getal' }, kols.length === 1 ? kols[0].label : kols[0].label + ' t/m ' + kols[kols.length - 1].label)),
+      h('div', { class: 'mtf-kern' }, fact('Te factureren', som(g.gepland), null, 'Wat je in deze periode factureert, van de offertes die zeker doorgaan'), fact('Binnen', som(g.binnen), null, 'Verwachte betalingen van die facturen in deze periode'),
+        fact('Netto', netto, netto < 0 ? 'mtf-n' : netto > 0 ? 'mtf-p' : '', 'Binnen min de aangevinkte kosten, in deze periode'), fact('Nog niet gepland', nogTot, null, 'Deel van de offertes dat zeker doorgaat en nog in geen enkele maand staat')));
+    const kop = h('tr', null, h('th', { class: 's', title: 'Het vinkje is hetzelfde als ‘gaat zeker door’ in Financiën: alleen die offertes tellen mee in de totalen en de prognose' }, 'Offerte · vinkje = gaat zeker door'), h('th', { class: 'num' }, 'Bedrag'), h('th', { class: 'num' }, 'Gefactureerd'), h('th', { class: 'num' }, 'Nog te plannen'),
       st.heeftEerder ? h('th', { class: 'num', title: 'Factuurdatum voorbij, nog niet gefactureerd' }, 'Eerder') : null,
       kols.map((k, ki) => h('th', { class: 'num' + (k.van === 0 ? ' nu' : ''), title: edit ? null : k.maanden[0] + ' t/m ' + k.maanden[k.maanden.length - 1] }, edit ? k.label : h('button', { type: 'button', class: 'mtf-agg mtf-kopknop', data: { spring: String(ki) }, title: 'Per maand bekijken en bewerken' }, k.label))),
       st.heeftLater ? h('th', { class: 'num', title: 'Alles na de gekozen periode' }, 'Later') : null);
     const foot = [];
     const regel = (label, cellen, eerder, later, klasse, extra) => h('tr', { class: klasse || '' }, h('th', { class: 's' }, extra || label), h('td'), h('td'), h('td'), st.heeftEerder ? (eerder != null ? getalTd(eerder) : h('td')) : null, cellen, st.heeftLater ? (later != null ? getalTd(later) : h('td')) : null);
-    foot.push(regel('Gefactureerd (gepland)', g.gepland.map(v => bedragTd(v, 'mtf-p')), tot.eerder.gepland, g.later.gepland, '', h('span', { title: 'Wat je in die periode factureert, van de offertes die meetellen' }, 'Gefactureerd (gepland)')));
+    foot.push(regel('Gefactureerd (gepland)', g.gepland.map(v => bedragTd(v)), tot.eerder.gepland, g.later.gepland, '', h('span', { title: 'Wat je in die periode factureert, van de offertes die meetellen' }, 'Gefactureerd (gepland)')));
     foot.push(regel('Binnen', g.binnen.map(v => getalTd(v)), null, g.later.binnen, '', h('span', { title: 'Verwachte betaling: factuurdatum plus betaaltermijn en het gewone betaalgedrag van de klant, zoals in Financiën' }, 'Binnen (betaaldatum)')));
     foot.push(regel('', g.open.map(v => getalTd(v)), null, g.later.open, '', h('label', { title: 'Al verstuurde verkoopfacturen die nog niet betaald zijn, per verwachte betaalmaand (dezelfde bron als de kaslijn in Financiën)' }, h('input', { type: 'checkbox', checked: st.openAan, data: { open: '1' } }), 'Openstaande facturen')));
     foot.push(regel('', g.kosten.map(v => getalTd(v)), null, g.later.kosten, '', h('label', { title: 'Inkoopfacturen en vaste patronen uit Financiën' }, h('input', { type: 'checkbox', checked: st.kostenAan, data: { kosten: '1' } }), 'Lopende kosten')));
     foot.push(regel('', g.overig.map(v => getalTd(v)), null, g.later.overig, '', h('label', { title: 'Btw-aangifte, weekinleg en handmatige posten uit Financiën' }, h('input', { type: 'checkbox', checked: st.overigAan, data: { overig: '1' } }), 'Overige voorspelling')));
-    foot.push(regel('Netto', g.netto.map(v => getalTd(v)), null, g.later.netto, 'netto', h('span', { title: 'Binnen, min de aangevinkte kosten' }, 'Netto per ' + (st.sel.eenheid === 'maand' ? 'maand' : st.sel.eenheid))));
+    foot.push(regel('Netto', g.netto.map(v => getalTd(v)), null, g.later.netto, 'netto', h('span', { title: 'Binnen, min de aangevinkte kosten' }, 'Netto per ' + eenheidWoord)));
     const tab = h('table', { class: 'mtf-tabel' }, h('thead', null, kop), h('tbody', null, zv.zichtbaar.map(r => rijEl(r, nu, kols, edit))), h('tfoot', null, foot));
-    return h('div', { class: 'mtf-scroll' }, tab);
+    const kaart = h('section', { class: 'mtf-kaart', 'aria-label': 'Offertes' }, h('div', { class: 'mtf-kaart-kop' }, h('h2', null, 'Offertes'), h('span', { class: 'mtf-getal' }, String(zv.zichtbaar.length))), h('div', { class: 'mtf-scroll' }, tab));
+    return [kern, kaart];
   }
 
   function teken() {
     const el = st.el; if (!el) return;
     const eenh = h('div', { class: 'mtf-seg-knoppen', role: 'group', 'aria-label': 'Periode-eenheid' }, F.EENHEDEN.map(x => h('button', { type: 'button', class: 'ui-knop' + (st.sel.eenheid === x ? ' ui-knop--primair' : ''), 'aria-pressed': String(st.sel.eenheid === x), data: { eenheid: x } }, x.charAt(0).toUpperCase() + x.slice(1))));
-    const kop = h('div', { class: 'mtf-kop' }, h('h2', null, 'Forecast'), h('span', { class: 'mtf-chip' }, 'incl. btw'), h('span', { class: 'ruim' }), eenh,
-      st.mag && st.data ? maakKnop('Factuurschema\u2019s', { disabled: st.verouderd, data: { schemas: '1' } }) : null, maakKnop('Vernieuwen', { data: { vernieuw: '1' } }), maakKnop('Uitleg', { 'aria-expanded': String(st.uitleg), data: { uitleg: '1' } }));
+    const menu = h('div', { class: 'mtf-menu' + (st.menu ? ' open' : ''), role: 'menu' }, st.mag && st.data ? h('button', { type: 'button', role: 'menuitem', disabled: st.verouderd, data: { schemas: '1' } }, 'Factuurschema’s') : null,
+      h('button', { type: 'button', role: 'menuitem', data: { vernieuw: '1' } }, 'Vernieuwen'), h('button', { type: 'button', role: 'menuitem', data: { uitleg: '1' } }, st.uitleg ? 'Uitleg verbergen' : 'Uitleg'));
+    const kop = h('div', { class: 'mtf-kop' }, h('div', { class: 'mtf-titelblok' }, h('h1', { class: 'mtf-titel' }, 'Forecast'), h('p', { class: 'mtf-sub' }, 'Facturatie per periode, incl. btw. Wat je plant staat ook in de prognose van Financiën.')),
+      h('div', { class: 'mtf-acties' }, eenh, h('div', { class: 'mtf-menuwrap' }, h('button', { type: 'button', class: 'ui-knop mtf-stil', 'aria-haspopup': 'menu', 'aria-expanded': String(!!st.menu), 'aria-label': 'Meer acties', title: 'Factuurschema’s, vernieuwen, uitleg', data: { menu: '1' } }, ico('meer') || '…'), menu)));
     const w = h('div', { class: 'mtf' + (st.bezig ? ' mtf-bezig' : '') }, kop, st.uitleg ? h('div', { class: 'mtf-uitleg' }, UITLEG) : null);
-    if (st.data) {
-      const tel = F.telStatus(st.schatten || []);
-      w.append(h('div', { class: 'mtf-filter', role: 'group', 'aria-label': 'Status van de offertes' }, h('span', { class: 'mtf-zacht' }, 'Offertes'),
-        F.STATUSSEN.map(x => h('button', { type: 'button', class: 'mtf-fchip', 'aria-pressed': String(st.filter.has(x)), data: { filter: x } }, STATUSLABEL[x][1], h('span', { class: 'mtf-tel' }, String(tel[x]))))));
-      const verb = F.zichtbaar(st.rijen, [...st.filter]).verborgen;
-      if (verb) w.append(h('div', { class: 'mtf-verborgen' }, verb + (verb === 1 ? ' offerte verborgen door filter; totalen tellen hem' : ' offertes verborgen door filter; totalen tellen ze') + ' wel mee (zoals Financiën).'));
-      w.append(sliderEl(st.data.vandaag.slice(0, 7)));
-    }
-    if (st.onvolledig) w.append(h('div', { class: 'mtf-fout', role: 'alert' }, h('b', null, 'Prognose onvolledig geladen. '), 'Niet alle prognose-items zijn opgehaald, dus de dubbelencontrole en de totalen kunnen niet kloppen. Wijzigen is uitgeschakeld; klik op Vernieuwen.'));
+    if (st.onvolledig) w.append(h('div', { class: 'mtf-fout', role: 'alert' }, h('b', null, 'Prognose onvolledig geladen. '), 'Niet alle prognose-items zijn opgehaald, dus de dubbelencontrole en de totalen kunnen niet kloppen. Wijzigen is uitgeschakeld; kies Vernieuwen in het menu.'));
     else if (st.verouderd) w.append(h('div', { class: 'mtf-fout' }, h('b', null, 'Gegevens verouderd — Vernieuwen. '), 'Wijzigen is uitgeschakeld tot het verversen lukt.'));
     if (st.fout) w.append(h('div', { class: 'mtf-fout' }, st.fout));
     if (st.afgekapt) w.append(h('div', { class: 'mtf-fout' }, h('b', null, 'Lijst afgekapt. '), 'Er zijn meer geaccepteerde offertes in Moneybird dan hier getoond worden; de lijst is dus niet volledig.'));
+    if (st.data) {
+      const tel = F.telStatus(st.schatten || []), verb = F.zichtbaar(st.rijen, [...st.filter]).verborgen;
+      w.append(h('section', { class: 'mtf-kaart mtf-strook', 'aria-label': 'Filter en periode' },
+        h('div', { class: 'mtf-filter', role: 'group', 'aria-label': 'Status van de offertes' }, h('span', { class: 'mtf-zacht' }, 'Offertes'),
+          F.STATUSSEN.map(x => h('button', { type: 'button', class: 'mtf-fchip', 'aria-pressed': String(st.filter.has(x)), data: { filter: x } }, STATUSLABEL[x][1], h('span', { class: 'mtf-tel' }, String(tel[x])))),
+          verb ? h('span', { class: 'mtf-verborgen' }, verb + (verb === 1 ? ' offerte verborgen door filter; totalen tellen hem' : ' offertes verborgen door filter; totalen tellen ze') + ' wel mee (zoals Financiën).') : null),
+        sliderEl(st.data.vandaag.slice(0, 7))));
+      const ak = aandachtKaart(); if (ak) w.append(ak);
+    }
     if (!st.data) { w.append(h('div', { class: 'mtf-melding' }, st.fout ? '' : 'Forecast laden…')); }
-    else if (!st.rijen.length) w.append(h('div', { class: 'mtf-melding' }, 'Geen offertes in Moneybird gevonden.'));
-    else if (!F.zichtbaar(st.rijen, [...st.filter]).zichtbaar.length) w.append(h('div', { class: 'mtf-melding' }, 'Geen offertes met de gekozen statussen. Zet een status aan.'));
+    else if (!st.rijen.length) w.append(h('div', { class: 'mtf-kaart mtf-melding' }, 'Geen offertes in Moneybird gevonden.'));
+    else if (!F.zichtbaar(st.rijen, [...st.filter]).zichtbaar.length) { w.append(h('div', { class: 'mtf-kaart mtf-melding' }, 'Geen offertes met de gekozen statussen. Zet een status aan.')); }
     else {
-      w.append(tekenTabel());
+      for (const k of tekenTabel()) w.append(k);
       const waarsch = (st.data.waarschuwingen || []).filter(x => x && x.onvolledig).length;
-      w.append(h('div', { class: 'mtf-voet' }, 'Wat je hier plant, staat ook in de prognose van Financiën. De totalen tellen alle offertes waar ‘Gaat zeker door’ aan staat, ook als het filter ze verbergt (zoals Financiën).' + (st.sel.eenheid === 'maand' ? '' : ' Kwartaal en jaar zijn sommen: klik op een periode om per maand te bewerken.') + (st.mag ? '' : ' Je mag lezen, niet wijzigen.') + (waarsch ? ' Let op: niet alle bronnen van Financiën zijn volledig geladen; de bedragen onderaan kunnen afwijken.' : '')));
+      w.append(h('div', { class: 'mtf-voet' }, 'De totalen tellen alle offertes waar ‘Gaat zeker door’ aan staat, ook als het filter ze verbergt (zoals Financiën).' + (st.sel.eenheid === 'maand' ? '' : ' Kwartaal en jaar zijn sommen: klik op een periode om per maand te bewerken.') + (st.mag ? '' : ' Je mag lezen, niet wijzigen.') + (waarsch ? ' Let op: niet alle bronnen van Financiën zijn volledig geladen; de bedragen kunnen afwijken.' : '')));
     }
     closePop();
     el.replaceChildren(w);
@@ -796,6 +843,10 @@
     });
     return st.wachtrij;
   }
+  function zetMenu(open) {
+    st.menu = !!open; const w = st.el && st.el.querySelector('.mtf-menu'), k = st.el && st.el.querySelector('[data-menu]');
+    if (w) w.classList.toggle('open', st.menu); if (k) k.setAttribute('aria-expanded', String(st.menu));
+  }
   function koppel() {
     const el = st.el; if (el._mtfKoppel) return; el._mtfKoppel = true;
     el.addEventListener('change', e => {
@@ -815,15 +866,16 @@
       else if (t.dataset && t.dataset.overig) { st.overigAan = t.checked; ls.set('mtg:fc:overig:' + st.wie, t.checked ? '1' : '0'); teken(); }
     });
     el.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches && e.target.matches('input.mtf-in')) e.target.blur(); });
-    document.addEventListener('keydown', e => { if (e.key === 'Escape' && st.pop) closePop(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (st.pop) closePop(); if (st.menu) zetMenu(false); } });
     el.addEventListener('input', e => { if (st.pop && e.target.matches && e.target.matches('input.mtf-in') && e.target.dataset.sl === st.pop.sl && e.target.dataset.ym === st.pop.ym) st.pop.zet(e.target.value); });
+    document.addEventListener('pointerdown', e => { if (st.menu && !(e.target.closest && e.target.closest('.mtf-menuwrap'))) zetMenu(false); });
     document.addEventListener('pointerdown', e => { if (st.pop && st.pop.el && !st.pop.el.contains(e.target) && !(e.target.closest && e.target.closest('input.mtf-in'))) closePop(); });
     el.addEventListener('click', e => {
       const inv = e.target.closest && e.target.closest('input.mtf-in'); if (inv && st.mag && !st.verouderd) { if (!st.pop || st.pop.sl !== inv.dataset.sl || st.pop.ym !== inv.dataset.ym) openPop(inv); return; }
       const k = e.target.closest && e.target.closest('button'); if (!k) return;
       const d = k.dataset;
       if (d.filter) { if (st.filter.has(d.filter)) st.filter.delete(d.filter); else st.filter.add(d.filter); ls.set('mtg:fc:filter:' + st.wie, [...st.filter].join(',')); teken(); }
-      else if (d.schemas) openSchemaPaneel();
+      else if (d.schemas) { zetMenu(false); openSchemaPaneel(); }
       else if (d.schema && st.mag && !st.verouderd) {
         const rij = st.rijen.find(r => r.sleutel === d.schema); if (!rij || rij.afwijkt) return;
         const sch = F.kiesSchema(rij.contactId, rij.totaalC, st.cfg && st.cfg.factuurschemas, st.cfg && st.cfg.prognose_schema);
@@ -831,8 +883,9 @@
       }
       else if (d.eenheid) { if (st.data) { st.sel = F.selNaarEenheid(st.sel, st.data.vandaag.slice(0, 7), d.eenheid); bewaarSel(); teken(); } }
       else if (d.spring) { const nu = st.data.vandaag.slice(0, 7), kol = F.kolommen(F.eenheden(nu, st.sel.eenheid), st.sel)[Number(d.spring)]; if (kol) { st.sel = F.selSchoon({ eenheid: 'maand', i0: kol.van, i1: kol.tot }, F.eenheden(nu, 'maand')); bewaarSel(); teken(); } }
-      else if (d.uitleg) { st.uitleg = !st.uitleg; teken(); }
-      else if (d.vernieuw) { st.bezig = true; teken(); F.laad('schatten'); }
+      else if (d.menu) zetMenu(!st.menu)
+      else if (d.uitleg) { zetMenu(false); st.uitleg = !st.uitleg; teken(); }
+      else if (d.vernieuw) { zetMenu(false); st.bezig = true; teken(); F.laad('schatten'); }
       else if (d.bijwerk && st.mag && !st.verouderd) { const rij = st.rijen.find(r => r.sleutel === d.bijwerk); if (rij && rij.afwijkt) wijzig(d.bijwerk, (it, ov) => F.bijwerkTotaal(it, ov, rij.mbTotaalC, st.data.vandaag), 'Totaal bijgewerkt naar het Moneybird-bedrag'); }
       else if (d.dubbeluit && st.mag && !st.verouderd) wijzig(d.dubbeluit, it => F.zetAan(it, false), 'Dubbel item uitgezet (niet verwijderd)');
       else if (d.rest && st.mag && !st.verouderd) { const rij = st.rijen.find(r => r.sleutel === d.rest), cc = rij && F.restHier(rij, d.ym); if (cc != null) wijzig(d.rest, (it, ov) => F.zetCel(it, ov, d.ym, cc, st.data.vandaag, { behoudAan: behoudAanVoor(rij) }), 'Rest ingepland — Financiën rekent mee'); }
