@@ -111,5 +111,30 @@ const { pathToFileURL } = require('url');
     const uit = await roep(env, 'eigenaar', '/geld/prognose', 'POST', { sleutel: 'p:nieuw', item: item('300000000555', { aan: false }), vorige_ts: null }); assert.strictEqual(uit.status, 200);
     const kapot = kv(); kapot.list = async () => { throw new Error('KV stuk'); };
     const r2 = await roep({ MT_ROLLEN: kapot }, 'eigenaar', '/geld/prognose', 'POST', { sleutel: 'p:nieuw', item: item('300000000555'), vorige_ts: null }); assert.strictEqual(r2.status, 503);
+  });  await test('uit beeld: opslaan in de geld-config; wie en wanneer zet de server, niet de client; teruglezen door een lezer', async () => {
+    const env = { MT_ROLLEN: kv() }; const rev = (await roep(env, 'eigenaar', '/geld/config', 'GET')).body.config.revisie;
+    assert.deepStrictEqual((await roep(env, 'administratie', '/geld/config', 'GET')).body.config.uitbeeld, {});
+    const w = await roep(env, 'eigenaar', '/geld/config', 'POST', { uitbeeld: { '300000000201': { reden: 'verkeerd', door: 'Valse Naam', ts: 5 }, '300000000202': { reden: 'weg' } }, revisie: rev });
+    assert.strictEqual(w.status, 200, JSON.stringify(w.body)); const ub = w.body.config.uitbeeld;
+    assert.deepStrictEqual(Object.keys(ub).sort(), ['300000000201', '300000000202']); assert.strictEqual(ub['300000000201'].reden, 'verkeerd');
+    assert.notStrictEqual(ub['300000000201'].door, 'Valse Naam'); assert.ok(ub['300000000201'].ts > 1e12); assert.ok(ub['300000000201'].door.length > 0);
+    assert.deepStrictEqual((await roep(env, 'administratie', '/geld/config', 'GET')).body.config.uitbeeld, ub);
+    // ongewijzigde reden houdt de oorspronkelijke stempel; andere reden krijgt een nieuwe; terugzetten = sleutel weglaten
+    const w2 = await roep(env, 'eigenaar', '/geld/config', 'POST', { uitbeeld: { '300000000201': { reden: 'verkeerd' }, '300000000202': { reden: 'gefactureerd' }, '300000000203': { reden: 'weg' } }, revisie: w.body.config.revisie });
+    assert.deepStrictEqual(w2.body.config.uitbeeld['300000000201'], ub['300000000201']); assert.strictEqual(w2.body.config.uitbeeld['300000000202'].reden, 'gefactureerd');
+    const w3 = await roep(env, 'eigenaar', '/geld/config', 'POST', { uitbeeld: { '300000000203': { reden: 'weg' } }, revisie: w2.body.config.revisie });
+    assert.deepStrictEqual(Object.keys(w3.body.config.uitbeeld), ['300000000203']);
+    const leeg = await roep(env, 'eigenaar', '/geld/config', 'POST', { uitbeeld: {}, revisie: w3.body.config.revisie }); assert.deepStrictEqual(leeg.body.config.uitbeeld, {});
+  });
+  await test('uit beeld: ongeldig (reden, offerte-id, type), oude revisie 409 en lees-recht 403 (server)', async () => {
+    const env = { MT_ROLLEN: kv() }; const rev = (await roep(env, 'eigenaar', '/geld/config', 'GET')).body.config.revisie;
+    for (const ub of [{ '300000000201': { reden: 'onzin' } }, { abc: { reden: 'weg' } }, { '300000000201': null }, { '300000000201': 'weg' }, [], null, 'x']) {
+      const r = await roep(env, 'eigenaar', '/geld/config', 'POST', { uitbeeld: ub, revisie: rev }); assert.strictEqual(r.status, 400, JSON.stringify(ub));
+    }
+    assert.strictEqual((await roep(env, 'eigenaar', '/geld/config', 'POST', { uitbeeld: { '300000000201': { reden: 'weg' } }, revisie: rev + 7 })).status, 409);
+    for (const rol of ['administratie', 'beheerder', 'kantoor', 'werkplaats', 'lezen']) assert.strictEqual((await roep(env, rol, '/geld/config', 'POST', { uitbeeld: { '300000000201': { reden: 'weg' } }, revisie: rev })).status, 403, rol);
+    assert.deepStrictEqual((await roep(env, 'eigenaar', '/geld/config', 'GET')).body.config.uitbeeld, {});
+    const veel = {}; for (let i = 0; i < 2001; i++) veel['3' + String(100000000 + i)] = { reden: 'weg' };
+    assert.strictEqual((await roep(env, 'eigenaar', '/geld/config', 'POST', { uitbeeld: veel, revisie: rev })).status, 400);
   });  console.log(`\n${n} worker-tests geslaagd${process.exitCode ? ' — er zijn fouten' : ''}`);
 })();

@@ -2258,6 +2258,16 @@ function geldFactuurschemasNorm(x) {
   }
   return uit;
 }
+// Offertes die in de Forecast "uit beeld" staan (alleen verbergen; Moneybird blijft alleen-lezen): per offerte-id een reden, wie en wanneer.
+const GELD_UITBEELD_REDEN = ['verkeerd', 'gefactureerd', 'weg'], GELD_UITBEELD_MAX = 2000;
+function geldUitbeeldNorm(x) {
+  const uit = {}; if (!x || typeof x !== 'object' || Array.isArray(x)) return uit;
+  for (const k of Object.keys(x).slice(0, GELD_UITBEELD_MAX)) {
+    const v = x[k]; if (!/^\d{6,25}$/.test(k) || !v || typeof v !== 'object' || !GELD_UITBEELD_REDEN.includes(v.reden)) continue;
+    uit[k] = { reden: v.reden, door: String(v.door || '').slice(0, 60), ts: typeof v.ts === 'number' && isFinite(v.ts) ? v.ts : 0 };
+  }
+  return uit;
+}
 function geldConfigNorm(c) {
   c = c && typeof c === 'object' ? c : {};
   const getal = (x, min, max) => (typeof x === 'number' && isFinite(x) && x >= min && x <= max) ? x : null;
@@ -2277,7 +2287,7 @@ function geldConfigNorm(c) {
     id: String(g.id), naam: String(g.naam || g.id).slice(0, 60), prefix: String(g.prefix || '').trim().slice(0, 60),
     contact_ids: (Array.isArray(g.contact_ids) ? g.contact_ids : []).map(String).filter(x => /^\d{6,25}$/.test(x)).slice(0, 200) }))
     .filter(g => g.prefix.length >= 3 || g.contact_ids.length);
-  const uit = { kredietlimiet: getal(c.kredietlimiet, 0, 1e9), potten: uniek, klantgroepen: groepen, lopend_streef: geldStreefNorm(c.lopend_streef), prognose_schema: geldSchemaNorm(c.prognose_schema), factuurschemas: geldFactuurschemasNorm(c.factuurschemas),
+  const uit = { kredietlimiet: getal(c.kredietlimiet, 0, 1e9), potten: uniek, klantgroepen: groepen, lopend_streef: geldStreefNorm(c.lopend_streef), prognose_schema: geldSchemaNorm(c.prognose_schema), factuurschemas: geldFactuurschemasNorm(c.factuurschemas), uitbeeld: geldUitbeeldNorm(c.uitbeeld),
     // buffer_lopend (eigen ondergrens) is samengevoegd met de fictieve buffer: een gezet oud veld wordt het eigen bedrag (negatief → 0). Eén release lang schrijven we beide velden
     // (dual-write) zodat een terugdraaiing van de front-end niets verliest: buffer_lopend = de fictieve buffer, of de oude waarde zolang er nog geen fictieve buffer is.
     buffer_lopend: null,   // hieronder gelijkgetrokken met fictieve_buffer (dual-write)
@@ -4244,6 +4254,15 @@ async function handleGeld(p, request, env, ik, json0) {
       const n = geldSchemaNorm(b.prognose_schema);
       if (b.prognose_schema !== null && (!n || ['klein', 'middel', 'groot'].some(k => Array.isArray(b.prognose_schema[k]) && b.prognose_schema[k].length && !n[k].length))) return json({ error: 'standaardschema: per grootte percentages die samen 100 zijn' }, 400);
       nieuw.prognose_schema = b.prognose_schema; gewijzigd.push('prognose_schema');
+    }
+    if ('uitbeeld' in b) {
+      const ub = b.uitbeeld;
+      if (!ub || typeof ub !== 'object' || Array.isArray(ub) || Object.keys(ub).length > GELD_UITBEELD_MAX) return json({ error: `uitbeeld: object per offerte-id (hooguit ${GELD_UITBEELD_MAX})` }, 400);
+      for (const [k, v] of Object.entries(ub)) if (!/^\d{6,25}$/.test(k) || !v || typeof v !== 'object' || !GELD_UITBEELD_REDEN.includes(v.reden)) return json({ error: 'uitbeeld: offerte-id (alleen cijfers) met reden verkeerd, gefactureerd of weg', offerte: k.slice(0, 25) }, 400);
+      // wie en wanneer zet de server zelf (niet te vervalsen); een ongewijzigde reden behoudt de oorspronkelijke stempel
+      const wie = String((ik.rec && ik.rec.naam) || ik.email || ik.oid).slice(0, 60), nu = Date.now(), oudU = oud.uitbeeld || {}, nw = {};
+      for (const [k, v] of Object.entries(ub)) nw[k] = oudU[k] && oudU[k].reden === v.reden ? oudU[k] : { reden: v.reden, door: wie, ts: nu };
+      nieuw.uitbeeld = nw; gewijzigd.push('uitbeeld');
     }
     if ('factuurschemas' in b) {
       const fs = b.factuurschemas;
