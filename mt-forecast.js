@@ -158,9 +158,9 @@
   //   kosten = inkoopfacturen en vaste patronen · overig = btw-aangifte, weekinleg en handmatige prognose-posten.
   F.totalen = function (o) {
     const rijen = o.rijen || [], vandaag = o.vandaag, n = o.maanden || 6, nu = vandaag.slice(0, 7), einde = maandPlus(nu, n - 1);
-    const effect = o.effect || (e => e.intern ? 0 : (typeof e.delta === 'number' ? c(e.delta) : (e.richting === 'in' ? 1 : -1) * c(e.bedrag)));
+    const effect = o.effect || (e => e.intern ? 0 : (typeof e.delta === 'number' ? c(e.delta) : 0));
     const kol = () => { const a = []; for (let i = 0; i < n; i++) a.push(0); return a; };
-    const t = { maanden: Array.from({ length: n }, (_, i) => maandPlus(nu, i)), gepland: kol(), binnen: kol(), kosten: kol(), overig: kol(), netto: kol(), eerder: { gepland: 0 }, later: { gepland: 0, binnen: 0, kosten: 0, overig: 0 } };
+    const t = { maanden: Array.from({ length: n }, (_, i) => maandPlus(nu, i)), gepland: kol(), binnen: kol(), open: kol(), kosten: kol(), overig: kol(), netto: kol(), eerder: { gepland: 0 }, later: { gepland: 0, binnen: 0, open: 0, kosten: 0, overig: 0 } };
     for (const r of rijen) {
       if (!r.aan) continue;
       t.eerder.gepland += r.eerderC; t.later.gepland += r.laterC;
@@ -168,15 +168,15 @@
     }
     for (const e of o.events || []) {
       if (!e || e.bron === 'bank' || e.saldo_ijkpunt || !e.datum) continue;
-      const soort = e.bron === 'prognose' ? (e.termijn_id ? 'binnen' : 'overig') : e.bron === 'inkoop' || e.bron === 'patroon' ? 'kosten' : e.bron === 'btw' || e.bron === 'inleg' ? 'overig' : null;
+      const soort = e.bron === 'prognose' ? (e.termijn_id ? 'binnen' : 'overig') : e.bron === 'verkoop' ? 'open' : e.bron === 'inkoop' || e.bron === 'patroon' ? 'kosten' : e.bron === 'btw' || e.bron === 'inleg' ? 'overig' : null;
       if (!soort) continue;
       const v = effect(e); if (!v) continue;
       const ym = (e.datum < vandaag ? vandaag : e.datum).slice(0, 7);
       if (ym > einde) t.later[soort] += v; else t[soort][Math.max(0, t.maanden.indexOf(ym))] += v;
     }
-    const kostenAan = o.kostenAan !== false, overigAan = o.overigAan !== false;
-    t.netto = t.binnen.map((b, i) => b + (kostenAan ? t.kosten[i] : 0) + (overigAan ? t.overig[i] : 0));
-    t.later.netto = t.later.binnen + (kostenAan ? t.later.kosten : 0) + (overigAan ? t.later.overig : 0);
+    const openAan = o.openAan !== false, kostenAan = o.kostenAan !== false, overigAan = o.overigAan !== false;
+    t.netto = t.binnen.map((b, i) => b + (openAan ? t.open[i] : 0) + (kostenAan ? t.kosten[i] : 0) + (overigAan ? t.overig[i] : 0));
+    t.later.netto = t.later.binnen + (openAan ? t.later.open : 0) + (kostenAan ? t.later.kosten : 0) + (overigAan ? t.later.overig : 0);
     return t;
   };
 
@@ -188,8 +188,8 @@
     return e;
   };
   const ls = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { } } };
-  const st = F._st = { el: null, bron: null, mag: false, wie: '', data: null, items: {}, schatten: null, schattenT: 0, projecten: null, haalSchatten: null, rijen: [], n: 6, kostenAan: true, overigAan: true, bezig: false, fout: null, uitleg: false, wachtrij: Promise.resolve(), vers: {}, ks: [], cv: '', bt: null };
-  const UITLEG = 'Links staan de goedgekeurde offertes uit Moneybird (incl. btw). Typ in een maand het bedrag dat je dan wilt factureren, in zijn geheel of in delen; "rest" zet wat nog niet gepland is in die maand. De planning is dezelfde als de prognose in Financiën (de termijnen van de offerte): de kaslijn, de Factuurplanning en deze tabel rekenen meteen mee. Het vinkje bij een offerte bepaalt of hij meetelt. "Binnen" is de verwachte betaling: factuurdatum plus betaaltermijn en het gewone betaalgedrag van de klant. Vink "lopende kosten" en "overige voorspelling" (btw, weekinleg, handmatige posten) aan of uit om het netto per maand te zien. Een deel dat al in Moneybird gefactureerd is, staat vast. Een offerte kan in hoogstens 6 delen. Er gaat nooit iets naar Moneybird.';
+  const st = F._st = { el: null, bron: null, mag: false, wie: '', data: null, items: {}, schatten: null, schattenT: 0, projecten: null, haalSchatten: null, rijen: [], n: 6, kostenAan: true, overigAan: true, openAan: true, bezig: false, fout: null, uitleg: false, wachtrij: Promise.resolve(), vers: {}, ks: [], cv: '', bt: null };
+  const UITLEG = 'Links staan de goedgekeurde offertes uit Moneybird (incl. btw). Typ in een maand het bedrag dat je dan wilt factureren, in zijn geheel of in delen; "rest" zet wat nog niet gepland is in die maand. De planning is dezelfde als de prognose in Financiën (de termijnen van de offerte): de kaslijn, de Factuurplanning en deze tabel rekenen meteen mee. Het vinkje bij een offerte bepaalt of hij meetelt. "Binnen" is de verwachte betaling: factuurdatum plus betaaltermijn en het gewone betaalgedrag van de klant. "Openstaande facturen" zijn de al verstuurde, nog niet betaalde verkoopfacturen per verwachte betaalmaand. Vink die, "lopende kosten" en "overige voorspelling" (btw, weekinleg, handmatige posten) aan of uit om het netto per maand te zien. Een deel dat al in Moneybird gefactureerd is, staat vast. Een offerte kan in hoogstens 6 delen. Er gaat nooit iets naar Moneybird.';
   function css() {
     if (document.getElementById('mtf-css')) return;
     const s = document.createElement('style'); s.id = 'mtf-css';
@@ -220,6 +220,7 @@
 .mtf-tabel tfoot .s{background:var(--surface-2,#f7f6f1)}.mtf-tabel tfoot tr.netto td,.mtf-tabel tfoot tr.netto th{font-weight:600;border-top:2px solid var(--line-strong,#cfcdc3)}
 .mtf-tabel tfoot label{display:flex;gap:8px;align-items:center;cursor:pointer}.mtf-tabel tfoot input{width:16px;height:16px}
 .mtf-p{color:var(--mtf-in)}.mtf-n{color:var(--mtf-uit)}.mtf-0{color:var(--mtf-zacht)}
+.mtf input[type=checkbox]{accent-color:var(--primary,#2A4A38)}
 .mtf-bezig{opacity:.6;pointer-events:none}
 .mtf-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink,#1d1d1b);color:#fff;padding:9px 14px;border-radius:8px;font-size:13px;z-index:9999;max-width:90vw}
 .mtf-voet{font-size:12px;color:var(--mtf-zacht);margin:8px 2px}
@@ -259,7 +260,7 @@
     const vandaag = st.data.vandaag, nu = vandaag.slice(0, 7), rijen = st.rijen;
     st.heeftEerder = rijen.some(r => r.aan && r.eerderC); st.heeftLater = rijen.some(r => r.aan && r.laterC);
     const G = root.MTGeld, groep = G && G.groep ? G.groep(st.data) : null;
-    const tot = F.totalen({ rijen, events: st.data.events, vandaag, maanden: st.n, kostenAan: st.kostenAan, overigAan: st.overigAan, effect: G && G.effect && groep ? (e => c(G.effect(e, 'lopend', groep))) : null });
+    const tot = F.totalen({ rijen, events: st.data.events, vandaag, maanden: st.n, openAan: st.openAan, kostenAan: st.kostenAan, overigAan: st.overigAan, effect: G && G.effect && groep ? (e => c(G.effect(e, 'lopend', groep))) : null });
     const mnd = tot.maanden;
     const kop = h('tr', null, h('th', { class: 's' }, 'Goedgekeurde offertes'), h('th', { class: 'num' }, 'Offerte'), h('th', { class: 'num' }, 'Gefactureerd'), h('th', { class: 'num' }, 'Nog te plannen'),
       st.heeftEerder ? h('th', { class: 'num', title: 'Factuurdatum voorbij, nog niet gefactureerd' }, 'Eerder') : null,
@@ -268,6 +269,7 @@
     const regel = (label, cellen, eerder, later, klasse, extra) => h('tr', { class: klasse || '' }, h('th', { class: 's' }, extra || label), h('td'), h('td'), h('td'), st.heeftEerder ? (eerder != null ? getalTd(eerder) : h('td')) : null, cellen, st.heeftLater ? (later != null ? getalTd(later) : h('td')) : null);
     foot.push(regel('Gefactureerd (gepland)', tot.gepland.map(v => bedragTd(v, 'mtf-p')), tot.eerder.gepland, tot.later.gepland, '', h('span', { title: 'Wat je in die maand factureert, van de offertes die meetellen' }, 'Gefactureerd (gepland)')));
     foot.push(regel('Binnen', tot.binnen.map(v => getalTd(v)), null, tot.later.binnen, '', h('span', { title: 'Verwachte betaling: factuurdatum plus betaaltermijn en het gewone betaalgedrag van de klant, zoals in Financiën' }, 'Binnen (betaaldatum)')));
+    foot.push(regel('', tot.open.map(v => getalTd(v)), null, tot.later.open, '', h('label', { title: 'Al verstuurde verkoopfacturen die nog niet betaald zijn, per verwachte betaalmaand (dezelfde bron als de kaslijn in Financi\u00ebn)' }, h('input', { type: 'checkbox', checked: st.openAan, data: { open: '1' } }), 'Openstaande facturen')));
     foot.push(regel('', tot.kosten.map(v => getalTd(v)), null, tot.later.kosten, '', h('label', { title: 'Inkoopfacturen en vaste patronen uit Financiën' }, h('input', { type: 'checkbox', checked: st.kostenAan, data: { kosten: '1' } }), 'Lopende kosten')));
     foot.push(regel('', tot.overig.map(v => getalTd(v)), null, tot.later.overig, '', h('label', { title: 'Btw-aangifte, weekinleg en handmatige posten uit Financiën' }, h('input', { type: 'checkbox', checked: st.overigAan, data: { overig: '1' } }), 'Overige voorspelling')));
     foot.push(regel('Netto', tot.netto.map(v => getalTd(v)), null, tot.later.netto, 'netto', h('span', { title: 'Binnen, min de aangevinkte kosten' }, 'Netto per maand')));
@@ -321,7 +323,7 @@
   };
   F.start = async function (el, o) {
     st.el = el; st.bron = o.bron; st.mag = !!o.magWijzigen; st.wie = o.wie || ''; st.projecten = o.projecten || null; st.haalSchatten = o.schatten;
-    st.n = ls.get('mtg:fc:mnd:' + st.wie) === '12' ? 12 : 6; st.kostenAan = ls.get('mtg:fc:kosten:' + st.wie) !== '0'; st.overigAan = ls.get('mtg:fc:overig:' + st.wie) !== '0';
+    st.n = ls.get('mtg:fc:mnd:' + st.wie) === '12' ? 12 : 6; st.kostenAan = ls.get('mtg:fc:kosten:' + st.wie) !== '0'; st.overigAan = ls.get('mtg:fc:overig:' + st.wie) !== '0'; st.openAan = ls.get('mtg:fc:open:' + st.wie) !== '0';
     css(); koppel(); teken(); await F.laad();
   };
   // Eén wijziging tegelijk (de prognose heeft een versiecontrole per item). fn(item, overzicht) → {item} of {fout}.
@@ -366,6 +368,7 @@
         wijzig(sl, it => F.zetAan(it, aan), aan ? 'Telt mee' : 'Telt niet meer mee (ook niet in de prognose van Financiën)');
         void rij;
       } else if (t.dataset && t.dataset.kosten) { st.kostenAan = t.checked; ls.set('mtg:fc:kosten:' + st.wie, t.checked ? '1' : '0'); teken(); }
+      else if (t.dataset && t.dataset.open) { st.openAan = t.checked; ls.set('mtg:fc:open:' + st.wie, t.checked ? '1' : '0'); teken(); }
       else if (t.dataset && t.dataset.overig) { st.overigAan = t.checked; ls.set('mtg:fc:overig:' + st.wie, t.checked ? '1' : '0'); teken(); }
     });
     el.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches && e.target.matches('input.mtf-in')) e.target.blur(); });

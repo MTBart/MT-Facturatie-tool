@@ -155,10 +155,21 @@ test('totalen: binnen/kosten/overig per maand, klem op vandaag, later-bucket, ne
   assert.deepStrictEqual(t.maanden, ['2026-10', '2026-11', '2026-12']);
   assert.deepStrictEqual(t.gepland, [100000, 205000, 0]); assert.strictEqual(t.eerder.gepland, 0); assert.strictEqual(t.later.gepland, 0);   // rij 2 staat uit
   assert.deepStrictEqual(t.binnen, [20000, 100050, 0]); assert.deepStrictEqual(t.kosten, [0, -30025, -15000]); assert.deepStrictEqual(t.overig, [0, -5000, -70000]);
-  assert.deepStrictEqual(t.netto, [20000, 100050 - 30025 - 5000, -15000 - 70000]); assert.strictEqual(t.later.binnen, 4000);
-  const zonderK = F.totalen({ rijen, events: ev, vandaag: V, maanden: 3, kostenAan: false }); assert.deepStrictEqual(zonderK.netto, [20000, 100050 - 5000, -70000]);
-  const zonderBeide = F.totalen({ rijen, events: ev, vandaag: V, maanden: 3, kostenAan: false, overigAan: false }); assert.deepStrictEqual(zonderBeide.netto, [20000, 100050, 0]);
+  assert.deepStrictEqual(t.open, [0, 500000, 0]);                                             // de openstaande verkoopfactuur (g) staat apart van Binnen
+  assert.deepStrictEqual(t.netto, [20000, 100050 + 500000 - 30025 - 5000, -15000 - 70000]); assert.strictEqual(t.later.binnen, 4000);
+  const zonderK = F.totalen({ rijen, events: ev, vandaag: V, maanden: 3, kostenAan: false }); assert.deepStrictEqual(zonderK.netto, [20000, 100050 + 500000 - 5000, -70000]);
+  const zonderBeide = F.totalen({ rijen, events: ev, vandaag: V, maanden: 3, kostenAan: false, overigAan: false, openAan: false }); assert.deepStrictEqual(zonderBeide.netto, [20000, 100050, 0]);
   assert.strictEqual(zonderBeide.later.netto, 4000);
+});
+test('totalen: openstaande facturen per verwachte betaalmaand, klem op vandaag, later, creditnota, vinkje, bank/intern telt niet', () => {
+  const ev = [{ id: 'v1', bron: 'verkoop', datum: '2026-09-01', delta: 1000 },                // achterstallig: vandaag (lopende maand)
+    { id: 'v2', bron: 'verkoop', datum: '2026-12-10', delta: 2500.5 }, { id: 'v3', bron: 'verkoop', datum: '2026-12-20', delta: -100.25 },   // creditnota trekt af
+    { id: 'v4', bron: 'verkoop', datum: '2027-08-01', delta: 700 }, { id: 'v5', bron: 'verkoop', telt_niet: { soort: 'concept' }, bedrag: 999, datum: '2026-11-01' },   // zonder delta: telt niet
+    { id: 'v6', bron: 'verkoop', intern: true, datum: '2026-11-01', delta: 50 }, { id: 'b1', bron: 'bank', datum: '2026-10-02', delta: 123 }];
+  const t = F.totalen({ rijen: [], events: ev, vandaag: V, maanden: 3 });
+  assert.deepStrictEqual(t.open, [100000, 0, 240025]); assert.strictEqual(t.later.open, 70000); assert.deepStrictEqual(t.netto, [100000, 0, 240025]); assert.strictEqual(t.later.netto, 70000);
+  const uit = F.totalen({ rijen: [], events: ev, vandaag: V, maanden: 3, openAan: false }); assert.deepStrictEqual(uit.netto, [0, 0, 0]); assert.strictEqual(uit.later.netto, 0); assert.deepStrictEqual(uit.open, t.open);
+  const eigen = F.totalen({ rijen: [], events: ev, vandaag: V, maanden: 3, effect: e => e.id === 'v2' ? 111 : 0 }); assert.deepStrictEqual(eigen.open, [0, 0, 111]);   // effect van de kaslijn (MTGeld.effect) gaat voor
 });
 test('totalen: gepland telt eerder en later van rijen die meetellen', () => {
   const r = [{ aan: true, eerderC: 300, laterC: 700, maanden: [{ vrijC: 0, vastOpenC: 0 }] }];
