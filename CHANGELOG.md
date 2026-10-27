@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-27 — Backup = v2.24.1
+- Commit: `1546518` | Auteur: Bart Witte
+
 ## 2026-10-24 — Release v2.24.1: nieuw logo gelijk aan de website (lijn-beeldmerk pen-en-gat + woordmerk in Jost) in tool, mobiel, uren, tv en Outlook-paneel; nieuwe favicons en app-iconen (bosgroen/linnen); backup = v2.24.0
 - Commit: `62c2b13` | Auteur: Bart Witte
 
