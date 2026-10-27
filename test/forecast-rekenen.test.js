@@ -177,6 +177,13 @@ test('bouwRijen: factuur-ids uit het overzicht en projectnummer via offerte of v
   assert.strictEqual(b.projectCode, 'ABC-1'); assert.strictEqual(b.projectNr, 'ABC-1');
   const c0 = F.bouwRijen({ schatten: sch, items: {}, posten: [], projecten: [], vandaag: V, maanden: 6 })[0]; assert.strictEqual(c0.projectNr, ''); assert.deepStrictEqual(c0.facturen, []);
 });
+test('betaalvertraging: uit een bestaand prognose-event; zonder event (eerste planning) onbekend, nooit 0 geraden', () => {
+  const it = { betaaltermijn: 14 };
+  assert.strictEqual(F.vertragingUit([{ bron: 'prognose', prognose: 'p:x', termijn_id: 't1', ontvangst_na: 20 }], 'p:x', it), 6);
+  assert.strictEqual(F.vertragingUit([], 'p:x', it), null);
+  assert.strictEqual(F.vertragingUit([{ bron: 'prognose', prognose: 'p:andere', termijn_id: 't1', ontvangst_na: 20 }], 'p:x', it), null);
+  assert.strictEqual(F.vertragingUit([{ bron: 'verkoop', prognose: 'p:x', ontvangst_na: 20 }], 'p:x', it), null);
+});
 test('zetAan: alleen het vinkje, termijnen blijven; ts en door worden niet teruggestuurd', () => {
   const it = Object.assign(itemVast(), { ts: 5, door: 'X' }); const r = F.zetAan(it, false).item;
   assert.strictEqual(r.aan, false); assert.strictEqual(r.ts, undefined); assert.strictEqual(r.door, undefined); assert.strictEqual(r.termijnen.length, 2);
