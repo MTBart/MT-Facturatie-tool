@@ -109,3 +109,6 @@ __pycache__/
 
 # Lokale namenlijst voor githooks/privacy-scan.js (nooit committen)
 verboden-namen*.txt
+
+# Forecast: schermafdrukken en demo met verzonnen data (niet committen)
+shots-forecast/

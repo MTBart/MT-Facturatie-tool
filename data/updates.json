@@ -1,5 +1,16 @@
 [
   {
+    "versie": "2.25.0",
+    "datum": "2026-10-27",
+    "titel": "Forecast: facturatie per maand plannen",
+    "voor": "geld",
+    "punten": [
+      "Nieuw tabblad Forecast: links de goedgekeurde offertes uit Moneybird, kolommen zijn de komende maanden (6 of 12). Typ in een maand wat je dan wilt factureren, in zijn geheel of in delen, of zet met \"rest hier\" wat nog niet gepland is in die maand.",
+      "Onderaan zie je per maand wat er gefactureerd wordt, wat er binnenkomt (factuurdatum plus betaaltermijn en betaalgedrag van de klant) en het netto, met of zonder lopende kosten en overige voorspelling.",
+      "De planning is dezelfde als de prognose in Financiën: de kaslijn en de Factuurplanning rekenen meteen mee. Er gaat niets naar Moneybird."
+    ]
+  },
+  {
     "versie": "2.24.1",
     "datum": "2026-10-24",
     "titel": "Nieuw logo, gelijk aan de website",
