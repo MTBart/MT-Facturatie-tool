@@ -1559,8 +1559,7 @@ export class MtTeller {
           const schrijf = {}; let n = 0;
           for (const [ym, c] of Object.entries(nw.cellen)) {
             if (!GS_YM.test(ym) || !Number.isInteger(c) || Math.abs(c) > GS_MAX_C) continue;
-            if (ym in rec.cellen) { overgeslagen++; continue; }
-            if (Object.keys(rec.cellen).length >= GS_MAX_CELLEN) { overgeslagen++; continue; }
+            if (ym in rec.cellen) { overgeslagen++; continue; }            // al ingevuld in de schets: dat bedrag wint (geen grens hier: niets uit de prognose valt weg)
             rec.cellen[ym] = c; n++; hn++;
             schrijf['h:' + String(hn).padStart(12, '0')] = { eid, ym, veld: 'import', oud: null, nieuw: c, naam: nw.naam || rec.naam || null, door: b.door, ts: b.ts };
           }
@@ -1590,8 +1589,8 @@ export class MtTeller {
       if (was !== b.oud) return antw({ error: (b.ym ? 'dit vakje' : '"gaat zeker door"') + ' is intussen gewijzigd' + (rec.door ? ' door ' + rec.door : ''), huidig: was, item: oud }, 409);
       if (was === wordt) return antw({ ok: true, item: oud, ongewijzigd: true });
       if (!oud) { const n = (await st.list({ prefix: 'o:', limit: GS_MAX_OFFERTES + 1 })).size; if (n >= GS_MAX_OFFERTES) return antw({ error: `hooguit ${GS_MAX_OFFERTES} offertes in de schets` }, 400); }
+      if (b.ym && wordt != null && !(b.ym in rec.cellen) && Object.keys(rec.cellen).length >= GS_MAX_CELLEN) return antw({ error: `hooguit ${GS_MAX_CELLEN} maanden per offerte` }, 400);   // alleen een nieuwe maand telt; bestaande blijven wijzigbaar
       if (b.ym) { if (wordt == null) delete rec.cellen[b.ym]; else rec.cellen[b.ym] = wordt; } else rec.zeker = wordt;
-      if (Object.keys(rec.cellen).length > GS_MAX_CELLEN) return antw({ error: `hooguit ${GS_MAX_CELLEN} maanden per offerte` }, 400);
       if (b.naam) rec.naam = b.naam; if (b.nummer) rec.nummer = b.nummer;    // zodat een offerte die uit Moneybird verdwijnt herkenbaar blijft
       rec.door = b.door; rec.ts = b.ts;
       const hn = ((await st.get('hn')) || 0) + 1, schrijf = { [sleutel]: rec, hn, ['h:' + String(hn).padStart(12, '0')]: { eid: b.eid, ym: b.ym || null, veld, oud: was, nieuw: wordt, naam: rec.naam || null, door: b.door, ts: b.ts } };
