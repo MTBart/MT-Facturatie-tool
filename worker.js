@@ -1496,6 +1496,7 @@ export class MtTeller {
     if (op.startsWith('nr-')) return await this.nummers(op, b);
     if (op.startsWith('sig-')) return await SigDO.ops(this, op, b);   // signalen (L3), instantie 'signalen'
     if (op.startsWith('gc-')) return await this.geldConfig(op, b);   // geld-config schrijven, instantie 'geldconfig'
+    if (op.startsWith('gs-')) return await this.geldSchets(op, b);   // Forecast light (schets), instantie 'geldschets'
     if (op === 'alle') {
       const m = await st.list({ prefix: 'pid:' }), werkcodes = {}, nummers = {}, aliassen = {};
       for (const [k, w] of m) {
@@ -1533,6 +1534,41 @@ export class MtTeller {
     }).catch(e => ({ fout: String(e.message || e) }));
     if (uit && uit.fout) return antw({ error: uit.fout }, 400);
     return antw({ uit, proef: op === 'proef' || undefined });
+  }
+  // Forecast light (schets, Mathijs 29-10): per offerte losse bedragen per maand, die nergens anders meetellen (niet in de prognose, niet in Financiën).
+  // Alles in de opslag van deze DO (sterk consistent, geserialiseerd, telt niet mee voor de KV-schrijflimiet). Per vakje: de client stuurt mee wat hij
+  // dacht dat er stond (oud); wijkt dat af, dan 409 met de huidige waarde, zodat niemand ongezien een bedrag van een collega overschrijft. Elke wijziging
+  // komt in de historie (h:, de laatste GS_HIST_MAX), zodat een gewist of overschreven bedrag altijd terug te halen is.
+  async geldSchets(op, b) {
+    const st = this.state.storage, antw = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json' } });
+    if (op === 'gs-lees') {
+      const items = {}; for (const [k, v] of await st.list({ prefix: 'o:' })) items[k.slice(2)] = v;
+      return antw({ items, compleet: true });
+    }
+    if (op === 'gs-historie') {
+      const n = Math.max(1, Math.min(GS_HIST_MAX, Number(b.limiet) || 200)), eid = GS_EID.test(String(b.eid || '')) ? String(b.eid) : null;
+      const uit = []; for (const v of (await st.list({ prefix: 'h:', reverse: true, limit: eid ? GS_HIST_MAX : n })).values()) { if (!eid || v.eid === eid) uit.push(v); if (uit.length >= n) break; }
+      return antw({ historie: uit });
+    }
+    if (op !== 'gs-zet') return antw({ error: 'onbekend' }, 404);
+    const fout = geldSchetsCheck(b); if (fout) return antw({ error: fout }, 400);
+    return await this.state.blockConcurrencyWhile(async () => {
+      const sleutel = 'o:' + b.eid, oud = (await st.get(sleutel)) || null, rec = oud ? JSON.parse(JSON.stringify(oud)) : { cellen: {} };
+      if (!rec.cellen || typeof rec.cellen !== 'object') rec.cellen = {};
+      const veld = b.ym ? 'cel' : 'zeker', was = b.ym ? (b.ym in rec.cellen ? rec.cellen[b.ym] : null) : (typeof rec.zeker === 'boolean' ? rec.zeker : null);
+      const wordt = b.ym ? b.bedrag : b.zeker;
+      if (was !== b.oud) return antw({ error: (b.ym ? 'dit vakje' : '"gaat zeker door"') + ' is intussen gewijzigd' + (rec.door ? ' door ' + rec.door : ''), huidig: was, item: oud }, 409);
+      if (was === wordt) return antw({ ok: true, item: oud, ongewijzigd: true });
+      if (!oud) { const n = (await st.list({ prefix: 'o:', limit: GS_MAX_OFFERTES + 1 })).size; if (n >= GS_MAX_OFFERTES) return antw({ error: `hooguit ${GS_MAX_OFFERTES} offertes in de schets` }, 400); }
+      if (b.ym) { if (wordt == null) delete rec.cellen[b.ym]; else rec.cellen[b.ym] = wordt; } else rec.zeker = wordt;
+      if (Object.keys(rec.cellen).length > GS_MAX_CELLEN) return antw({ error: `hooguit ${GS_MAX_CELLEN} maanden per offerte` }, 400);
+      if (b.naam) rec.naam = b.naam; if (b.nummer) rec.nummer = b.nummer;    // zodat een offerte die uit Moneybird verdwijnt herkenbaar blijft
+      rec.door = b.door; rec.ts = b.ts;
+      const hn = ((await st.get('hn')) || 0) + 1, schrijf = { [sleutel]: rec, hn, ['h:' + String(hn).padStart(12, '0')]: { eid: b.eid, ym: b.ym || null, veld, oud: was, nieuw: wordt, naam: rec.naam || null, door: b.door, ts: b.ts } };
+      await st.put(schrijf);                                                              // item, teller en historie in één keer
+      if (hn > GS_HIST_MAX) try { await st.delete('h:' + String(hn - GS_HIST_MAX).padStart(12, '0')); } catch { }
+      return antw({ ok: true, item: rec });
+    });
   }
   // Geld-config (Forecast, ronde 5): lezen van de huidige revisie, controle en schrijven in één geserialiseerd blok; de historie wordt hier ook geschreven.
   async geldConfig(op, b) {
@@ -2292,6 +2328,31 @@ function geldUitbeeldNorm(x) {
 // zodat de lijst in één list()-aanroep komt. Er is geen terugval op config.uitbeeld / config.factuurschemas (die bestaan in de live config niet); een
 // eventueel oud veld in de config blijft wel ongemoeid staan.
 const GELD_UB = 'geld:uitbeeld:', GELD_FS = 'geld:fschema:', GELD_UB_MAX = 5000, GELD_FS_MAX = 2000;
+// Forecast light (schets): zie MtTeller.geldSchets. Bedragen in hele centen (mag negatief, bv. een creditnota), hooguit 1 miljard euro per vakje.
+const GS_EID = /^\d{6,25}$/, GS_YM = /^\d{4}-(0[1-9]|1[0-2])$/, GS_MAX_C = 1e11, GS_MAX_OFFERTES = 5000, GS_MAX_CELLEN = 120, GS_HIST_MAX = 20000;
+function geldSchetsCheck(b) {
+  if (!b || !GS_EID.test(String(b.eid || ''))) return 'eid: het offerte-id uit Moneybird (alleen cijfers)';
+  const bedragOk = x => x === null || (Number.isInteger(x) && Math.abs(x) <= GS_MAX_C);
+  if (b.ym != null) {
+    if (!GS_YM.test(String(b.ym))) return 'ym: een maand als JJJJ-MM';
+    if (!('bedrag' in b) || !bedragOk(b.bedrag)) return 'bedrag: hele centen of null (leeg)';
+    if (!('oud' in b) || !bedragOk(b.oud)) return 'oud: de waarde die je zag (hele centen of null)';
+    if ('zeker' in b) return 'een vakje of "gaat zeker door", niet allebei';
+  } else if (typeof b.zeker !== 'boolean') return 'zeker: true of false (of een maand met een bedrag)';
+  else if (!('oud' in b) || !(b.oud === null || typeof b.oud === 'boolean')) return 'oud: de stand die je zag (true, false of null)';
+  if (b.naam != null && typeof b.naam !== 'string') return 'naam: tekst';
+  if (b.nummer != null && typeof b.nummer !== 'string') return 'nummer: tekst';
+  return null;
+}
+async function geldSchetsDO(env, op, body) {
+  const ns = env.MT_TELLER;
+  if (!ns || !ns.idFromName) return { status: 503, body: { error: 'geen-schets-opslag', uitleg: 'Durable Object-binding MT_TELLER ontbreekt: de schets wordt niet zonder opslag geschreven' } };
+  try {
+    const r = await ns.get(ns.idFromName('geldschets')).fetch('https://mt-teller/' + op, { method: 'POST', body: JSON.stringify(body || {}) });
+    const j = await r.json().catch(() => null);
+    return { status: j ? r.status : 503, body: j || { error: 'geen antwoord van de schets-opslag' } };
+  } catch (e) { return { status: 503, body: { error: 'schets-opslag niet bereikbaar — probeer het zo opnieuw' } }; }
+}
 async function geldForecastLijst(env, prefix) {
   const l = await geldKvLijst(env, prefix, 500);          // volledige paginering; compleet:false = niet alles gelezen
   return { items: l.items, compleet: !!l.compleet };
@@ -4385,6 +4446,22 @@ async function handleGeld(p, request, env, ik, json0) {
     await geldZetVersie(env, `${ts}-c${randHex(3)}`, ctx);
     await audit(env, { door: ik.oid, doorNaam: (ik.rec && ik.rec.naam) || ik.email || '', actie: 'geld-config', doel: 'geld', doelNaam: 'instellingen: ' + gewijzigd.join(', ') });   // geen bedragen
     return json({ ok: true, config: norm });
+  }
+  // Forecast light: lezen (iedereen met geld-recht), schrijven alleen met geld-wijzigen (de algemene controle hierboven). Geen audit-regel per vakje
+  // (KV-schrijflimiet); de historie staat in de DO zelf (?historie=1, optioneel &eid=).
+  if (p === '/geld/schets' && m === 'GET') {
+    const hist = url.searchParams.get('historie') === '1';
+    const r = await geldSchetsDO(env, hist ? 'gs-historie' : 'gs-lees', hist ? { limiet: Number(url.searchParams.get('limiet')) || 200, eid: url.searchParams.get('eid') || '' } : {});
+    return json(r.body, r.status);
+  }
+  if (p === '/geld/schets' && m === 'POST') {
+    let b = {}; try { b = await request.json(); } catch {}
+    const body = { eid: String(b.eid || ''), ts: Date.now(), door: String((ik.rec && ik.rec.naam) || ik.email || ik.oid).slice(0, 60) };
+    if (b.ym != null) Object.assign(body, { ym: b.ym, bedrag: b.bedrag, oud: b.oud }, 'zeker' in b ? { zeker: b.zeker } : {}); else Object.assign(body, { zeker: b.zeker, oud: b.oud });
+    if (typeof b.naam === 'string') body.naam = b.naam.slice(0, 120); if (typeof b.nummer === 'string') body.nummer = b.nummer.slice(0, 30);
+    const fout = geldSchetsCheck(body); if (fout) return json({ error: fout }, 400);
+    const r = await geldSchetsDO(env, 'gs-zet', body);
+    return json(r.body, r.status);
   }
   if (p === '/geld/uitbeeld' && m === 'GET') {
     if (!env.MT_ROLLEN) return json({ error: 'geen-opslag', uitleg: 'KV-binding MT_ROLLEN ontbreekt' }, 503);
