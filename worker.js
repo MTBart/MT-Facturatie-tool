@@ -1543,7 +1543,37 @@ export class MtTeller {
     const st = this.state.storage, antw = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json' } });
     if (op === 'gs-lees') {
       const items = {}; for (const [k, v] of await st.list({ prefix: 'o:' })) items[k.slice(2)] = v;
-      return antw({ items, compleet: true });
+      return antw({ items, compleet: true, import: (await st.get('meta:import')) || null });
+    }
+    // Eenmalig overnemen van de planning uit de uitgebreide Forecast (de prognose-termijnen). Vult alleen maanden die in de schets nog leeg zijn:
+    // een bestaand bedrag wordt nooit overschreven. Daarna staat meta:import, zodat het nooit een tweede keer gebeurt.
+    if (op === 'gs-import') {
+      if (!b || !b.records || typeof b.records !== 'object' || !Number.isFinite(b.ts)) return antw({ error: 'ongeldig' }, 400);
+      return await this.state.blockConcurrencyWhile(async () => {
+        const al = await st.get('meta:import'); if (al) return antw({ ok: true, al: true, import: al });
+        let hn = (await st.get('hn')) || 0, offertes = 0, vakjes = 0, overgeslagen = 0;
+        for (const [eid, nw] of Object.entries(b.records)) {
+          if (!GS_EID.test(eid) || !nw || !nw.cellen) continue;
+          const sleutel = 'o:' + eid, oud = (await st.get(sleutel)) || null, rec = oud ? JSON.parse(JSON.stringify(oud)) : { cellen: {} };
+          if (!rec.cellen || typeof rec.cellen !== 'object') rec.cellen = {};
+          const schrijf = {}; let n = 0;
+          for (const [ym, c] of Object.entries(nw.cellen)) {
+            if (!GS_YM.test(ym) || !Number.isInteger(c) || Math.abs(c) > GS_MAX_C) continue;
+            if (ym in rec.cellen) { overgeslagen++; continue; }
+            if (Object.keys(rec.cellen).length >= GS_MAX_CELLEN) { overgeslagen++; continue; }
+            rec.cellen[ym] = c; n++; hn++;
+            schrijf['h:' + String(hn).padStart(12, '0')] = { eid, ym, veld: 'import', oud: null, nieuw: c, naam: nw.naam || rec.naam || null, door: b.door, ts: b.ts };
+          }
+          if (typeof rec.zeker !== 'boolean' && typeof nw.zeker === 'boolean') rec.zeker = nw.zeker;
+          if (!rec.naam && nw.naam) rec.naam = String(nw.naam).slice(0, 120); if (!rec.nummer && nw.nummer) rec.nummer = String(nw.nummer).slice(0, 30);
+          if (!n && oud) continue;
+          rec.door = b.door; rec.ts = b.ts; schrijf[sleutel] = rec; schrijf.hn = hn;
+          await st.put(schrijf); offertes++; vakjes += n;                                        // per offerte in één keer (ruim onder 128 sleutels)
+        }
+        const meta = { ts: b.ts, door: b.door, offertes, vakjes, overgeslagen, zonder_offerte: Number(b.zonder_offerte) || 0 };
+        await st.put('meta:import', meta);
+        return antw({ ok: true, import: meta });
+      });
     }
     if (op === 'gs-historie') {
       const n = Math.max(1, Math.min(GS_HIST_MAX, Number(b.limiet) || 200)), eid = GS_EID.test(String(b.eid || '')) ? String(b.eid) : null;
@@ -4452,6 +4482,32 @@ async function handleGeld(p, request, env, ik, json0) {
   if (p === '/geld/schets' && m === 'GET') {
     const hist = url.searchParams.get('historie') === '1';
     const r = await geldSchetsDO(env, hist ? 'gs-historie' : 'gs-lees', hist ? { limiet: Number(url.searchParams.get('limiet')) || 200, eid: url.searchParams.get('eid') || '' } : {});
+    return json(r.body, r.status);
+  }
+  // Eenmalig: de planning uit de uitgebreide Forecast (prognose-items met een offerte) als startpunt in de schets. Per offerte de termijnen die
+  // gepland zijn (aan), opgeteld per factuurmaand, in hele centen incl. btw (zoals ze opgeslagen zijn). Dubbele items voor dezelfde offerte: het
+  // actieve, anders het nieuwste. De prognose zelf wordt alleen gelezen. Alleen met een complete lijst (anders 503, later opnieuw).
+  if (p === '/geld/schets/import' && m === 'POST') {
+    let lijst = null; try { lijst = await geldKvLijst(env, GELD_PROG, 500); } catch { }
+    if (!lijst || !lijst.compleet) return json({ error: 'de planning is niet compleet gelezen — probeer het zo opnieuw', reden: 'lijst-onvolledig' }, 503);
+    const kies = {}; let zonder = 0;
+    for (const [sleutel, it] of Object.entries(lijst.items)) {
+      if (!sleutel.startsWith('p:') || !it || it.soort === 'post' || !Array.isArray(it.termijnen)) continue;
+      const eid = String(it.estimate_id || (/^p:e(\d{6,25})$/.exec(sleutel) || [])[1] || '');
+      const cellen = {};
+      for (const t of it.termijnen) {
+        if (!t || t.aan === false || !/^\d{4}-\d{2}-\d{2}$/.test(String(t.factuurdatum || ''))) continue;
+        const c = Math.round(Number(t.bedrag) * 100); if (!Number.isFinite(c) || !c) continue;
+        const ym = String(t.factuurdatum).slice(0, 7); cellen[ym] = (cellen[ym] || 0) + c;
+      }
+      if (!Object.keys(cellen).length) continue;
+      if (!GS_EID.test(eid)) { zonder++; continue; }
+      const nw = { cellen, zeker: it.aan !== false, naam: String(it.naam || it.code || '').slice(0, 120), nummer: String(it.offertenr || '').slice(0, 30), aan: it.aan !== false, ts: Number(it.ts) || 0 };
+      const h = kies[eid];
+      if (!h || (nw.aan && !h.aan) || (nw.aan === h.aan && nw.ts > h.ts)) kies[eid] = nw;
+    }
+    const records = {}; for (const [eid, x] of Object.entries(kies)) records[eid] = { cellen: x.cellen, zeker: x.zeker, naam: x.naam, nummer: x.nummer };
+    const r = await geldSchetsDO(env, 'gs-import', { records, zonder_offerte: zonder, ts: Date.now(), door: String((ik.rec && ik.rec.naam) || ik.email || ik.oid).slice(0, 60) });
     return json(r.body, r.status);
   }
   if (p === '/geld/schets' && m === 'POST') {

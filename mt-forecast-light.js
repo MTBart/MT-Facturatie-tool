@@ -240,9 +240,20 @@
     const nr = ++st.laadNr, offertesOok = (o && o.vers) || !st.schatten || Date.now() - st.schattenT > 120000;
     st.bezig = true; st.fout = null; teken();
     try {
-      const [sch, ub, sr] = await Promise.all([st.opt.bron.haal('/geld/schets'), st.opt.bron.haal('/geld/uitbeeld').catch(() => null), offertesOok ? st.opt.schatten() : Promise.resolve(null)]);
+      let [sch, ub, sr] = await Promise.all([st.opt.bron.haal('/geld/schets'), st.opt.bron.haal('/geld/uitbeeld').catch(() => null), offertesOok ? st.opt.schatten() : Promise.resolve(null)]);
       if (nr !== st.laadNr) return;
       if (!sch || sch.error || !sch.items) throw new Error((sch && sch.error) || 'de schets is niet te lezen');
+      // Eenmalig (de eerste keer dat iemand met schrijfrecht de light opent): de planning uit de uitgebreide Forecast overnemen. De worker vult
+      // alleen lege vakjes en doet het nooit twee keer; mislukt het, dan gewoon de volgende keer opnieuw.
+      if (sch.import === null && st.mag && !st.importGeprobeerd) {
+        st.importGeprobeerd = true;
+        let im = null; try { im = await st.opt.bron.haal('/geld/schets/import', { method: 'POST', body: {} }); } catch (e) { im = { error: String(e.message || e) }; }
+        if (im && im.ok) {
+          const sch2 = await st.opt.bron.haal('/geld/schets'); if (sch2 && sch2.items) sch = sch2;
+          const x = im.import || {}; if (!im.al && (x.vakjes || x.offertes)) toast(`De planning uit de uitgebreide forecast is overgenomen: ${x.vakjes} bedragen bij ${x.offertes} offertes${x.zonder_offerte ? ` (${x.zonder_offerte} zonder offerte niet: die staan alleen in de uitgebreide forecast)` : ''}.`);
+        } else { st.importGeprobeerd = false; toast('Overnemen uit de uitgebreide forecast lukte nog niet (' + ((im && im.error) || 'geen verbinding') + '); de volgende keer opnieuw.'); }
+        if (nr !== st.laadNr) return;
+      }
       st.schets = sch.items; ls.set('mtl:kopie', JSON.stringify({ ts: Date.now(), items: sch.items }));   // reservekopie op deze computer
       if (ub && ub.items) st.uitbeeld = ub.items;
       if (sr) { st.schatten = (sr.lijst || []).map(e => root.MTForecast.schatNorm(e)).filter(Boolean); st.afgekapt = !!sr.afgekapt; st.schattenT = Date.now(); }

@@ -98,5 +98,32 @@ const { pathToFileURL } = require('url');
     const r = await roep(env, 'eigenaar', '/geld/schets', 'POST', { eid: E, ym: '2026-11', bedrag: 100, oud: 100 }); assert.strictEqual(r.body.ongewijzigd, true);
     const h = await roep(env, 'eigenaar', '/geld/schets?historie=1', 'GET'); assert.strictEqual(h.body.historie.length, 1);
   });
+  await test('import uit de uitgebreide forecast: geplande termijnen per maand, nooit overschrijven, maar één keer', async () => {
+    const env = { MT_ROLLEN: kv() };
+    const zet = (k, v) => env.MT_ROLLEN.m.set('geld:prognose:' + k, { v: JSON.stringify(v), meta: v });
+    zet('p:abc', { naam: 'Klant — Kast', estimate_id: E, offertenr: '2026-1', totaal: 1000, aan: true, ts: 5, termijnen: [{ id: 't1', bedrag: 300.5, factuurdatum: '2026-11-03', aan: true }, { id: 't2', bedrag: 200, factuurdatum: '2026-11-20', aan: true }, { id: 't3', bedrag: 499.5, factuurdatum: '2026-12-01', aan: false }] });
+    zet('p:e300000000002', { naam: 'Uit', estimate_id: '300000000002', totaal: 50, aan: false, ts: 1, termijnen: [{ id: 't1', bedrag: 50, factuurdatum: '2027-01-10', aan: true }] });
+    zet('p:dubbel', { naam: 'Dubbel oud', estimate_id: '300000000002', totaal: 50, aan: false, ts: 0, termijnen: [{ id: 't1', bedrag: 7, factuurdatum: '2027-02-10', aan: true }] });
+    zet('p:zonder', { naam: 'Zonder offerte', totaal: 10, aan: true, termijnen: [{ id: 't1', bedrag: 10, factuurdatum: '2026-11-01', aan: true }] });
+    zet('h:abcd1234', { soort: 'post', omschrijving: 'machine', bedrag: 100, datum: '2026-11-01' });
+    await roep(env, 'eigenaar', '/geld/schets', 'POST', { eid: E, ym: '2026-11', bedrag: 1, oud: null });   // al ingevuld in de light: blijft staan
+    const voor = JSON.stringify([...env.MT_ROLLEN.m.entries()]);
+    const r = await roep(env, 'eigenaar', '/geld/schets/import', 'POST', {}); assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+    assert.strictEqual(r.body.import.zonder_offerte, 1); assert.strictEqual(r.body.import.overgeslagen, 1);
+    const l = await roep(env, 'eigenaar', '/geld/schets', 'GET');
+    assert.deepStrictEqual(l.body.items[E].cellen, { '2026-11': 1 }, 'bestaand bedrag niet overschreven; niet-geplande rest niet overgenomen');
+    assert.deepStrictEqual(l.body.items['300000000002'].cellen, { '2027-01': 5000 }, 'van dubbele items het nieuwste');
+    assert.strictEqual(l.body.items['300000000002'].zeker, false); assert.strictEqual(l.body.items['300000000002'].naam, 'Uit');
+    assert.ok(l.body.import && l.body.import.ts);
+    assert.strictEqual(JSON.stringify([...env.MT_ROLLEN.m.entries()]), voor, 'de prognose (KV) is alleen gelezen');
+    const r2 = await roep(env, 'eigenaar', '/geld/schets/import', 'POST', {}); assert.strictEqual(r2.body.al, true, 'tweede keer: niets');
+    const a = await roep(env, 'administratie', '/geld/schets/import', 'POST', {}); assert.strictEqual(a.status, 403);
+  });
+  await test('import zonder eerdere schets: optellen per maand', async () => {
+    const env = { MT_ROLLEN: kv() };
+    env.MT_ROLLEN.m.set('geld:prognose:p:x', { v: '', meta: { naam: 'X', estimate_id: E, totaal: 1000, aan: true, termijnen: [{ id: 't1', bedrag: 300.5, factuurdatum: '2026-11-03', aan: true }, { id: 't2', bedrag: 200, factuurdatum: '2026-11-20', aan: true }] } });
+    const r = await roep(env, 'eigenaar', '/geld/schets/import', 'POST', {}); assert.strictEqual(r.body.import.vakjes, 1);
+    const l = await roep(env, 'eigenaar', '/geld/schets', 'GET'); assert.deepStrictEqual(l.body.items[E].cellen, { '2026-11': 50050 }); assert.strictEqual(l.body.items[E].zeker, true);
+  });
   console.log(`\n${n} tests geslaagd${process.exitCode ? ' (met fouten)' : ''}`);
 })();
