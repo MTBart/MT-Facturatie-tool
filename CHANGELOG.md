@@ -5,8 +5,17 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-27 — Release v2.25.4: Forecast keuze incl. / excl. btw (omgerekend per offerte uit Moneybird; kasregels blijven incl. btw)
+- Commit: `5d7c8c2` | Auteur: Bart Witte
+
 ## 2026-10-27 — Backup = v2.25.3
 - Commit: `7f543de` | Auteur: Bart Witte
+
+## 2026-10-27 — Forecast v2.25.4: Codex-ronde 8, btw-verhouding alleen geldig bij 0 < excl <= incl, excl naar incl idempotent, toelichting bij afronding
+- Commit: `afabbb9` | Auteur: Bart Witte
+
+## 2026-10-27 — Forecast v2.25.4: bedragen incl. of excl. btw (alleen weergave en invoer, opslag blijft incl.)
+- Commit: `db13c91` | Auteur: Bart Witte
 
 ## 2026-10-27 — Release v2.25.3: Forecast snel opslaan (lokaal herrekenen, ≈-schatting tot verversen), links naar Moneybird en project, selectievinkje met bulkbalk en schakelaar Gaat zeker door
 - Commit: `6aabcd8` | Auteur: Bart Witte
