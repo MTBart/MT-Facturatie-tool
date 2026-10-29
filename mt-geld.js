@@ -802,6 +802,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     <div class="mtg-knoppen">
       <button class="mtg-knop ${st.modus === 'lopend' ? 'aan' : ''}" data-modus="lopend">Besteedbaar budget</button>
       <button class="mtg-knop ${st.modus === 'totaal' ? 'aan' : ''}" data-modus="totaal" title="De spaarpotjes zijn geen buffer: dat geld blijft eraf">Inclusief spaarpotjes (niet bedoeld als buffer)</button>
+      <button class="mtg-knop" data-forecastplus="1" title="De facturatieplanning per maand die met de prognose meerekent (de eenvoudige schets staat onder Forecast)">Uitgebreide forecast</button>
       ${introWeg ? '<button class="mtg-vraag" data-intro="1" title="Wat zie je hier?">?</button>' : ''}
     </div></div>`}
   <div id="mtk-plek">${koersHtml()}</div>

@@ -1,5 +1,17 @@
 [
   {
+    "versie": "2.26.0",
+    "datum": "2026-10-29",
+    "titel": "Forecast light: een simpel schetsschema",
+    "voor": "geld",
+    "punten": [
+      "Het tabblad Forecast is nu een simpel schetsschema: links de offertes met hun totaalbedrag, kolommen zijn maanden, en in elk vakje typ je vrij een bedrag (of een percentage van de offerte, bv. 50%). Onderaan staat per maand het totaal en wat daarvan zeker doorgaat, rechts het totaal per offerte.",
+      "De bedragen tellen nergens anders mee: niet in Financiën, niet in de prognose, niet in Moneybird. De maanden staan bovenaan vast, de totalen onderaan; de offertes ertussen scrollen.",
+      "Wat je typt wordt meteen op je computer bewaard tot het is opgeslagen. Heeft iemand anders hetzelfde vakje intussen gewijzigd, dan zie je dat en kies je zelf.",
+      "De uitgebreide Forecast (die met de prognose meerekent) staat nu bij Financiën: knop Uitgebreide forecast."
+    ]
+  },
+  {
     "versie": "2.25.4",
     "datum": "2026-10-28",
     "titel": "Forecast: bedragen incl. of excl. btw",

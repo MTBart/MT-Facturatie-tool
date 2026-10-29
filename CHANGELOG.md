@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-29 — Backup = v2.25.4
+- Commit: `d22de1a` | Auteur: Bart Witte
+
 ## 2026-10-27 — Release v2.25.4: Forecast keuze incl. / excl. btw (omgerekend per offerte uit Moneybird; kasregels blijven incl. btw)
 - Commit: `5d7c8c2` | Auteur: Bart Witte
 
