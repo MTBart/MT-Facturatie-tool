@@ -164,6 +164,7 @@ body{
 .geld-terug{min-height:44px;padding:0 18px;border:0;border-radius:22px;background:var(--n-150,#EDF1F0);color:var(--text,#172521);font-size:16px;font-weight:600;cursor:pointer}
 .geld-laag-titel{font-size:18px;font-weight:600}
 .geld-laag-body{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+#forecastLaagBody .mtl-titelblok{display:none}   /* de laag heeft al de titel "Forecast"; geen tweede grote kop */
 .geld-laag-leeg{padding:24px 16px;font-size:15px;color:var(--text-faint,#6b7a76)}
 .geld-laag-leeg button{min-height:44px;margin-top:12px;padding:0 18px;font-size:16px}
 .zb-terug{flex:0 0 44px;height:44px;border:0;border-radius:50%;background:var(--n-150,#EDF1F0);color:var(--text,#172521);font-size:20px;cursor:pointer}
@@ -6843,7 +6844,7 @@ window.geldLaagOpen = window.geldLaagOpen || function () {};
    dezelfde worker-routes en dezelfde Moneybird-leesroute als v2.html; rol "lezen" kan niets wijzigen (magWijzigen false).
    De uitgebreide forecast blijft op de computer (geen openUitgebreid op de telefoon).
    ===================================================================== */
-const FORECAST_SCRIPTS = ["mt-forecast.js?v=2026-10-30e","mt-forecast-light.js?v=2026-10-30f"];
+const FORECAST_SCRIPTS = ["mt-forecast.js?v=2026-10-30e","mt-forecast-light.js?v=2026-10-30i"];
 let _forecastScripts = null;
 function forecastLaadScripts() {
   if (window.MTForecast && window.MTForecastLight) return Promise.resolve();
