@@ -30,7 +30,7 @@ test('rijen: offertes uit Moneybird plus losse schets-records met bedragen; uit 
   assert.strictEqual(rijen[1].zeker, true); assert.strictEqual(rijen[1].uitbeeld, true);
   assert.strictEqual(rijen[2].status, 'los'); assert.strictEqual(rijen[2].naam, 'Weg — oud');
   assert.deepStrictEqual(L.filter(rijen, ['geaccepteerd', 'los']).map(r => r.id), ['300000000001', '300000000009']);
-  assert.deepStrictEqual(L.tel(rijen), { geaccepteerd: 1, openstaand: 0, concept: 0, los: 1, gefactureerd: 0, uitbeeld: 1 });
+  assert.deepStrictEqual(L.tel(rijen), { geaccepteerd: 1, openstaand: 0, concept: 0, los: 1, gefactureerd: 0, afgerond: 0, uitbeeld: 1 });
 });
 const fx = (o) => L.factuurNorm(Object.assign({ id: 400000000001, invoice_id: '2026-0100', contact_id: 500000000001, contact: { company_name: 'A' }, invoice_date: '2026-10-15', state: 'open', total_price_incl_tax: '60.50', total_price_excl_tax: '50' }, o));
 test('facturen: normaliseren; concept en zonder datum tellen niet', () => {
@@ -123,6 +123,17 @@ test('eigen posten: vervallen in een maand met een factuur van dezelfde leveranc
   const start = { posten: [{ id: 'startx', groep: 'vast', naam: 'Loon', richting: 'uit', bedragC: 210000, van: '2026-11', tot: null, lev: 'n:medewerker test', loon: 'ilona' }] };
   assert.deepStrictEqual(L.postRegels(L.kasEff(null, start), ms, L.bezet(pat, '2026-10-30')).map(r => r.ym), ['2026-11'], 'herkend patroon onder dezelfde naam vervangt de post');
   assert.strictEqual(L.kasEff({ posten: [] }, start).posten.length, 0, 'opgeslagen indeling wint'); assert.strictEqual(L.kasEff(null, null), null);
+});
+test('afgerond gefactureerd alleen in beeld als het in de getoonde maanden meetelt', () => {
+  const r = { fstatus: 'gefactureerd', gef: { maand: { '2026-09': 484000 } }, cellen: {} }, d = { fstatus: 'deels', gef: { maand: { '2026-09': 100 } }, cellen: {} };
+  assert.strictEqual(L.inBeeld(r, ['2026-10', '2026-11']), false); assert.strictEqual(L.inBeeld(r, ['2026-09', '2026-10']), true);
+  assert.strictEqual(L.inBeeld(d, ['2026-10']), true, 'deels blijft staan'); assert.strictEqual(L.inBeeld({ status: 'openstaand', cellen: {} }, ['2026-10']), true);
+  assert.strictEqual(L.inBeeld({ fstatus: 'gefactureerd', gef: { maand: {} }, cellen: { '2026-10': 5 } }, ['2026-10']), true, 'schetsbedrag in beeld telt ook');
+  const rs = [Object.assign({ id: 'a', status: 'gefactureerd' }, r), { id: 'b', status: 'openstaand', cellen: {} }];
+  assert.deepStrictEqual(L.filter(rs, ['gefactureerd', 'openstaand'], ['2026-10']).map(x => x.id), ['b'], 'afgerond zit niet onder Gefactureerd');
+  assert.deepStrictEqual(L.filter(rs, ['afgerond'], ['2026-10']).map(x => x.id), ['a']);
+  assert.deepStrictEqual(L.filter(rs, ['gefactureerd'], ['2026-09']).map(x => x.id), ['a'], 'terugbladeren: weer gewoon zichtbaar');
+  assert.strictEqual(L.tel(rs, ['2026-10']).afgerond, 1); assert.strictEqual(L.tel(rs, ['2026-09']).afgerond, 0);
 });
 test('totalen: per maand, zeker, geheel en buiten beeld', () => {
   const ms = ['2026-10', '2026-11'];

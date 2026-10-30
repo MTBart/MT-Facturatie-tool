@@ -1,5 +1,15 @@
 [
   {
+    "versie": "2.27.1",
+    "datum": "2026-10-30",
+    "titel": "Forecast: netto altijd in beeld, filter Afgerond",
+    "voor": "geld",
+    "punten": [
+      "Netto resultaat staat nu altijd vast onder Totaal per maand. Wat meetelt kies je met de vinkjes in de uitsplitsing (klik op Totaal per maand); die klapt ruimer open.",
+      "Helemaal gefactureerde offertes en facturen waar in de getoonde maanden niets meer van meetelt, staan onder het nieuwe filter Afgerond. Blader je terug naar hun maand, dan staan ze gewoon weer in de lijst.",
+      "Vattenfall: de termijnen van de betalingsregeling komen nu naast de maandfactuur, in plaats van die weg te laten vallen."
+    ]
+  },{
     "versie": "2.27.0",
     "datum": "2026-10-30",
     "titel": "Forecast: facturen en kosten erbij",
