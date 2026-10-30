@@ -152,6 +152,8 @@ test('voorbije maanden exact uit de bank: indeling, patroon-sleutel, loon, btw, 
   assert.strictEqual(L.histIn(hist, '2026-09'), 3000000); assert.strictEqual(L.histIn(null, '2026-09'), null);
   assert.deepStrictEqual(L.nettoWerkelijk([111, 222], ms, '2026-10', hist, kt, {}, '2026-09-20'), [0, 222], 'historie van vóór het einde van september: september niet als werkelijk');
   assert.strictEqual(L.histCompleet('2026-09', '2026-10', '2026-10-01', false), true); assert.strictEqual(L.histCompleet('2026-10', '2026-10', '2026-10-30', false), false); assert.strictEqual(L.histCompleet('2026-10', '2026-10', '2026-10-30', true), true);
+  const zonderIndeling = L.histRegels({ '2026-09': { uit: { 'Houthandel Test': 100, '(onbekend)': 50 } } }, ['2026-09'], {}, {});
+  assert.deepStrictEqual(zonderIndeling.map(r => [r.naam, r.groep]), [['Houthandel Test', 'betaald'], ['Verzamelbetalingen en betalingen zonder naam', 'betaald']], 'al betaald staat nooit onder openstaande facturen');
   const handLoon = L.histRegels({ '2026-09': { uit: { 'B. Witte prive': 1000 } } }, ['2026-09'], { indeling: { 'n:b. witte prive': 'vast' }, loon: { 'n:b. witte prive': 'bart' } }, {});
   assert.strictEqual(handLoon[0].loon, 'bart', 'handmatig loon op een naam telt ook terug');
 });test('totalen: per maand, zeker, geheel en buiten beeld', () => {

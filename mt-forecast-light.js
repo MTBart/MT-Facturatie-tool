@@ -139,7 +139,7 @@
   // abonnementen …) · patroon = vaste patronen (bv. Interprojecten) · overig = btw-aangifte en handmatige posten. Verstuurde verkoopfacturen,
   // de eigen termijnen van de uitgebreide forecast, interne boekingen en de bank tellen hier niet. De indeling per vaste betaling of leverancier
   // staat in /geld/schets (kas.indeling), lonen van de eigenaren in kas.loon; eigen terugkerende posten in kas.posten.
-  L.KAS_GROEPEN = ['open', 'vast', 'patroon', 'overig'];
+  L.KAS_GROEPEN = ['open', 'betaald', 'vast', 'patroon', 'overig'];   // betaald = al betaalde facturen (alleen uit de bank: voorbije maanden en deze maand)
   const VAST_RE = /vattenfall|eneco|essent|greenchoice|vandebron|pwn|vitens|evides|dunea|waternet|verzeker|allianz|nationale.nederlanden|interpolis|centraal beheer|hypothe|ziggo|kpn|odido|t-mobile|delta fiber|moneybird|renewi|rci financial|lease/i;
   L.kasSleutel = e => e.bron === 'patroon' && /^[a-z0-9]{1,20}$/i.test(String(e.patroon_id || '')) ? 'p:' + String(e.patroon_id).toLowerCase()
     : 'n:' + (String(e.tegenpartij || '').toLowerCase().replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 80) || 'onbekend');
@@ -184,9 +184,10 @@
       for (const [naam, bedrag] of Object.entries(h.uit || {})) {
         const c = Math.round(Number(bedrag) * 100); if (!isFinite(c) || c <= 0) continue;
         const ps = patNamen && patNamen[naam.trim().toLowerCase()], sl = ps || L.kasSleutel({ tegenpartij: naam });
-        const groep = (kas && kas.indeling && kas.indeling[sl]) || (ps ? 'vast' : VAST_RE.test(naam) ? 'vast' : 'open');
+        let groep = (kas && kas.indeling && kas.indeling[sl]) || (ps ? 'vast' : VAST_RE.test(naam) ? 'vast' : 'open');
         if (groep === 'uit') continue;
-        uit.push({ sleutel: sl, naam, groep, c: -c, ym, loon: groep === 'vast' ? L.loonVan(sl, naam, kas) : null, bron: 'bank' });
+        if (groep === 'open') groep = 'betaald';                           // al betaald: nooit onder Openstaande facturen
+        uit.push({ sleutel: sl, naam: naam === '(onbekend)' ? 'Verzamelbetalingen en betalingen zonder naam' : naam, groep, c: -c, ym, loon: groep === 'vast' ? L.loonVan(sl, naam, kas) : null, bron: 'bank' });
       }
       const b = Math.round(Number(h.btw || 0) * 100); if (b > 0) uit.push({ sleutel: 'btw:' + ym, naam: 'Btw-aangifte (betaald)', groep: 'overig', c: -b, ym, loon: null, bron: 'bank' });
     }
@@ -266,8 +267,8 @@
     fact: null, factFout: null, factAfgekapt: false, prog: null, fk: null, kas: null, tl: null, tlFout: null, tlBezig: false, kasOpen: false, kasAan: {}, paneel: null };
   const STATUS_TEKST = { geaccepteerd: 'Geaccepteerd', openstaand: 'Openstaand', concept: 'Concept', los: 'Niet meer open', gefactureerd: 'Gefactureerd', afgerond: 'Afgerond', uitbeeld: 'Uit beeld' };
   const FSTATUS_TEKST = { deels: 'Deels gefactureerd', gefactureerd: 'Gefactureerd' };
-  const KAS_TEKST = { open: 'Openstaande facturen', vast: 'Vaste kosten', patroon: 'Vaste patronen', overig: 'Overige voorspelling', uit: 'Niet meetellen' };
-  const KAS_UITLEG = { open: 'Inkoopfacturen die wij nog moeten betalen, per verwachte betaalmaand (uit Financiën)', vast: 'Vaste kosten: lonen, energie (Vattenfall), water (PWN), verzekeringen, hypotheek, abonnementen, lease. Herkend uit de bank en de inkoopfacturen; met Indeling zet je een regel in een andere groep',
+  const KAS_TEKST = { open: 'Openstaande facturen', betaald: 'Betaalde facturen', vast: 'Vaste kosten', patroon: 'Vaste patronen', overig: 'Overige voorspelling', uit: 'Niet meetellen' };
+  const KAS_UITLEG = { open: 'Inkoopfacturen die wij nog moeten betalen, per verwachte betaalmaand (uit Financiën)', betaald: 'Inkoopfacturen en andere betalingen die al van de bank zijn afgeschreven (voorbije maanden en wat deze maand al betaald is); verzamelbetalingen staan als één regel', vast: 'Vaste kosten: lonen, energie (Vattenfall), water (PWN), verzekeringen, hypotheek, abonnementen, lease. Herkend uit de bank en de inkoopfacturen; met Indeling zet je een regel in een andere groep',
     patroon: 'Vaste patronen: terugkerende posten die geen vaste kosten zijn (bv. Interprojecten). Voeg ze toe of zet ze hierheen met Indeling', overig: 'Btw-aangifte (uit het btw-overzicht van Moneybird; het lopende kwartaal telt live op in de maand na het kwartaal) en handmatige posten uit Financiën' };
 
   function css() {
