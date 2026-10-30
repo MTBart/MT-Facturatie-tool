@@ -475,7 +475,14 @@
   F.groepeerTotalen = function (tot, kols) {
     const laatste = kols.length ? kols[kols.length - 1].tot : -1, na = a => { let s = 0; for (let i = laatste + 1; i < a.length; i++) s += a[i] || 0; return s; };
     const uit = { kolommen: kols, later: {}, eerder: tot.eerder };
-    for (const k of ['gepland', 'binnen', 'open', 'kosten', 'overig', 'netto']) { uit[k] = kols.map(x => somVan(tot[k], x)); uit.later[k] = na(tot[k]) + ((tot.later && tot.later[k]) || 0); }
+    for (const k of ['gepland', 'binnen', 'open', 'inkoop', 'vast', 'patroon', 'kosten', 'overig', 'netto']) { if (!tot[k]) continue; uit[k] = kols.map(x => somVan(tot[k], x)); uit.later[k] = na(tot[k]) + ((tot.later && tot.later[k]) || 0); }
+    // Opbouw per kolom (mouse-over): de namen met hun bedrag over de maanden van die kolom; later = na de laatste kolom.
+    const voeg = (doel, m) => { if (m) for (const [n, v] of m) doel.set(n, (doel.get(n) || 0) + v); return doel; };
+    uit.opbouw = {}; uit.later.opbouw = {};
+    for (const [k, a] of Object.entries(tot.opbouw || {})) {
+      uit.opbouw[k] = kols.map(x => { const m = new Map(); for (let i = x.van; i <= x.tot; i++) voeg(m, a[i]); return m; });
+      const l = new Map(); for (let i = laatste + 1; i < a.length; i++) voeg(l, a[i]); uit.later.opbouw[k] = l;
+    }
     return uit;
   };
   // Eén rij over een kolom (som van de maanden): vrij gepland, al gefactureerd (vast) en vast open deel.
@@ -512,30 +519,45 @@
   // ── Maandtotalen ─────────────────────────────────────────────────────────────
   // events: de tijdlijn-events. effect(e) → delta op de lopende rekening (standaard: intern telt niet). Verdeling:
   //   binnen = prognose-ontvangsten van termijnen (factuurdatum + betaaltermijn + betaalgedrag, zoals Financiën)
-  //   kosten = inkoopfacturen en vaste patronen · overig = btw-aangifte, weekinleg en handmatige prognose-posten.
+  //   open = te ontvangen (verstuurde, nog niet betaalde verkoopfacturen) · overig = btw-aangifte, weekinleg en handmatige prognose-posten.
+  //   Kosten (Bart 30-10): inkoop = openstaande inkoopfacturen (te betalen), vast = vaste kosten, patroon = vaste patronen; kosten = de som.
+  //   o.groep(e) (de indeling van de Forecast) kiest de groep van een inkoopfactuur of vaste betaling ('open'|'vast'|'patroon'|'overig'; iets
+  //   anders = telt niet); zonder groep: inkoop → inkoop, patroon → vast. o.posten: eigen terugkerende posten [{ groep, c (centen), ym, naam }].
+  //   opbouw[soort][i] = Map naam → bedrag (voor de mouse-over; index n = later).
   F.totalen = function (o) {
     const rijen = o.rijen || [], vandaag = o.vandaag, n = o.maanden || 6, nu = vandaag.slice(0, 7), einde = maandPlus(nu, n - 1);
     const effect = o.effect || (e => e.intern ? 0 : (typeof e.delta === 'number' ? c(e.delta) : 0));
     const uitgesloten = new Set(o.uitgesloten || []);
     const kol = () => { const a = []; for (let i = 0; i < n; i++) a.push(0); return a; };
-    const t = { maanden: Array.from({ length: n }, (_, i) => maandPlus(nu, i)), gepland: kol(), binnen: kol(), open: kol(), kosten: kol(), overig: kol(), netto: kol(), eerder: { gepland: 0 }, later: { gepland: 0, binnen: 0, open: 0, kosten: 0, overig: 0 } };
+    const SOORTEN = ['binnen', 'open', 'inkoop', 'vast', 'patroon', 'overig'];
+    const t = { maanden: Array.from({ length: n }, (_, i) => maandPlus(nu, i)), gepland: kol(), kosten: kol(), netto: kol(), eerder: { gepland: 0 }, later: { gepland: 0, kosten: 0 }, opbouw: {} };
+    for (const s of SOORTEN) { t[s] = kol(); t.later[s] = 0; t.opbouw[s] = Array.from({ length: n + 1 }, () => new Map()); }
     for (const r of rijen) {
       if (!r.aan) continue;
       t.eerder.gepland += r.eerderC; t.later.gepland += r.laterC;
       r.maanden.forEach((m, i) => { t.gepland[i] += m.vrijC + m.vastOpenC; });
     }
+    const tel = (soort, ym, v, naam) => {
+      const i = ym > einde ? n : Math.max(0, t.maanden.indexOf(ym));
+      if (i === n) t.later[soort] += v; else t[soort][i] += v;
+      if (naam) { const m = t.opbouw[soort][i]; m.set(naam, (m.get(naam) || 0) + v); }
+    };
     for (const e of o.events || []) {
       if (!e || e.bron === 'bank' || e.saldo_ijkpunt || !e.datum) continue;
       if (e.bron === 'prognose' && e.prognose && uitgesloten.has(e.prognose)) continue;     // dubbel prognose-item van dezelfde offerte
-      const soort = e.bron === 'prognose' ? (e.termijn_id ? 'binnen' : 'overig') : e.bron === 'verkoop' ? 'open' : e.bron === 'inkoop' || e.bron === 'patroon' ? 'kosten' : e.bron === 'btw' || e.bron === 'inleg' ? 'overig' : null;
+      let soort = e.bron === 'prognose' ? (e.termijn_id ? 'binnen' : 'overig') : e.bron === 'verkoop' ? 'open' : e.bron === 'inkoop' ? 'inkoop' : e.bron === 'patroon' ? 'vast' : e.bron === 'btw' || e.bron === 'inleg' ? 'overig' : null;
       if (!soort) continue;
+      if (o.groep && (e.bron === 'inkoop' || e.bron === 'patroon')) { const g = o.groep(e); soort = g === 'open' ? 'inkoop' : ['vast', 'patroon', 'overig'].includes(g) ? g : null; if (!soort) continue; }
       const v = effect(e); if (!v) continue;
-      const ym = (e.datum < vandaag ? vandaag : e.datum).slice(0, 7);
-      if (ym > einde) t.later[soort] += v; else t[soort][Math.max(0, t.maanden.indexOf(ym))] += v;
+      tel(soort, (e.datum < vandaag ? vandaag : e.datum).slice(0, 7), v, e.bron === 'btw' ? 'Btw-aangifte ' + String(e.kwartaal || '') : e.tegenpartij || null);
     }
-    const openAan = o.openAan !== false, kostenAan = o.kostenAan !== false, overigAan = o.overigAan !== false;
-    t.netto = t.binnen.map((b, i) => b + (openAan ? t.open[i] : 0) + (kostenAan ? t.kosten[i] : 0) + (overigAan ? t.overig[i] : 0));
-    t.later.netto = t.later.binnen + (openAan ? t.later.open : 0) + (kostenAan ? t.later.kosten : 0) + (overigAan ? t.later.overig : 0);
+    for (const p of o.posten || []) if (p && ['vast', 'patroon', 'overig'].includes(p.groep) && p.ym >= nu && Number.isInteger(p.c)) tel(p.groep, p.ym, p.c, p.naam || null);
+    for (let i = 0; i < n; i++) t.kosten[i] = t.inkoop[i] + t.vast[i] + t.patroon[i];
+    t.later.kosten = t.later.inkoop + t.later.vast + t.later.patroon;
+    const aan = k => o[k + 'Aan'] !== false && (k === 'open' || k === 'overig' || o.kostenAan !== false);   // kostenAan: false = alle drie kostengroepen uit
+    const delen = ['open', 'inkoop', 'vast', 'patroon', 'overig'].filter(aan);
+    t.netto = t.binnen.map((b, i) => b + delen.reduce((a, k) => a + t[k][i], 0));
+    t.later.netto = t.later.binnen + delen.reduce((a, k) => a + t.later[k], 0);
     return t;
   };
 
@@ -548,7 +570,7 @@
   };
   const ls = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { } } };
   const st = F._st = { el: null, bron: null, mag: false, wie: '', data: null, items: {}, schatten: null, schattenT: 0, projecten: null, haalSchatten: null, rijen: [], sel: null, sort: null, scrollNaarBoven: false, menu: false, ub: {}, ubInfo: null, ubOverlay: {}, vertr: {}, btw: 'incl', keuze: new Set(), ubBeschikbaar: true, fs: {}, fsBeschikbaar: true, uitbeeldMelding: null, focusTerug: null, rijmenuSel: null, rijmenu: null, weergave: 'vast', aandachtOpen: null, bulkReden: 'verkeerd', filter: null, cfg: null, pop: null, popBezig: false, kostenAan: true, overigAan: true, openAan: true, verouderd: false, afgekapt: false, bezig: false, fout: null, uitleg: false, wachtrij: Promise.resolve(), vers: {}, ks: [], cv: '', bt: null };
-  const UITLEG = 'Links staan de goedgekeurde offertes uit Moneybird (incl. btw). Typ in een maand het bedrag dat je dan wilt factureren, in zijn geheel of in delen; "rest" zet wat nog niet gepland is in die maand. De planning is dezelfde als de prognose in Financiën (de termijnen van de offerte): de kaslijn, de Factuurplanning en deze tabel rekenen meteen mee. De schakelaar ‘Gaat zeker door’ is hetzelfde vinkje als in Financiën: alleen die offertes tellen mee. Met ‘…’ achter een offerte (of de selectievinkjes links voor meerdere tegelijk) zet je een offerte uit beeld, met een reden; het vinkje Gaat zeker door gaat dan uit en de planning blijft bewaard. Bij het filter Uit beeld zet je ze terug. Met Uitklappen kies je de lange paginaweergave. Staan er meer maanden in beeld dan er passen, dan scrolt de tabel zijwaarts (Shift+muiswiel, slepen of de pijlknoppen); Passend maken maakt de maandkolommen smaller zodat alles in beeld past. Met de chips boven de tabel kies je welke offertes je ziet (geaccepteerd, openstaand, concept); het filter verbergt alleen rijen, de totalen blijven gelijk aan Financiën. Een niet-geaccepteerde offerte staat standaard op ‘Gaat zeker door’ uit. Klik in een maandcel voor een paneel met bedrag of percentage en een label; ‘Schema toepassen…’ in het …-menu toont eerst een voorbeeld en vult dan de standaardverdeling van de klant in op het nog niet geplande deel; ‘Planning wissen…’ zet de niet gefactureerde planning terug. Beide kun je ongedaan maken. "Binnen" is de verwachte betaling: factuurdatum plus betaaltermijn en het gewone betaalgedrag van de klant. "Openstaande facturen" zijn de al verstuurde, nog niet betaalde verkoopfacturen per verwachte betaalmaand. Vink die, "lopende kosten" en "overige voorspelling" (btw, weekinleg, handmatige posten) aan of uit om het netto per maand te zien. Een deel dat al in Moneybird gefactureerd is, staat vast. Een offerte kan in hoogstens 6 delen. Er gaat nooit iets naar Moneybird.';
+  const UITLEG = 'Links staan de goedgekeurde offertes uit Moneybird (incl. btw). Typ in een maand het bedrag dat je dan wilt factureren, in zijn geheel of in delen; "rest" zet wat nog niet gepland is in die maand. De planning is dezelfde als de prognose in Financiën (de termijnen van de offerte): de kaslijn, de Factuurplanning en deze tabel rekenen meteen mee. De schakelaar ‘Gaat zeker door’ is hetzelfde vinkje als in Financiën: alleen die offertes tellen mee. Met ‘…’ achter een offerte (of de selectievinkjes links voor meerdere tegelijk) zet je een offerte uit beeld, met een reden; het vinkje Gaat zeker door gaat dan uit en de planning blijft bewaard. Bij het filter Uit beeld zet je ze terug. Met Uitklappen kies je de lange paginaweergave. Staan er meer maanden in beeld dan er passen, dan scrolt de tabel zijwaarts (Shift+muiswiel, slepen of de pijlknoppen); Passend maken maakt de maandkolommen smaller zodat alles in beeld past. Met de chips boven de tabel kies je welke offertes je ziet (geaccepteerd, openstaand, concept); het filter verbergt alleen rijen, de totalen blijven gelijk aan Financiën. Een niet-geaccepteerde offerte staat standaard op ‘Gaat zeker door’ uit. Klik in een maandcel voor een paneel met bedrag of percentage en een label; ‘Schema toepassen…’ in het …-menu toont eerst een voorbeeld en vult dan de standaardverdeling van de klant in op het nog niet geplande deel; ‘Planning wissen…’ zet de niet gefactureerde planning terug. Beide kun je ongedaan maken. "Binnen" is de verwachte betaling: factuurdatum plus betaaltermijn en het gewone betaalgedrag van de klant. "Te ontvangen" zijn de al verstuurde, nog niet betaalde verkoopfacturen per verwachte betaalmaand; "Openstaande facturen" zijn de inkoopfacturen die wij nog moeten betalen. Vink die, "vaste kosten" (met apart het loon van Bart en Mathijs), "vaste patronen" en "overige voorspelling" (btw, weekinleg, handmatige posten) aan of uit om het netto per maand te zien; de mouse-over op een bedrag toont de opbouw. De indeling per leverancier kies je in de Forecast onder Uitsplitsing → Indeling. Een deel dat al in Moneybird gefactureerd is, staat vast. Een offerte kan in hoogstens 6 delen. Er gaat nooit iets naar Moneybird.';
   function css() {
     if (document.getElementById('mtf-css')) return;
     const s = document.createElement('style'); s.id = 'mtf-css';
@@ -649,6 +671,7 @@
 .mtf-fnr{display:block;font-size:11px}.mtf-fnr .mtf-ext{margin-left:4px}.mtf-fnr .mtf-ext:first-child{margin-left:0}
 .mtf-ca.mtf-kas,.mtf-kas{display:inline;margin-left:8px;font-style:normal;white-space:nowrap}.mtf-btwhint{color:var(--m-ink2)}
 .mtf-ca{display:block;font-size:11px;font-weight:400;color:var(--m-ink3)}
+.mtf-kasrij{display:inline-flex;align-items:center;gap:10px;flex-wrap:nowrap}.mtf-loonrij{display:inline-flex;align-items:center;gap:8px;font-size:11px;font-weight:400;color:var(--m-ink3)}.mtf-kasfout{color:var(--m-err);font-size:12px;font-weight:400}.mtf-loon{display:inline-flex;align-items:center;gap:4px;cursor:pointer}
 .mtf-toast-knop{margin-left:12px;border:0;background:none;color:var(--m-primary,#2f6b4f);font:inherit;font-weight:600;cursor:pointer;padding:0;text-decoration:underline}
 .mtf-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--m-surface);color:var(--m-ink);border:1px solid var(--m-line);box-shadow:var(--m-pop);padding:10px 16px;border-radius:var(--m-rp);font-size:13px;z-index:9999;max-width:90vw}
 .mtf-pop{position:fixed;z-index:9000;width:300px;max-width:calc(100vw - 16px);background:var(--m-surface);border:1px solid var(--m-line);border-radius:var(--m-rp);box-shadow:var(--m-pop);padding:var(--space-4,16px);font-family:var(--m-ui);font-size:13px;color:var(--m-ink)}
@@ -1001,7 +1024,11 @@ th.num .mtf-sortknop .mtf-sortpijl{position:absolute;left:-9px;top:50%;margin:-5
     if (st.sort && /^kol:/.test(st.sort.sleutel) && !kols.some(k => st.sort.sleutel === 'kol:' + k.van + ':' + k.tot)) { st.sort = null; ls.set('mtg:fc:sort:' + st.wie, ''); }   // die kolom staat niet meer in beeld: terug naar de standaard
     st.heeftEerder = rijen.some(r => r.aan && r.eerderC);
     const G = root.MTGeld, groep = G && G.groep ? G.groep(st.data) : null;
-    const tot = F.totalen({ rijen, events: st.data.events, vandaag, maanden: F.HORIZON + 1, uitgesloten: zv.uitgesloten, openAan: st.openAan, kostenAan: st.kostenAan, overigAan: st.overigAan, effect: G && G.effect && groep ? (e => c(G.effect(e, 'lopend', groep))) : null });
+    // Kosten volgens de indeling van de Forecast (light): groep per inkoopfactuur/vaste betaling, lonen Bart/Mathijs aan of uit, eigen posten.
+    const FL = root.MTForecastLight, kasE = FL && st.kasGeladen ? FL.kasEff(st.kas, st.kasStart) : null, kasGroep = FL && FL.kasRegel ? (e => { const r = FL.kasRegel(e, kasE, vandaag); if (!r) return null; if (r.loon && !st[FL.loonAanSleutel(r.loon) + 'Aan']) return 'uit'; return r.groep; }) : null;
+    const posten = FL && FL.postRegels ? FL.postRegels(kasE, Array.from({ length: F.HORIZON + 1 }, (_, i) => maandPlus(nu, i)), FL.bezet(st.data.events, vandaag)).filter(p => !(p.loon && !st[FL.loonAanSleutel(p.loon) + 'Aan'])) : [];
+    const tot = F.totalen({ rijen, events: st.data.events, vandaag, maanden: F.HORIZON + 1, uitgesloten: zv.uitgesloten, openAan: st.openAan, inkoopAan: st.inkoopAan, vastAan: st.vastAan, patroonAan: st.patroonAan, overigAan: st.overigAan,
+      groep: kasGroep, posten, effect: G && G.effect && groep ? (e => c(G.effect(e, 'lopend', groep))) : null });
     const exclM = st.btw === 'excl', rijenV = exclM ? rijen.map(F.rijExcl) : rijen;
     if (exclM) {                                                                                                  // offertedeel in excl; kas (binnen, kosten, netto) blijft incl.
       const tx = F.totalen({ rijen: rijenV.map(r => r.nvt ? Object.assign({}, r, { aan: false }) : r), events: [], vandaag, maanden: F.HORIZON + 1 });
@@ -1009,7 +1036,7 @@ th.num .mtf-sortknop .mtf-sortpijl{position:absolute;left:-9px;top:50%;margin:-5
     }
     const nNvt = exclM ? rijen.filter(r => r.aan && !r.verh).length : 0;
     const g = F.groepeerTotalen(tot, kols);
-    st.heeftLater = rijen.some(r => r.aan && F.rijLater(r, kols) > 0) || ['gepland', 'binnen', 'open', 'kosten', 'overig'].some(k => g.later[k] !== 0);
+    st.heeftLater = rijen.some(r => r.aan && F.rijLater(r, kols) > 0) || ['gepland', 'binnen', 'open', 'inkoop', 'vast', 'patroon', 'overig'].some(k => g.later[k] !== 0);
     const eenheidWoord = st.sel.eenheid === 'maand' ? 'maand' : st.sel.eenheid;
     // Kerncijfers voor de gekozen periode
     const som = a => a.reduce((x, y) => x + y, 0), nogTot = rijenV.reduce((a, r) => a + (r.aan && !r.nvt ? r.nogC : 0), 0), netto = som(g.netto), kasTxt = exclM ? ' · kas, incl. btw' : '', exTxt = exclM ? ' · excl. btw' : '';
@@ -1031,12 +1058,25 @@ th.num .mtf-sortknop .mtf-sortpijl{position:absolute;left:-9px;top:50%;margin:-5
     const regel = (label, cellen, eerder, later, klasse, extra) => h('tr', { class: klasse || '' }, h('th', { class: 's' }, extra || label), h('td', { class: 'zd' }), h('td'), h('td', { class: 'kol-gef' }), h('td', { class: 'kol-nog' }), st.heeftEerder ? (eerder != null ? getalTd(eerder) : h('td')) : null, cellen, st.heeftLater ? (later != null ? getalTd(later) : h('td')) : null);
     foot.push(regel('Gefactureerd (gepland)', g.gepland.map(v => bedragTd(v, 'mnd')), tot.eerder.gepland, g.later.gepland, '', h('span', { title: 'Wat je in die periode factureert, van de offertes die meetellen' }, 'Gefactureerd (gepland)', exclM ? h('small', { class: 'mtf-ca mtf-kas' }, 'excl. btw') : null)));
     foot.push(regel('Binnen', g.binnen.map(v => getalTd(v, 'mnd')), null, g.later.binnen, '', h('span', { title: 'Verwachte betaling: factuurdatum plus betaaltermijn en het gewone betaalgedrag van de klant, zoals in Financiën' }, 'Binnen (betaaldatum)', kasTag(), schatLabel())));
-    foot.push(regel('', g.open.map(v => getalTd(v, 'mnd')), null, g.later.open, '', h('label', { title: 'Al verstuurde verkoopfacturen die nog niet betaald zijn, per verwachte betaalmaand (dezelfde bron als de kaslijn in Financiën)' }, h('input', { type: 'checkbox', checked: st.openAan, data: { open: '1' } }), 'Openstaande facturen', kasTag())));
-    foot.push(regel('', g.kosten.map(v => getalTd(v, 'mnd')), null, g.later.kosten, '', h('label', { title: 'Inkoopfacturen en vaste patronen uit Financiën' }, h('input', { type: 'checkbox', checked: st.kostenAan, data: { kosten: '1' } }), 'Lopende kosten', kasTag())));
-    foot.push(regel('', g.overig.map(v => getalTd(v, 'mnd')), null, g.later.overig, '', h('label', { title: 'Btw-aangifte, weekinleg en handmatige posten uit Financiën' }, h('input', { type: 'checkbox', checked: st.overigAan, data: { overig: '1' } }), 'Overige voorspelling', kasTag())));
-    foot.push(regel('Netto', g.netto.map(v => getalTd(v, 'mnd')), null, g.later.netto, 'netto', h('span', { title: 'Binnen, min de aangevinkte kosten' }, 'Netto per ' + eenheidWoord, kasTag(), schatLabel())));
+    // Kasregels met de opbouw als mouse-over (zelfde indeling en namen als de Forecast light; Bart 30-10).
+    const opbouwTitel = (kopTekst, m) => { const xs = [...(m || new Map()).entries()].filter(([, v]) => v).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])); return xs.length ? kopTekst + ':\n' + xs.slice(0, 14).map(([n2, v]) => n2 + '   ' + F.fmt(v)).join('\n') + (xs.length > 14 ? `\n… en nog ${xs.length - 14}` : '') : null; };
+    const kasRij = (k, tekst, titel, aan, data, extra) => {
+      const cel = (v, i) => { const td = getalTd(v, 'mnd'); const t2 = opbouwTitel(tekst + ' ' + kols[i].label, g.opbouw[k] && g.opbouw[k][i]); if (t2) td.title = t2; return td; };
+      const later = st.heeftLater ? (() => { const td = getalTd(g.later[k]); const t2 = opbouwTitel(tekst + ' later', g.later.opbouw[k]); if (t2) td.title = t2; return td; })() : null;
+      const tr = regel('', g[k].map(cel), null, null, '', h('span', { class: 'mtf-kasrij' }, h('label', { title: titel }, h('input', { type: 'checkbox', checked: aan, data }), tekst, kasTag()), extra || null));
+      if (later) tr.replaceChild(later, tr.lastChild);
+      return tr;
+    };
+    const loonVink = (k, naam) => h('label', { class: 'mtf-loon', title: 'Loon van ' + naam + ' meetellen' }, h('input', { type: 'checkbox', checked: st[k + 'Aan'], data: { kasaan: k } }), naam);
+    foot.push(kasRij('open', 'Te ontvangen', 'Al verstuurde verkoopfacturen die nog niet betaald zijn, per verwachte betaalmaand (dezelfde bron als de kaslijn in Financiën)', st.openAan, { open: '1' }));
+    foot.push(kasRij('inkoop', 'Openstaande facturen', 'Inkoopfacturen die wij nog moeten betalen, per verwachte betaalmaand. De indeling per leverancier kies je in de Forecast (Uitsplitsing → Indeling)', st.inkoopAan, { kasaan: 'inkoop' }));
+    foot.push(kasRij('vast', 'Vaste kosten', 'Lonen, energie, water, verzekeringen, hypotheek, abonnementen, lease (vaste betalingen uit de bank en inkoopfacturen van vaste leveranciers)', st.vastAan, { kasaan: 'vast' }, h('span', { class: 'mtf-loonrij' }, 'loon', ((root.MTForecastLight && root.MTForecastLight.LONEN) || []).map(([k, n]) => loonVink(root.MTForecastLight.loonAanSleutel(k), n)))));
+    foot.push(kasRij('patroon', 'Vaste patronen', 'Terugkerende posten die geen vaste kosten zijn (bv. Interprojecten); in te delen of toe te voegen in de Forecast', st.patroonAan, { kasaan: 'patroon' }));
+    foot.push(kasRij('overig', 'Overige voorspelling', 'Btw-aangifte (btw-overzicht van Moneybird; het lopende kwartaal telt live op in de maand na het kwartaal), weekinleg en handmatige posten uit Financiën', st.overigAan, { overig: '1' }));
+    foot.push(regel('Netto', g.netto.map(v => getalTd(v, 'mnd')), null, g.later.netto, 'netto', h('span', { title: 'Binnen, plus de aangevinkte regels (kosten zijn negatief)' }, 'Netto per ' + eenheidWoord, kasTag(), schatLabel()),
+      st.kasGeladen ? null : h('span', { class: 'mtf-kasfout', title: 'De indeling van de Forecast (groepen, lonen, eigen posten) kon niet worden geladen: kosten staan in de standaardgroepen en eigen posten ontbreken. Probeer Vernieuwen.' }, ' \u26a0 indeling niet geladen')));
     const tab = h('table', { class: 'mtf-tabel' + (vast ? ' vast' : '') }, h('thead', null, kop), h('tbody', null, F.sorteerRijen(zv.zichtbaar, st.sort).map(r => rijEl(exclM ? F.rijExcl(r) : r, nu, kols, edit))), h('tfoot', null, foot));
-    if (vast) { const hs = [28, 28, 28, 28, 28, 34]; foot.forEach((tr, i) => { const b = hs.slice(i + 1).reduce((a, x) => a + x, 0); [...tr.children].forEach(cel => { cel.style.bottom = b + 'px'; }); }); }   // totalen blijven onderaan in beeld
+    if (vast) { const hs = foot.map((tr, i) => i === foot.length - 1 ? 34 : 28); foot.forEach((tr, i) => { const b = hs.slice(i + 1).reduce((a, x) => a + x, 0); [...tr.children].forEach(cel => { cel.style.bottom = b + 'px'; }); }); }   // totalen blijven onderaan in beeld
     const nKeuze = nGekozen;
     const balk = nKeuze ? h('div', { class: 'mtf-bulkbalk', role: 'region', 'aria-label': 'Selectie' }, h('b', null, nKeuze + ' geselecteerd'), h('span', { class: 'mtf-bulk-sep', 'aria-hidden': 'true' }, '·'),
       h('select', { class: 'mtf-bulkreden', 'aria-label': 'Reden om uit beeld te zetten', data: { bulkreden: '1' } }, Object.keys(F.UITBEELD_REDENEN).map(k => h('option', { value: k, selected: st.bulkReden === k }, F.UITBEELD_REDENEN[k]))),
@@ -1119,6 +1159,8 @@ th.num .mtf-sortknop .mtf-sortpijl{position:absolute;left:-9px;top:50%;margin:-5
       const [d, p, s, cf, ubR, fsR] = await Promise.all([st.bron.haal(pad), st.bron.haal('/geld/prognose'), nodig ? st.haalSchatten() : Promise.resolve(null), st.bron.haal('/geld/config').catch(() => null),
         st.bron.haal('/geld/uitbeeld').catch(foutObj), st.bron.haal('/geld/fschemas').catch(foutObj)]);
       if (cf && cf.config) st.cfg = cf.config;
+      st.kasGeladen = false;                                                                             // indeling van de Forecast (light); niet geladen: standaardgroepen, geen startposten, met waarschuwing
+      try { const k = await st.bron.haal('/geld/schets?kas=1'); if (k && !k.error && 'kas' in k) { st.kas = k.kas; st.kasStart = k.kas_start || null; st.kasGeladen = true; } } catch (e) { }
       const weg = r => !r || (r.error && /404|onbekende|not.?found/i.test(String(r.error)));          // oude worker zonder deze routes: die functie uitzetten
       if (ubR && !ubR.error && ubR.items) { st.ubBeschikbaar = true; st.ub = ubR.items; st.ubInfo = { aantal: ubR.aantal, max: ubR.max }; }
       else if (weg(ubR)) { st.ubBeschikbaar = false; st.ub = {}; st.ubInfo = null; }
@@ -1144,6 +1186,7 @@ th.num .mtf-sortknop .mtf-sortpijl{position:absolute;left:-9px;top:50%;margin:-5
   F.start = async function (el, o) {
     st.el = el; st.bron = o.bron; st.mag = !!o.magWijzigen; st.wie = o.wie || ''; st.projecten = o.projecten || null; st.haalSchatten = o.schatten; st.admin = o.administratie || null; st.projectHref = o.projectHref || null; st.openProject = o.openProject || null;
     st.kostenAan = ls.get('mtg:fc:kosten:' + st.wie) !== '0'; st.overigAan = ls.get('mtg:fc:overig:' + st.wie) !== '0'; st.openAan = ls.get('mtg:fc:open:' + st.wie) !== '0';
+    for (const k of ['inkoop', 'vast', 'patroon', 'loonBart', 'loonMathijs', 'loonMaarten', 'loonIlona']) st[k + 'Aan'] = ls.get('mtg:fc:' + k + ':' + st.wie) !== '0';
     st.sel = F.selStandaard();
     { const f = ls.get('mtg:fc:filter:' + st.wie); st.filter = new Set(f == null ? F.STATUSSEN : f.split(',').filter(x => F.FILTERS.includes(x))); }
     st.btw = ls.get('mtg:fc:btw:' + st.wie) === 'excl' ? 'excl' : 'incl'; st.passend = ls.get('mtg:fc:passend:' + st.wie) === '1'; st.sort = F.sortLees(ls.get('mtg:fc:sort:' + st.wie));
@@ -1400,6 +1443,7 @@ th.num .mtf-sortknop .mtf-sortpijl{position:absolute;left:-9px;top:50%;margin:-5
       } else if (t.dataset && t.dataset.kosten) { st.kostenAan = t.checked; ls.set('mtg:fc:kosten:' + st.wie, t.checked ? '1' : '0'); teken(); }
       else if (t.dataset && t.dataset.open) { st.openAan = t.checked; ls.set('mtg:fc:open:' + st.wie, t.checked ? '1' : '0'); teken(); }
       else if (t.dataset && t.dataset.overig) { st.overigAan = t.checked; ls.set('mtg:fc:overig:' + st.wie, t.checked ? '1' : '0'); teken(); }
+      else if (t.dataset && t.dataset.kasaan) { const k = t.dataset.kasaan; st[k + 'Aan'] = t.checked; ls.set('mtg:fc:' + k + ':' + st.wie, t.checked ? '1' : '0'); teken(); }
     });
     el.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches && e.target.matches('input.mtf-in')) e.target.blur(); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (st.pop) closePop(true); if (st.menu) zetMenu(false); if (st.rijmenu) closeRijMenu(true); } });

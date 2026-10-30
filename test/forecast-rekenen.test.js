@@ -695,3 +695,16 @@ atest('haalOffertes: drie statussen apart gepagineerd, samengevoegd zonder dubbe
   const dubbel = await F.haalOffertes(() => Promise.resolve([{ id: 7 }, { id: 8 }]), { max: 5, per: 100 }); assert.deepStrictEqual(dubbel.lijst.map(e => e.id), [7, 8]);   // dezelfde offerte in meerdere lijsten telt één keer
   const afgekapt = await F.haalOffertes((f, p) => Promise.resolve(f === 'draft' ? Array.from({ length: 100 }, (_, i) => ({ id: 'd' + p + '_' + i })) : []), { max: 2, per: 100 }); assert.strictEqual(afgekapt.afgekapt, true);
 });async_.then(() => console.log(`\n${n} tests geslaagd${process.exitCode ? ' — er zijn fouten' : ''}`));
+test('totalen: kosten in te ontvangen / openstaand (inkoop) / vast / patroon / overig, met indeling, eigen posten en opbouw', () => {
+  const ev = [{ bron: 'verkoop', delta: 100, datum: '2026-11-01', tegenpartij: 'Klant' }, { bron: 'inkoop', delta: -40, datum: '2026-11-03', tegenpartij: 'Hout' }, { bron: 'inkoop', delta: -30, datum: '2026-11-04', tegenpartij: 'Vattenfall' },
+    { bron: 'patroon', delta: -20, datum: '2026-11-25', tegenpartij: 'Loon' }, { bron: 'btw', delta: -10, datum: '2026-10-31', kwartaal: '2026-K3' }];
+  const zonder = F.totalen({ rijen: [], events: ev, vandaag: V, maanden: 3 });
+  assert.deepStrictEqual([zonder.open[1], zonder.inkoop[1], zonder.vast[1], zonder.patroon[1], zonder.overig[0]], [10000, -7000, -2000, 0, -1000], 'standaard: inkoop → openstaand, patroon → vast');
+  assert.strictEqual(zonder.kosten[1], -9000); assert.strictEqual(zonder.opbouw.inkoop[1].get('Hout'), -4000);
+  const groep = e => e.tegenpartij === 'Vattenfall' ? 'vast' : e.tegenpartij === 'Loon' ? 'uit' : e.bron === 'inkoop' ? 'open' : 'vast';
+  const met = F.totalen({ rijen: [], events: ev, vandaag: V, maanden: 3, groep, posten: [{ groep: 'patroon', c: -5000, ym: '2026-12', naam: 'Interprojecten' }, { groep: 'vast', c: -1, ym: '2026-09' }], inkoopAan: false });
+  assert.deepStrictEqual([met.inkoop[1], met.vast[1], met.patroon[2]], [-4000, -3000, -5000], 'indeling: Vattenfall vast, loon uit, eigen post (en geen post in het verleden)');
+  assert.deepStrictEqual(met.netto, [-1000, 10000 - 3000, -5000], 'openstaand uit: telt niet in netto');
+  const g = F.groepeerTotalen(met, F.kolommen(F.eenheden('2026-10', 'maand'), { eenheid: 'maand', i0: 0, i1: 1 }));
+  assert.strictEqual(g.vast[1], -3000); assert.strictEqual(g.later.patroon, -5000); assert.strictEqual(g.later.opbouw.patroon.get('Interprojecten'), -5000);
+});

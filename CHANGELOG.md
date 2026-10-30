@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-30 — Backup = v2.26.0
+- Commit: `6a2c5dc` | Auteur: Bart Witte
+
 ## 2026-10-29 — Release v2.26.0: Forecast light (simpel schetsschema) op de plek van Forecast; uitgebreide Forecast bij Financiën
 - Commit: `9f53dcc` | Auteur: Bart Witte
 
