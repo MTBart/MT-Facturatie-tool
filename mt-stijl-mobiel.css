@@ -52,10 +52,33 @@ html[data-stijl="nieuw"] .nav-btn{color:var(--ink-2);font-size:11px;min-height:4
 html[data-stijl="nieuw"] .nav-btn.active,html[data-stijl="nieuw"] .nav-btn.active .nav-icon{color:var(--primary-text)}
 html[data-stijl="nieuw"] .nav-btn.active .nav-icon{filter:none}
 html[data-stijl="nieuw"] .nav-btn::before{background:var(--gold);border-radius:0 0 2px 2px}
+/* lijn-iconen met een zachte groene pil achter het actieve item (mobiel.html vult .nav-lijn met mtIcoon; zolang dat niet lukt blijft het emoji-icoon staan) */
+html[data-stijl="nieuw"] .nav-btn{gap:2px;padding:6px 2px 4px}
+html[data-stijl="nieuw"] .nav-btn:has(.nav-lijn:not([hidden])) .nav-icon{display:none}
+html[data-stijl="nieuw"] .nav-btn:has(.nav-lijn:not([hidden]))::before{display:none}
+html[data-stijl="nieuw"] .nav-lijn:not([hidden]){display:grid;place-items:center;width:52px;height:30px;border-radius:15px;transition:background .15s}
+html[data-stijl="nieuw"] .nav-lijn .ui-ico{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+html[data-stijl="nieuw"] .nav-btn.active .nav-lijn{background:var(--primary-soft)}
+html[data-stijl="nieuw"] .nav-btn:active{transform:none}
+html[data-stijl="nieuw"] .nav-btn:active .nav-lijn{background:var(--surface-sunken)}
 @media (max-width:420px){html[data-stijl="nieuw"] .nav-btn{font-size:10px}}
 html[data-stijl="nieuw"] .vd-plus{background:var(--primary);border-radius:12px;box-shadow:var(--shadow-pop)}
 html[data-stijl="nieuw"] .toast{bottom:calc(var(--nav-h) + 16px + env(safe-area-inset-bottom,0px));border-radius:8px}
 html[data-stijl="nieuw"] .kb-pop-onder{bottom:calc(8px + env(safe-area-inset-bottom,0px))}
+
+/* ── 2b. Bovenrij (kantoor/admin): vier even brede snelle ingangen onder de kop; alleen toegestane knoppen, gelijk verdeeld ── */
+html[data-stijl="nieuw"] .boven-rij:not([hidden]){flex:0 0 auto;display:flex;gap:6px;padding:8px 12px;background:var(--canvas);border-bottom:1px solid var(--border-hair)}
+html[data-stijl="nieuw"] .boven-knop{flex:1 1 0;min-width:0;min-height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:4px 2px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink-2);font:500 11.5px/1.2 var(--sans);cursor:pointer;-webkit-tap-highlight-color:transparent}
+html[data-stijl="nieuw"] .boven-knop[hidden]{display:none}
+html[data-stijl="nieuw"] .boven-knop>span:last-child{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+html[data-stijl="nieuw"] .boven-ic{display:grid;place-items:center;width:20px;height:20px}
+html[data-stijl="nieuw"] .boven-ic .ui-ico{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+html[data-stijl="nieuw"] .boven-knop.actief{background:var(--primary-soft);border-color:var(--green-100);color:var(--primary-text)}
+html[data-stijl="nieuw"] .boven-knop:active{background:var(--surface-sunken)}
+@media (max-width:339px){html[data-stijl="nieuw"] .boven-knop{font-size:10.5px}}
+/* beeldmerk (pen en gat) als rustig watermerk midden in het inhoudsvlak: vast, onder de inhoud, niet klikbaar (mobiel.html zet --merk-top/--merk-bottom) */
+html[data-stijl="nieuw"] .app-content{isolation:isolate}
+html[data-stijl="nieuw"] .app-content::before{content:"";position:fixed;left:0;right:0;top:var(--merk-top,110px);bottom:var(--merk-bottom,calc(var(--nav-h) + env(safe-area-inset-bottom,0px)));z-index:-1;pointer-events:none;opacity:.06;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect x='2' y='2' width='96' height='96' fill='none' stroke='%23244a36' stroke-width='2.2'/%3E%3Cpath d='M55.4 2 V31.3 H34.2 V67.3 H55.4 V98' fill='none' stroke='%23244a36' stroke-width='2.2'/%3E%3C/svg%3E") center/min(54vw,230px) no-repeat}
 
 /* ── 3. Kaarten, knoppen, formulieren: vlak en hoekig ─────────────── */
 html[data-stijl="nieuw"] .card{border-color:var(--line);box-shadow:none}
