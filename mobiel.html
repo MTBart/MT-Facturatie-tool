@@ -918,6 +918,15 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
   <div class="geld-laag-body" id="geldLaagBody"></div>
 </div>
 
+<!-- ── FORECAST-LAAG (bovenrij; mt-forecast-light.js, pas geladen bij het openen) ── -->
+<div class="geld-laag" id="forecastLaag" role="dialog" aria-modal="true" aria-label="Forecast" hidden>
+  <div class="geld-laag-kop">
+    <button type="button" class="geld-terug" id="forecastTerug" aria-label="Forecast sluiten">← Terug</button>
+    <span class="geld-laag-titel">Forecast</span>
+  </div>
+  <div class="geld-laag-body" id="forecastLaagBody" style="padding:8px 8px 12px"></div>
+</div>
+
 <!-- ── LOPENDE TIMER BAR ── -->
 <div class="timer-bar" id="timerBar">
   <div class="timer-bar-label" onclick="timerBarOpenProject()" style="cursor:pointer" title="Tik om het project te openen">
@@ -6826,6 +6835,99 @@ function geldLaagInit() {
 }
 geldLaagInit();
 window.geldLaagOpen = window.geldLaagOpen || function () {};
+
+/* =====================================================================
+   FORECAST-LAAG — de Forecast-knop in de bovenrij opent de light-forecast (mt-forecast-light.js + mt-forecast.js) over het hele scherm.
+   Zelfde patroon als de geld-laag: pas laden bij het openen (de werkplaats-app start niet trager), "← Terug", een history-entry
+   (de Android-terugknop sluit de laag), recht `geld` + runtime-controle. De forecast zelf (opslag, 409-regels) is ongewijzigd:
+   dezelfde worker-routes en dezelfde Moneybird-leesroute als v2.html; rol "lezen" kan niets wijzigen (magWijzigen false).
+   De uitgebreide forecast blijft op de computer (geen openUitgebreid op de telefoon).
+   ===================================================================== */
+const FORECAST_SCRIPTS = ["mt-forecast.js?v=2026-10-30e","mt-forecast-light.js?v=2026-10-30f"];
+let _forecastScripts = null;
+function forecastLaadScripts() {
+  if (window.MTForecast && window.MTForecastLight) return Promise.resolve();
+  if (_forecastScripts) return _forecastScripts;
+  const een = src => new Promise((ok, fail) => { const sc = document.createElement("script"); sc.src = src; sc.onload = ok; sc.onerror = () => fail(new Error("kon " + src.split("?")[0] + " niet laden")); document.head.appendChild(sc); });
+  _forecastScripts = (async () => { for (const src of FORECAST_SCRIPTS) await een(src); })().catch(e => { _forecastScripts = null; throw e; });
+  return _forecastScripts;
+}
+const fcAdmin = () => { try { return localStorage.getItem("mt_mb_admin") || "342968480452052559"; } catch (e) { return "342968480452052559"; } };
+const fcMbGet = path => fetchMetAuth(WORKER + "?target=moneybird&path=" + encodeURIComponent(String(path || "").replace(/^\/+/, "")));
+// Verkoopfacturen (alleen lezen): factuurdatum van 2 jaar terug t/m eind volgend jaar, gepagineerd (plafond 40 pagina's); zelfde als v2.html.
+async function fcFacturen() {
+  const d = new Date(), f = (j, m, dag) => `${j}${String(m).padStart(2, "0")}${String(dag).padStart(2, "0")}`;
+  const per = `${f(d.getFullYear() - 2, d.getMonth() + 1, 1)}..${f(d.getFullYear() + 1, 12, 31)}`, lijst = [];
+  for (let p = 1; p <= 40; p++) {
+    const r = await fcMbGet(`${fcAdmin()}/sales_invoices?filter=${encodeURIComponent("period:" + per + ",state:all")}&per_page=100&page=${p}`);
+    if (!r.ok) throw new Error("Moneybird: facturen niet te lezen (HTTP " + r.status + ")");
+    const a = await r.json(); if (!Array.isArray(a)) throw new Error("Moneybird: onverwacht antwoord op de facturenlijst");
+    lijst.push(...a); if (a.length < 100) return { lijst };
+  }
+  return { lijst, afgekapt: true };
+}
+function fcSchatten() {
+  return MTForecast.haalOffertes(async (filter, p) => {
+    const r = await fcMbGet(`${fcAdmin()}/estimates?filter=state:${filter}&per_page=100&page=${p}`);
+    if (!r.ok) throw new Error("Moneybird: offertes niet te lezen (HTTP " + r.status + ")");
+    return r.json();
+  }, { max: 50, per: 100 });
+}
+function forecastLaagInit() {
+  const laag = document.getElementById("forecastLaag"), body = document.getElementById("forecastLaagBody");
+  if (!laag || !body || laag._init) return;
+  laag._init = true;
+  let vorigeFocus = null, geblokkeerd = [], histActief = false, naTerug = null, terugTimer = null, sessie = 0, gestart = false;
+  async function laad() {
+    const mijn = ++sessie;
+    if (!gestart) body.innerHTML = '<div class="geld-laag-leeg">Forecast laden…</div>';
+    try { await forecastLaadScripts(); }
+    catch (e) {
+      if (mijn !== sessie) return;
+      body.innerHTML = '<div class="geld-laag-leeg">Forecast kon niet geladen worden (' + esc(e.message || e) + ').<br><button type="button" class="btn btn-primary" id="forecastOpnieuw">Opnieuw proberen</button></div>';
+      const o = document.getElementById("forecastOpnieuw"); if (o) o.addEventListener("click", laad);
+      return;
+    }
+    if (mijn !== sessie || laag.hidden) return;
+    if (gestart) { MTForecastLight.laad(); return; }   // al gestart: alleen verversen (een lopende opslag blijft staan)
+    gestart = true; body.textContent = "";
+    await MTForecastLight.start(body, { bron: { haal: geldHaalM }, magWijzigen: MTRol.magGeld("wijzigen"), schatten: fcSchatten, facturen: fcFacturen, administratie: fcAdmin });
+  }
+  function open() {
+    if (!laag.hidden) return;
+    if (!geldMagM()) { showToast("Forecast is alleen voor eigenaren en de administratie."); return; }
+    vorigeFocus = document.activeElement; laag.hidden = false;
+    geblokkeerd = [...document.body.children].filter(el => el !== laag && el.tagName !== "SCRIPT" && !el.inert);
+    geblokkeerd.forEach(el => { el.inert = true; });
+    try { history.pushState({ forecastLaag: 1 }, ""); histActief = true; } catch (e) { histActief = false; }
+    bovenRijActief("forecast");
+    laad();
+    const t = document.getElementById("forecastTerug"); if (t) t.focus();
+  }
+  function dicht() {
+    sessie++; laag.hidden = true; geblokkeerd.forEach(el => { el.inert = false; }); geblokkeerd = [];
+    document.querySelectorAll(".mtl-pop,.mtl-popbg,.mtl-overlay").forEach(b => b.remove());   // een open lijstje of paneel hoort bij de laag
+    const actief = document.querySelector(".tab.active"); bovenRijActief(actief ? actief.id.replace(/^tab-/, "") : "");
+    if (vorigeFocus && vorigeFocus.focus) { try { vorigeFocus.focus(); } catch (e) {} }
+  }
+  function sluit(na) {
+    if (laag.hidden) { if (na) na(); return; }
+    dicht();
+    if (!histActief) { if (na) na(); return; }
+    histActief = false; naTerug = na || null;
+    terugTimer = setTimeout(() => { terugTimer = null; const f = naTerug; naTerug = null; if (f) f(); }, 400);
+    try { history.back(); } catch (e) {}
+  }
+  window.addEventListener("popstate", () => {
+    if (terugTimer) { clearTimeout(terugTimer); terugTimer = null; const f = naTerug; naTerug = null; if (f) f(); return; }
+    if (!laag.hidden && histActief) { histActief = false; dicht(); }
+  });
+  document.getElementById("forecastTerug").addEventListener("click", () => sluit());
+  laag.addEventListener("keydown", e => { if (e.key === "Escape" && !document.querySelector(".mtl-pop,.mtl-overlay")) { e.preventDefault(); sluit(); } });
+  window.forecastLaagOpen = open; window.forecastLaagSluit = sluit;
+}
+forecastLaagInit();
+window.forecastLaagOpen = window.forecastLaagOpen || function () {};
 
 /* =====================================================================
    TAKEN PER PROJECT (punt 2) — in project-detail-sheet
