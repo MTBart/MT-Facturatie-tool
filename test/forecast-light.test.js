@@ -135,7 +135,26 @@ test('afgerond gefactureerd alleen in beeld als het in de getoonde maanden meete
   assert.deepStrictEqual(L.filter(rs, ['gefactureerd'], ['2026-09']).map(x => x.id), ['a'], 'terugbladeren: weer gewoon zichtbaar');
   assert.strictEqual(L.tel(rs, ['2026-10']).afgerond, 1); assert.strictEqual(L.tel(rs, ['2026-09']).afgerond, 0);
 });
-test('totalen: per maand, zeker, geheel en buiten beeld', () => {
+test('voorbije maanden exact uit de bank: indeling, patroon-sleutel, loon, btw, netto = ontvangen min betaald', () => {
+  const events = [{ bron: 'patroon', patroon_id: 'pa14c9087c018', tegenpartij: 'B.Witte', richting: 'uit', bedrag: 5308.48, datum: '2026-11-25' }];
+  const hist = { '2026-09': { uit: { 'B.Witte': 5308.48, 'Houthandel Test': 1210, 'Allianz Nederland Schade': 222.24, 'Weg ermee': 50 }, in: 30000, btw: 9000 } };
+  const kas = { indeling: { 'n:weg ermee': 'uit', 'n:houthandel test': 'patroon' } }, ms = ['2026-09', '2026-10'];
+  const rg = L.histRegels(hist, ['2026-09'], kas, L.patNamen(events));
+  assert.strictEqual(rg.length, 4, 'uit = telt niet');
+  const bw = rg.find(r => r.naam === 'B.Witte'); assert.strictEqual(bw.sleutel, 'p:pa14c9087c018'); assert.strictEqual(bw.groep, 'vast'); assert.strictEqual(bw.loon, 'bart'); assert.strictEqual(bw.c, -530848);
+  assert.strictEqual(rg.find(r => r.naam === 'Houthandel Test').groep, 'patroon', 'eigen indeling geldt ook terug');
+  assert.strictEqual(rg.find(r => r.naam === 'Allianz Nederland Schade').groep, 'vast');
+  assert.deepStrictEqual(rg.find(r => r.bron === 'bank' && r.groep === 'overig'), { sleutel: 'btw:2026-09', naam: 'Btw-aangifte (betaald)', groep: 'overig', c: -900000, ym: '2026-09', loon: null, bron: 'bank' });
+  const kt = L.kasTotalen(rg, ms, {});
+  assert.deepStrictEqual(L.nettoWerkelijk([111, 222], ms, '2026-10', hist, kt, {}, '2026-10-30'), [3000000 - 530848 - 22224 - 121000 - 900000, 222], 'deze maand blijft de voorspelling');
+  assert.deepStrictEqual(L.nettoWerkelijk([111, 222], ms, '2026-10', hist, L.kasTotalen(rg, ms, { loonBart: false }), { overig: false }, '2026-10-30'), [3000000 - 22224 - 121000, 222], 'vinkjes gelden ook terug');
+  assert.deepStrictEqual(L.nettoWerkelijk([111], ['2025-01'], '2026-10', hist, kt, {}, '2026-10-30'), [0], 'geen bankgegevens = 0, niet de schets');
+  assert.strictEqual(L.histIn(hist, '2026-09'), 3000000); assert.strictEqual(L.histIn(null, '2026-09'), null);
+  assert.deepStrictEqual(L.nettoWerkelijk([111, 222], ms, '2026-10', hist, kt, {}, '2026-09-20'), [0, 222], 'historie van vóór het einde van september: september niet als werkelijk');
+  assert.strictEqual(L.histCompleet('2026-09', '2026-10', '2026-10-01', false), true); assert.strictEqual(L.histCompleet('2026-10', '2026-10', '2026-10-30', false), false); assert.strictEqual(L.histCompleet('2026-10', '2026-10', '2026-10-30', true), true);
+  const handLoon = L.histRegels({ '2026-09': { uit: { 'B. Witte prive': 1000 } } }, ['2026-09'], { indeling: { 'n:b. witte prive': 'vast' }, loon: { 'n:b. witte prive': 'bart' } }, {});
+  assert.strictEqual(handLoon[0].loon, 'bart', 'handmatig loon op een naam telt ook terug');
+});test('totalen: per maand, zeker, geheel en buiten beeld', () => {
   const ms = ['2026-10', '2026-11'];
   const rijen = [{ cellen: { '2026-10': 100, '2026-11': 200, '2027-05': 7 }, zeker: true }, { cellen: { '2026-11': -50, '2026-09': 3 }, zeker: false }];
   const t = L.totalen(rijen, ms);

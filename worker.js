@@ -3035,11 +3035,17 @@ function geldPatroonVind(xs, vandaag) {
     laatste: op[op.length - 1].datum, laatste_cyclus: laatsteCyclus, zekerheid: Math.max(...laatste3) - Math.min(...laatste3) <= med * 0.05 ? 'vast' : 'schatting', ids: aanwezig.map(k => per[k].grootste.id) };
 }
 async function geldHash(s) { const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('mt-geld:' + s)); return [...new Uint8Array(d)].slice(0, 6).map(b => b.toString(16).padStart(2, '0')).join(''); }
+// Hooguit 80 tegenpartijen per maand (de grootste); de rest samen onder "(overige)", zodat KV en de tijdlijn klein blijven.
+function geldMaandPartijKap(mp) {
+  for (const x of Object.values(mp)) { const l = Object.entries(x.uit).sort((a, b) => b[1] - a[1]); if (l.length <= 80) continue;
+    x.uit = Object.fromEntries(l.slice(0, 79)); x.uit['(overige)'] = geldRond(l.slice(79).reduce((a, y) => a + y[1], 0)); }
+  return mp;
+}
 async function geldPatronenBereken(env) {
   const vandaag = geldVandaag(), w = [], budget = { rest: GELD_PROFIEL_BUDGET }, get = geldMb(env, budget);
   let cfg; try { cfg = await geldConfig(env); } catch (e) { cfg = geldConfigNorm(null); }
   const muts = await geldMutaties(get, geldDag(vandaag, -365), vandaag, w);
-  const groepen = {}, dagsom = {}, btw = [], potDag = {}, dagsomIntern = {}, maandUit = {}, rc = [], spaarRente = [], btwPot = geldBtwPot(cfg);
+  const groepen = {}, dagsom = {}, btw = [], potDag = {}, dagsomIntern = {}, maandUit = {}, rc = [], spaarRente = [], btwPot = geldBtwPot(cfg), maandPartij = {};
   for (const m of muts.lijst) {
     const bedrag = geldGetal(m.amount), pays = m.payments || [];
     dagsom[m.date] = geldRond((dagsom[m.date] || 0) + bedrag);
@@ -3049,6 +3055,16 @@ async function geldPatronenBereken(env) {
       rc.push({ datum: m.date, maand: pm ? `${pm[2]}-${pm[1]}` : m.date.slice(0, 7), soort: /DEBETRENTE/i.test(tekstRc) ? 'rente' : /PROVISIE/i.test(tekstRc) ? 'provisie' : 'overig', bedrag: geldRond(-bedrag) });
     }
     { const bb = geldBtwBetaling(m); if (bb) btw.push(Object.assign({ datum: m.date, bedrag: geldRond(bedrag) }, bb)); }
+    // Werkelijk betaald en ontvangen per maand (voor de Forecast: voorbije maanden exact uit de bank). Spaarpotten en vermoedelijk interne overboekingen tellen niet;
+    // btw-afdracht apart, uitgaven per tegenpartij (naam zoals de bank hem geeft), ontvangsten als totaal.
+    { const sp0 = geldPotVan(m, cfg.potten), intern = sp0.pot || sp0.onzeker || sp0.inactief.length ||                 // zelfde regel als geldBankEvent (intern / intern_vermoed)
+        (!pays.length && ((!(m.ledger_account_bookings || []).length && geldInternVermoed(m)) || GELD_SPAAR_LETTER.test(String(m.contra_account_name || '').trim())));
+      if (!intern && bedrag) {
+        const mp = maandPartij[m.date.slice(0, 7)] = maandPartij[m.date.slice(0, 7)] || { uit: {}, in: 0, btw: 0 };
+        if (bedrag < 0 && (geldBtwBetaling(m) || pays.some(p => p.invoice_type === 'VatDocument'))) mp.btw = geldRond(mp.btw - bedrag);
+        else if (bedrag < 0) { const n = String(m.contra_account_name || '').trim().slice(0, 80) || '(onbekend)'; mp.uit[n] = geldRond((mp.uit[n] || 0) - bedrag); }
+        else mp.in = geldRond(mp.in + bedrag);
+      } }
     if (pays.some(p => p.invoice_type === 'VatDocument')) continue;                // een btw-document-betaling blijft buiten de patronen (zoals altijd), maar telt niet meer als betaald
     const sp = geldPotVan(m, cfg.potten);
     if (bedrag < 0 && !(sp.pot && sp.pot === btwPot)) maandUit[m.date.slice(0, 7)] = geldRond((maandUit[m.date.slice(0, 7)] || 0) - bedrag);   // uitgaven (BTW-sparen telt niet)
@@ -3075,7 +3091,7 @@ async function geldPatronenBereken(env) {
     richting: x.g.sleutel.includes(':uit') ? 'uit' : 'in', factuur: x.g.factuur, ledgers: [...x.ledgers].slice(0, 10) }, p));
   const pot_weekdag = {};
   for (const [pot, wd] of Object.entries(potDag)) { const t = {}; for (const d of wd) t[d] = (t[d] || 0) + 1; const [dag, n] = Object.entries(t).sort((a, b) => b[1] - a[1])[0]; if (n >= 3) pot_weekdag[pot] = Number(dag); }
-  return { as_of: new Date().toISOString(), vandaag, patronen: patronen.sort((a, b) => b.bedrag - a.bedrag), dagsom, dagsom_intern: dagsomIntern, maand_uit: maandUit, rc_afrek: rc, spaar_rente: spaarRente, btw_betalingen: btw, pot_weekdag,
+  return { as_of: new Date().toISOString(), vandaag, patronen: patronen.sort((a, b) => b.bedrag - a.bedrag), dagsom, dagsom_intern: dagsomIntern, maand_uit: maandUit, maand_partij: geldMaandPartijKap(maandPartij), rc_afrek: rc, spaar_rente: spaarRente, btw_betalingen: btw, pot_weekdag,
     onvolledig: muts.onvolledig || budget.rest <= 0, waarschuwingen: w, verzoeken: GELD_PROFIEL_BUDGET - budget.rest };
 }
 const geldMaandLengte = ym => new Date(Date.UTC(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0)).getUTCDate();
@@ -3551,6 +3567,7 @@ async function geldTijdlijn(env, url, hint) {
     historie_dagsom: url.searchParams.get('historie') === '1' && patronen ? patronen.dagsom : undefined,
     historie_intern: url.searchParams.get('historie') === '1' && patronen ? patronen.dagsom_intern || {} : undefined,
     historie_maand_uit: url.searchParams.get('historie') === '1' && patronen ? patronen.maand_uit || {} : undefined,
+    historie_maand_partij: url.searchParams.get('historie') === '1' && patronen ? patronen.maand_partij || null : undefined,
     historie_rc: url.searchParams.get('historie') === '1' && patronen ? patronen.rc_afrek || [] : undefined,
     historie_spaarrente: url.searchParams.get('historie') === '1' && patronen ? patronen.spaar_rente || [] : undefined,
     prognose: { posten: progOverzicht, compleet: prognose.compleet },
