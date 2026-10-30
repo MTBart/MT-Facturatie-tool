@@ -1543,7 +1543,24 @@ export class MtTeller {
     const st = this.state.storage, antw = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json' } });
     if (op === 'gs-lees') {
       const items = {}; for (const [k, v] of await st.list({ prefix: 'o:' })) items[k.slice(2)] = v;
-      return antw({ items, compleet: true, import: (await st.get('meta:import')) || null });
+      return antw({ items, compleet: true, import: (await st.get('meta:import')) || null, kas: (await st.get('cfg')) || null });
+    }
+    if (op === 'gs-kas-lees') return antw({ kas: (await st.get('cfg')) || null });
+    // Indeling van de kasregels onder de Forecast (Bart 30-10): welke vaste betaling of leverancier in welke groep, de lonen van de eigenaren en
+    // eigen terugkerende posten. Eén document; de client stuurt de ts mee die hij zag (oud_ts), wijkt die af dan 409 met de huidige indeling.
+    // De vorige versie gaat altijd mee in de historie.
+    if (op === 'gs-kas') {
+      const n = geldKasNorm(b && b.kas); if (n.fout) return antw({ error: n.fout }, 400);
+      if (!b || !Number.isFinite(b.ts) || !('oud_ts' in b)) return antw({ error: 'ongeldig' }, 400);
+      return await this.state.blockConcurrencyWhile(async () => {
+        const oud = (await st.get('cfg')) || null, wasTs = oud ? oud.ts : null;
+        if ((b.oud_ts == null ? null : b.oud_ts) !== wasTs) return antw({ error: 'de indeling is intussen gewijzigd' + (oud && oud.door ? ' door ' + oud.door : ''), huidig: oud }, 409);
+        const nw = Object.assign(n.kas, { ts: Math.max(b.ts, (wasTs || 0) + 1), door: b.door });
+        const hn = ((await st.get('hn')) || 0) + 1;
+        await st.put({ cfg: nw, hn, ['h:' + String(hn).padStart(12, '0')]: { eid: null, ym: null, veld: 'kas', oud, nieuw: nw, door: b.door, ts: nw.ts } });
+        if (hn > GS_HIST_MAX) try { await st.delete('h:' + String(hn - GS_HIST_MAX).padStart(12, '0')); } catch { }
+        return antw({ ok: true, kas: nw });
+      });
     }
     // Eenmalig overnemen van de planning uit de uitgebreide Forecast (de prognose-termijnen). Vult alleen maanden die in de schets nog leeg zijn:
     // een bestaand bedrag wordt nooit overschreven. Daarna staat meta:import, zodat het nooit een tweede keer gebeurt.
@@ -2359,6 +2376,31 @@ function geldUitbeeldNorm(x) {
 const GELD_UB = 'geld:uitbeeld:', GELD_FS = 'geld:fschema:', GELD_UB_MAX = 5000, GELD_FS_MAX = 2000;
 // Forecast light (schets): zie MtTeller.geldSchets. Bedragen in hele centen (mag negatief, bv. een creditnota), hooguit 1 miljard euro per vakje.
 const GS_EID = /^\d{6,25}$/, GS_YM = /^\d{4}-(0[1-9]|1[0-2])$/, GS_MAX_C = 1e11, GS_MAX_OFFERTES = 5000, GS_MAX_CELLEN = 120, GS_HIST_MAX = 20000;
+// Kasindeling (Forecast): sleutel = p:<patroon-id> of n:<naam tegenpartij in kleine letters>; groep = waar de regel onder de Forecast staat.
+const GS_KAS_GROEP = ['open', 'vast', 'patroon', 'overig', 'uit'], GS_KAS_KEY = /^(p:[a-z0-9]{1,20}|n:[^\u0000-\u001f]{1,80})$/, GS_KAS_POST = ['vast', 'patroon', 'overig'];
+function geldKasNorm(x) {
+  const obj = v => v && typeof v === 'object' && !Array.isArray(v);
+  if (!obj(x)) return { fout: 'kas ontbreekt' };
+  const indeling = {}, loon = {}, posten = [], ids = new Set();
+  if (x.indeling != null && !obj(x.indeling)) return { fout: 'indeling: object' };
+  for (const [k, v] of Object.entries(x.indeling || {})) { if (!GS_KAS_KEY.test(k) || !GS_KAS_GROEP.includes(v)) return { fout: 'indeling: ongeldige regel' }; indeling[k] = v; }
+  if (Object.keys(indeling).length > 500) return { fout: 'indeling: hooguit 500 regels' };
+  if (x.loon != null && !obj(x.loon)) return { fout: 'loon: object' };
+  for (const [k, v] of Object.entries(x.loon || {})) { if (!GS_KAS_KEY.test(k) || !['bart', 'mathijs', 'geen'].includes(v)) return { fout: 'loon: ongeldige regel' }; loon[k] = v; }
+  if (Object.keys(loon).length > 100) return { fout: 'loon: hooguit 100 regels' };
+  if (x.posten != null && !Array.isArray(x.posten)) return { fout: 'posten: lijst' };
+  for (const p of x.posten || []) {
+    if (!obj(p) || !/^[a-z0-9]{4,20}$/.test(String(p.id || '')) || ids.has(p.id)) return { fout: 'post: id ontbreekt of dubbel' };
+    const naam = String(p.naam == null ? '' : p.naam).replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 60);
+    if (!naam) return { fout: 'post: naam ontbreekt' };
+    if (!GS_KAS_POST.includes(p.groep) || !['in', 'uit'].includes(p.richting)) return { fout: 'post: groep of richting ongeldig' };
+    if (!Number.isInteger(p.bedragC) || p.bedragC < 1 || p.bedragC > GS_MAX_C) return { fout: 'post: bedrag ongeldig' };
+    if (!GS_YM.test(String(p.van || '')) || (p.tot != null && (!GS_YM.test(String(p.tot)) || p.tot < p.van))) return { fout: 'post: van/tot ongeldig' };
+    ids.add(p.id); posten.push({ id: p.id, groep: p.groep, naam, richting: p.richting, bedragC: p.bedragC, van: p.van, tot: p.tot == null ? null : p.tot });
+  }
+  if (posten.length > 100) return { fout: 'hooguit 100 posten' };
+  return { kas: { v: 1, indeling, loon, posten } };
+}
 function geldSchetsCheck(b) {
   if (!b || !GS_EID.test(String(b.eid || ''))) return 'eid: het offerte-id uit Moneybird (alleen cijfers)';
   const bedragOk = x => x === null || (Number.isInteger(x) && Math.abs(x) <= GS_MAX_C);
@@ -4480,7 +4522,8 @@ async function handleGeld(p, request, env, ik, json0) {
   // (KV-schrijflimiet); de historie staat in de DO zelf (?historie=1, optioneel &eid=).
   if (p === '/geld/schets' && m === 'GET') {
     const hist = url.searchParams.get('historie') === '1';
-    const r = await geldSchetsDO(env, hist ? 'gs-historie' : 'gs-lees', hist ? { limiet: Number(url.searchParams.get('limiet')) || 200, eid: url.searchParams.get('eid') || '' } : {});
+    const kas = url.searchParams.get('kas') === '1';
+    const r = await geldSchetsDO(env, hist ? 'gs-historie' : kas ? 'gs-kas-lees' : 'gs-lees', hist ?{ limiet: Number(url.searchParams.get('limiet')) || 200, eid: url.searchParams.get('eid') || '' } : {});
     return json(r.body, r.status);
   }
   // Eenmalig: de planning uit de uitgebreide Forecast (prognose-items met een offerte) als startpunt in de schets. Per offerte de termijnen die
@@ -4507,6 +4550,14 @@ async function handleGeld(p, request, env, ik, json0) {
     }
     const records = {}; for (const [eid, x] of Object.entries(kies)) records[eid] = { cellen: x.cellen, zeker: x.zeker, naam: x.naam, nummer: x.nummer };
     const r = await geldSchetsDO(env, 'gs-import', { records, zonder_offerte: zonder, ts: Date.now(), door: String((ik.rec && ik.rec.naam) || ik.email || ik.oid).slice(0, 60) });
+    return json(r.body, r.status);
+  }
+  // Kasindeling onder de Forecast (welke regel in welke groep, lonen, eigen posten): schrijven met geld-wijzigen, met oud_ts tegen ongezien overschrijven.
+  if (p === '/geld/schets/kas' && m === 'POST') {
+    let b = {}; try { b = await request.json(); } catch {}
+    const n = geldKasNorm(b.kas); if (n.fout) return json({ error: n.fout }, 400);
+    if (!('oud_ts' in b) || (b.oud_ts != null && !Number.isFinite(b.oud_ts))) return json({ error: 'oud_ts ontbreekt' }, 400);
+    const r = await geldSchetsDO(env, 'gs-kas', { kas: b.kas, oud_ts: b.oud_ts == null ? null : b.oud_ts, ts: Date.now(), door: String((ik.rec && ik.rec.naam) || ik.email || ik.oid).slice(0, 60) });
     return json(r.body, r.status);
   }
   if (p === '/geld/schets' && m === 'POST') {

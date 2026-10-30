@@ -88,8 +88,8 @@
 <script src="mt-iconen.js?v=2026-10-24z" defer></script>
 <script src="mt-zijbalk.js?v=2026-10-24z" defer></script>
 <script src="mt-geld.js?v=2026-10-29a"></script>
-<script src="mt-forecast.js?v=2026-10-28e"></script>
-<script src="mt-forecast-light.js?v=2026-10-29a"></script>
+<script src="mt-forecast.js?v=2026-10-30a"></script>
+<script src="mt-forecast-light.js?v=2026-10-30a"></script>
 <script src="mt-koers.js?v=2026-10-23a"></script>
 <script src="mt-schulden.js?v=2026-10-12a"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
@@ -922,7 +922,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1 class="mt-merkrij"><svg class="mt-merk" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><rect x="2" y="2" width="96" height="96"/><path d="M55.4 2 V31.3 H34.2 V67.3 H55.4 V98"/></svg><b class="mt-woord">mortise <em>&amp;</em> tenon</b></h1>
-    <span class="header-version">v2.26.0</span>
+    <span class="header-version">v2.27.0</span>
     <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
@@ -16836,7 +16836,7 @@ async function capHerstel(w,opt){
 //   Larry leest die bestanden via Graph voor het verbeterplan.
 // ═══════════════════════════════════════════════════════════════════════════
 const TAB_HELP={
-  forecast:{naam:'Forecast',uitleg:'Een schets van de facturatie per maand. Links de offertes uit Moneybird met hun totaalbedrag (incl. of excl. btw), kolommen zijn maanden. Typ in een vakje een bedrag of een percentage van de offerte (bv. 50%); onderaan staat per maand het totaal en wat daarvan zeker doorgaat, rechts per offerte. De bedragen tellen nergens anders mee (niet in Financiën, niet in Moneybird). Blader met ‹ › door de maanden. De uitgebreide Forecast, die wél met de prognose van Financiën meerekent, open je met de knop rechtsboven of bij Financiën.'},
+  forecast:{naam:'Forecast',uitleg:'Een schets van de facturatie per maand. Links de offertes uit Moneybird met hun totaalbedrag (incl. of excl. btw), kolommen zijn maanden. Typ in een vakje een bedrag of een percentage van de offerte (bv. 50%); onderaan staat per maand het totaal en wat daarvan zeker doorgaat, rechts per offerte. De bedragen tellen nergens anders mee (niet in Financiën, niet in Moneybird). Is er in een maand gefactureerd in Moneybird, dan staat dat bedrag blauw en vast in het vakje en telt het in plaats van de schets (de schets blijft bewaard); bij de offerte zie je wat er nog te factureren is. Onder het totaal klap je de uitsplitsing open: gefactureerd, openstaande facturen (wat wij moeten betalen), vaste kosten (met apart het loon van Bart en Mathijs), vaste patronen en overige voorspelling (btw), elk aan of uit te vinken, met het netto resultaat; de mouse-over toont de opbouw. Met Indeling kies je per vaste betaling of leverancier de groep en voeg je eigen terugkerende posten toe. Blader met ‹ › door de maanden. De uitgebreide Forecast, die wél met de prognose van Financiën meerekent, open je met de knop rechtsboven of bij Financiën.'},
   forecastplus:{naam:'Uitgebreide forecast',uitleg:'De facturatieplanning per maand. Links de goedgekeurde offertes uit Moneybird met hun bedrag (incl. btw), kolommen zijn de komende maanden. Typ in een maand wat je dan wilt factureren, in zijn geheel of in delen; "rest hier" zet het nog niet geplande deel in die maand. Onderaan zie je per maand wat er gefactureerd wordt, wat er binnenkomt (factuurdatum plus betaaltermijn en betaalgedrag van de klant) en het netto, met of zonder lopende kosten en overige voorspelling. De planning is dezelfde als de prognose in Financiën, dus de kaslijn rekent meteen mee. Er gaat nooit iets naar Moneybird.'},
   dashboard:{naam:'Dashboard',uitleg:'Het overzicht: omzet dit jaar, openstaande debiteuren en crediteuren en netto resultaat — live uit Moneybird. Daaronder de ouderdom van openstaande posten, de top-leveranciers qua uitgaven en de "nog te doen"-lijst. Alles is klikbaar waar een cijfer dieper gaat.'},
   inbox:{naam:'Inbox',uitleg:'De smart-inbox van info@. Mappenboom, zoeken over de hele postbus en — met de schakelaar "💬 Gesprekken" — mailwisselingen gebundeld als één thread (zoals Outlook). Mails lezen, aan een project of klant koppelen, factuur-bijlagen direct laten analyseren (✨) en per mail met Larry chatten. Verplaatsingen die je hier doet leren het sorteersysteem bij.'},
@@ -17228,7 +17228,7 @@ function forecastLightOpen(){
   if(!geldNieuw()||!MTRol.magGeld()){ el.textContent='Forecast is alleen voor eigenaren en de administratie.'; return; }
   if(el.dataset.gestart){ MTForecastLight.laad(); return; }
   el.dataset.gestart='1';
-  MTForecastLight.start(el,{bron:{haal:geldHaal},magWijzigen:MTRol.magGeld('wijzigen'),schatten:forecastSchatten,administratie:getAdmin,openUitgebreid:forecastUitgebreidOpen});
+  MTForecastLight.start(el,{bron:{haal:geldHaal},magWijzigen:MTRol.magGeld('wijzigen'),schatten:forecastSchatten,facturen:forecastFacturen,administratie:getAdmin,openUitgebreid:forecastUitgebreidOpen});
 }
 function forecastOpen(){
   const el=document.getElementById('forecast-root'); if(!el||!window.MTForecast) return;
@@ -17240,6 +17240,18 @@ function forecastOpen(){
     administratie:getAdmin,   // zelfde administratie als de Moneybird-aanroepen: voor de links naar offerte en facturen
     projectHref:code=>mtRoute.format({tab:'projecten',code}),
     openProject:code=>{ const knop=document.querySelector('.tabs-wrap .tab-btn[onclick*="\'projecten\'"]'); showTab('projecten',knop); openProject(code); }});
+}
+// Verkoopfacturen uit Moneybird voor de Forecast (alleen lezen): factuurdatum van 2 jaar terug t/m eind volgend jaar, gepagineerd (plafond 40 pagina's).
+async function forecastFacturen(){
+  const d=new Date(),f=(j,m,dag)=>`${j}${String(m).padStart(2,'0')}${String(dag).padStart(2,'0')}`;
+  const per=`${f(d.getFullYear()-2,d.getMonth()+1,1)}..${f(d.getFullYear()+1,12,31)}`,lijst=[];
+  for(let p=1;p<=40;p++){
+    const r=await mbGet(`${getAdmin()}/sales_invoices?filter=${encodeURIComponent('period:'+per+',state:all')}&per_page=100&page=${p}`);
+    if(!r.ok) throw new Error('Moneybird: facturen niet te lezen (HTTP '+r.status+')');
+    const a=await r.json(); if(!Array.isArray(a)) throw new Error('Moneybird: onverwacht antwoord op de facturenlijst');
+    lijst.push(...a); if(a.length<100) return {lijst};
+  }
+  return {lijst,afgekapt:true};
 }
 // Offertes uit Moneybird met de drie statussen (geaccepteerd, openstaand = open|late, concept), alleen lezen; per status gepagineerd
 // tot een lege of korte pagina (plafond 50 pagina's; daarna meldt de Forecast "lijst afgekapt").

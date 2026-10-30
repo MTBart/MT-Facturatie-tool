@@ -125,5 +125,28 @@ const { pathToFileURL } = require('url');
     const r = await roep(env, 'eigenaar', '/geld/schets/import', 'POST', {}); assert.strictEqual(r.body.import.vakjes, 1);
     const l = await roep(env, 'eigenaar', '/geld/schets', 'GET'); assert.deepStrictEqual(l.body.items[E].cellen, { '2026-11': 50050 }); assert.strictEqual(l.body.items[E].zeker, true);
   });
+  await test('kasindeling: opslaan, 409 bij een verouderde stand, historie, lezer mag niet', async () => {
+    const env = { MT_ROLLEN: kv() };
+    const kas = { indeling: { 'p:pabc123': 'vast', 'n:leverancier b.v.': 'open' }, loon: { 'p:pabc123': 'bart' }, posten: [{ id: 'post1', groep: 'patroon', naam: 'Verhuur werkplaats', richting: 'in', bedragC: 50000, van: '2026-11', tot: null }] };
+    let r = await roep(env, 'eigenaar', '/geld/schets/kas', 'POST', { kas, oud_ts: null }); assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+    const ts = r.body.kas.ts; assert.strictEqual(r.body.kas.door, 'Eigenaar A'); assert.strictEqual(r.body.kas.posten[0].bedragC, 50000);
+    r = await roep(env, 'eigenaar', '/geld/schets/kas', 'POST', { kas: { indeling: {} }, oud_ts: null }); assert.strictEqual(r.status, 409, 'verouderd: 409'); assert.strictEqual(r.body.huidig.ts, ts);
+    r = await roep(env, 'eigenaar', '/geld/schets/kas', 'POST', { kas: { indeling: { 'p:pabc123': 'patroon' } }, oud_ts: ts }); assert.strictEqual(r.status, 200); assert.ok(r.body.kas.ts > ts);
+    const l = await roep(env, 'administratie', '/geld/schets?kas=1', 'GET'); assert.strictEqual(l.status, 200); assert.strictEqual(l.body.kas.indeling['p:pabc123'], 'patroon');
+    const g = await roep(env, 'eigenaar', '/geld/schets', 'GET'); assert.strictEqual(g.body.kas.indeling['p:pabc123'], 'patroon'); assert.ok(!('cfg' in g.body.items), 'niet tussen de offertes');
+    const h = await roep(env, 'eigenaar', '/geld/schets?historie=1', 'GET'); assert.strictEqual(h.body.historie.length, 2); assert.strictEqual(h.body.historie[0].oud.indeling['p:pabc123'], 'vast', 'vorige versie bewaard');
+    r = await roep(env, 'administratie', '/geld/schets/kas', 'POST', { kas: { indeling: {} }, oud_ts: r.body.kas.ts }); assert.strictEqual(r.status, 403);
+  });
+  await test('kasindeling: ongeldige invoer → 400', async () => {
+    const env = { MT_ROLLEN: kv() };
+    for (const kas of [null, { indeling: { 'x:1': 'vast' } }, { indeling: { 'p:a': 'raar' } }, { loon: { 'p:a': 'iemand' } }, { posten: [{ id: 'p1', groep: 'vast', naam: 'x', richting: 'uit', bedragC: 1, van: '2026-11' }] },
+      { posten: [{ id: 'post1', groep: 'open', naam: 'x', richting: 'uit', bedragC: 1, van: '2026-11' }] }, { posten: [{ id: 'post1', groep: 'vast', naam: ' ', richting: 'uit', bedragC: 1, van: '2026-11' }] },
+      { posten: [{ id: 'post1', groep: 'vast', naam: 'x', richting: 'uit', bedragC: 1.5, van: '2026-11' }] }, { posten: [{ id: 'post1', groep: 'vast', naam: 'x', richting: 'uit', bedragC: 1, van: '2026-11', tot: '2026-10' }] },
+      { posten: [{ id: 'post1', groep: 'vast', naam: 'x', richting: 'uit', bedragC: 1, van: '2026-11' }, { id: 'post1', groep: 'vast', naam: 'y', richting: 'uit', bedragC: 1, van: '2026-11' }] }]) {
+      const r = await roep(env, 'eigenaar', '/geld/schets/kas', 'POST', { kas, oud_ts: null }); assert.strictEqual(r.status, 400, JSON.stringify(kas));
+    }
+    const r = await roep(env, 'eigenaar', '/geld/schets/kas', 'POST', { kas: { indeling: {} } }); assert.strictEqual(r.status, 400, 'zonder oud_ts');
+    const l = await roep(env, 'eigenaar', '/geld/schets?kas=1', 'GET'); assert.strictEqual(l.body.kas, null);
+  });
   console.log(`\n${n} tests geslaagd${process.exitCode ? ' (met fouten)' : ''}`);
 })();
