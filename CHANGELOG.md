@@ -5,8 +5,20 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-29 — Release v2.26.0: Forecast light (simpel schetsschema) op de plek van Forecast; uitgebreide Forecast bij Financiën
+- Commit: `9f53dcc` | Auteur: Bart Witte
+
 ## 2026-10-29 — Backup = v2.25.4
 - Commit: `d22de1a` | Auteur: Bart Witte
+
+## 2026-10-29 — Forecast light: import kent geen maandengrens (niets uit de prognose valt weg); grens geldt alleen voor een nieuwe maand (Codex)
+- Commit: `0b90fb5` | Auteur: Bart Witte
+
+## 2026-10-29 — Forecast light: eenmalig de planning uit de uitgebreide Forecast overnemen
+- Commit: `6c6109d` | Auteur: Bart Witte
+
+## 2026-10-29 — Forecast light (v2.26.0): simpel schetsschema op de plek van Forecast; uitgebreide Forecast naar Financiën
+- Commit: `a153f6c` | Auteur: Bart Witte
 
 ## 2026-10-27 — Release v2.25.4: Forecast keuze incl. / excl. btw (omgerekend per offerte uit Moneybird; kasregels blijven incl. btw)
 - Commit: `5d7c8c2` | Auteur: Bart Witte
