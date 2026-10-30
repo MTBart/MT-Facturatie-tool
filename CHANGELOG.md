@@ -5,8 +5,14 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-30 — Release v2.28.0: Forecast voorbije maanden exact uit de bank (betaald/ontvangen per maand), alleen vooruit voorspellen
+- Commit: `a82bb8d` | Auteur: Bart Witte
+
 ## 2026-10-30 — Backup = v2.27.1
 - Commit: `cd56867` | Auteur: Bart Witte
+
+## 2026-10-30 — Forecast v2.28.0: voorbije maanden exact uit de bank (maand_partij), alleen vooruit voorspellen; Codex 2 rondes
+- Commit: `4496c6d` | Auteur: Bart Witte
 
 ## 2026-10-30 — Release v2.27.1: Forecast netto vast in beeld, filter Afgerond, Vattenfall-regelingstermijnen naast de maandpost
 - Commit: `4e17ba8` | Auteur: Bart Witte

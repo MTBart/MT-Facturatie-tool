@@ -173,6 +173,30 @@
     for (const p of (kas && kas.posten) || []) for (const ym of maanden) if (ym >= p.van && (!p.tot || ym <= p.tot) && !(p.lev && bezet && bezet.has(p.lev + '|' + ym))) uit.push({ sleutel: 'post:' + p.id, naam: p.naam, groep: p.groep, c: (p.richting === 'in' ? 1 : -1) * p.bedragC, ym, loon: p.loon || null, bron: 'post' });
     return uit;
   };
+  // Werkelijk betaald (Bart 30-10): voorbije maanden komen exact uit de bank (worker: historie_maand_partij = per maand uitgaven per tegenpartij,
+  // btw-afdracht en ontvangsten; spaarpotten en interne overboekingen tellen niet). Alleen vooruit wordt voorspeld. Een tegenpartij die als vaste
+  // betaling herkend is, krijgt de sleutel van dat patroon (zelfde indeling en loonvinkjes); de rest per naam (standaard: vast of facturen).
+  L.patNamen = events => { const m = {}; for (const e of events || []) if (e && e.bron === 'patroon' && /^[a-z0-9]{1,20}$/i.test(String(e.patroon_id || '')) && e.tegenpartij) m[String(e.tegenpartij).trim().toLowerCase()] = 'p:' + String(e.patroon_id).toLowerCase(); return m; };
+  L.histRegels = function (hist, maanden, kas, patNamen) {
+    const uit = [];
+    for (const ym of maanden) {
+      const h = hist && hist[ym]; if (!h) continue;
+      for (const [naam, bedrag] of Object.entries(h.uit || {})) {
+        const c = Math.round(Number(bedrag) * 100); if (!isFinite(c) || c <= 0) continue;
+        const ps = patNamen && patNamen[naam.trim().toLowerCase()], sl = ps || L.kasSleutel({ tegenpartij: naam });
+        const groep = (kas && kas.indeling && kas.indeling[sl]) || (ps ? 'vast' : VAST_RE.test(naam) ? 'vast' : 'open');
+        if (groep === 'uit') continue;
+        uit.push({ sleutel: sl, naam, groep, c: -c, ym, loon: groep === 'vast' ? L.loonVan(sl, naam, kas) : null, bron: 'bank' });
+      }
+      const b = Math.round(Number(h.btw || 0) * 100); if (b > 0) uit.push({ sleutel: 'btw:' + ym, naam: 'Btw-aangifte (betaald)', groep: 'overig', c: -b, ym, loon: null, bron: 'bank' });
+    }
+    return uit;
+  };
+  L.nettoWerkelijk = (netto, maanden, nu, hist, kt, aan, asOf) => netto.map((v, i) => { const ym = maanden[i]; if (!nu || ym >= nu) return v; const hi = L.histIn(hist, ym); if (hi == null || !L.histCompleet(ym, nu, asOf, false)) return 0;
+    return hi + L.KAS_GROEPEN.reduce((a, g) => a + ((aan || {})[g] !== false && kt && kt[g] ? kt[g].per[i] : 0), 0); });
+  // Een maand uit de historie is pas compleet als de berekening van ná die maand is; deze maand alleen als hij van vandaag is.
+  L.histCompleet = (ym, nu, asOf, vers) => ym === nu ? !!vers : ym < nu && !!asOf && ym < String(asOf).slice(0, 7);
+  L.histIn = (hist, ym) => hist && hist[ym] ? Math.round(Number(hist[ym].in || 0) * 100) : null;
   // Per groep per maand de som en de opbouw (voor de mouse-over). aan.loonBart / loonMathijs / loonMaarten / loonIlona === false: dat loon telt niet mee.
   L.kasTotalen = function (regels, maanden, aan) {
     aan = aan || {}; const idx = new Map(maanden.map((m, i) => [m, i])), t = {};
@@ -454,14 +478,29 @@
       const onv = (r.waarschuwingen || []).filter(w => w && w.onvolledig && !['prognose', 'verkoop'].includes(w.bron)).map(w => String(w.fout || 'onvolledig'));
       if (r.bronnen && r.bronnen.facturen && r.bronnen.facturen.onvolledig) onv.unshift('inkoopfacturen niet volledig opgehaald');
       if (r.bronnen && r.bronnen.bankmutaties && r.bronnen.bankmutaties.onvolledig) onv.unshift('bankmutaties niet volledig opgehaald');
-      st.tl = { events: r.events, vandaag: /^\d{4}-\d{2}-\d{2}$/.test(String(r.vandaag || '')) ? r.vandaag : v, onvolledig: onv };
+      const vd = /^\d{4}-\d{2}-\d{2}$/.test(String(r.vandaag || '')) ? r.vandaag : v, asOf = r.patronen && r.patronen.as_of ? String(r.patronen.as_of).slice(0, 10) : null;
+      const hist = r.historie_maand_partij && typeof r.historie_maand_partij === 'object' ? r.historie_maand_partij : null;
+      st.tl = { events: r.events, vandaag: vd, onvolledig: onv, hist, histVers: !!(hist && asOf && asOf >= vd), histAsOf: asOf };
+      // Bankhistorie ontbreekt of is niet van vandaag: één keer per sessie opnieuw laten berekenen (alleen de eigenaar mag dat), daarna opnieuw laden.
+      if ((!hist || !st.tl.histVers) && st.mag && !st.histGevraagd) vernieuwHist();
     } catch (e) { st.tlFout = String(e.message || e); st.tl = null; }   // nooit met de cijfers van een vorige keer verder rekenen
     st.tlBezig = false; teken();
+  }
+  // Bankhistorie opnieuw laten berekenen (eigenaar; één keer per sessie vanzelf, daarna via "opnieuw"). Mislukt het, dan een melding bij Netto.
+  function vernieuwHist() {
+    st.histGevraagd = true; st.histFout = null;
+    st.opt.bron.haal('/geld/patronen?vers=1').then(x => { if (x && !x.error && x.opgeslagen !== false) laadKas(false); else { st.histFout = (x && x.error) || 'de bankgegevens konden niet volledig worden opgehaald'; teken(); } })
+      .catch(e => { st.histFout = String(e.message || e); teken(); });
   }
   function kasRegels(ms) {
     if (!st.tl) return null;
     const kas = st.kasGeladen ? L.kasEff(st.kas, st.kasStart) : st.kas;
-    return st.tl.events.map(e => L.kasRegel(e, kas, st.tl.vandaag)).filter(Boolean).concat(L.postRegels(kas, ms, L.bezet(st.tl.events, st.tl.vandaag)));
+    const nu = st.tl.vandaag.slice(0, 7), vooruit = ms.filter(m => m >= nu), terug = ms.filter(m => L.histCompleet(m, nu, st.tl.histAsOf, st.tl.histVers));
+    const pn = L.patNamen(st.tl.events), bezet = L.bezet(st.tl.events, st.tl.vandaag), hNu = st.tl.histVers && st.tl.hist ? st.tl.hist[nu] : null;
+    // Deze maand al betaald (historie van vandaag): een eigen post van dezelfde leverancier en de btw-aangifte van de tijdlijn tellen dan niet nog eens (Codex).
+    if (hNu) for (const n of Object.keys(hNu.uit || {})) { bezet.add('n:' + n.trim().toLowerCase() + '|' + nu); if (pn[n.trim().toLowerCase()]) bezet.add(pn[n.trim().toLowerCase()] + '|' + nu); }
+    const ev = st.tl.events.map(e => L.kasRegel(e, kas, st.tl.vandaag)).filter(r => r && !(hNu && hNu.btw > 0 && r.bron === 'btw' && r.ym === nu));
+    return ev.concat(L.postRegels(kas, vooruit, bezet), L.histRegels(st.tl.hist, terug, kas, pn));
   }
   function bewaarKasStand() { ls.set('mtl:kas', JSON.stringify({ open: st.kasOpen, aan: st.kasAan })); }
   // Per vakje één opslag tegelijk, op volgorde. Loopt er al een opslag voor dit vakje, dan zag je die waarde: die geldt als "oud" (anders gaf
@@ -632,9 +671,12 @@
       alle[i].set((f.nummer || 'factuur') + ' ' + (f.klant || '') + (losIds.has(f.id) ? ' (zonder offerte)' : ''), f.inclC); }
     zet('gef', st.fact ? allePer : null, i => opbouwTekst('Gefactureerd in ' + maandTekst(ms[i]) + ' (incl. btw)', alle[i]));
     const regels = kasRegels(ms), kt = regels ? L.kasTotalen(regels, ms, st.kasAan) : null;
-    for (const g of L.KAS_GROEPEN) zet(g, kt ? kt[g].per : null, i => opbouwTekst(KAS_TEXT_KORT(g) + ' ' + maandTekst(ms[i]), kt[g].opbouw[i]));
+    const nuYmV = st.tl ? st.tl.vandaag.slice(0, 7) : null;
+    for (const g of L.KAS_GROEPEN) zet(g, kt ? kt[g].per : null, i => opbouwTekst(KAS_TEXT_KORT(g) + ' ' + maandTekst(ms[i]) + (nuYmV && ms[i] < nuYmV ? ' (betaald, bank)' : nuYmV && ms[i] === nuYmV && st.tl.histVers ? ' (al betaald + nog verwacht)' : ' (verwacht)'), kt[g].opbouw[i]));
     const onv = st.tl && st.tl.onvolledig.length;
-    zet('netto', L.netto(tot.per, st.fact ? losPer : null, kt, st.kasAan), !kt ? () => 'De kosten zijn niet geladen: dit is alleen het totaal' : onv ? () => 'Let op: het overzicht van Financiën is niet compleet, er kunnen kosten ontbreken' : null);
+    // Voorbije maanden: netto = werkelijk ontvangen min werkelijk betaald (bank, met de vinkjes). Vanaf deze maand: totaal + aangevinkte regels.
+    const nuYm = st.tl ? st.tl.vandaag.slice(0, 7) : null, nettoPer = L.nettoWerkelijk(L.netto(tot.per, st.fact ? losPer : null, kt, st.kasAan), ms, nuYm, st.tl && st.tl.hist, kt, st.kasAan, st.tl && st.tl.histAsOf);
+    zet('netto', nettoPer, i => nuYm && ms[i] < nuYm ? (st.tl.hist && st.tl.hist[ms[i]] && L.histCompleet(ms[i], nuYm, st.tl.histAsOf, false) ? 'Werkelijk via de bank in ' + maandTekst(ms[i]) + ': ontvangen ' + L.fmt(L.histIn(st.tl.hist, ms[i])) + ', min de aangevinkte betaalde kosten' : (st.tl.hist && st.tl.histAsOf && ms[i] >= st.tl.histAsOf.slice(0, 7) ? 'De bankgegevens van ' + maandTekst(ms[i]) + ' zijn nog niet bijgewerkt' : 'Geen bankgegevens voor ' + maandTekst(ms[i]) + ' (de bankhistorie gaat een jaar terug)')) : !kt ? 'De kosten zijn niet geladen: dit is alleen het totaal' : onv ? 'Let op: het overzicht van Financiën is niet compleet, er kunnen kosten ontbreken' : '');
     const nr = t.querySelector('tfoot tr[data-rij="netto"]'); if (nr) nr.classList.toggle('onv', !kt || !!onv);
     t.querySelectorAll('tfoot tr[data-rij]').forEach(tr => { const g = tr.dataset.rij; if (g === 'gef' || L.KAS_GROEPEN.includes(g)) tr.classList.toggle('uit', st.kasAan[g] === false); });
   }
@@ -730,6 +772,7 @@
       // Netto resultaat staat altijd vast onder het totaal; de vinkjes in de uitsplitsing bepalen wat meetelt.
       voet.push(voetRij('netto', 'netto', h('span', { class: 'mtl-somkop' }, h('span', { title: 'Totaal per maand plus de aangevinkte regels uit de uitsplitsing (kosten zijn negatief; klik op Totaal per maand om te zien wat meetelt). Kas, incl. btw.' }, 'Netto resultaat'),
           st.tlFout ? h('span', { class: 'mtl-kasfout', title: st.tlFout }, '⚠ kosten niet geladen ', h('button', { type: 'button', class: 'mtl-link', onclick: () => laadKas(true) }, 'opnieuw')) : null,
+          st.histFout && st.mag ? h('span', { class: 'mtl-kasfout', title: 'Bankgegevens niet bijgewerkt: ' + st.histFout + '. Voorbije maanden tonen de laatst berekende stand.' }, '\u26a0 bank niet bijgewerkt ', h('button', { type: 'button', class: 'mtl-link', onclick: () => vernieuwHist() }, 'opnieuw')) : null,
           st.tl && st.tl.onvolledig.length ? h('span', { class: 'mtl-kasfout', title: 'Het overzicht van Financiën is niet compleet:\n' + st.tl.onvolledig.slice(0, 10).join('\n') }, '⚠ mogelijk onvolledig ', h('button', { type: 'button', class: 'mtl-link', onclick: () => laadKas(true) }, 'opnieuw')) : null)));
       const tfoot = h('tfoot', null, voet);
       // vast onderaan: elke regel krijgt als bottom de hoogte van de regels eronder
