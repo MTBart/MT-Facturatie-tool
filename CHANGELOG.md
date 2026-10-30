@@ -5,8 +5,20 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-30 — Release v2.27.1: Forecast netto vast in beeld, filter Afgerond, Vattenfall-regelingstermijnen naast de maandpost
+- Commit: `4e17ba8` | Auteur: Bart Witte
+
 ## 2026-10-30 — Backup = v2.27.0
 - Commit: `b9be88a` | Auteur: Bart Witte
+
+## 2026-10-30 — Forecast v2.27.1: filter Afgerond, netto vast in beeld, regelingstermijnen
+- Commit: `d02ea76` | Auteur: Bart Witte
+
+## 2026-10-30 — Forecast: netto resultaat altijd vast onder het totaal, ruimere uitsplitsing
+- Commit: `89966ed` | Auteur: Bart Witte
+
+## 2026-10-30 — Forecast: termijnen van een betalingsregeling laten een gekoppelde maandpost staan
+- Commit: `d62eae3` | Auteur: Bart Witte
 
 ## 2026-10-30 — Release v2.27.0: Forecast met facturen (deels gefactureerd, nog te factureren), uitklapbare uitsplitsing met kosten en netto resultaat, indeling met eigen posten, loonvinkjes, mobiel overzichtelijk
 - Commit: `03a9700` | Auteur: Bart Witte
