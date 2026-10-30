@@ -1,12 +1,13 @@
 [
   {
-    "versie": "2.28.1",
+    "versie": "2.28.2",
     "datum": "2026-10-30",
     "titel": "Forecast: voorbije maanden exact uit de bank",
     "voor": "geld",
     "punten": [
       "Blader je in de Forecast terug, dan staan bij de kosten nu de werkelijke betalingen uit de bank (lonen, Vattenfall, Arjan, facturen, btw-aangifte), ingedeeld zoals bij Indeling. Netto resultaat is daar wat er werkelijk binnenkwam min wat er betaald is.",
       "Wat al van de bank is afgeschreven staat onder een eigen regel Betaalde facturen; Openstaande facturen is alleen wat nog betaald moet worden. Verzamelbetalingen staan als één regel.",
+      "Klik op een bedrag bij de kosten voor het lijstje: wat al betaald is (bv. de lonen) staat doorgehaald met betaald, wat nog komt gewoon. Deze maand staat onder het bedrag wat er nog betaald moet worden.",
       "Deze maand: wat al betaald is plus wat nog verwacht wordt. Alleen vooruit wordt voorspeld. Ga met de muis over een bedrag om te zien of het betaald of verwacht is."
     ]
   },{

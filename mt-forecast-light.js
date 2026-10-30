@@ -201,11 +201,13 @@
   // Per groep per maand de som en de opbouw (voor de mouse-over). aan.loonBart / loonMathijs / loonMaarten / loonIlona === false: dat loon telt niet mee.
   L.kasTotalen = function (regels, maanden, aan) {
     aan = aan || {}; const idx = new Map(maanden.map((m, i) => [m, i])), t = {};
-    for (const g of L.KAS_GROEPEN) t[g] = { per: maanden.map(() => 0), opbouw: maanden.map(() => new Map()) };
+    for (const g of L.KAS_GROEPEN) t[g] = { per: maanden.map(() => 0), opbouw: maanden.map(() => new Map()), posten: maanden.map(() => new Map()) };
     for (const r of regels || []) {
       const i = idx.get(r.ym); if (i == null || !t[r.groep]) continue;
       if (r.loon && aan[L.loonAanSleutel(r.loon)] === false) continue;
       t[r.groep].per[i] += r.c; const o = t[r.groep].opbouw[i]; o.set(r.naam, (o.get(r.naam) || 0) + r.c);
+      // per post ook of hij al betaald is (bank) of nog verwacht wordt: voor het lijstje met doorgehaalde betaalde posten
+      const bet = r.bron === 'bank', k = r.naam + '|' + (bet ? 1 : 0), ps = t[r.groep].posten[i], x = ps.get(k) || { naam: r.naam, c: 0, betaald: bet }; x.c += r.c; ps.set(k, x);
     }
     return t;
   };
@@ -275,7 +277,7 @@
     if (document.getElementById('mtl-css')) return;
     const s = document.createElement('style'); s.id = 'mtl-css';
     s.textContent = `
-.mtl,.mtl-toast,.mtl-overlay{--l-fbg:color-mix(in srgb,#3d8fe0 16%,var(--surface,#fff));--l-f:color-mix(in srgb,#1f6bb8 85%,var(--ink,#1b211e));--l-surface:var(--surface,#fff);--l-surface2:var(--surface-2,#f1ede5);--l-line:var(--line,#dfd8cb);--l-soft:var(--line-soft,#ece7de);--l-strong:var(--line-strong,#9a917f);--l-ink:var(--ink,#1b211e);--l-ink2:var(--ink-2,#5e655f);--l-ink3:var(--ink-3,#8c918a);--l-primary:var(--primary,#17643f);--l-psoft:var(--primary-soft,#ddefe3);--l-ptext:var(--primary-text,#17643f);--l-ok:var(--ok,#1a6e3b);--l-okbg:var(--ok-bg,#e3f3e8);--l-warn:var(--warn,#8f5508);--l-warnbg:var(--warn-bg,#fcefd9);--l-err:var(--err,#c4322a);--l-errbg:var(--err-bg,#fce6e4);--l-mono:var(--font-mono,"Geist Mono",ui-monospace,Menlo,monospace);--l-ui:var(--font-ui,"Geist",system-ui,-apple-system,"Segoe UI",sans-serif);--l-head:var(--font-head,"Bricolage Grotesque","Geist",system-ui,sans-serif);--l-r:var(--radius-ctl,4px);--l-rp:var(--radius-panel,8px);--l-pop:var(--shadow-pop,0 24px 60px rgba(40,34,20,.2))}
+.mtl,.mtl-toast,.mtl-overlay,.mtl-pop{--l-fbg:color-mix(in srgb,#3d8fe0 16%,var(--surface,#fff));--l-f:color-mix(in srgb,#1f6bb8 85%,var(--ink,#1b211e));--l-surface:var(--surface,#fff);--l-surface2:var(--surface-2,#f1ede5);--l-line:var(--line,#dfd8cb);--l-soft:var(--line-soft,#ece7de);--l-strong:var(--line-strong,#9a917f);--l-ink:var(--ink,#1b211e);--l-ink2:var(--ink-2,#5e655f);--l-ink3:var(--ink-3,#8c918a);--l-primary:var(--primary,#17643f);--l-psoft:var(--primary-soft,#ddefe3);--l-ptext:var(--primary-text,#17643f);--l-ok:var(--ok,#1a6e3b);--l-okbg:var(--ok-bg,#e3f3e8);--l-warn:var(--warn,#8f5508);--l-warnbg:var(--warn-bg,#fcefd9);--l-err:var(--err,#c4322a);--l-errbg:var(--err-bg,#fce6e4);--l-mono:var(--font-mono,"Geist Mono",ui-monospace,Menlo,monospace);--l-ui:var(--font-ui,"Geist",system-ui,-apple-system,"Segoe UI",sans-serif);--l-head:var(--font-head,"Bricolage Grotesque","Geist",system-ui,sans-serif);--l-r:var(--radius-ctl,4px);--l-rp:var(--radius-panel,8px);--l-pop:var(--shadow-pop,0 24px 60px rgba(40,34,20,.2))}
 .mtl{font-family:var(--l-ui);font-size:14px;line-height:20px;color:var(--l-ink);display:flex;flex-direction:column;gap:12px;min-height:360px}
 .mtl button{font-family:inherit}
 .mtl-kop{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;flex:none}.mtl-titelblok{flex:1;min-width:220px}
@@ -338,6 +340,11 @@
 .mtl-paneel select,.mtl-paneel input{font:inherit;height:28px;box-sizing:border-box;border:1px solid var(--l-line);border-radius:var(--l-r);background:var(--l-surface);color:var(--l-ink);padding:0 6px}
 .mtl-pnieuw{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px}.mtl-pvoet{padding:12px 20px;border-top:1px solid var(--l-line);display:flex;gap:8px;justify-content:flex-end}
 .mtl-tabel tfoot tr.netto.onv td{color:var(--l-warn);font-style:italic}
+.mtl-tabel tfoot td.klik{cursor:pointer}.mtl-tabel tfoot td.klik:hover{text-decoration:underline dotted}.mtl-tabel tfoot td.klik:focus-visible{outline:2px solid var(--l-primary);outline-offset:-2px}.mtl-nogk{display:block;font-size:10px;line-height:12px;color:var(--l-ink3);font-weight:400}
+.mtl-pop{position:fixed;z-index:9997;background:var(--l-surface);color:var(--l-ink);border:1px solid var(--l-line);border-radius:var(--l-rp);box-shadow:var(--l-pop);font-family:var(--l-ui);font-size:13px;width:min(380px,calc(100vw - 16px));max-height:60vh;overflow:auto;padding:10px 12px}
+.mtl-popkop{display:flex;align-items:center;gap:6px;margin-bottom:6px}.mtl-popkop button{margin-left:auto;font-size:16px;text-decoration:none}.mtl-pop ul{list-style:none;margin:0;padding:0}.mtl-pop li{display:flex;gap:8px;align-items:baseline;padding:3px 0;border-bottom:1px solid var(--l-soft)}
+.mtl-pop li .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mtl-pop li .b{font-family:var(--l-mono);font-variant-numeric:tabular-nums}.mtl-pop li.betaald .n,.mtl-pop li.betaald .b{text-decoration:line-through;color:var(--l-ink3)}
+.mtl-pop li .tag{font-size:10px;color:var(--l-ok);background:var(--l-okbg);border-radius:var(--l-r);padding:0 5px}.mtl-popvoet{display:flex;gap:14px;justify-content:flex-end;margin-top:8px;font-size:12px;color:var(--l-ink2)}
 @media (max-width:700px){
 .mtl-mbd{display:inline;width:100%;font-family:var(--l-mono);font-variant-numeric:tabular-nums;color:var(--l-ink2)}.mtl{gap:8px}.mtl-kop{align-items:flex-start;gap:6px}.mtl-titelblok{min-width:0}.mtl-titel{font-size:23px;line-height:28px}.mtl-sub{font-size:11px;line-height:15px;margin-top:1px}.mtl-acties{width:100%;gap:4px;flex-wrap:nowrap;overflow-x:auto;padding-bottom:1px}.mtl-acties .ui-knop{min-height:36px;padding:0 8px;font-size:12px;white-space:nowrap}.mtl-acties .mtl-seg{flex:none}
 .mtl-balk{padding:8px;gap:6px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}.mtl-balk::-webkit-scrollbar{display:none}.mtl-chip,.mtl-nav{flex:none}.mtl-chip{height:30px;padding:0 9px}.mtl-nav{margin-left:0}.mtl-nav .ui-knop{min-height:36px}.mtl-periode{font-size:11px;margin:0 2px}
@@ -653,6 +660,23 @@
     const v = st.el.querySelector('.mtl-voet'); if (v) v.textContent = voetTekst(tot);
   }
   function zetGetal(td, c) { td.textContent = c ? L.fmt(c) : '\u2013'; td.classList.toggle('mtl-0', !c); }
+  function postenTekst(m) { const ps = [...m.values()]; const b = ps.filter(x => x.betaald).reduce((a, x) => a + x.c, 0), n = ps.filter(x => !x.betaald).reduce((a, x) => a + x.c, 0); return (b ? 'Al betaald ' + L.fmt(b) + '\n' : '') + (n ? 'Nog verwacht ' + L.fmt(n) + '\n' : '') + 'Klik voor het lijstje'; }
+  // Lijstje bij een kostencel: al betaalde posten doorgehaald (met "betaald"), wat nog komt gewoon. Sluit met Esc, een klik ernaast of opnieuw klikken.
+  function toonPosten(g, i, td) {
+    sluitPosten(); if (!st.voet || !st.voet.kt) return;
+    const ps = [...st.voet.kt[g].posten[i].values()].filter(x => x.c).sort((a, b) => (a.betaald - b.betaald) || Math.abs(b.c) - Math.abs(a.c)); if (!ps.length) return;
+    const bet = ps.filter(x => x.betaald).reduce((a, x) => a + x.c, 0), nog = ps.filter(x => !x.betaald).reduce((a, x) => a + x.c, 0);
+    const pop = h('div', { class: 'mtl-pop', role: 'dialog', 'aria-label': KAS_TEKST[g] + ' ' + maandTekst(st.voet.ms[i]) },
+      h('div', { class: 'mtl-popkop' }, h('b', null, KAS_TEKST[g]), ' ', maandTekst(st.voet.ms[i]), h('button', { type: 'button', class: 'mtl-link', 'aria-label': 'Sluiten', onclick: () => sluitPosten() }, '\u00d7')),
+      h('ul', null, ps.slice(0, 40).map(x => h('li', { class: x.betaald ? 'betaald' : null }, h('span', { class: 'n' }, x.naam), x.betaald ? h('span', { class: 'tag' }, 'betaald') : null, h('span', { class: 'b' }, L.fmt(x.c))))),
+      ps.length > 40 ? h('div', { class: 'mtl-0' }, '\u2026 en nog ' + (ps.length - 40)) : null,
+      h('div', { class: 'mtl-popvoet' }, bet ? h('span', null, 'Al betaald ', h('b', null, L.fmt(bet))) : null, nog ? h('span', null, 'Nog verwacht ', h('b', null, L.fmt(nog))) : null));
+    document.body.appendChild(pop); st.pop = { el: pop, td };
+    const r = td.getBoundingClientRect(), w = pop.offsetWidth, hh = pop.offsetHeight;
+    pop.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.right - w)) + 'px'; pop.style.top = Math.max(8, r.top - hh - 6) + 'px';
+    setTimeout(() => { if (!st.pop || st.pop.el !== pop) return; document.addEventListener('mousedown', st.pop.weg = ev => { if (!pop.contains(ev.target) && !td.contains(ev.target)) sluitPosten(); }); document.addEventListener('keydown', st.pop.esc = ev => { if (ev.key === 'Escape') { sluitPosten(); td.focus(); } }); }, 0);
+  }
+  function sluitPosten() { if (!st.pop) return; document.removeEventListener('mousedown', st.pop.weg); document.removeEventListener('keydown', st.pop.esc); st.pop.el.remove(); st.pop = null; }
   // Opbouw voor de mouse-over: grootste posten eerst, hooguit 14 regels.
   function opbouwTekst(kop, m) {
     const xs = [...m.entries()].filter(([, c]) => c).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
@@ -673,13 +697,19 @@
     zet('gef', st.fact ? allePer : null, i => opbouwTekst('Gefactureerd in ' + maandTekst(ms[i]) + ' (incl. btw)', alle[i]));
     const regels = kasRegels(ms), kt = regels ? L.kasTotalen(regels, ms, st.kasAan) : null;
     const nuYmV = st.tl ? st.tl.vandaag.slice(0, 7) : null;
-    for (const g of L.KAS_GROEPEN) zet(g, kt ? kt[g].per : null, i => opbouwTekst(KAS_TEXT_KORT(g) + ' ' + maandTekst(ms[i]) + (nuYmV && ms[i] < nuYmV ? ' (betaald, bank)' : nuYmV && ms[i] === nuYmV && st.tl.histVers ? ' (al betaald + nog verwacht)' : ' (verwacht)'), kt[g].opbouw[i]));
+    st.voet = { kt, ms };
+    for (const g of L.KAS_GROEPEN) zet(g, kt ? kt[g].per : null, i => postenTekst(kt[g].posten[i]) + '\n\n' + opbouwTekst(KAS_TEXT_KORT(g) + ' ' + maandTekst(ms[i]) + (nuYmV && ms[i] < nuYmV ? ' (betaald, bank)' : nuYmV && ms[i] === nuYmV && st.tl.histVers ? ' (al betaald + nog verwacht)' : ' (verwacht)'), kt[g].opbouw[i]));
     const onv = st.tl && st.tl.onvolledig.length;
     // Voorbije maanden: netto = werkelijk ontvangen min werkelijk betaald (bank, met de vinkjes). Vanaf deze maand: totaal + aangevinkte regels.
     const nuYm = st.tl ? st.tl.vandaag.slice(0, 7) : null, nettoPer = L.nettoWerkelijk(L.netto(tot.per, st.fact ? losPer : null, kt, st.kasAan), ms, nuYm, st.tl && st.tl.hist, kt, st.kasAan, st.tl && st.tl.histAsOf);
     zet('netto', nettoPer, i => nuYm && ms[i] < nuYm ? (st.tl.hist && st.tl.hist[ms[i]] && L.histCompleet(ms[i], nuYm, st.tl.histAsOf, false) ? 'Werkelijk via de bank in ' + maandTekst(ms[i]) + ': ontvangen ' + L.fmt(L.histIn(st.tl.hist, ms[i])) + ', min de aangevinkte betaalde kosten' : (st.tl.hist && st.tl.histAsOf && ms[i] >= st.tl.histAsOf.slice(0, 7) ? 'De bankgegevens van ' + maandTekst(ms[i]) + ' zijn nog niet bijgewerkt' : 'Geen bankgegevens voor ' + maandTekst(ms[i]) + ' (de bankhistorie gaat een jaar terug)')) : !kt ? 'De kosten zijn niet geladen: dit is alleen het totaal' : onv ? 'Let op: het overzicht van Financiën is niet compleet, er kunnen kosten ontbreken' : '');
     const nr = t.querySelector('tfoot tr[data-rij="netto"]'); if (nr) nr.classList.toggle('onv', !kt || !!onv);
     t.querySelectorAll('tfoot tr[data-rij]').forEach(tr => { const g = tr.dataset.rij; if (g === 'gef' || L.KAS_GROEPEN.includes(g)) tr.classList.toggle('uit', st.kasAan[g] === false); });
+    // Kostencellen klikbaar (lijstje met posten); deze maand met een regeltje "nog …" als een deel al betaald is.
+    if (kt) for (const g of L.KAS_GROEPEN) t.querySelectorAll(`tfoot tr[data-rij="${g}"] td[data-i]`).forEach(td => { const i = Number(td.dataset.i), ps = [...kt[g].posten[i].values()];
+      td.classList.toggle('klik', ps.length > 0); td.tabIndex = ps.length ? 0 : -1; td.setAttribute('role', ps.length ? 'button' : 'cell');
+      const bet = ps.filter(x => x.betaald).reduce((a, x) => a + x.c, 0), nog = ps.filter(x => !x.betaald).reduce((a, x) => a + x.c, 0);
+      if (bet && ps.some(x => !x.betaald)) td.appendChild(h('span', { class: 'mtl-nogk' }, 'nog ' + L.fmt(nog))); });
   }
   const KAS_TEXT_KORT = g => KAS_TEKST[g];
   function voetTekst(tot) {
@@ -697,6 +727,7 @@
       onclick: () => { st.sort = { sleutel, richting: actief && st.sort.richting === 'af' ? 'op' : 'af' }; ls.set('mtl:sort', st.sort.sleutel + ':' + st.sort.richting); teken(); } }, tekst + pijl);
   }
   function teken() {
+    sluitPosten();
     if (!st.el) return;
     const sl = st.el.querySelector('.mtl-scroll'), sx = sl ? sl.scrollLeft : 0, sy = sl ? sl.scrollTop : 0;
     // wie aan het typen is houdt zijn vakje, tekst en cursor bij een hertekening (bv. Vernieuwen of het laden na het openen van de tab)
@@ -778,6 +809,9 @@
       const tfoot = h('tfoot', null, voet);
       // vast onderaan: elke regel krijgt als bottom de hoogte van de regels eronder
       { let b = 0; for (const tr of voet.slice().reverse()) { for (const c of tr.children) c.style.bottom = b + 'px'; b += tr.classList.contains('k') ? 38 : 34; } }
+      const kostTd = ev => { const td = ev.target.closest && ev.target.closest('td[data-i].klik'), tr = td && td.parentElement; return td && tr && L.KAS_GROEPEN.includes(tr.dataset.rij) ? [tr.dataset.rij, Number(td.dataset.i), td] : null; };
+      tfoot.addEventListener('click', ev => { const k = kostTd(ev); if (!k) return; if (st.pop && st.pop.td === k[2]) return sluitPosten(); toonPosten(...k); });
+      tfoot.addEventListener('keydown', ev => { const k = kostTd(ev); if (k && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); toonPosten(...k); } });
       tfoot.addEventListener('change', ev => { const g = ev.target.dataset && ev.target.dataset.kas; if (!g) return; st.kasAan[g] = ev.target.checked; bewaarKasStand(); werkBij(); });
       const tabel = h('table', { class: 'mtl-tabel' + (st.kasOpen ? ' kasopen' : '') }, thead, tbody, tfoot);
       tabel.addEventListener('focusin', ev => { if (ev.target.classList && ev.target.classList.contains('mtl-in')) ev.target.select(); });
