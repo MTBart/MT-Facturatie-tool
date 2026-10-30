@@ -112,6 +112,8 @@ test('eigen posten: vervallen in een maand met een factuur van dezelfde leveranc
   assert.deepStrictEqual(pr.filter(r => r.naam === 'Energie').map(r => r.ym), ['2026-12'], 'november heeft al een factuur');
   assert.deepStrictEqual(pr.filter(r => r.naam === 'Inhuur').map(r => r.ym), ['2026-11', '2026-12'], 'oktober-factuur raakt november niet');
   assert.strictEqual(L.postRegels(kas, ms).length, 6, 'zonder bezet telt alles');
+  const regeling = [{ bron: 'inkoop', tegenpartij: 'Energie Test N.V.', richting: 'uit', bedrag: 1042.09, datum: '2026-12-27', override: { type: 'afbetaling' } }];
+  assert.deepStrictEqual(L.postRegels(kas, ms, L.bezet(regeling, '2026-10-30')).filter(r => r.naam === 'Energie').map(r => r.ym), ['2026-11', '2026-12'], 'regelingstermijn laat de maandpost staan');
   assert.strictEqual(L.loonVan('p:abc', 'Ilona X', null), 'ilona'); assert.strictEqual(L.loonVan('p:abd', 'Maarten X', null), 'maarten');
   assert.deepStrictEqual(L.kasTotalen([{ groep: 'vast', c: -100, ym: '2026-11', loon: 'maarten', naam: 'M', sleutel: 'p:abd' }], ['2026-11'], { loonMaarten: false }).vast.per, [0], 'loon Maarten uit');
   const rg = ev.map(e => L.kasRegel(e, { indeling: { 'n:energie test n.v.': 'vast' } }, '2026-10-30')).concat(pr);

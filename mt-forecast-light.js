@@ -161,8 +161,9 @@
   };
   // Een eigen post met lev (sleutel van een leverancier, bv. n:vattenfall …) vervalt in een maand waarin van die leverancier al een factuur of betaling staat:
   // de echte factuur telt dan, de post niet (geen dubbeltelling). bezet = L.bezet(events, vandaag).
+  // Termijnen van een betalingsregeling (override afbetaling) tellen niet als factuur: die komen naast de gewone maandfactuur.
   // Een vaste betaling (patroon) telt ook onder zijn naam, zodat een post met lev n:<naam> vervalt zodra die betaling als patroon herkend wordt.
-  L.bezet = (events, vandaag) => new Set((events || []).map(e => L.kasRegel(e, null, vandaag)).filter(r => r && (r.bron === 'inkoop' || r.bron === 'patroon'))
+  L.bezet = (events, vandaag) => new Set((events || []).filter(e => !(e && e.override && e.override.type === 'afbetaling')).map(e => L.kasRegel(e, null, vandaag)).filter(r => r && (r.bron === 'inkoop' || r.bron === 'patroon'))
     .flatMap(r => [r.sleutel + '|' + r.ym, 'n:' + String(r.naam || '').toLowerCase().trim() + '|' + r.ym]));
   L.postRegels = function (kas, maanden, bezet) {
     const uit = [];
