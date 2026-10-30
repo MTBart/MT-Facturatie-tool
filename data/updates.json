@@ -7,8 +7,10 @@
     "punten": [
       "Facturen uit Moneybird staan nu in de Forecast. Is een offerte (deels) gefactureerd, dan staat dat bedrag blauw en vast in de maand van de factuur en telt het daar in plaats van de schets. Je schetsbedrag blijft bewaard.",
       "Bij elke offerte zie je onder het bedrag wat er nog te factureren is. De status wordt Deels gefactureerd of Gefactureerd.",
-      "Onder Totaal per maand klap je de uitsplitsing open: gefactureerd, openstaande facturen (wat wij nog moeten betalen), vaste kosten (met een vinkje voor het loon van Bart en van Mathijs), vaste patronen en overige voorspelling (btw-aangifte, live uit Moneybird). Vink aan wat meetelt; onderaan staat het netto resultaat. Ga met de muis over een bedrag om te zien waar het uit bestaat.",
-      "Met Indeling kies je per vaste betaling of leverancier de groep, en voeg je eigen terugkerende posten toe (bv. Interprojecten). Dezelfde indeling en namen staan nu ook in de uitgebreide forecast; daar heet wat klanten ons nog moeten betalen Te ontvangen."
+      "Klik op Totaal per maand (⋯) voor de uitsplitsing: gefactureerd, openstaande facturen (wat wij nog moeten betalen), vaste kosten (met een vinkje voor het loon van Bart, Mathijs en Ilona), vaste patronen en overige voorspelling (btw-aangifte, live uit Moneybird). Vink aan wat meetelt; onderaan staat het netto resultaat. Ga met de muis over een bedrag om te zien waar het uit bestaat.",
+      "Met Indeling kies je per vaste betaling of leverancier de groep, en voeg je eigen terugkerende posten toe (bv. Interprojecten). Dezelfde indeling en namen staan nu ook in de uitgebreide forecast; daar heet wat klanten ons nog moeten betalen Te ontvangen.",
+      "Vaste posten om mee te beginnen: Arjan (uren, ± € 10.000 per maand), Vattenfall en het loon van Ilona. Staat in een maand al hun echte factuur of betaling, dan telt de post die maand niet (geen dubbeltelling). Bedragen pas je aan bij Indeling.",
+      "De Forecast is overzichtelijker op de telefoon: twee maanden naast de offerte, het bedrag onder de naam en compacte knoppen."
     ]
   },
   {
