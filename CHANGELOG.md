@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-30 — Backup = v2.27.0
+- Commit: `b9be88a` | Auteur: Bart Witte
+
 ## 2026-10-30 — Release v2.27.0: Forecast met facturen (deels gefactureerd, nog te factureren), uitklapbare uitsplitsing met kosten en netto resultaat, indeling met eigen posten, loonvinkjes, mobiel overzichtelijk
 - Commit: `03a9700` | Auteur: Bart Witte
 
