@@ -2386,7 +2386,7 @@ function geldKasNorm(x) {
   for (const [k, v] of Object.entries(x.indeling || {})) { if (!GS_KAS_KEY.test(k) || !GS_KAS_GROEP.includes(v)) return { fout: 'indeling: ongeldige regel' }; indeling[k] = v; }
   if (Object.keys(indeling).length > 500) return { fout: 'indeling: hooguit 500 regels' };
   if (x.loon != null && !obj(x.loon)) return { fout: 'loon: object' };
-  for (const [k, v] of Object.entries(x.loon || {})) { if (!GS_KAS_KEY.test(k) || !['bart', 'mathijs', 'geen'].includes(v)) return { fout: 'loon: ongeldige regel' }; loon[k] = v; }
+  for (const [k, v] of Object.entries(x.loon || {})) { if (!GS_KAS_KEY.test(k) || !['bart', 'mathijs', 'ilona', 'geen'].includes(v)) return { fout: 'loon: ongeldige regel' }; loon[k] = v; }
   if (Object.keys(loon).length > 100) return { fout: 'loon: hooguit 100 regels' };
   if (x.posten != null && !Array.isArray(x.posten)) return { fout: 'posten: lijst' };
   for (const p of x.posten || []) {
@@ -2396,7 +2396,9 @@ function geldKasNorm(x) {
     if (!GS_KAS_POST.includes(p.groep) || !['in', 'uit'].includes(p.richting)) return { fout: 'post: groep of richting ongeldig' };
     if (!Number.isInteger(p.bedragC) || p.bedragC < 1 || p.bedragC > GS_MAX_C) return { fout: 'post: bedrag ongeldig' };
     if (!GS_YM.test(String(p.van || '')) || (p.tot != null && (!GS_YM.test(String(p.tot)) || p.tot < p.van))) return { fout: 'post: van/tot ongeldig' };
-    ids.add(p.id); posten.push({ id: p.id, groep: p.groep, naam, richting: p.richting, bedragC: p.bedragC, van: p.van, tot: p.tot == null ? null : p.tot });
+    if (p.lev != null && !(typeof p.lev === 'string' && GS_KAS_KEY.test(p.lev))) return { fout: 'post: leverancier ongeldig' };
+    if (p.loon != null && !['bart', 'mathijs', 'ilona'].includes(p.loon)) return { fout: 'post: loon ongeldig' };
+    ids.add(p.id); posten.push({ id: p.id, groep: p.groep, naam, richting: p.richting, bedragC: p.bedragC, van: p.van, tot: p.tot == null ? null : p.tot, ...(p.lev != null ? { lev: p.lev } : {}), ...(p.loon != null ? { loon: p.loon } : {}) });
   }
   if (posten.length > 100) return { fout: 'hooguit 100 posten' };
   return { kas: { v: 1, indeling, loon, posten } };
@@ -4524,6 +4526,11 @@ async function handleGeld(p, request, env, ik, json0) {
     const hist = url.searchParams.get('historie') === '1';
     const kas = url.searchParams.get('kas') === '1';
     const r = await geldSchetsDO(env, hist ? 'gs-historie' : kas ? 'gs-kas-lees' : 'gs-lees', hist ?{ limiet: Number(url.searchParams.get('limiet')) || 200, eid: url.searchParams.get('eid') || '' } : {});
+    // Nog nooit een kasindeling opgeslagen: de startindeling uit KV (geld:kas:start, met namen, dus niet in de code) meegeven. Ongeldig of afwezig = geen.
+    if (!hist && r.status === 200 && r.body && r.body.kas == null) {
+      let s = null; try { s = await env.MT_ROLLEN.get('geld:kas:start', 'json'); } catch (e) { s = null; }
+      const n = s ? geldKasNorm(s) : null; r.body.kas_start = n && n.kas ? n.kas : null;
+    }
     return json(r.body, r.status);
   }
   // Eenmalig: de planning uit de uitgebreide Forecast (prognose-items met een offerte) als startpunt in de schets. Per offerte de termijnen die

@@ -101,6 +101,26 @@ test('kasregels: indeling, standaard, lonen, btw, eigen posten en netto', () => 
   assert.deepStrictEqual(L.netto([5, 5], [1, 1], kt, { gef: false, open: false, vast: false, patroon: false, overig: false }), [5, 5]);
   const geenLoon = L.kasRegel(ev[0], { loon: { 'p:pa14c9087c018': 'geen' } }, '2026-10-30'); assert.strictEqual(geenLoon.loon, null);
 });
+test('eigen posten: vervallen in een maand met een factuur van dezelfde leverancier; loon Ilona; startindeling', () => {
+  const ev = [{ bron: 'inkoop', tegenpartij: 'Energie Test N.V.', richting: 'uit', bedrag: 1439.62, datum: '2026-11-05' },
+    { bron: 'inkoop', tegenpartij: 'Inhuur Test B.V.', richting: 'uit', bedrag: 1405, datum: '2026-10-27' }];
+  const kas = { posten: [{ id: 'post1', groep: 'vast', naam: 'Energie', richting: 'uit', bedragC: 143961, van: '2026-11', tot: null, lev: 'n:energie test n.v.' },
+    { id: 'post2', groep: 'patroon', naam: 'Inhuur', richting: 'uit', bedragC: 1000000, van: '2026-11', tot: null, lev: 'n:inhuur test b.v.' },
+    { id: 'post3', groep: 'vast', naam: 'Loon Ilona', richting: 'uit', bedragC: 200000, van: '2026-11', tot: null, loon: 'ilona' }] };
+  const ms = ['2026-10', '2026-11', '2026-12'], bezet = L.bezet(ev, '2026-10-30');
+  const pr = L.postRegels(kas, ms, bezet);
+  assert.deepStrictEqual(pr.filter(r => r.naam === 'Energie').map(r => r.ym), ['2026-12'], 'november heeft al een factuur');
+  assert.deepStrictEqual(pr.filter(r => r.naam === 'Inhuur').map(r => r.ym), ['2026-11', '2026-12'], 'oktober-factuur raakt november niet');
+  assert.strictEqual(L.postRegels(kas, ms).length, 6, 'zonder bezet telt alles');
+  assert.strictEqual(L.loonVan('p:abc', 'Ilona X', null), 'ilona');
+  const rg = ev.map(e => L.kasRegel(e, { indeling: { 'n:energie test n.v.': 'vast' } }, '2026-10-30')).concat(pr);
+  assert.deepStrictEqual(L.kasTotalen(rg, ms, {}).vast.per, [0, -143962 - 200000, -143961 - 200000]);
+  assert.deepStrictEqual(L.kasTotalen(rg, ms, { loonIlona: false }).vast.per, [0, -143962, -143961], 'loon Ilona uit');
+  const pat = [{ bron: 'patroon', patroon_id: 'pabc123', tegenpartij: 'Medewerker Test', richting: 'uit', bedrag: 2100, datum: '2026-12-01' }];
+  const start = { posten: [{ id: 'startx', groep: 'vast', naam: 'Loon', richting: 'uit', bedragC: 210000, van: '2026-11', tot: null, lev: 'n:medewerker test', loon: 'ilona' }] };
+  assert.deepStrictEqual(L.postRegels(L.kasEff(null, start), ms, L.bezet(pat, '2026-10-30')).map(r => r.ym), ['2026-11'], 'herkend patroon onder dezelfde naam vervangt de post');
+  assert.strictEqual(L.kasEff({ posten: [] }, start).posten.length, 0, 'opgeslagen indeling wint'); assert.strictEqual(L.kasEff(null, null), null);
+});
 test('totalen: per maand, zeker, geheel en buiten beeld', () => {
   const ms = ['2026-10', '2026-11'];
   const rijen = [{ cellen: { '2026-10': 100, '2026-11': 200, '2027-05': 7 }, zeker: true }, { cellen: { '2026-11': -50, '2026-09': 3 }, zeker: false }];

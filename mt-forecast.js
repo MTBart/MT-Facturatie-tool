@@ -671,7 +671,7 @@
 .mtf-fnr{display:block;font-size:11px}.mtf-fnr .mtf-ext{margin-left:4px}.mtf-fnr .mtf-ext:first-child{margin-left:0}
 .mtf-ca.mtf-kas,.mtf-kas{display:inline;margin-left:8px;font-style:normal;white-space:nowrap}.mtf-btwhint{color:var(--m-ink2)}
 .mtf-ca{display:block;font-size:11px;font-weight:400;color:var(--m-ink3)}
-.mtf-kasrij{display:inline-flex;align-items:center;gap:10px;flex-wrap:nowrap}.mtf-loonrij{display:inline-flex;align-items:center;gap:8px;font-size:11px;font-weight:400;color:var(--m-ink3)}.mtf-loon{display:inline-flex;align-items:center;gap:4px;cursor:pointer}
+.mtf-kasrij{display:inline-flex;align-items:center;gap:10px;flex-wrap:nowrap}.mtf-loonrij{display:inline-flex;align-items:center;gap:8px;font-size:11px;font-weight:400;color:var(--m-ink3)}.mtf-kasfout{color:var(--m-err);font-size:12px;font-weight:400}.mtf-loon{display:inline-flex;align-items:center;gap:4px;cursor:pointer}
 .mtf-toast-knop{margin-left:12px;border:0;background:none;color:var(--m-primary,#2f6b4f);font:inherit;font-weight:600;cursor:pointer;padding:0;text-decoration:underline}
 .mtf-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--m-surface);color:var(--m-ink);border:1px solid var(--m-line);box-shadow:var(--m-pop);padding:10px 16px;border-radius:var(--m-rp);font-size:13px;z-index:9999;max-width:90vw}
 .mtf-pop{position:fixed;z-index:9000;width:300px;max-width:calc(100vw - 16px);background:var(--m-surface);border:1px solid var(--m-line);border-radius:var(--m-rp);box-shadow:var(--m-pop);padding:var(--space-4,16px);font-family:var(--m-ui);font-size:13px;color:var(--m-ink)}
@@ -1025,8 +1025,8 @@ th.num .mtf-sortknop .mtf-sortpijl{position:absolute;left:-9px;top:50%;margin:-5
     st.heeftEerder = rijen.some(r => r.aan && r.eerderC);
     const G = root.MTGeld, groep = G && G.groep ? G.groep(st.data) : null;
     // Kosten volgens de indeling van de Forecast (light): groep per inkoopfactuur/vaste betaling, lonen Bart/Mathijs aan of uit, eigen posten.
-    const FL = root.MTForecastLight, kasGroep = FL && FL.kasRegel ? (e => { const r = FL.kasRegel(e, st.kas, vandaag); if (!r) return null; if ((r.loon === 'bart' && !st.loonBartAan) || (r.loon === 'mathijs' && !st.loonMathijsAan)) return 'uit'; return r.groep; }) : null;
-    const posten = FL && FL.postRegels ? FL.postRegels(st.kas, Array.from({ length: F.HORIZON + 1 }, (_, i) => maandPlus(nu, i))) : [];
+    const FL = root.MTForecastLight, kasE = FL && st.kasGeladen ? FL.kasEff(st.kas, st.kasStart) : null, kasGroep = FL && FL.kasRegel ? (e => { const r = FL.kasRegel(e, kasE, vandaag); if (!r) return null; if (r.loon && !st[FL.loonAanSleutel(r.loon) + 'Aan']) return 'uit'; return r.groep; }) : null;
+    const posten = FL && FL.postRegels ? FL.postRegels(kasE, Array.from({ length: F.HORIZON + 1 }, (_, i) => maandPlus(nu, i)), FL.bezet(st.data.events, vandaag)).filter(p => !(p.loon && !st[FL.loonAanSleutel(p.loon) + 'Aan'])) : [];
     const tot = F.totalen({ rijen, events: st.data.events, vandaag, maanden: F.HORIZON + 1, uitgesloten: zv.uitgesloten, openAan: st.openAan, inkoopAan: st.inkoopAan, vastAan: st.vastAan, patroonAan: st.patroonAan, overigAan: st.overigAan,
       groep: kasGroep, posten, effect: G && G.effect && groep ? (e => c(G.effect(e, 'lopend', groep))) : null });
     const exclM = st.btw === 'excl', rijenV = exclM ? rijen.map(F.rijExcl) : rijen;
@@ -1070,10 +1070,11 @@ th.num .mtf-sortknop .mtf-sortpijl{position:absolute;left:-9px;top:50%;margin:-5
     const loonVink = (k, naam) => h('label', { class: 'mtf-loon', title: 'Loon van ' + naam + ' meetellen' }, h('input', { type: 'checkbox', checked: st[k + 'Aan'], data: { kasaan: k } }), naam);
     foot.push(kasRij('open', 'Te ontvangen', 'Al verstuurde verkoopfacturen die nog niet betaald zijn, per verwachte betaalmaand (dezelfde bron als de kaslijn in Financiën)', st.openAan, { open: '1' }));
     foot.push(kasRij('inkoop', 'Openstaande facturen', 'Inkoopfacturen die wij nog moeten betalen, per verwachte betaalmaand. De indeling per leverancier kies je in de Forecast (Uitsplitsing → Indeling)', st.inkoopAan, { kasaan: 'inkoop' }));
-    foot.push(kasRij('vast', 'Vaste kosten', 'Lonen, energie, water, verzekeringen, hypotheek, abonnementen, lease (vaste betalingen uit de bank en inkoopfacturen van vaste leveranciers)', st.vastAan, { kasaan: 'vast' }, h('span', { class: 'mtf-loonrij' }, 'loon', loonVink('loonBart', 'Bart'), loonVink('loonMathijs', 'Mathijs'))));
+    foot.push(kasRij('vast', 'Vaste kosten', 'Lonen, energie, water, verzekeringen, hypotheek, abonnementen, lease (vaste betalingen uit de bank en inkoopfacturen van vaste leveranciers)', st.vastAan, { kasaan: 'vast' }, h('span', { class: 'mtf-loonrij' }, 'loon', ((root.MTForecastLight && root.MTForecastLight.LONEN) || []).map(([k, n]) => loonVink(root.MTForecastLight.loonAanSleutel(k), n)))));
     foot.push(kasRij('patroon', 'Vaste patronen', 'Terugkerende posten die geen vaste kosten zijn (bv. Interprojecten); in te delen of toe te voegen in de Forecast', st.patroonAan, { kasaan: 'patroon' }));
     foot.push(kasRij('overig', 'Overige voorspelling', 'Btw-aangifte (btw-overzicht van Moneybird; het lopende kwartaal telt live op in de maand na het kwartaal), weekinleg en handmatige posten uit Financiën', st.overigAan, { overig: '1' }));
-    foot.push(regel('Netto', g.netto.map(v => getalTd(v, 'mnd')), null, g.later.netto, 'netto', h('span', { title: 'Binnen, plus de aangevinkte regels (kosten zijn negatief)' }, 'Netto per ' + eenheidWoord, kasTag(), schatLabel())));
+    foot.push(regel('Netto', g.netto.map(v => getalTd(v, 'mnd')), null, g.later.netto, 'netto', h('span', { title: 'Binnen, plus de aangevinkte regels (kosten zijn negatief)' }, 'Netto per ' + eenheidWoord, kasTag(), schatLabel()),
+      st.kasGeladen ? null : h('span', { class: 'mtf-kasfout', title: 'De indeling van de Forecast (groepen, lonen, eigen posten) kon niet worden geladen: kosten staan in de standaardgroepen en eigen posten ontbreken. Probeer Vernieuwen.' }, ' \u26a0 indeling niet geladen')));
     const tab = h('table', { class: 'mtf-tabel' + (vast ? ' vast' : '') }, h('thead', null, kop), h('tbody', null, F.sorteerRijen(zv.zichtbaar, st.sort).map(r => rijEl(exclM ? F.rijExcl(r) : r, nu, kols, edit))), h('tfoot', null, foot));
     if (vast) { const hs = foot.map((tr, i) => i === foot.length - 1 ? 34 : 28); foot.forEach((tr, i) => { const b = hs.slice(i + 1).reduce((a, x) => a + x, 0); [...tr.children].forEach(cel => { cel.style.bottom = b + 'px'; }); }); }   // totalen blijven onderaan in beeld
     const nKeuze = nGekozen;
@@ -1158,7 +1159,8 @@ th.num .mtf-sortknop .mtf-sortpijl{position:absolute;left:-9px;top:50%;margin:-5
       const [d, p, s, cf, ubR, fsR] = await Promise.all([st.bron.haal(pad), st.bron.haal('/geld/prognose'), nodig ? st.haalSchatten() : Promise.resolve(null), st.bron.haal('/geld/config').catch(() => null),
         st.bron.haal('/geld/uitbeeld').catch(foutObj), st.bron.haal('/geld/fschemas').catch(foutObj)]);
       if (cf && cf.config) st.cfg = cf.config;
-      try { const k = await st.bron.haal('/geld/schets?kas=1'); if (k && !k.error && 'kas' in k) st.kas = k.kas; } catch (e) { }   // indeling van de Forecast (light); zonder: de standaardindeling
+      st.kasGeladen = false;                                                                             // indeling van de Forecast (light); niet geladen: standaardgroepen, geen startposten, met waarschuwing
+      try { const k = await st.bron.haal('/geld/schets?kas=1'); if (k && !k.error && 'kas' in k) { st.kas = k.kas; st.kasStart = k.kas_start || null; st.kasGeladen = true; } } catch (e) { }
       const weg = r => !r || (r.error && /404|onbekende|not.?found/i.test(String(r.error)));          // oude worker zonder deze routes: die functie uitzetten
       if (ubR && !ubR.error && ubR.items) { st.ubBeschikbaar = true; st.ub = ubR.items; st.ubInfo = { aantal: ubR.aantal, max: ubR.max }; }
       else if (weg(ubR)) { st.ubBeschikbaar = false; st.ub = {}; st.ubInfo = null; }
@@ -1184,7 +1186,7 @@ th.num .mtf-sortknop .mtf-sortpijl{position:absolute;left:-9px;top:50%;margin:-5
   F.start = async function (el, o) {
     st.el = el; st.bron = o.bron; st.mag = !!o.magWijzigen; st.wie = o.wie || ''; st.projecten = o.projecten || null; st.haalSchatten = o.schatten; st.admin = o.administratie || null; st.projectHref = o.projectHref || null; st.openProject = o.openProject || null;
     st.kostenAan = ls.get('mtg:fc:kosten:' + st.wie) !== '0'; st.overigAan = ls.get('mtg:fc:overig:' + st.wie) !== '0'; st.openAan = ls.get('mtg:fc:open:' + st.wie) !== '0';
-    for (const k of ['inkoop', 'vast', 'patroon', 'loonBart', 'loonMathijs']) st[k + 'Aan'] = ls.get('mtg:fc:' + k + ':' + st.wie) !== '0';
+    for (const k of ['inkoop', 'vast', 'patroon', 'loonBart', 'loonMathijs', 'loonIlona']) st[k + 'Aan'] = ls.get('mtg:fc:' + k + ':' + st.wie) !== '0';
     st.sel = F.selStandaard();
     { const f = ls.get('mtg:fc:filter:' + st.wie); st.filter = new Set(f == null ? F.STATUSSEN : f.split(',').filter(x => F.FILTERS.includes(x))); }
     st.btw = ls.get('mtg:fc:btw:' + st.wie) === 'excl' ? 'excl' : 'incl'; st.passend = ls.get('mtg:fc:passend:' + st.wie) === '1'; st.sort = F.sortLees(ls.get('mtg:fc:sort:' + st.wie));

@@ -141,10 +141,15 @@
   L.kasSleutel = e => e.bron === 'patroon' && /^[a-z0-9]{1,20}$/i.test(String(e.patroon_id || '')) ? 'p:' + String(e.patroon_id).toLowerCase()
     : 'n:' + (String(e.tegenpartij || '').toLowerCase().replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 80) || 'onbekend');
   L.kasStandaard = e => e.bron === 'patroon' ? 'vast' : e.bron === 'inkoop' ? (VAST_RE.test(String(e.tegenpartij || '')) ? 'vast' : 'open') : 'overig';
+  L.LONEN = [['bart', 'Bart'], ['mathijs', 'Mathijs'], ['ilona', 'Ilona']];
+  // Zolang er nog nooit een indeling is opgeslagen geldt de startindeling die de worker meegeeft (kas_start, uit KV; met namen en bedragen,
+  // dus niet in deze code). Wie opslaat, legt hem vast en kan hem aanpassen. Eigen posten met lev vervallen in een maand met hun echte factuur.
+  L.kasEff = (kas, start) => kas || start || null;
+  L.loonAanSleutel = k => 'loon' + k.charAt(0).toUpperCase() + k.slice(1);
   L.loonVan = function (sl, naam, kas) {
     const x = kas && kas.loon && kas.loon[sl]; if (x) return x === 'geen' ? null : x;
     if (!sl.startsWith('p:')) return null;
-    return /\bwitte\b/i.test(naam) ? 'bart' : /\b(zwiers|mathijs)\b/i.test(naam) ? 'mathijs' : null;
+    return /\bwitte\b/i.test(naam) ? 'bart' : /\b(zwiers|mathijs)\b/i.test(naam) ? 'mathijs' : /\bilona\b/i.test(naam) ? 'ilona' : null;
   };
   L.kasRegel = function (e, kas, vandaag) {
     if (!e || e.intern || e.bron === 'bank' || e.saldo_ijkpunt || !e.datum || e.bron === 'verkoop' || e.bron === 'inleg' || (e.bron === 'prognose' && e.termijn_id)) return null;
@@ -154,18 +159,23 @@
     const groep = (!btw && kas && kas.indeling && kas.indeling[sl]) || L.kasStandaard(e), d = String(e.datum).slice(0, 10);
     return { sleutel: sl, naam, groep, c: (e.richting === 'in' ? 1 : -1) * b, ym: (d < vandaag ? vandaag : d).slice(0, 7), loon: groep === 'vast' ? L.loonVan(sl, naam, kas) : null, bron: e.bron };
   };
-  L.postRegels = function (kas, maanden) {
+  // Een eigen post met lev (sleutel van een leverancier, bv. n:vattenfall …) vervalt in een maand waarin van die leverancier al een factuur of betaling staat:
+  // de echte factuur telt dan, de post niet (geen dubbeltelling). bezet = L.bezet(events, vandaag).
+  // Een vaste betaling (patroon) telt ook onder zijn naam, zodat een post met lev n:<naam> vervalt zodra die betaling als patroon herkend wordt.
+  L.bezet = (events, vandaag) => new Set((events || []).map(e => L.kasRegel(e, null, vandaag)).filter(r => r && (r.bron === 'inkoop' || r.bron === 'patroon'))
+    .flatMap(r => [r.sleutel + '|' + r.ym, 'n:' + String(r.naam || '').toLowerCase().trim() + '|' + r.ym]));
+  L.postRegels = function (kas, maanden, bezet) {
     const uit = [];
-    for (const p of (kas && kas.posten) || []) for (const ym of maanden) if (ym >= p.van && (!p.tot || ym <= p.tot)) uit.push({ sleutel: 'post:' + p.id, naam: p.naam, groep: p.groep, c: (p.richting === 'in' ? 1 : -1) * p.bedragC, ym, loon: null, bron: 'post' });
+    for (const p of (kas && kas.posten) || []) for (const ym of maanden) if (ym >= p.van && (!p.tot || ym <= p.tot) && !(p.lev && bezet && bezet.has(p.lev + '|' + ym))) uit.push({ sleutel: 'post:' + p.id, naam: p.naam, groep: p.groep, c: (p.richting === 'in' ? 1 : -1) * p.bedragC, ym, loon: p.loon || null, bron: 'post' });
     return uit;
   };
-  // Per groep per maand de som en de opbouw (voor de mouse-over). aan.loonBart / aan.loonMathijs === false: dat loon telt niet mee.
+  // Per groep per maand de som en de opbouw (voor de mouse-over). aan.loonBart / loonMathijs / loonIlona === false: dat loon telt niet mee.
   L.kasTotalen = function (regels, maanden, aan) {
     aan = aan || {}; const idx = new Map(maanden.map((m, i) => [m, i])), t = {};
     for (const g of L.KAS_GROEPEN) t[g] = { per: maanden.map(() => 0), opbouw: maanden.map(() => new Map()) };
     for (const r of regels || []) {
       const i = idx.get(r.ym); if (i == null || !t[r.groep]) continue;
-      if ((r.loon === 'bart' && aan.loonBart === false) || (r.loon === 'mathijs' && aan.loonMathijs === false)) continue;
+      if (r.loon && aan[L.loonAanSleutel(r.loon)] === false) continue;
       t[r.groep].per[i] += r.c; const o = t[r.groep].opbouw[i]; o.set(r.naam, (o.get(r.naam) || 0) + r.c);
     }
     return t;
@@ -281,9 +291,9 @@
 .mtl-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--l-surface);color:var(--l-ink);border:1px solid var(--l-line);box-shadow:var(--l-pop);padding:10px 16px;border-radius:var(--l-rp);font-family:var(--l-ui);font-size:13px;z-index:9999;max-width:90vw}
 .mtl-toast button{margin-left:12px;border:0;background:none;color:var(--l-primary);font:inherit;font-weight:600;cursor:pointer;padding:0;text-decoration:underline}
 .mtl-tabel tfoot tr.k th,.mtl-tabel tfoot tr.k td{height:28px;font-weight:400;font-size:12px;color:var(--l-ink2)}
-.mtl-tabel tfoot tr.k.uit td{opacity:.4}.mtl-tabel tfoot tr.kop td,.mtl-tabel tfoot tr.kop th{border-top:1px solid var(--l-soft)}
+.mtl-tabel tfoot tr.k.uit td{opacity:.4}.mtl-somkop{display:flex;align-items:center;gap:8px;white-space:nowrap}.mtl-sub0{padding-left:2px}
 .mtl-tabel tfoot tr.netto th,.mtl-tabel tfoot tr.netto td{height:34px;border-top:1px solid var(--l-strong);border-bottom:0;font-weight:600}
-.mtl-uitklap{border:0;background:none;font:inherit;font-size:12px;font-weight:500;color:var(--l-ink2);cursor:pointer;padding:2px 4px;border-radius:var(--l-r)}.mtl-uitklap:hover{background:var(--l-surface2);color:var(--l-ink)}
+.mtl-uitklap{display:inline-flex;align-items:center;gap:8px;border:0;background:none;font:inherit;font-weight:600;color:var(--l-ink);cursor:pointer;padding:3px 6px;margin-left:-6px;border-radius:var(--l-r)}.mtl-uitklap:hover,.mtl-uitklap[aria-expanded="true"]{background:var(--l-surface2)}.mtl-uitklap:focus-visible{outline:2px solid var(--l-primary);outline-offset:1px}.mtl-meer{color:var(--l-ink3);font-size:15px;line-height:1;min-width:14px;text-align:center}.mtl-uitklap:hover .mtl-meer{color:var(--l-ink)}
 .mtl-link{border:0;background:none;color:var(--l-primary);font:inherit;font-size:12px;cursor:pointer;text-decoration:underline;padding:0 4px}.mtl-link:disabled{color:var(--l-ink3);cursor:default;text-decoration:none}
 .mtl-vink{display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap}.mtl-vink input{margin:0}
 .mtl-vinkrij{display:flex;align-items:center;gap:12px}.mtl-loon{display:inline-flex;gap:8px;align-items:center;color:var(--l-ink3);font-size:11px}.mtl-kasfout{color:var(--l-err);font-size:12px}
@@ -298,7 +308,7 @@
 .mtl-ptabel{width:100%;border-collapse:collapse}.mtl-ptabel th,.mtl-ptabel td{padding:4px 6px;border-bottom:1px solid var(--l-soft);text-align:left;vertical-align:middle}.mtl-ptabel th{font-weight:500;color:var(--l-ink2);font-size:12px}.mtl-ptabel .num{text-align:right;font-family:var(--l-mono)}
 .mtl-paneel select,.mtl-paneel input{font:inherit;height:28px;box-sizing:border-box;border:1px solid var(--l-line);border-radius:var(--l-r);background:var(--l-surface);color:var(--l-ink);padding:0 6px}
 .mtl-pnieuw{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px}.mtl-pvoet{padding:12px 20px;border-top:1px solid var(--l-line);display:flex;gap:8px;justify-content:flex-end}
-.mtl-tabel tfoot tr.kop th{white-space:nowrap}.mtl-tabel tfoot tr.netto.onv td{color:var(--l-warn);font-style:italic}
+.mtl-tabel tfoot tr.netto.onv td{color:var(--l-warn);font-style:italic}
 @media (max-width:700px){.mtl-tabel.kasopen tfoot th,.mtl-tabel.kasopen tfoot td{position:static}.mtl-tabel.kasopen tfoot th.s{position:sticky;left:0;bottom:auto!important}.mtl-vinkrij{flex-wrap:wrap;gap:2px 10px}.mtl-tabel tfoot tr.k th{height:auto;padding-top:5px;padding-bottom:5px}.mtl-lang{display:none}}
 @media (max-width:700px){.mtl-titel{font-size:24px;line-height:29px}.mtl-tabel .s{min-width:170px;max-width:180px}.mtl-naam b{max-width:160px}.mtl-nav{margin-left:0}.mtl-in{width:84px}}
 `;
@@ -413,7 +423,7 @@
         else { st.fact = ((fl && fl.lijst) || []).map(L.factuurNorm).filter(Boolean); st.factFout = null; }
         st.prog = pg && pg.items ? pg.items : null;
       }
-      if (sch.kas !== undefined) st.kas = sch.kas;
+      if (sch.kas !== undefined) { st.kas = sch.kas; st.kasStart = sch.kas_start || null; st.kasGeladen = true; } else { st.kas = null; st.kasStart = null; st.kasGeladen = false; }   // geen kas in de respons: geen oude of startindeling gebruiken
       st.fk = st.fact ? L.koppelFacturen(st.fact, st.schatten, st.prog) : null;
     } catch (e) { if (nr === st.laadNr) st.fout = String(e.message || e); }
     if (nr !== st.laadNr) return;
@@ -441,7 +451,8 @@
   }
   function kasRegels(ms) {
     if (!st.tl) return null;
-    return st.tl.events.map(e => L.kasRegel(e, st.kas, st.tl.vandaag)).filter(Boolean).concat(L.postRegels(st.kas, ms));
+    const kas = st.kasGeladen ? L.kasEff(st.kas, st.kasStart) : st.kas;
+    return st.tl.events.map(e => L.kasRegel(e, kas, st.tl.vandaag)).filter(Boolean).concat(L.postRegels(kas, ms, L.bezet(st.tl.events, st.tl.vandaag)));
   }
   function bewaarKasStand() { ls.set('mtl:kas', JSON.stringify({ open: st.kasOpen, aan: st.kasAan })); }
   // Per vakje één opslag tegelijk, op volgorde. Loopt er al een opslag voor dit vakje, dan zag je die waarde: die geldt als "oud" (anders gaf
@@ -496,7 +507,8 @@
     if (!st.tl) return;
     sluitIndeling();
     const kas = st.kas || {}, kopie = x => JSON.parse(JSON.stringify({ indeling: (x && x.indeling) || {}, loon: (x && x.loon) || {}, posten: (x && x.posten) || [] }));
-    let basis = kopie(kas), c = kopie(kas);
+    // nog nooit opgeslagen: je begint met de startindeling, ook als basis (zodat een 409-samenvoeging die niet als jouw toevoeging ziet)
+    let basis = kopie(st.kasGeladen ? L.kasEff(st.kas, st.kasStart) : kas), c = kopie(basis);
     const oudTs = kas.ts == null ? null : kas.ts;
     const regels = new Map();
     for (const e of st.tl.events) {
@@ -513,22 +525,24 @@
       h('td', { class: 'mtl-0' }, x.bron === 'patroon' ? 'vaste betaling' : 'inkoopfactuur'),
       h('td', { class: 'num' }, x.bedrag ? L.fmt(x.bedrag) + (x.bron === 'patroon' ? ' p/m' : '') : ''),
       h('td', null, sel(['open', 'vast', 'patroon', 'overig', 'uit'].map(g => [g, KAS_TEKST[g]]), groepVan(x), v => { if (v === x.standaard) delete c.indeling[x.sleutel]; else c.indeling[x.sleutel] = v; })),
-      h('td', null, x.bron === 'patroon' ? sel([['', '—'], ['bart', 'Loon Bart'], ['mathijs', 'Loon Mathijs']], loonVan(x), v => { const std = x.loonStd || ''; if (v === std) delete c.loon[x.sleutel]; else c.loon[x.sleutel] = v || 'geen'; }) : null));
+      h('td', null, x.bron === 'patroon' ? sel([['', '—']].concat(L.LONEN.map(([k, n]) => [k, 'Loon ' + n])), loonVan(x), v => { const std = x.loonStd || ''; if (v === std) delete c.loon[x.sleutel]; else c.loon[x.sleutel] = v || 'geen'; }) : null));
     const postBody = h('tbody');
-    const tekenPosten = () => postBody.replaceChildren(...(c.posten.length ? c.posten.map(p => h('tr', null, h('td', null, p.naam), h('td', null, KAS_TEKST[p.groep]), h('td', null, p.richting === 'in' ? 'ontvangst' : 'betaling'),
+    const tekenPosten = () => postBody.replaceChildren(...(c.posten.length ? c.posten.map(p => h('tr', null, h('td', null, p.naam, p.loon ? h('span', { class: 'mtl-0' }, ' (loon ' + ((L.LONEN.find(l => l[0] === p.loon) || [0, p.loon])[1]) + ')') : null, p.lev ? h('div', { class: 'mtl-0', style: 'font-size:11px' }, 'telt niet in een maand met een factuur van ' + ((regels.get(p.lev) || { naam: p.lev.slice(2) }).naam)) : null), h('td', null, KAS_TEKST[p.groep]), h('td', null, p.richting === 'in' ? 'ontvangst' : 'betaling'),
       h('td', { class: 'num' }, L.fmt(p.bedragC) + ' p/m'), h('td', null, maandTekst(p.van) + ' – ' + (p.tot ? maandTekst(p.tot) : 'doorlopend')),
       h('td', null, dis ? null : h('button', { type: 'button', class: 'mtl-link', 'aria-label': 'Post ' + p.naam + ' verwijderen', onclick: () => { c.posten = c.posten.filter(q => q !== p); tekenPosten(); } }, 'verwijderen')))) : [h('tr', null, h('td', { colspan: '6', class: 'mtl-0' }, 'Nog geen eigen posten.'))]));
     tekenPosten();
     const f = { naam: h('input', { type: 'text', maxlength: '60', placeholder: 'bv. Interprojecten', 'aria-label': 'Naam' }), groep: sel([['patroon', KAS_TEKST.patroon], ['vast', KAS_TEKST.vast], ['overig', KAS_TEKST.overig]], 'patroon', () => { }),
       richting: sel([['uit', 'betaling'], ['in', 'ontvangst']], 'uit', () => { }), bedrag: h('input', { type: 'text', inputmode: 'decimal', placeholder: 'per maand', 'aria-label': 'Bedrag per maand', style: 'width:100px' }),
-      van: h('input', { type: 'month', value: nu(), 'aria-label': 'Vanaf maand' }), tot: h('input', { type: 'month', 'aria-label': 'Tot en met maand (leeg = doorlopend)' }) };
+      van: h('input', { type: 'month', value: nu(), 'aria-label': 'Vanaf maand' }), tot: h('input', { type: 'month', 'aria-label': 'Tot en met maand (leeg = doorlopend)' }),
+      loon: sel([['', 'geen loon']].concat(L.LONEN.map(([k, n]) => [k, 'loon ' + n])), '', () => { }),
+      lev: sel([['', 'niet gekoppeld aan een leverancier']].concat(lijst.filter(x => !x.weg).map(x => [x.sleutel, 'vervalt bij factuur van ' + x.naam])), '', () => { }) };
     const voegToe = () => {
       const naam = f.naam.value.trim(), x = L.leesInvoer(f.bedrag.value, null), van = f.van.value, tot = f.tot.value || null;
       if (!naam) return toast('Geef de post een naam.'); if (x.fout || !(x.c > 0)) return toast('Vul een bedrag per maand in (groter dan 0).');
       if (!/^\d{4}-\d{2}$/.test(van) || (tot && tot < van)) return toast('Kies een geldige begin- en eindmaand.');
       if (c.posten.length >= 100) return toast('Hooguit 100 eigen posten.');
-      c.posten.push({ id: 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), groep: f.groep.value, naam, richting: f.richting.value, bedragC: x.c, van, tot });
-      f.naam.value = ''; f.bedrag.value = ''; f.tot.value = ''; tekenPosten();
+      c.posten.push({ id: 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), groep: f.groep.value, naam, richting: f.richting.value, bedragC: x.c, van, tot, ...(f.lev.value ? { lev: f.lev.value } : {}), ...(f.loon.value ? { loon: f.loon.value } : {}) });
+      f.naam.value = ''; f.lev.value = ''; f.loon.value = ''; f.bedrag.value = ''; f.tot.value = ''; tekenPosten();
     };
     let samengevoegd = null;
     const bewaarIndeling = async (ts) => {
@@ -555,7 +569,7 @@
         h('h3', null, 'Eigen terugkerende posten'),
         h('p', { class: 'mtl-0' }, 'Voor wat de bank niet als vast patroon herkent, zoals Interprojecten of een betalingsregeling. Komt een factuur van dezelfde partij binnen, dan telt die er los bij: pas de post dan zo nodig aan.'),
         h('table', { class: 'mtl-ptabel' }, h('thead', null, h('tr', null, h('th', null, 'Naam'), h('th', null, 'Groep'), h('th', null, 'Soort'), h('th', { class: 'num' }, 'Bedrag'), h('th', null, 'Periode'), h('th'))), postBody),
-        dis ? null : h('div', { class: 'mtl-pnieuw' }, f.naam, f.groep, f.richting, f.bedrag, f.van, f.tot, knop('Toevoegen', { onclick: voegToe }))),
+        dis ? null : h('div', { class: 'mtl-pnieuw' }, f.naam, f.groep, f.richting, f.bedrag, f.van, f.tot, f.loon, f.lev, knop('Toevoegen', { onclick: voegToe }))),
       h('div', { class: 'mtl-pvoet' }, knop(dis ? 'Sluiten' : 'Annuleren', { onclick: () => sluitIndeling() }), dis ? null : knopOk));
     const ov = h('div', { class: 'mtl-overlay', onclick: ev => { if (ev.target === ov) sluitIndeling(); } }, paneel);
     ov.addEventListener('keydown', ev => { if (ev.key === 'Escape') sluitIndeling(); });
@@ -694,18 +708,18 @@
       const voetRij = (rij, klasse, label) => h('tr', { class: klasse, data: { rij } }, h('th', { class: 's', scope: 'row' }, label), h('td', { class: 'zk' }), h('td', { class: 'bd num' }),
         ms.map((m, i) => h('td', { class: 'num' + (m === dezeMaand ? ' nu' : ''), data: { i: String(i) } })), h('td', { class: 'tot num' }));
       const vink = (g, tekst, titel) => h('label', { class: 'mtl-vink', title: titel }, h('input', { type: 'checkbox', data: { kas: g }, checked: st.kasAan[g] !== false }), tekst);
-      const voet = [voetRij('som', 'som', h('span', { title: 'Per maand: de schets, en waar gefactureerd is het gefactureerde bedrag' }, 'Totaal per maand')), voetRij('zeker', 'zeker', 'waarvan gaat zeker door')];
-      // Uitklapbaar: gefactureerd, de kasgroepen en het netto resultaat. Dichtgeklapt blijft het totaalbeeld schoon.
-      voet.push(h('tr', { class: 'k kop', data: { rij: 'kop' } }, h('th', { class: 's', scope: 'row' }, h('button', { type: 'button', class: 'mtl-uitklap', 'aria-expanded': String(st.kasOpen),
-        onclick: () => { st.kasOpen = !st.kasOpen; bewaarKasStand(); teken(); if (st.kasOpen && !st.tl) laadKas(false); } }, (st.kasOpen ? '▾ ' : '▸ ') + 'Uitsplitsing en netto', h('span', { class: 'mtl-lang' }, ' resultaat')),
-        st.kasOpen ? h('button', { type: 'button', class: 'mtl-link', title: 'Welke vaste betaling of leverancier in welke groep, lonen en eigen terugkerende posten (bv. Interprojecten)', disabled: !st.tl, onclick: () => openIndeling() }, 'Indeling…') : null,
-        st.kasOpen && st.tlFout ? h('span', { class: 'mtl-kasfout', title: st.tlFout }, ' kosten niet geladen ', h('button', { type: 'button', class: 'mtl-link', onclick: () => laadKas(true) }, 'opnieuw')) : null,
-        st.kasOpen && st.tl && st.tl.onvolledig.length ? h('span', { class: 'mtl-kasfout', title: 'Het overzicht van Financiën is niet compleet:\n' + st.tl.onvolledig.slice(0, 10).join('\n') }, ' ⚠ kosten mogelijk onvolledig ', h('button', { type: 'button', class: 'mtl-link', onclick: () => laadKas(true) }, 'opnieuw')) : null),
-        h('td', { colspan: String(ms.length + 3) })));
+      // Dichtgeklapt alleen "Totaal per maand"; een klik erop (of op ⋯) opent de lijst met wat wel en niet meetelt.
+      const voet = [voetRij('som', 'som', h('span', { class: 'mtl-somkop' }, h('button', { type: 'button', class: 'mtl-uitklap', 'aria-expanded': String(st.kasOpen),
+        title: st.kasOpen ? 'Uitsplitsing dichtklappen' : 'Uitsplitsing openen: gefactureerd, kosten en netto resultaat, met per regel een vinkje of hij meetelt',
+        onclick: () => { st.kasOpen = !st.kasOpen; bewaarKasStand(); teken(); if (st.kasOpen && !st.tl) laadKas(false); } }, 'Totaal per maand', h('span', { class: 'mtl-meer', 'aria-hidden': 'true' }, st.kasOpen ? '▾' : '⋯')),
+        st.kasOpen ? h('button', { type: 'button', class: 'mtl-link', title: 'Welke vaste betaling of leverancier in welke groep, lonen en eigen terugkerende posten (bv. Interprojecten)', disabled: !st.tl, onclick: () => openIndeling() }, 'Indeling…') : null))];
       if (st.kasOpen) {
+        voet.push(voetRij('zeker', 'k', h('span', { class: 'mtl-sub0' }, 'waarvan gaat zeker door')));
         voet.push(voetRij('gef', 'k', vink('gef', 'Gefactureerd', 'Alle verkoopfacturen van die maand (incl. btw; mouse-over per maand voor de lijst). Facturen bij een offerte staan al in het totaal; met het vinkje tellen ook de facturen zonder offerte mee in het netto resultaat.')));
-        for (const g of L.KAS_GROEPEN) voet.push(voetRij(g, 'k', g === 'vast' ? h('span', { class: 'mtl-vinkrij' }, vink(g, KAS_TEKST[g], KAS_UITLEG[g]), h('span', { class: 'mtl-loon' }, 'loon', vink('loonBart', 'Bart', 'Loon van Bart meetellen'), vink('loonMathijs', 'Mathijs', 'Loon van Mathijs meetellen'))) : vink(g, KAS_TEKST[g], KAS_UITLEG[g])));
-        voet.push(voetRij('netto', 'netto', h('span', { title: 'Totaal per maand plus de aangevinkte regels (kosten zijn negatief). Kas, incl. btw.' }, 'Netto resultaat')));
+        for (const g of L.KAS_GROEPEN) voet.push(voetRij(g, 'k', g === 'vast' ? h('span', { class: 'mtl-vinkrij' }, vink(g, KAS_TEKST[g], KAS_UITLEG[g]), h('span', { class: 'mtl-loon' }, 'loon', L.LONEN.map(([k, n]) => vink(L.loonAanSleutel(k), n, 'Loon van ' + n + ' meetellen')))) : vink(g, KAS_TEKST[g], KAS_UITLEG[g])));
+        voet.push(voetRij('netto', 'netto', h('span', { class: 'mtl-somkop' }, h('span', { title: 'Totaal per maand plus de aangevinkte regels (kosten zijn negatief). Kas, incl. btw.' }, 'Netto resultaat'),
+          st.tlFout ? h('span', { class: 'mtl-kasfout', title: st.tlFout }, '⚠ kosten niet geladen ', h('button', { type: 'button', class: 'mtl-link', onclick: () => laadKas(true) }, 'opnieuw')) : null,
+          st.tl && st.tl.onvolledig.length ? h('span', { class: 'mtl-kasfout', title: 'Het overzicht van Financiën is niet compleet:\n' + st.tl.onvolledig.slice(0, 10).join('\n') }, '⚠ mogelijk onvolledig ', h('button', { type: 'button', class: 'mtl-link', onclick: () => laadKas(true) }, 'opnieuw')) : null)));
       }
       const tfoot = h('tfoot', null, voet);
       // vast onderaan: elke regel krijgt als bottom de hoogte van de regels eronder
