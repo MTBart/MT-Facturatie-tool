@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-30 — Backup = v2.28.2
+- Commit: `c340053` | Auteur: Bart Witte
+
 ## 2026-10-30 — Release v2.28.2: Forecast kostencellen klikbaar, betaalde posten doorgehaald
 - Commit: `6bda4c4` | Auteur: Bart Witte
 
