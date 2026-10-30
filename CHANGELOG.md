@@ -5,8 +5,14 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-30 — Release v2.28.1: Forecast al betaalde facturen onder Betaalde facturen, verzamelbetalingen benoemd
+- Commit: `79c263c` | Auteur: Bart Witte
+
 ## 2026-10-30 — Backup = v2.28.0
 - Commit: `4481036` | Auteur: Bart Witte
+
+## 2026-10-30 — Forecast v2.28.1: al betaalde facturen onder eigen regel Betaalde facturen, verzamelbetalingen benoemd
+- Commit: `2e0d0d5` | Auteur: Bart Witte
 
 ## 2026-10-30 — Release v2.28.0: Forecast voorbije maanden exact uit de bank (betaald/ontvangen per maand), alleen vooruit voorspellen
 - Commit: `a82bb8d` | Auteur: Bart Witte
