@@ -274,7 +274,7 @@
 .mtl-tabel tfoot tr.zeker th,.mtl-tabel tfoot tr.zeker td{bottom:0;height:28px;font-weight:400;color:var(--l-ink2);font-size:12px;border-bottom:0}
 .mtl-naam b{display:block;font-weight:500;line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:290px}
 .mtl-naam a{color:inherit;text-decoration:none}.mtl-naam a:hover,.mtl-naam a:focus-visible{color:var(--l-primary);text-decoration:underline}
-.mtl-meta{display:flex;gap:4px 8px;align-items:center;flex-wrap:wrap;font-size:11px;line-height:16px;color:var(--l-ink3)}
+.mtl-mbd{display:none}.mtl-meta{display:flex;gap:4px 8px;align-items:center;flex-wrap:wrap;font-size:11px;line-height:16px;color:var(--l-ink3)}
 .mtl-st{display:inline-flex;align-items:center;height:18px;padding:0 6px;border-radius:var(--l-r);font-size:11px;font-weight:500}
 .mtl-st.geaccepteerd{color:var(--l-ok);background:var(--l-okbg)}.mtl-st.openstaand{color:var(--l-warn);background:var(--l-warnbg)}.mtl-st.concept,.mtl-st.los,.mtl-st.uitbeeld{color:var(--l-ink2);background:var(--l-surface2)}
 .mtl-tabel .zk{width:72px;min-width:72px;text-align:center}.mtl-tabel .bd{min-width:96px;color:var(--l-ink2)}.mtl-tabel .tot{min-width:96px;font-weight:500;box-shadow:inset 1px 0 0 var(--l-line)}
@@ -309,8 +309,13 @@
 .mtl-paneel select,.mtl-paneel input{font:inherit;height:28px;box-sizing:border-box;border:1px solid var(--l-line);border-radius:var(--l-r);background:var(--l-surface);color:var(--l-ink);padding:0 6px}
 .mtl-pnieuw{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px}.mtl-pvoet{padding:12px 20px;border-top:1px solid var(--l-line);display:flex;gap:8px;justify-content:flex-end}
 .mtl-tabel tfoot tr.netto.onv td{color:var(--l-warn);font-style:italic}
-@media (max-width:700px){.mtl-tabel.kasopen tfoot th,.mtl-tabel.kasopen tfoot td{position:static}.mtl-tabel.kasopen tfoot th.s{position:sticky;left:0;bottom:auto!important}.mtl-vinkrij{flex-wrap:wrap;gap:2px 10px}.mtl-tabel tfoot tr.k th{height:auto;padding-top:5px;padding-bottom:5px}.mtl-lang{display:none}}
-@media (max-width:700px){.mtl-titel{font-size:24px;line-height:29px}.mtl-tabel .s{min-width:170px;max-width:180px}.mtl-naam b{max-width:160px}.mtl-nav{margin-left:0}.mtl-in{width:84px}}
+@media (max-width:700px){
+.mtl-mbd{display:inline;width:100%;font-family:var(--l-mono);font-variant-numeric:tabular-nums;color:var(--l-ink2)}.mtl{gap:8px}.mtl-kop{align-items:flex-start;gap:6px}.mtl-titelblok{min-width:0}.mtl-titel{font-size:23px;line-height:28px}.mtl-sub{font-size:11px;line-height:15px;margin-top:1px}.mtl-acties{width:100%;gap:4px;flex-wrap:nowrap;overflow-x:auto;padding-bottom:1px}.mtl-acties .ui-knop{min-height:36px;padding:0 8px;font-size:12px;white-space:nowrap}.mtl-acties .mtl-seg{flex:none}
+.mtl-balk{padding:8px;gap:6px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}.mtl-balk::-webkit-scrollbar{display:none}.mtl-chip,.mtl-nav{flex:none}.mtl-chip{height:30px;padding:0 9px}.mtl-nav{margin-left:0}.mtl-nav .ui-knop{min-height:36px}.mtl-periode{font-size:11px;margin:0 2px}
+.mtl-tabel{font-size:12px}.mtl-tabel .s{min-width:118px;max-width:118px}.mtl-tabel .zk{width:36px;min-width:36px;padding-left:2px;padding-right:2px}.mtl-tabel .bd{display:none}.mtl-tabel th,.mtl-tabel td{padding-left:8px;padding-right:8px}.mtl-tabel thead .zk .mtl-sortknop{font-size:0;padding:4px 0}.mtl-tabel thead .zk .mtl-sortknop::after{content:"Zeker";font-size:11px}.mtl-tabel td.num,.mtl-tabel th.num{padding-left:4px;padding-right:4px}.mtl-naam b{max-width:110px;white-space:normal;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;line-height:16px}.mtl-meta{gap:2px;line-height:14px}.mtl-meta>span:not(.mtl-st):not(.mtl-mbd){display:none}.mtl-st{height:17px;padding:0 5px;font-size:10px}.mtl-in,.mtl-gefcel{width:68px}.mtl-in{height:32px}.mtl-gefcel{line-height:32px;padding:0 5px}.mtl-tabel tbody tr:not(.vul){height:52px}
+.mtl-tabel.kasopen tfoot th,.mtl-tabel.kasopen tfoot td{position:static}.mtl-tabel.kasopen tfoot th.s{position:sticky;left:0;bottom:auto!important}.mtl-tabel.kasopen tfoot tr.som th,.mtl-tabel.kasopen tfoot tr.som td{position:sticky;bottom:0!important;z-index:4}.mtl-vinkrij{flex-wrap:wrap;gap:2px 8px;max-width:150px}.mtl-loon{flex-wrap:wrap;gap:2px 8px}.mtl-tabel tfoot tr.k th{height:auto;padding-top:4px;padding-bottom:4px}.mtl-tabel tfoot tr.k th,.mtl-tabel tfoot tr.k td{font-size:11px}.mtl-uitklap{min-height:36px;padding-top:4px;padding-bottom:4px}.mtl-somkop{gap:2px 4px;flex-wrap:wrap;white-space:normal}.mtl-tabel tfoot th.s .mtl-uitklap{font-size:12px;gap:4px;margin-left:-4px;padding-left:4px;padding-right:4px;text-align:left}.mtl-voet{font-size:11px;line-height:15px;max-height:30px;overflow:auto;padding-right:4px}.mtl-lang{display:none}
+.mtl-overlay{padding:8px;align-items:flex-start}.mtl-paneel{max-height:calc(100vh - 16px);border-radius:var(--l-rp)}.mtl-pkop{padding:12px}.mtl-pkop h2{font-size:18px;line-height:23px}.mtl-pinhoud{padding:8px 12px 12px}.mtl-ptabel{min-width:560px}.mtl-paneel select,.mtl-paneel input{height:36px}.mtl-pnieuw{display:grid;grid-template-columns:1fr;gap:8px}.mtl-pnieuw>input,.mtl-pnieuw>select,.mtl-pnieuw>.ui-knop{width:100%;min-height:36px}.mtl-pvoet{padding:10px 12px}.mtl-pvoet .ui-knop{min-height:36px}
+}
 `;
     document.head.appendChild(s);
   }
@@ -567,7 +572,7 @@
         h('table', { class: 'mtl-ptabel' }, h('thead', null, h('tr', null, h('th', null, 'Naam'), h('th', null, 'Soort'), h('th', { class: 'num' }, 'Bedrag'), h('th', null, 'Groep'), h('th', null, 'Loon'))),
           h('tbody', null, lijst.length ? lijst.map(regelTr) : h('tr', null, h('td', { colspan: '5', class: 'mtl-0' }, 'Geen vaste betalingen of inkoopfacturen in het overzicht.')))),
         h('h3', null, 'Eigen terugkerende posten'),
-        h('p', { class: 'mtl-0' }, 'Voor wat de bank niet als vast patroon herkent, zoals Interprojecten of een betalingsregeling. Komt een factuur van dezelfde partij binnen, dan telt die er los bij: pas de post dan zo nodig aan.'),
+        h('p', { class: 'mtl-0' }, 'Voor wat de bank niet als vast patroon herkent, zoals Interprojecten of een betalingsregeling. Koppel je de post aan een leverancier, dan telt hij niet in een maand waarin diens echte factuur al staat (geen dubbeltelling).'),
         h('table', { class: 'mtl-ptabel' }, h('thead', null, h('tr', null, h('th', null, 'Naam'), h('th', null, 'Groep'), h('th', null, 'Soort'), h('th', { class: 'num' }, 'Bedrag'), h('th', null, 'Periode'), h('th'))), postBody),
         dis ? null : h('div', { class: 'mtl-pnieuw' }, f.naam, f.groep, f.richting, f.bedrag, f.van, f.tot, f.loon, f.lev, knop('Toevoegen', { onclick: voegToe }))),
       h('div', { class: 'mtl-pvoet' }, knop(dis ? 'Sluiten' : 'Annuleren', { onclick: () => sluitIndeling() }), dis ? null : knopOk));
@@ -688,7 +693,8 @@
         const bdTitel = [r.inclC != null ? 'incl. btw ' + L.fmt(r.inclC) + (r.exclC != null ? ' \u00b7 excl. btw ' + L.fmt(r.exclC) : '') : null, r.gef ? 'gefactureerd ' + L.fmt(r.gef.inclC) + ' incl. btw (' + r.gef.facturen.length + (r.gef.facturen.length === 1 ? ' factuur)' : ' facturen)') : null].filter(Boolean).join('\n') || null;
         return h('tr', null,
           h('th', { class: 's', scope: 'row' }, h('div', { class: 'mtl-naam' }, h('b', { title: r.naam }, href ? h('a', { href, target: '_blank', rel: 'noopener', title: 'Open de offerte in Moneybird' }, r.naam) : r.naam),
-            h('div', { class: 'mtl-meta' }, r.nummer ? h('span', null, 'offerte ' + r.nummer) : null, r.factuurnrs && r.factuurnrs.length ? h('span', null, (r.factuurnrs.length === 1 ? 'factuur ' : 'facturen ') + r.factuurnrs.join(', ')) : null,
+            h('div', { class: 'mtl-meta' }, h('span', { class: 'mtl-mbd', title: bdTitel }, b == null ? (r.gef ? L.fmt(r.gef.inclC) : '') : L.fmt(b) + (nog ? ' \u00b7 nog ' + L.fmt(nog) : '')),   // alleen op mobiel (daar valt de kolom Bedrag weg)
+              r.nummer ? h('span', null, 'offerte ' + r.nummer) : null, r.factuurnrs && r.factuurnrs.length ? h('span', null, (r.factuurnrs.length === 1 ? 'factuur ' : 'facturen ') + r.factuurnrs.join(', ')) : null,
               r.datum ? h('span', null, r.datum.split('-').reverse().join('-')) : null, stBadge))),
           h('td', { class: 'zk' }, h('label', { class: 'mtl-sw', title: 'Gaat zeker door (alleen voor deze schets)' }, h('input', { type: 'checkbox', class: 'mtl-zk', role: 'switch', data: { id: r.id }, 'aria-label': 'Gaat zeker door: ' + r.naam, disabled: !st.mag, checked: r.zeker, onchange: ev => zetZeker(r.id, ev.target.checked) }), h('span'))),
           h('td', { class: 'bd num', title: bdTitel }, h('div', null, b == null ? (r.gef ? L.fmt(r.gef.inclC) : '\u2013') : L.fmt(b)),
