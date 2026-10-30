@@ -1,5 +1,14 @@
 [
   {
+    "versie": "2.28.0",
+    "datum": "2026-10-30",
+    "titel": "Forecast: voorbije maanden exact uit de bank",
+    "voor": "geld",
+    "punten": [
+      "Blader je in de Forecast terug, dan staan bij de kosten nu de werkelijke betalingen uit de bank (lonen, Vattenfall, Arjan, facturen, btw-aangifte), ingedeeld zoals bij Indeling. Netto resultaat is daar wat er werkelijk binnenkwam min wat er betaald is.",
+      "Deze maand: wat al betaald is plus wat nog verwacht wordt. Alleen vooruit wordt voorspeld. Ga met de muis over een bedrag om te zien of het betaald of verwacht is."
+    ]
+  },{
     "versie": "2.27.1",
     "datum": "2026-10-30",
     "titel": "Forecast: netto altijd in beeld, filter Afgerond",
