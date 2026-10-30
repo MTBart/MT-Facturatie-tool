@@ -1,5 +1,16 @@
 [
   {
+    "versie": "2.29.0",
+    "datum": "2026-10-30",
+    "titel": "Telefoon-app: nieuwe opmaak en de Forecast in de app",
+    "voor": "iedereen",
+    "punten": [
+      "De onderbalk van de app heeft lijn-iconen; waar je bent zie je aan het groene vlak achter het icoon.",
+      "Kantoor ziet onder de kop vier knoppen: Financiën, Forecast, Planning en Opname. Je ziet alleen de knoppen waar je recht op hebt; de werkplaats houdt alleen de onderbalk.",
+      "Het logo staat licht op de achtergrond.",
+      "Forecast op de telefoon: Zeker is een bolletje (groen = zeker), bedragen in hele euro's zodat er meer maanden passen, en boven de tabel een maandenbalk om met je vinger door de maanden te schuiven (ook terug). Tik op een totaal voor het lijstje van onderaf."
+    ]
+  },{
     "versie": "2.28.2",
     "datum": "2026-10-30",
     "titel": "Forecast: voorbije maanden exact uit de bank",
