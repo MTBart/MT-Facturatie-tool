@@ -5,8 +5,26 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-30 — Release v2.27.0: Forecast met facturen (deels gefactureerd, nog te factureren), uitklapbare uitsplitsing met kosten en netto resultaat, indeling met eigen posten, loonvinkjes, mobiel overzichtelijk
+- Commit: `03a9700` | Auteur: Bart Witte
+
+## 2026-10-30 — Forecast: loonvinkje Maarten
+- Commit: `12041e5` | Auteur: Bart Witte
+
 ## 2026-10-30 — Backup = v2.26.0
 - Commit: `6a2c5dc` | Auteur: Bart Witte
+
+## 2026-10-30 — Updates 2.27.0: totaalregel, vaste posten, mobiel
+- Commit: `8e499c7` | Auteur: Bart Witte
+
+## 2026-10-30 — Forecast light: overzichtelijk op mobiel
+- Commit: `ce9a2cb` | Auteur: Bart Witte
+
+## 2026-10-30 — Forecast: rustiger totaalregel, startindeling uit KV, loon Ilona
+- Commit: `5c5292b` | Auteur: Bart Witte
+
+## 2026-10-30 — Forecast v2.27.0: facturen en kosten in de Forecast
+- Commit: `841746a` | Auteur: Bart Witte
 
 ## 2026-10-29 — Release v2.26.0: Forecast light (simpel schetsschema) op de plek van Forecast; uitgebreide Forecast bij Financiën
 - Commit: `9f53dcc` | Auteur: Bart Witte
