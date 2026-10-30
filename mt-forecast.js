@@ -1186,7 +1186,7 @@ th.num .mtf-sortknop .mtf-sortpijl{position:absolute;left:-9px;top:50%;margin:-5
   F.start = async function (el, o) {
     st.el = el; st.bron = o.bron; st.mag = !!o.magWijzigen; st.wie = o.wie || ''; st.projecten = o.projecten || null; st.haalSchatten = o.schatten; st.admin = o.administratie || null; st.projectHref = o.projectHref || null; st.openProject = o.openProject || null;
     st.kostenAan = ls.get('mtg:fc:kosten:' + st.wie) !== '0'; st.overigAan = ls.get('mtg:fc:overig:' + st.wie) !== '0'; st.openAan = ls.get('mtg:fc:open:' + st.wie) !== '0';
-    for (const k of ['inkoop', 'vast', 'patroon', 'loonBart', 'loonMathijs', 'loonIlona']) st[k + 'Aan'] = ls.get('mtg:fc:' + k + ':' + st.wie) !== '0';
+    for (const k of ['inkoop', 'vast', 'patroon', 'loonBart', 'loonMathijs', 'loonMaarten', 'loonIlona']) st[k + 'Aan'] = ls.get('mtg:fc:' + k + ':' + st.wie) !== '0';
     st.sel = F.selStandaard();
     { const f = ls.get('mtg:fc:filter:' + st.wie); st.filter = new Set(f == null ? F.STATUSSEN : f.split(',').filter(x => F.FILTERS.includes(x))); }
     st.btw = ls.get('mtg:fc:btw:' + st.wie) === 'excl' ? 'excl' : 'incl'; st.passend = ls.get('mtg:fc:passend:' + st.wie) === '1'; st.sort = F.sortLees(ls.get('mtg:fc:sort:' + st.wie));

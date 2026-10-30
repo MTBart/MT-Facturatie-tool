@@ -2386,7 +2386,7 @@ function geldKasNorm(x) {
   for (const [k, v] of Object.entries(x.indeling || {})) { if (!GS_KAS_KEY.test(k) || !GS_KAS_GROEP.includes(v)) return { fout: 'indeling: ongeldige regel' }; indeling[k] = v; }
   if (Object.keys(indeling).length > 500) return { fout: 'indeling: hooguit 500 regels' };
   if (x.loon != null && !obj(x.loon)) return { fout: 'loon: object' };
-  for (const [k, v] of Object.entries(x.loon || {})) { if (!GS_KAS_KEY.test(k) || !['bart', 'mathijs', 'ilona', 'geen'].includes(v)) return { fout: 'loon: ongeldige regel' }; loon[k] = v; }
+  for (const [k, v] of Object.entries(x.loon || {})) { if (!GS_KAS_KEY.test(k) || !['bart', 'mathijs', 'maarten', 'ilona', 'geen'].includes(v)) return { fout: 'loon: ongeldige regel' }; loon[k] = v; }
   if (Object.keys(loon).length > 100) return { fout: 'loon: hooguit 100 regels' };
   if (x.posten != null && !Array.isArray(x.posten)) return { fout: 'posten: lijst' };
   for (const p of x.posten || []) {
@@ -2397,7 +2397,7 @@ function geldKasNorm(x) {
     if (!Number.isInteger(p.bedragC) || p.bedragC < 1 || p.bedragC > GS_MAX_C) return { fout: 'post: bedrag ongeldig' };
     if (!GS_YM.test(String(p.van || '')) || (p.tot != null && (!GS_YM.test(String(p.tot)) || p.tot < p.van))) return { fout: 'post: van/tot ongeldig' };
     if (p.lev != null && !(typeof p.lev === 'string' && GS_KAS_KEY.test(p.lev))) return { fout: 'post: leverancier ongeldig' };
-    if (p.loon != null && !['bart', 'mathijs', 'ilona'].includes(p.loon)) return { fout: 'post: loon ongeldig' };
+    if (p.loon != null && !['bart', 'mathijs', 'maarten', 'ilona'].includes(p.loon)) return { fout: 'post: loon ongeldig' };
     ids.add(p.id); posten.push({ id: p.id, groep: p.groep, naam, richting: p.richting, bedragC: p.bedragC, van: p.van, tot: p.tot == null ? null : p.tot, ...(p.lev != null ? { lev: p.lev } : {}), ...(p.loon != null ? { loon: p.loon } : {}) });
   }
   if (posten.length > 100) return { fout: 'hooguit 100 posten' };

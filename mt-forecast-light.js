@@ -141,7 +141,7 @@
   L.kasSleutel = e => e.bron === 'patroon' && /^[a-z0-9]{1,20}$/i.test(String(e.patroon_id || '')) ? 'p:' + String(e.patroon_id).toLowerCase()
     : 'n:' + (String(e.tegenpartij || '').toLowerCase().replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 80) || 'onbekend');
   L.kasStandaard = e => e.bron === 'patroon' ? 'vast' : e.bron === 'inkoop' ? (VAST_RE.test(String(e.tegenpartij || '')) ? 'vast' : 'open') : 'overig';
-  L.LONEN = [['bart', 'Bart'], ['mathijs', 'Mathijs'], ['ilona', 'Ilona']];
+  L.LONEN = [['bart', 'Bart'], ['mathijs', 'Mathijs'], ['maarten', 'Maarten'], ['ilona', 'Ilona']];
   // Zolang er nog nooit een indeling is opgeslagen geldt de startindeling die de worker meegeeft (kas_start, uit KV; met namen en bedragen,
   // dus niet in deze code). Wie opslaat, legt hem vast en kan hem aanpassen. Eigen posten met lev vervallen in een maand met hun echte factuur.
   L.kasEff = (kas, start) => kas || start || null;
@@ -149,7 +149,7 @@
   L.loonVan = function (sl, naam, kas) {
     const x = kas && kas.loon && kas.loon[sl]; if (x) return x === 'geen' ? null : x;
     if (!sl.startsWith('p:')) return null;
-    return /\bwitte\b/i.test(naam) ? 'bart' : /\b(zwiers|mathijs)\b/i.test(naam) ? 'mathijs' : /\bilona\b/i.test(naam) ? 'ilona' : null;
+    return /\bwitte\b/i.test(naam) ? 'bart' : /\b(zwiers|mathijs)\b/i.test(naam) ? 'mathijs' : /\bmaarten\b/i.test(naam) ? 'maarten' : /\bilona\b/i.test(naam) ? 'ilona' : null;
   };
   L.kasRegel = function (e, kas, vandaag) {
     if (!e || e.intern || e.bron === 'bank' || e.saldo_ijkpunt || !e.datum || e.bron === 'verkoop' || e.bron === 'inleg' || (e.bron === 'prognose' && e.termijn_id)) return null;
@@ -169,7 +169,7 @@
     for (const p of (kas && kas.posten) || []) for (const ym of maanden) if (ym >= p.van && (!p.tot || ym <= p.tot) && !(p.lev && bezet && bezet.has(p.lev + '|' + ym))) uit.push({ sleutel: 'post:' + p.id, naam: p.naam, groep: p.groep, c: (p.richting === 'in' ? 1 : -1) * p.bedragC, ym, loon: p.loon || null, bron: 'post' });
     return uit;
   };
-  // Per groep per maand de som en de opbouw (voor de mouse-over). aan.loonBart / loonMathijs / loonIlona === false: dat loon telt niet mee.
+  // Per groep per maand de som en de opbouw (voor de mouse-over). aan.loonBart / loonMathijs / loonMaarten / loonIlona === false: dat loon telt niet mee.
   L.kasTotalen = function (regels, maanden, aan) {
     aan = aan || {}; const idx = new Map(maanden.map((m, i) => [m, i])), t = {};
     for (const g of L.KAS_GROEPEN) t[g] = { per: maanden.map(() => 0), opbouw: maanden.map(() => new Map()) };
