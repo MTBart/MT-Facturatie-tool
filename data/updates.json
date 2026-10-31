@@ -1,5 +1,18 @@
 [
   {
+    "versie": "2.31.0",
+    "datum": "2026-10-31",
+    "titel": "Telefoon-app: timerknop, zoeken in de bovenrij en ons logo als app-icoon",
+    "voor": "iedereen",
+    "punten": [
+      "De bovenrij van de app is nu Forecast, Planning, Opname, Zoeken en Timer (je ziet alleen de knoppen waar je recht op hebt). Financiën, Meldingen, Help, Melden, Verhuizen en Uitloggen staan onder Meer.",
+      "Timer: één tik en de tijd loopt. Kies daarna je project en eventueel een taak; staat de taak er niet in, typ hem dan en maak hem direct aan. De tijd telt vanaf je tik. Loopt er al een timer (bijvoorbeeld op de pc), dan vraagt de app eerst of die moet stoppen.",
+      "Stop je zonder project, dan kies je alsnog een project of gooi je de tijd weg. Lukt opslaan even niet, dan zie je dat bovenin met een oranje stip en probeert de app het zelf opnieuw.",
+      "Bovenin staan geen groene knoppen meer; als de timer loopt zie je daar de tijd en het project.",
+      "Het app-icoon en het laadscherm zijn ons logo met mortise & tenon eronder. Soms werkt Android het icoon pas bij na de app opnieuw te installeren.",
+      "Forecast: Indeling kosten en patronen toont nu per regel de kosten van de gekozen maand (met het totaal bovenaan) en past op de telefoon zonder zijwaarts scrollen."
+    ]
+  },{
     "versie": "2.30.0",
     "datum": "2026-10-31",
     "titel": "Forecast op de telefoon: overzichtelijke tabel om dagelijks even te kijken",

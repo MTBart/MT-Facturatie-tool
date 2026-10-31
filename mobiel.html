@@ -29,9 +29,9 @@
 <link rel="manifest" href="manifest-mobiel.json">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jost:ital,wght@0,500;1,400&display=swap">
 <link rel="stylesheet" href="mt-merk.css?v=2026-10-24-logo">
-<link rel="icon" type="image/svg+xml" href="icons/icon.svg">
-<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
-<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" type="image/svg+xml" href="icons/icon.svg?v=2">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png?v=3">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?v=3">
 <!-- msal-browser lokaal gevendord (was jsdelivr @2 = 2.39.0, laatste v2-release).
      Bron: https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.39.0/lib/msal-browser.min.js
      sha256: c933092555a52d4ded0196d16578406dcb5d25dfdf987bf3e27606653e99f1d6
@@ -41,7 +41,7 @@
      één bron voor cockpit én app (audit-actie S2). Moet vóór de code laden die het
      gebruikt; ?v= = cachebuster, zelfde patroon als in v2.html. -->
 <script src="mt-core.js?v=2026-10-13a"></script>
-<script src="mt-iconen.js?v=2026-10-24z" defer></script>
+<script src="mt-iconen.js?v=2026-11-01a" defer></script>
 <script src="mt-project.js?v=2026-10-15b"></script>
 <script src="mt-rollen.js?v=2026-10-09a"></script>
 <script src="mt-dialog.js?v=2026-10-11b"></script>
@@ -860,7 +860,7 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 .pv-melding{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 10px;border-radius:6px;margin:6px 0;font-size:12.5px}.pv-melding.goed{background:#E3F1E7;color:#1F5C36}.pv-melding.af{background:#FDE8E8;color:#8B1A1A}.pv-melding.open{background:#FFF4D6;color:#7A5300}
 .pv-form{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}.pv-form input{min-height:40px;padding:0 8px;border:1px solid var(--border);border-radius:8px;font:inherit}.pv-form .vol{grid-column:1/-1}
 </style>
-<link rel="stylesheet" href="mt-stijl-mobiel.css?v=2026-10-30a">
+<link rel="stylesheet" href="mt-stijl-mobiel.css?v=2026-11-01f">
 <link rel="stylesheet" href="mt-rust.css?v=2026-10-24z">
 </head>
 <body>
@@ -884,6 +884,7 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 <!-- ── APP HEADER ── -->
 <header class="app-header">
   <div class="app-title" style="display:flex;align-items:center"><div class="mt-merkrij" style="font-size:16px"><svg class="mt-merk" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><rect x="2" y="2" width="96" height="96"/><path d="M55.4 2 V31.3 H34.2 V67.3 H55.4 V98"/></svg><b class="mt-woord">mortise <em>&amp;</em> tenon</b></div><span class="demo-badge" id="demoBadge" style="display:none">DEMO</span></div>
+  <button type="button" class="kop-timer" id="kopTimer" hidden onclick="kopTimerOpen()" aria-label="Lopende timer, open het timerscherm"><span class="kop-timer-t" id="kopTimerT">00:00:00</span><span class="kop-timer-p" id="kopTimerP"></span></button>
   <div class="header-btns">
     <button class="header-info-btn" id="zoekKnop" type="button" aria-label="Zoeken" aria-haspopup="dialog" title="Zoeken">🔍</button>
     <button class="header-info-btn" id="geldKnop" style="display:none" onclick="geldLaagOpen()" aria-label="Financiën" title="Financiën">€</button>
@@ -896,10 +897,11 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 
 <!-- ── BOVENRIJ (kantoor/admin, alleen nieuwe stijl): vier snelle ingangen; per knop eigen recht, alleen toegestane knoppen, gelijk verdeeld ── -->
 <div class="boven-rij" id="bovenRij" aria-label="Snelle ingangen" hidden>
-  <button type="button" class="boven-knop" id="bk-geld" data-recht="geld" onclick="geldLaagOpen()"><span class="boven-ic" data-ico="dash"></span><span>Financiën</span></button>
   <button type="button" class="boven-knop" id="bk-forecast" data-recht="geld" onclick="forecastLaagOpen()"><span class="boven-ic" data-ico="forecast"></span><span>Forecast</span></button>
   <button type="button" class="boven-knop" id="bk-planning" data-recht="projecten" onclick="switchTab('agenda',document.getElementById('nav-agenda'))"><span class="boven-ic" data-ico="planning"></span><span>Planning</span></button>
   <button type="button" class="boven-knop" id="bk-opname" data-recht="projecten" onclick="switchTab('capture',document.getElementById('nav-capture'))"><span class="boven-ic" data-ico="camera"></span><span>Opname</span></button>
+  <button type="button" class="boven-knop" id="bk-zoek" onclick="document.getElementById('zoekKnop').click()"><span class="boven-ic" data-ico="zoek"></span><span>Zoeken</span></button>
+  <button type="button" class="boven-knop" id="bk-timer" onclick="kopTimerTik()" aria-label="Timer starten"><span class="boven-ic" data-ico="timerPlay"></span><span id="bk-timer-l">Timer</span></button>
 </div>
 
 <!-- ── ZOEKLAAG (opent met het zoekicoon in de kop) ── -->
@@ -928,6 +930,8 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
   </div>
   <div class="geld-laag-body" id="forecastLaagBody" style="padding:8px 8px 12px"></div>
 </div>
+
+<div class="snack" id="snack" role="status" hidden></div>
 
 <!-- ── LOPENDE TIMER BAR ── -->
 <div class="timer-bar" id="timerBar">
@@ -1365,6 +1369,18 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
   </button>
 </nav>
 
+<!-- ── TIMER: project en taak kiezen (nieuwe stijl: na een tik op de timerknop) ── -->
+<div class="sheet-overlay" id="tkSheet" onclick="if(event.target===this)tkSluit()">
+  <div class="sheet" role="dialog" aria-label="Project en taak voor de timer">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head" style="position:relative">
+      <button class="sheet-close" onclick="tkSluit()" aria-label="Sluiten">×</button>
+      <div class="sheet-title" id="tkTitel">Waar werk je aan?</div>
+    </div>
+    <div id="tkInhoud" style="padding:0 16px 16px"></div>
+  </div>
+</div>
+
 <!-- ── MEER (Capture, Rapportage, Voorraad, Feedback: dezelfde tabs, via het menu) ── -->
 <div class="sheet-overlay" id="meerSheet" onclick="if(event.target===this)sluitMeer()">
   <div class="sheet" role="dialog" aria-label="Meer">
@@ -1386,6 +1402,12 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
       <button class="sheet-action-btn meer-item" onclick="switchTab('feedback',this)" id="nav-feedback" data-recht="verbeterpunten">
         <span class="sheet-action-icon">💬</span><span class="sheet-action-label"><span class="sheet-action-title">Feedback</span></span><span class="sheet-action-arrow">›</span>
       </button>
+      <button class="sheet-action-btn meer-item meer-extra" id="mx-geld" type="button" onclick="sluitMeer();geldLaagOpen()"><span class="sheet-action-icon">€</span><span class="sheet-action-label"><span class="sheet-action-title">Financiën</span><span class="sheet-action-sub"></span></span><span class="sheet-action-arrow">›</span></button>
+      <button class="sheet-action-btn meer-item meer-extra" id="mx-meld" type="button" onclick="sluitMeer();openNotifs()"><span class="sheet-action-icon">🔔</span><span class="sheet-action-label"><span class="sheet-action-title">Meldingen</span><span class="sheet-action-sub"></span></span><span class="sheet-action-arrow">›</span></button>
+      <button class="sheet-action-btn meer-item meer-extra" id="mx-help" type="button" onclick="sluitMeer();openLarry()"><span class="sheet-action-icon">ⓘ</span><span class="sheet-action-label"><span class="sheet-action-title">Help (Larry)</span><span class="sheet-action-sub"></span></span><span class="sheet-action-arrow">›</span></button>
+      <button class="sheet-action-btn meer-item meer-extra" id="mx-melden" type="button" onclick="sluitMeer();MTVandaag.menu()"><span class="sheet-action-icon">＋</span><span class="sheet-action-label"><span class="sheet-action-title">Melden</span><span class="sheet-action-sub"></span></span><span class="sheet-action-arrow">›</span></button>
+      <button class="sheet-action-btn meer-item meer-extra" id="mx-verhuis" type="button" onclick="sluitMeer();verhuisOpen()"><span class="sheet-action-icon">⇄</span><span class="sheet-action-label"><span class="sheet-action-title">Verhuizen</span><span class="sheet-action-sub"></span></span><span class="sheet-action-arrow">›</span></button>
+      <button class="sheet-action-btn meer-item meer-extra" id="mx-uit" type="button" onclick="sluitMeer();msLogout()"><span class="sheet-action-icon">⎋</span><span class="sheet-action-label"><span class="sheet-action-title">Uitloggen</span><span class="sheet-action-sub"></span></span><span class="sheet-action-arrow">›</span></button>
       <button class="sheet-action-btn meer-item" id="stijlKnop" type="button" aria-pressed="false">
         <span class="sheet-action-icon">🎨</span><span class="sheet-action-label"><span class="sheet-action-title" id="stijlTitel">Oude stijl</span><span class="sheet-action-sub" id="stijlSub">Uit</span></span><span class="sheet-action-arrow" id="stijlPijl">›</span>
       </button>
@@ -2405,10 +2427,69 @@ function bovenRijBijwerken() {
   const geldOk = !!(window.MTRol && MTRol.me && MTRol.me.rechten && ('geld' in MTRol.me.rechten) && geldMagM());
   rij.querySelectorAll('.boven-knop').forEach(b => {
     if (b.dataset.recht === 'geld') b.hidden = !geldOk;
-    else if (window.MTRol && MTRol.pasToe && MTRol.me) { b.classList.toggle('mt-rol-verborgen', !MTRol.mag(b.dataset.recht)); }
+    else if (b.id === 'bk-timer') { const s = timerStatusM(); b.hidden = s === 'geen-recht'; b.disabled = s === 'rol-laden'; b.title = s === 'rol-laden' ? 'De rol wordt nog geladen' : ''; }
+    else if (b.dataset.recht && window.MTRol && MTRol.pasToe && MTRol.me) { b.classList.toggle('mt-rol-verborgen', !MTRol.mag(b.dataset.recht)); }
   });
   const zicht = [...rij.querySelectorAll('.boven-knop')].filter(b => !b.hidden && !b.classList.contains('mt-rol-verborgen'));
   rij.hidden = !zicht.length || document.documentElement.getAttribute('data-stijl') !== 'nieuw';   // de oude stijl blijft zoals voorheen: geen bovenrij
+}
+// Timer vanuit de bovenrij en de kop: één tik start de bestaande timer (startTimer, dus met de Toggl-race-guard en de offline-wachtrij) op het laatst gebruikte project;
+// loopt hij al, dan stopt dezelfde knop hem met stopTimer. Zonder laatst gebruikt project opent het timerscherm met de projectkiezer. Geen eigen API-aanroepen.
+// De timerknop werkt alleen na een bevestigde rol (rol-laden = uitgeschakeld), met recht op uren, een Microsoft-sessie en een gekoppeld Toggl-account; anders een melding en geen lokale schijntimer.
+function timerStatusM() { if (!(window.MTRol && MTRol.me)) return 'rol-laden'; try { return rolMagM(MTPlanning.ROL.UREN_BOEKEN) ? 'ok' : 'geen-recht'; } catch (e) { return 'rol-laden'; } }
+function togglGekoppeldM() { const s = window.MTToggl && MTToggl.status; if (!s) return false; return !!(s.track ? s.track.gekoppeld : (s.focus && s.focus.gekoppeld)); }
+function timerStartCheckM() {   // centrale controle voor elke manier om een timer te starten
+  const s = timerStatusM();
+  if (s === 'rol-laden') return { ok: false, melding: 'De rol wordt nog geladen \u2014 probeer het zo opnieuw.' };
+  if (s === 'geen-recht') return { ok: false, melding: 'Je rol mag geen timer starten.' };
+  if (_demoMode || !_msAccount || !togglGekoppeldM()) return { ok: false, melding: 'Timer niet beschikbaar: log in en koppel eerst je Toggl-account.' };
+  return { ok: true };
+}
+let _snackTimer = null;
+function snack(tekst, label, fn) {
+  const s = document.getElementById('snack'); if (!s) { showToast(tekst); return; }
+  s.replaceChildren(); const t = document.createElement('span'); t.textContent = tekst; s.appendChild(t);
+  if (label && fn) { const b = document.createElement('button'); b.type = 'button'; b.textContent = label; b.addEventListener('click', () => { s.hidden = true; fn(); }); s.appendChild(b); }
+  s.hidden = false; clearTimeout(_snackTimer); _snackTimer = setTimeout(() => { s.hidden = true; }, 6000);
+}
+function kopTimerOpen() {
+  if (projSyncStatus() === 'mislukt') {   // opnieuw proberen (bij twijfel: eerst vragen)
+    if (_pend.twijfel) { if (!confirm('Toggl toont al een entry met deze starttijd. Deze uren toch apart opslaan?')) return; _pend.negeerTwijfel = true; _pend.twijfel = false; }
+    _pend.keuze = false;
+    _pend.status = 'wacht'; _pendPogingenSessie = 0; pendOpslaan(); kopTimerBijwerken(); _tglEnqueue(() => pendAfronden()).catch(() => {}); return;
+  }
+  if (timerRunning && _pend && !_pend.projectId) tkOpen(); else switchTab('timer', document.getElementById('nav-timer'));   // zonder project: de kiezer
+}
+let _kopTimerBezig = false;
+async function kopTimerTik() {
+  if (timerRunning) { const naam = activeProject ? mProjNaam(activeProject) : ''; stopTimer(); if (!timerRunning) snack('Timer gestopt' + (naam ? ': ' + naam : '')); return; }
+  if (_kopTimerBezig) return; _kopTimerBezig = true;
+  try {
+    const g = timerStartCheckM(); if (!g.ok) { if (timerStatusM() !== 'rol-laden') showToast(g.melding); return; }
+    let token = false; try { const h = await authHeader(); token = !!(h && h['X-Auth-Token']); } catch (e) {}
+    if (!token) { showToast('Timer niet beschikbaar: log in en koppel eerst je Toggl-account.'); return; }
+    startTimerLokaal(); tkOpen();   // de tijd loopt meteen (lokaal); project en taak kies je daarna, dan volgt één POST naar Toggl
+  } finally { _kopTimerBezig = false; }
+}
+function kopTimerBijwerken() {
+  const nieuw = document.documentElement.getAttribute('data-stijl') === 'nieuw', loopt = !!timerRunning;
+  const k = document.getElementById('kopTimer');
+  if (k) { k.hidden = !(nieuw && loopt); if (!k.hidden) { const t = document.getElementById('timerDisplay'); document.getElementById('kopTimerT').textContent = (t && t.textContent) || '00:00:00'; document.getElementById('kopTimerP').textContent = projSyncStatus() === 'mislukt' ? 'Project niet opgeslagen \u2013 tik om opnieuw' : projSyncStatus() === 'wacht' ? 'Project wordt opgeslagen\u2026' : activeProject ? mProjNaam(activeProject) : 'Geen project \u2013 kiezen'; k.classList.toggle('zonder', !activeProject && !projSyncStatus()); k.classList.toggle('sync', !!projSyncStatus()); } }
+  const bk = document.getElementById('bk-timer'); if (!bk) return;
+  bk.classList.toggle('loopt', loopt); bk.setAttribute('aria-label', loopt ? 'Timer stoppen' : 'Timer starten');
+  const l = document.getElementById('bk-timer-l'); if (l) l.textContent = loopt ? 'Stop' : 'Timer';
+  const ic = bk.querySelector('.boven-ic'), naam = loopt ? 'timerStop' : 'timerPlay';
+  if (ic && nieuw && window.mtIcoon && ic.dataset.ico !== naam) { ic.dataset.ico = naam; const i = mtIcoon(naam); if (i) ic.replaceChildren(i); }
+}
+// Meer (nieuwe stijl): wat uit de kop is gehaald blijft hier bereikbaar; de oorspronkelijke knoppen blijven bestaan en bepalen of een item er is.
+function meerExtraBijwerken() {
+  const nieuw = document.documentElement.getAttribute('data-stijl') === 'nieuw';
+  const zet = (id, aan, sub) => { const e = document.getElementById(id); if (!e) return; e.classList.toggle('aan', nieuw && !!aan); const s = e.querySelector('.sheet-action-sub'); if (s) s.textContent = sub || ''; };
+  const zichtbaar = id => { const e = document.getElementById(id); return !!e && e.style.display !== 'none'; };
+  const nb = document.getElementById('notifBadge'), n = nb && nb.style.display !== 'none' ? Number(nb.textContent) || 0 : 0, gb = document.querySelector('#geldKnop .geld-badge');
+  zet('mx-geld', zichtbaar('geldKnop') && typeof geldLaagOpen === 'function', gb ? gb.textContent + ' ongelezen' : '');
+  zet('mx-meld', true, n ? n + ' ongelezen' : ''); zet('mx-help', true); zet('mx-melden', !!window.MTVandaag);
+  zet('mx-verhuis', zichtbaar('verhuisBtn')); zet('mx-uit', zichtbaar('userAvatarBtn') && !_demoMode);
 }
 function bovenRijActief(name) {
   const kaart = { agenda: 'bk-planning', capture: 'bk-opname', forecast: 'bk-forecast' };
@@ -2424,7 +2505,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const c = document.querySelector('.app-content'); if (c && window.ResizeObserver) new ResizeObserver(merkMaatM).observe(c);
   window.addEventListener('resize', merkMaatM);
   window.addEventListener('mt-rol', bovenRijBijwerken);
-  window.addEventListener('mt-stijl', () => { icoonVullenM(); bovenRijBijwerken(); merkMaatM(); });
+  window.addEventListener('mt-stijl', () => { icoonVullenM(); bovenRijBijwerken(); merkMaatM(); kopTimerBijwerken(); });
 });
 async function rolLaadMobiel() {
   if (!window.MTRol) return;
@@ -2988,7 +3069,12 @@ function saveTasks() { localStorage.setItem("mt_tasks", JSON.stringify(TASKS)); 
 // Buiten de modus "afdwingen" is alles toegestaan (MTRol.mag); de worker blijft voor Toggl de echte poortwachter.
 // TODO (stap 3 van het eindontwerp: offline-outbox en operation-id's): de mobiele Toggl-aanroepen (status, naam, aanmaken) krijgen nog GEEN tg_pending-intentie zoals v2; dat is bestaand gedrag.
 const ROL_TAAK_STATUS = 'taken:status-nieuw|alles', ROL_TAAK_ALLES = 'taken:alles';
-function rolMagM(spec) { return !(window.MTRol && MTRol.mag) || MTRol.mag(spec); }
+function rolMagM(spec) {   // schrijfacties (een spec met niveaus, 'kolom:niveau') zijn dicht zolang de rol niet geladen is (behalve demo en een oude worker zonder rollen); lezen blijft werken
+  const schrijf = String(spec || '').includes(':');
+  if (!(window.MTRol && MTRol.mag)) return !schrijf || _demoMode;   // de rolmodule ontbreekt: schrijfacties dicht, lezen open
+  if (!MTRol.me && schrijf && !_demoMode) return false;   // geen rol geladen (ook niet bij een oude worker): schrijfacties dicht; MTRol.mag zelf en de modus blijven zoals ze zijn
+  return MTRol.mag(spec);
+}
 function rolGeweigerdM(spec, wat) {
   if (rolMagM(spec)) return false;
   try { showToast('⛔ ' + (wat || 'Dit') + ' mag je niet met jouw rol. Er is niets gewijzigd.'); } catch (e) {}
@@ -3489,7 +3575,7 @@ document.addEventListener("DOMContentLoaded", () => {
 // Stap 2e: Capture, Rapportage, Voorraad en Feedback staan in het Meer-menu; dezelfde tabs en functies, alleen via een sheet.
 // Is een van die tabs open, dan is "Meer" de actieve knop in de onderbalk (en het item in het menu).
 const MEER_TABS = ["capture", "oplevering", "voorraad", "feedback"];
-function openMeer() { const s = document.getElementById("meerSheet"); if (s) s.classList.add("visible"); }
+function openMeer() { try { meerExtraBijwerken(); } catch (e) {} const s = document.getElementById("meerSheet"); if (s) s.classList.add("visible"); }
 function sluitMeer() { const s = document.getElementById("meerSheet"); if (s) s.classList.remove("visible"); }
 function switchTab(name, btn) {
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
@@ -3529,12 +3615,13 @@ function loadFromStorage() {
 // restoreTimer() is daarom herbruikbaar: hij draait nogmaals zodra de echte
 // projecten er zijn, en bij terugkeren uit de achtergrond.
 function restoreTimer() {
+  try { pendHervat(); } catch (e) {}   // een lokale start of een niet bevestigde POST uit een vorige sessie afronden
   if (timerRunning) return;
   try {
     const saved = JSON.parse(localStorage.getItem("mt_timer") || "null");
-    if (!(saved && saved.running && saved.projectId)) return;
-    const proj = allProjects().find(p => p.id === saved.projectId);
-    if (!proj) return;   // projecten mogelijk nog niet geladen — volgende poging pakt 'm
+    if (!(saved && saved.running)) return;
+    const proj = saved.projectId ? allProjects().find(p => p.id === saved.projectId) : null;   // een timer zonder project (nog niet gekozen) herstelt ook
+    if (saved.projectId && !proj) return;   // projecten mogelijk nog niet geladen — volgende poging pakt 'm
     activeProject = proj;
     captureProject = proj;
     timerStart = saved.start;
@@ -3579,9 +3666,9 @@ async function syncTimerWithToggl() {
 }
 
 function saveTimerState() {
-  if (timerRunning && activeProject) {
+  if (timerRunning) {
     localStorage.setItem("mt_timer", JSON.stringify({
-      running:true,projectId:activeProject.id,start:timerStart,
+      running:true,projectId:activeProject?activeProject.id:null,start:timerStart,
       togglEntryId:_togglTimerEntryId
     }));
   } else {
@@ -3589,6 +3676,165 @@ function saveTimerState() {
   }
 }
 
+/* ── Timer vanuit de bovenrij: lokaal starten, pas bij een gekozen project één POST naar Toggl ──
+   Tik: een lokale start (persistent in mt_timer_pending, status kiezen); er gaat nog niets naar Toggl. Project (en taak) gekozen: één POST met start = de tiktijd (terugwerkend),
+   via de bestaande wachtrij en tgTrack; daarna een gewone lopende timer. Stop zonder project: eerst een project kiezen (of weggooien), dan één POST met start en stop.
+   Valt een antwoord weg, dan vóór een nieuwe poging de lopende entry opvragen: alleen claimen bij exact dezelfde start (op de seconde) én hetzelfde project; bij twijfel nooit blind een tweede POST. */
+let _pend = null;   // { start (ms), projectId, taak, status: 'kiezen' | 'wacht' | 'mislukt', poging, stop (ms), twijfel, keuze, negeerTwijfel, stopAkkoord (id van de andere timer) }
+try { _pend = JSON.parse(localStorage.getItem('mt_timer_pending') || 'null'); } catch (e) { _pend = null; }
+let _pendRetryT = null, _pendLoopt = false, _pendPogingenSessie = 0;
+function pendOpslaan() { try { if (_pend) localStorage.setItem('mt_timer_pending', JSON.stringify(_pend)); else localStorage.removeItem('mt_timer_pending'); } catch (e) {} }
+const projSyncStatus = () => (_pend && _pend.projectId) ? (_pend.status === 'mislukt' ? 'mislukt' : 'wacht') : null;
+const isoSec = ms => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
+async function togglCurrent() { const cur = await tgTrack('me/time_entries/current'), e = (cur && cur.id) ? cur : (cur && cur.data); return (e && e.id && e.duration < 0) ? e : null; }   // gooit bij een mislukte opvraag
+function pendPlan() {   // opnieuw proberen via dezelfde wachtrij: na 8, 16, 24 … s, hooguit 6 keer per sessie; bij het opstarten hervat pendHervat het
+  clearTimeout(_pendRetryT); if (!_pend || _pend.twijfel || _pend.keuze || _pendPogingenSessie >= 6) return; _pendPogingenSessie++;
+  _pendRetryT = setTimeout(() => { if (_pend && _pend.projectId) { _pend.status = 'wacht'; pendOpslaan(); kopTimerBijwerken(); _tglEnqueue(() => pendAfronden()).catch(() => {}); } }, 8000 * _pendPogingenSessie);
+}
+function pendHervat() {   // bij het opstarten en na het laden van de projecten: een nog niet bevestigde POST afronden (een eerdere poging kan zijn aangekomen: dus altijd eerst opvragen)
+  if (!(_pend && _pend.projectId) || !_msAccount || _demoMode || !allProjects().length) return;
+  _pend.poging = Math.max(_pend.poging || 0, 1); _pendPogingenSessie = 0; _tglEnqueue(() => pendAfronden()).catch(() => {});
+}
+async function togglVindEntry(startMs, togglProjectId, negeerTwijfel) {   // onze eigen entry in de recente entries (ook een al gestopte): exact dezelfde startseconde én hetzelfde project; twijfel of een mislukte opvraag gooit (dan nooit een POST)
+  const van = new Date(startMs - 864e5).toISOString().slice(0, 10), tot = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
+  const res = await tgTrack(`me/time_entries?start_date=${van}&end_date=${tot}`), arr = Array.isArray(res) ? res : (res && Array.isArray(res.data) ? res.data : null);
+  if (!arr) throw new Error('lijst onleesbaar');
+  const sec = Math.floor(startMs / 1000), zelfde = arr.filter(e => e && e.id && Math.floor(new Date(e.start).getTime() / 1000) === sec);
+  const exact = zelfde.filter(e => String(e.project_id != null ? e.project_id : e.pid) === String(togglProjectId));
+  if (exact.length === 1) return exact[0];
+  if (zelfde.length && !negeerTwijfel) throw Object.assign(new Error('twijfel'), { twijfel: true });   // negeerTwijfel: de gebruiker koos toch apart opslaan; de entry met dezelfde start telt dan niet als de onze
+  return null;
+}
+const _tabId = Math.random().toString(36).slice(2), PEND_LOCK = 'mt_pend_lock';
+async function pendLockNemen() {   // één tabblad tegelijk werkt aan de pending POST; de lock verloopt na 15 s
+  try {
+    const l = JSON.parse(localStorage.getItem(PEND_LOCK) || 'null'); if (l && l.tab !== _tabId && Date.now() - l.t < 15000) return false;
+    const overgenomen = !!(l && l.tab !== _tabId);   // een verlopen lock van een ander tabblad: dan eerst opnieuw zoeken
+    localStorage.setItem(PEND_LOCK, JSON.stringify({ tab: _tabId, t: Date.now() })); await new Promise(r => setTimeout(r, 60));
+    const l2 = JSON.parse(localStorage.getItem(PEND_LOCK) || 'null'); return (!!l2 && l2.tab === _tabId) ? (overgenomen ? 'overgenomen' : 'vrij') : false;
+  } catch (e) { return 'vrij'; }
+}
+function pendLockVernieuw() { try { localStorage.setItem(PEND_LOCK, JSON.stringify({ tab: _tabId, t: Date.now() })); } catch (e) {} }
+function pendLockVrij() { try { const l = JSON.parse(localStorage.getItem(PEND_LOCK) || 'null'); if (l && l.tab === _tabId) localStorage.removeItem(PEND_LOCK); } catch (e) {} }
+async function pendAfronden() {
+  const p = _pend; if (!p) return true;   // niets (meer) te doen
+  if (!p.projectId || !_msAccount || _demoMode || _pendLoopt) return false;
+  const proj = allProjects().find(x => String(x.id) === String(p.projectId)); if (!proj) return false;   // projecten nog niet geladen: later opnieuw
+  if (!proj.togglProjectId) { p.status = 'mislukt'; pendOpslaan(); kopTimerBijwerken(); return false; }
+  _pendLoopt = true; let lease = null;
+  try {
+    const lock = await pendLockNemen(); if (!lock) { pendPlan(); return false; }   // een ander tabblad werkt hieraan: geen eigen POST
+    lease = setInterval(pendLockVernieuw, 5000);   // de lock blijft van ons zolang deze POST loopt
+    let id = null, gestopt = false;
+    if (p.poging > 0 || lock === 'overgenomen') {   // een vorige poging kan zijn aangekomen zonder dat het antwoord binnenkwam: eerst in de recente entries kijken
+      const e = await togglVindEntry(p.start, proj.togglProjectId, p.negeerTwijfel);
+      if (e) { id = e.id; gestopt = e.duration >= 0 || !!e.stop; }
+    }
+    if (!id) {   // vóór elke POST: loopt er al een timer (ander toestel of tabblad)? Nooit stil: de gebruiker kiest
+      const cur = await togglCurrent();
+      if (cur) {
+        const pr = allProjects().find(x => String(x.togglProjectId) === String(cur.project_id)), sinds = new Date(cur.start), hhmm = String(sinds.getHours()).padStart(2, '0') + ':' + String(sinds.getMinutes()).padStart(2, '0');
+        if (String(p.stopAkkoord) !== String(cur.id)) {   // akkoord geldt alleen voor déze timer, en slaat alleen de vraag over, niet de controles
+          if (!confirm('Er loopt al een timer (' + (pr ? mProjNaam(pr) : 'ander project') + ' sinds ' + hhmm + ').\n\nOK: die stoppen en deze starten.\nAnnuleren: niets starten (je tijd blijft hier bewaard).')) throw Object.assign(new Error('keuze'), { keuze: true });
+          p.stopAkkoord = cur.id; pendOpslaan();
+        }
+        await tgTrack(`workspaces/${TG_WS}/time_entries/${cur.id}/stop`, 'PATCH');
+        if (await togglCurrent()) throw new Error('er loopt nog een timer');   // pas een eigen POST als er aantoonbaar niets meer loopt
+      }
+    }
+    pendLockVernieuw();
+    if (!id) {
+      p.poging = (p.poging || 0) + 1; pendOpslaan();   // vanaf nu kan de POST onderweg zijn: een volgende poging zoekt eerst
+      const stopBijPost = p.stop;
+      const body = { description: p.taak || proj.name, project_id: proj.togglProjectId, start: isoSec(p.start), duration: stopBijPost ? Math.max(1, Math.round((stopBijPost - p.start) / 1000)) : -1, created_with: 'mt-mobiel', workspace_id: TG_WS };
+      if (stopBijPost) body.stop = isoSec(stopBijPost);
+      const made = await tgTrack(`workspaces/${TG_WS}/time_entries`, 'POST', body), nid = made && (made.id || (made.data && made.data.id)); if (!nid) throw new Error('geen entry-id');
+      id = nid; gestopt = !!stopBijPost;
+    }
+    // de toestand bij Toggl gelijk maken aan de bedoelde: is er intussen gestopt (tijdens de POST of op een eerdere poging), dan de entry stoppen op de gevraagde stoptijd
+    if (p.stop && !gestopt) await tgTrack(`workspaces/${TG_WS}/time_entries/${id}`, 'PUT', { stop: isoSec(p.stop), duration: Math.max(1, Math.round((p.stop - p.start) / 1000)), workspace_id: TG_WS });
+    if (!p.stop) { _togglTimerEntryId = id; saveTimerState(); }
+    if (_pend === p) { _pend = null; pendOpslaan(); }
+    clearTimeout(_pendRetryT); kopTimerBijwerken(); return true;
+  } catch (e) {
+    console.warn('pendAfronden fout:', e.message);
+    p.status = 'mislukt'; p.twijfel = !!e.twijfel; p.keuze = !!e.keuze; pendOpslaan(); pendPlan(); kopTimerBijwerken();
+    showToast(p.keuze ? 'Niet opgeslagen: er loopt al een timer bij Toggl — tik op de kop om te kiezen' : p.twijfel ? 'Toggl toont al een entry met deze starttijd — tik op de kop om te kiezen' : 'Nog niet bij Toggl opgeslagen — we proberen het opnieuw');
+    return false;
+  } finally { clearInterval(lease); _pendLoopt = false; pendLockVrij(); }
+}function startTimerLokaal() {
+  activeProject = null; captureProject = null;
+  timerRunning = true; timerStart = Math.floor(Date.now() / 1000) * 1000;
+  _pend = { start: timerStart, projectId: null, taak: '', status: 'kiezen', poging: 0 }; pendOpslaan(); _pendPogingenSessie = 0;
+  saveTimerState(); startTickInterval(); updateTimerUI(); renderCaptureProject();
+}
+function zetProjectOpTimer(proj, oms) {   // project (en taak) bij een lokale start: nu pas de POST; een timer die al bij Toggl loopt verandert hier alleen lokaal van project (zoals voorheen)
+  activeProject = proj; captureProject = proj; saveTimerState(); updateTimerUI(); renderCaptureProject();
+  if (!_pend) return Promise.resolve(true);
+  _pend.projectId = proj.id; _pend.taak = (typeof oms === 'string' && oms.trim()) ? oms.trim() : ''; _pend.status = 'wacht'; _pend.poging = _pend.poging || 0; pendOpslaan(); kopTimerBijwerken();
+  return _tglEnqueue(() => pendAfronden()).catch(() => false);
+}
+function timerLokaalStoppen() { timerRunning = false; clearInterval(timerInterval); timerInterval = null; timerStart = null; saveTimerState(); updateTimerUI(); renderCaptureProject(); }
+function pendWeggooien() { _pend = null; pendOpslaan(); clearTimeout(_pendRetryT); timerLokaalStoppen(); activeProject = null; captureProject = null; updateTimerUI(); kopTimerBijwerken(); }
+window.addEventListener('beforeunload', ev => { if (projSyncStatus() || (_pend && _pend.stop)) { ev.preventDefault(); ev.returnValue = ''; } });   // extra vangnet; de pending-toestand zelf blijft bewaard
+window.addEventListener('online', () => { try { pendHervat(); } catch (e) {} });
+window.addEventListener('storage', ev => { if (ev.key !== 'mt_timer_pending') return; try { _pend = ev.newValue ? JSON.parse(ev.newValue) : null; kopTimerBijwerken(); } catch (e) {} });   // een ander tabblad werkt de pending toestand bij: die tonen, geen eigen POST
+let _tkProj = null, _tkModus = 'normaal';
+function tkOpen(modus) { _tkModus = modus || 'normaal'; _tkProj = null; tkTeken(); document.getElementById('tkSheet').classList.add('visible'); }
+function tkDicht() { document.getElementById('tkSheet').classList.remove('visible'); }
+function tkSluit() {   // sluiten zonder af te maken: een gekozen project (zonder taak) telt; zonder keuze loopt de timer lokaal door
+  if (_tkProj && _tkModus === 'normaal' && _pend && !_pend.projectId) zetProjectOpTimer(_tkProj, '');
+  tkDicht();
+}
+function tkTeken() {
+  const root = document.getElementById('tkInhoud'), titel = document.getElementById('tkTitel'); root.replaceChildren();
+  const el = (tag, cls, tekst) => { const e = document.createElement(tag); if (cls) e.className = cls; if (tekst != null) e.textContent = tekst; return e; };
+  const veld = (id, ph) => { const i = el('input', 'picker-search'); i.type = 'search'; i.id = id; i.placeholder = ph; i.setAttribute('aria-label', ph); i.autocomplete = 'off'; i.style.cssText = 'width:100%;font-size:16px;min-height:44px'; return i; };
+  const PI = 'width:100%;min-height:48px;margin:0;padding:8px 4px;border:0;border-bottom:1px solid var(--n-200,#ece7de);border-radius:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;';
+  const lijstEl = () => { const l = el('div'); l.style.cssText = 'max-height:42vh;overflow-y:auto;margin-top:8px'; return l; };
+  if (!_tkProj) {
+    titel.textContent = _tkModus === 'stop' ? 'Stoppen: kies een project' : 'Waar werk je aan?';
+    const zoek = veld('tkZoek', 'Zoek project of code…'), lijst = lijstEl(); root.append(zoek, lijst);
+    const vul = () => {
+      const q = zoek.value.trim().toLowerCase(), ps = allProjects().filter(p => p.togglProjectId && (!q || p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q) || mProjZoek(p).includes(q)));
+      lijst.replaceChildren();
+      for (const [kop, groep] of [['Toegewezen', ps.filter(p => p.assigned)], ['Alle projecten', ps.filter(p => !p.assigned)]]) {
+        if (!groep.length) continue; lijst.appendChild(el('div', 'picker-group-label', kop));
+        for (const p of groep) { const b = el('button', 'picker-item'); b.type = 'button'; b.style.cssText = PI; const n = el('div'); n.appendChild(el('div', 'picker-item-name', mProjNaam(p))); b.append(n, el('div', 'picker-item-code', mProjNr(p)));
+          b.addEventListener('click', () => { _tkProj = p; if (_tkModus === 'stop') { if (_pend) { _pend.projectId = p.id; _pend.taak = ''; pendOpslaan(); } activeProject = p; captureProject = p; tkDicht(); stopTimer(); return; } tkTeken(); }); lijst.appendChild(b); }
+      }
+      if (!ps.length) lijst.appendChild(el('div', 'picker-group-label', 'Geen projecten gevonden'));
+    };
+    zoek.addEventListener('input', vul); vul();
+    if (_tkModus === 'stop') {
+      const weg = el('button', 'btn btn-secondary', 'Weggooien (geen uren opslaan)'); weg.type = 'button'; weg.style.cssText = 'width:100%;min-height:48px;margin-top:12px;color:var(--error,#c4322a)';
+      weg.addEventListener('click', () => { if (confirm('Deze tijd weggooien? Er wordt niets in Toggl opgeslagen.')) { pendWeggooien(); tkDicht(); snack('Tijd weggegooid'); } });
+      const terug = el('button', 'btn btn-secondary', 'Terug, de timer loopt door'); terug.type = 'button'; terug.style.cssText = 'width:100%;min-height:48px;margin-top:8px'; terug.addEventListener('click', tkDicht); root.append(weg, terug);
+    } else {
+      const zonder = el('button', 'btn btn-secondary', 'Later kiezen'); zonder.type = 'button'; zonder.style.cssText = 'width:100%;min-height:48px;margin-top:12px'; zonder.addEventListener('click', tkSluit); root.appendChild(zonder);
+    }
+  } else {
+    titel.textContent = 'Taak erbij?';
+    const kop = el('div'); kop.style.cssText = 'display:flex;align-items:center;gap:8px;justify-content:space-between;margin-bottom:8px';
+    const tekst = el('div'); tekst.style.cssText = 'min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'; tekst.textContent = mProjNaam(_tkProj) + ' · ' + mProjNr(_tkProj);
+    const anders = el('button', 'btn btn-secondary btn-sm', 'Ander project'); anders.type = 'button'; anders.style.cssText = 'flex:none;white-space:nowrap;min-height:44px;padding:0 12px'; anders.addEventListener('click', () => { _tkProj = null; tkTeken(); });
+    kop.append(tekst, anders);
+    const inp = veld('tkTaak', 'Taak typen…'), lijst = lijstEl(); root.append(kop, inp, lijst);
+    const klaar = taak => { zetProjectOpTimer(_tkProj, taak); snack('Timer loopt op ' + mProjNaam(_tkProj) + (taak ? ' \u00b7 ' + taak : '')); tkDicht(); };   // één POST met project en taak
+    const vul = () => {
+      const q = inp.value.trim(), ql = q.toLowerCase(), ts = tasksFor(_tkProj.code).filter(t => !ql || t.name.toLowerCase().includes(ql)).sort((a, b) => (a.status === 'klaar') - (b.status === 'klaar')).slice(0, 8);
+      lijst.replaceChildren();
+      for (const t of ts) { const b = el('button', 'picker-item'); b.type = 'button'; b.style.cssText = PI; b.append(el('div', 'picker-item-name', t.name)); b.addEventListener('click', () => klaar(t.name)); lijst.appendChild(b); }
+      if (q && !tasksFor(_tkProj.code).some(t => t.name.trim().toLowerCase() === ql)) {
+        const b = el('button', 'picker-item', '+ Taak \u2018' + q + '\u2019 aanmaken'); b.type = 'button'; b.style.cssText = PI + 'font-weight:600;';
+        b.addEventListener('click', () => { if (b.disabled) return; b.disabled = true; const t = maakTaakAan(_tkProj, q, null, null); if (!t) { b.disabled = false; return; } klaar(t.name); }); lijst.appendChild(b);
+      }
+    };
+    inp.addEventListener('input', vul); vul();
+    const gereed = el('button', 'btn btn-primary', 'Klaar, zonder taak'); gereed.type = 'button'; gereed.style.cssText = 'width:100%;min-height:48px;margin-top:12px'; gereed.addEventListener('click', () => klaar('')); root.appendChild(gereed);
+    setTimeout(() => { try { inp.focus(); } catch (e) {} }, 60);
+  }
+}
 function toggleTimer() {
   if (timerRunning) {
     stopTimer();
@@ -3598,6 +3844,7 @@ function toggleTimer() {
 }
 
 function startTimer(oms) {   // oms: omschrijving van de Toggl-entry (Vandaag geeft de taaknaam mee); zonder: de projectnaam
+  const toegang = timerStartCheckM(); if (!toegang.ok) { if (toegang.melding) showToast(toegang.melding); return Promise.resolve(false); }   // bevestigde rol, Microsoft-sessie en Toggl-koppeling: ook voor de timercirkel, de projectsheet en Vandaag
   if (!activeProject) {
     alert("Selecteer eerst een project.");
     return Promise.resolve(false);
@@ -3617,6 +3864,7 @@ function startTimer(oms) {   // oms: omschrijving van de Toggl-entry (Vandaag ge
 }
 
 function stopTimer() {
+  if (_pend && !_pend.projectId) { tkOpen('stop'); return; }   // een lokale timer zonder project: eerst een project kiezen of weggooien, nooit stil verliezen
   timerRunning = false;
   clearInterval(timerInterval);
   timerInterval = null;
@@ -3626,6 +3874,11 @@ function stopTimer() {
   renderCaptureProject();
   // Geserialiseerd (na een evt. lopende start-POST); niet bevestigd → melden,
   // het pending-id wordt bij de volgende sync/stop alsnog gestopt.
+  if (_pend && _pend.projectId) {   // de entry bestaat nog niet (of niet bevestigd) bij Toggl: één POST met start en stop
+    _pend.stop = Math.max(Math.floor(Date.now() / 1000) * 1000, _pend.start + 1000); _pend.status = 'wacht'; pendOpslaan(); kopTimerBijwerken();
+    _tglEnqueue(() => pendAfronden()).then(ok => { if (ok === false) showToast('⚠ Uren nog niet bij Toggl opgeslagen — we proberen het opnieuw'); }).catch(() => {});
+    return;
+  }
   _tglEnqueue(() => stopTimerOnToggl()).then(ok => {
     if (ok === false) showToast('⚠ Toggl-stop niet bevestigd — wordt automatisch opnieuw geprobeerd');
   }).catch(() => {});
@@ -3646,12 +3899,14 @@ function tickTimer() {
   const str = `${h}:${m}:${s}`;
   document.getElementById("timerDisplay").textContent = str;
   document.getElementById("timerBarTime").textContent = str;
+  const kt = document.getElementById("kopTimerT"); if (kt) kt.textContent = str;
   // also update bar display in other tabs
   const barDisplay = document.querySelectorAll(".timer-bar-time");
   barDisplay.forEach(el => el.textContent = str);
 }
 
 function updateTimerUI() {
+  setTimeout(kopTimerBijwerken, 0);   // kop en bovenrij volgen de timerstand (nieuwe stijl)
   const circle = document.getElementById("timerCircle");
   const icon = document.getElementById("timerIcon");
   const label = document.getElementById("timerLabel");
@@ -3663,16 +3918,16 @@ function updateTimerUI() {
   const projCode = document.getElementById("timerProjectCode");
   document.getElementById("timerEditStartBtn").style.display = (timerRunning && timerStart) ? "" : "none";
 
-  if (timerRunning && activeProject) {
+  if (timerRunning) {
     circle.classList.add("running");
     icon.textContent = "⏸";
     label.textContent = "STOP";
     display.style.display = "block";
     bar.classList.add("visible");
-    barProject.textContent = activeProject.name;
-    barCode.textContent = activeProject.code;
-    projName.textContent = activeProject.name;
-    projCode.textContent = activeProject.code;
+    barProject.textContent = activeProject ? activeProject.name : "Geen project";
+    barCode.textContent = activeProject ? activeProject.code : "";
+    projName.textContent = activeProject ? activeProject.name : "Geen project";
+    projCode.textContent = activeProject ? activeProject.code : "kies een project";
   } else {
     circle.classList.remove("running");
     icon.textContent = "▶";
@@ -3729,8 +3984,10 @@ function pickerItemHtml(p) {
 }
 
 function selectProject(id) {
+  const was = activeProject;
   activeProject = allProjects().find(p => p.id === id);
   captureProject = activeProject;
+  if (timerRunning && !was && activeProject) zetProjectOpTimer(activeProject, "");   // een timer zonder project krijgt nu zijn project (ook bij Toggl)
   if (timerRunning) {
     // update running project
     saveTimerState();
@@ -6845,7 +7102,7 @@ window.geldLaagOpen = window.geldLaagOpen || function () {};
    dezelfde worker-routes en dezelfde Moneybird-leesroute als v2.html; rol "lezen" kan niets wijzigen (magWijzigen false).
    De uitgebreide forecast blijft op de computer (geen openUitgebreid op de telefoon).
    ===================================================================== */
-const FORECAST_SCRIPTS = ["mt-forecast.js?v=2026-10-30e","mt-forecast-light.js?v=2026-11-01h"];
+const FORECAST_SCRIPTS = ["mt-forecast.js?v=2026-10-30e","mt-forecast-light.js?v=2026-11-01k"];
 let _forecastScripts = null;
 function forecastLaadScripts() {
   if (window.MTForecast && window.MTForecastLight) return Promise.resolve();
@@ -7078,19 +7335,23 @@ function saveNewTask() {
   if (rolGeweigerdM(ROL_TAAK_STATUS, 'Een taak toevoegen')) { addingTask = false; renderSheetTasks(); return; }
   const name = document.getElementById("tfNewName").value.trim();
   if (!name) { alert("Geef de taak een naam."); return; }
+  const task = maakTaakAan(currentSheetProject, name, document.getElementById("tfNewDate").value.trim(), document.getElementById("tfNewEst").value.trim());
+  addingTask = false;
+  renderSheetTasks();   // geweigerd of gelukt: het formulier gaat dicht
+}
+
+// Een taak bij een project aanmaken (lokaal + Toggl 2.0 Focus als het project een Toggl-ID heeft); ook gebruikt door de timerkiezer. null = geweigerd (rol).
+function maakTaakAan(proj, name, datum, est) {
   const task = {
     id: "t"+Date.now(), name,
     status: "todo",
-    date: document.getElementById("tfNewDate").value.trim() || null,
-    est: document.getElementById("tfNewEst").value.trim() || null,
+    date: datum || null,
+    est: est || null,
     tag: null, note: "", togglTaskId: null
   };
-  if (!addTaskToProject(currentSheetProject.code, task)) { addingTask = false; renderSheetTasks(); return; }   // geweigerd: ook geen Toggl-aanroep
-  addingTask = false;
-  renderSheetTasks();
+  if (!addTaskToProject(proj.code, task)) return null;   // geweigerd: ook geen Toggl-aanroep
 
   // Sync naar Toggl 2.0 Focus als project een echte Toggl-ID heeft
-  const proj = currentSheetProject;
   if (!_demoMode && _msAccount && proj.togglProjectId) {
     focusFetch('tasks', 'POST', {name, status_id: _PLAN_TG_STATUS.todo, project_id: proj.togglProjectId})
       .then(res => {
@@ -7108,6 +7369,7 @@ function saveNewTask() {
         showToast('Taak lokaal opgeslagen — sync naar Toggl 2.0 later');
       });
   }
+  return task;
 }
 
 /* =====================================================================

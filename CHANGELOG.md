@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-31 — Backup = v2.30.0
+- Commit: `e54044a` | Auteur: Bart Witte
+
 ## 2026-10-31 — Release v2.30.0: Forecast op de telefoon als compacte tabel met maandkiezer, filters en sorteren zoals op de pc; backup = v2.29.0
 - Commit: `7433133` | Auteur: Bart Witte
 
