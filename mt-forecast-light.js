@@ -642,6 +642,7 @@
   // Gaat zeker door: met dezelfde controle als de vakjes (oud = de stand die je zag; null = nog nooit gezet). Bij een conflict of fout springt de
   // schakelaar terug naar wat er echt staat en zie je waarom (met Toch / Opnieuw); tijdens het opslaan waarschuwt de browser bij sluiten.
   async function zetZeker(id, ja, oudOpt) {
+    if (st.zekerBezig.has(id)) { werkBij(); return; }   // er loopt al een opslag voor deze offerte: een tweede tik wordt genegeerd (geen dubbele POST of vals conflict); de schakelaar springt terug naar wat er staat en volgt het antwoord van de eerste
     const rij = rijVan(id), rec = st.schets && st.schets[id], oud = oudOpt !== undefined ? oudOpt : rec && typeof rec.zeker === 'boolean' ? rec.zeker : null;
     st.zekerBezig.add(id);
     let r; try { r = await st.opt.bron.haal('/geld/schets', { method: 'POST', body: { eid: id, zeker: ja, oud, naam: rij ? rij.naam : undefined, nummer: rij && rij.nummer ? rij.nummer : undefined } }); } catch (e) { r = { error: String(e.message || e) }; }
