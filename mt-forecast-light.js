@@ -472,7 +472,7 @@
 .mtl-mtw{position:relative}.mtl-mt{width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed;font:13px/16px var(--l-ui);color:var(--l-ink)}
 .mtl-mt th,.mtl-mt td{padding:0 2px;background:var(--l-surface);border-bottom:1px solid var(--l-soft);font-weight:400;box-sizing:border-box}
 .mtl-mt .n{text-align:left;padding-left:6px;overflow:hidden;white-space:nowrap}.mtl-mt .n span{display:block;overflow:hidden;text-overflow:ellipsis}.mtl-mt .num{text-align:center;white-space:nowrap;font-variant-numeric:tabular-nums}
-.mtl-mt tbody th.n{color:var(--l-ink)}.mtl-mt .jr{box-shadow:inset 1px 0 0 var(--l-line)}.mtl-mt .gef{color:var(--l-f)}.mtl-mt .nu{background:var(--l-surface2)}
+.mtl-mt tbody th.n{color:var(--l-ink);padding-top:2px;padding-bottom:2px}.mtl-mt tbody th.n .nm{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;white-space:normal;word-break:break-word;font-size:11px;line-height:1.2}.mtl-mt tbody th.n .nm.s2{display:block}.mtl-mt tbody th.n .nm .kl,.mtl-mt tbody th.n .nm .om{display:block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.mtl-mt tbody th.n .kl{color:var(--l-ink);font-weight:500}.mtl-mt tbody th.n .om{color:var(--l-ink2)}.mtl-mt-d1 tbody th.n .nm{font-size:12px}.mtl-mt .jr{box-shadow:inset 1px 0 0 var(--l-line)}.mtl-mt .gef{color:var(--l-f)}.mtl-mt .nu{background:var(--l-surface2)}
 .mtl-mt thead th{position:sticky;top:0;z-index:4;height:44px;border-bottom:1px solid var(--l-line)}.mtl-mt thead .n{font-size:12px;color:var(--l-ink2)}
 .mtl-mt-mk{display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:44px;padding:0;border:0;background:none;color:var(--l-ink);font:inherit}.mtl-mt-mk b{font-size:13px;line-height:16px}.mtl-mt-mk span{font-size:11px;line-height:13px;color:var(--l-ink3)}
 .mtl-mt tr.g td{height:30px;background:var(--l-surface2);font:600 12px/16px var(--l-ui);color:var(--l-ink2);text-align:left;padding-left:6px;border-bottom:1px solid var(--l-line)}
@@ -1056,8 +1056,10 @@
           h('b', null, MND_K[Number(m.slice(5, 7)) - 1]), dens === 'd3' ? null : h('span', null, m.slice(0, 4)))))));
       const groep = (titel, k, toggle) => h('tr', { class: 'g' }, h('td', { colspan: String(n + 1) }, toggle ? h('button', { type: 'button', class: 'mtl-mt-gk', 'aria-expanded': String(!!st.mConcept), onclick: toggle }, titel + ' (' + k + ')', lijnIcoon(st.mConcept ? PAD_NEER : PAD_CHEV)) : titel + ' (' + k + ')'));
       const leeg = tekst => h('tr', { class: 'leeg' }, h('td', { colspan: String(n + 1) }, tekst));
+      // klant op regel 1 en omschrijving op regel 2 (gesplitst op ' \u2014 '); zonder streep een gewone naam op hooguit twee regels
+      const naamCel = naam => { const i = naam.indexOf(' \u2014 '); return i > 0 ? h('span', { class: 'nm s2' }, h('span', { class: 'kl' }, naam.slice(0, i)), h('span', { class: 'om' }, naam.slice(i + 3))) : h('span', { class: 'nm' }, naam); };
       const rij = it => h('tr', { class: 'k', tabindex: '0', role: 'button', 'aria-label': it.r.naam + ', openen', onclick: () => openOfferteSheet(it.r.id), onkeydown: ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openOfferteSheet(it.r.id); } } },
-        h('th', { class: 'n', scope: 'row', title: it.r.naam }, h('span', null, it.r.naam)),
+        h('th', { class: 'n', scope: 'row', title: it.r.naam }, naamCel(it.r.naam)),
         ms.map((m, i) => { const v = L.cel(it.r, m); return h('td', { class: 'num' + (L.vast(it.r, m) ? ' gef' : '') + jr(m, i), title: v ? L.fmt(v) : null }, v ? fm(v) : ''); }));
       const tbody = h('tbody', null,
         groep('Nu factureren', nf.length), nf.length ? nf.map(rij) : leeg('Niets dat nu gefactureerd kan worden.'),
