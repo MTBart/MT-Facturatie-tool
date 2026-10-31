@@ -14,6 +14,7 @@
   const AANTAL = 12;                                         // maanden in beeld (de tabel scrolt zijwaarts)
   const maandPlus = (ym, n) => { const t = Number(ym.slice(0, 4)) * 12 + Number(ym.slice(5, 7)) - 1 + n; return `${Math.floor(t / 12)}-${String(t % 12 + 1).padStart(2, '0')}`; };
   const maandTekst = ym => MND_K[Number(ym.slice(5, 7)) - 1] + ' ' + ym.slice(0, 4);
+  const MND_L = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli', 'augustus', 'september', 'oktober', 'november', 'december'];
   const duizend = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   L.maandPlus = maandPlus; L.maandTekst = maandTekst;
   L.maanden = (start, n) => Array.from({ length: n }, (_, i) => maandPlus(start, i));
@@ -272,6 +273,14 @@
     if (p === 'vrij' && /^\d{4}-(0[1-9]|1[0-2])$/.test(String(sel.s)) && Number.isInteger(sel.n) && sel.n >= 1 && sel.n <= 12) return { start: sel.s, n: sel.n };
     return { start: nuYm, n: 4 };
   };
+  // Kosten van één maand voor de indeling: per sleutel de som van de kasregels van die maand (hetzelfde getal als in de kostenregels) en het totaal van de aangevinkte
+  // groepen = Kosten in de voet voor die maand. regels = kasRegels(ms); negatief = betaling.
+  L.indelingMaand = function (regels, ym, aan) {
+    aan = aan || {}; const per = new Map();
+    for (const r of regels || []) if (r.ym === ym) per.set(r.sleutel, (per.get(r.sleutel) || 0) + r.c);
+    const kt = L.kasTotalen(regels || [], [ym], aan);
+    return { per, totaal: L.KAS_GROEPEN.reduce((a, g) => a + (aan[g] !== false && kt[g] ? kt[g].per[0] : 0), 0) };
+  };
   // In duizenden euro's, voor veel maanden naast elkaar: 24.000 → "24", 5.304 → "5,3", 40 → "0"; negatief met een echt minteken.
   L.kortD = function (cc) {
     if (cc == null) return '–';
@@ -399,7 +408,7 @@
 .mtl-pop li .tag{font-size:10px;color:var(--l-ok);background:var(--l-okbg);border-radius:var(--l-r);padding:0 5px}.mtl-popvoet{display:flex;gap:14px;justify-content:flex-end;margin-top:8px;font-size:12px;color:var(--l-ink2)}
 .mtl-mbar{display:none}.mtl-jj{margin-left:0}
 .mtl-ks-ind{width:100%;min-height:48px;margin:8px 0 4px;border:1px solid var(--l-strong);border-radius:var(--l-r);background:var(--l-surface);color:var(--l-ink);font:600 15px var(--l-ui);cursor:pointer}.mtl-ks-ind:disabled{opacity:.5}
-.mtl-ik-ho{display:block;font:11px/14px var(--l-ui);white-space:nowrap}
+.mtl-ptabel tr.nul td{color:var(--l-ink3)}.mtl-ip-mnd{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:8px 0 0!important;font-size:14px!important;color:var(--l-ink)!important}.mtl-ip-tot{font-family:var(--l-mono);font-weight:600;white-space:nowrap}
 @media (max-width:700px){
 .mtl-mbd{display:inline;width:100%;font-family:var(--l-mono);font-variant-numeric:tabular-nums;color:var(--l-ink2)}.mtl{gap:8px}.mtl-kop{align-items:flex-start;gap:6px}.mtl-titelblok{min-width:0}.mtl-titel{font-size:23px;line-height:28px}.mtl-sub{font-size:11px;line-height:15px;margin-top:1px}.mtl-acties{width:100%;gap:4px;flex-wrap:nowrap;overflow-x:auto;padding-bottom:1px}.mtl-acties .ui-knop{min-height:44px;padding:0 8px;font-size:12px;white-space:nowrap}.mtl-acties .mtl-seg{flex:none}
 .mtl-balk{padding:8px;gap:6px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}.mtl-balk::-webkit-scrollbar{display:none}.mtl-chip,.mtl-nav{flex:none}.mtl-chip{height:30px;padding:0 9px}.mtl-nav{margin-left:0}.mtl-nav .ui-knop{min-height:44px}.mtl-periode{font-size:11px;margin:0 2px}
@@ -501,7 +510,7 @@
 .mtl-m-vt .mtl-m-cap{display:flex;flex-direction:column;align-items:flex-start;line-height:15px}.mtl-m-vt .mtl-m-cap b{font-size:13px;color:var(--l-ink);font-weight:600}.mtl-m-vt .mtl-m-cap small{font-size:11px;color:var(--l-ink3)}
 .mtl-ikl{display:flex;flex-direction:column}.mtl-ik{display:grid;gap:6px;padding:10px 0;border-bottom:1px solid var(--l-soft)}.mtl-ik-1{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
 .mtl-ik-n{flex:1;min-width:0;font-size:15px;font-weight:500;line-height:20px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;word-break:break-word}
-.mtl-ik-b{flex:none;max-width:48%;text-align:right;font:600 15px/20px var(--l-mono);white-space:nowrap}.mtl-ik-b .mtl-ik-ho{font-weight:400;color:var(--l-ink3)}
+.mtl-ik-b{flex:none;max-width:48%;text-align:right;font:600 15px/20px var(--l-mono);white-space:nowrap}.mtl-ik.nul{opacity:.6}
 .mtl-ik-2{font-size:12px;line-height:16px;color:var(--l-ink3)}.mtl-paneel .mtl-ik select{width:100%;height:44px;min-height:44px;font-size:16px}.mtl-ik-x{align-self:start;min-height:44px;padding:0 4px;font-size:14px}
 .mtl-overlay{padding:8px;align-items:flex-start}.mtl-paneel{max-height:calc(100vh - 16px);border-radius:var(--l-rp)}.mtl-pkop{padding:12px}.mtl-pkop h2{font-size:18px;line-height:23px}.mtl-pinhoud{padding:8px 12px 12px}.mtl-ptabel{min-width:560px}.mtl-paneel select,.mtl-paneel input{height:36px}.mtl-pnieuw{display:grid;grid-template-columns:1fr;gap:8px}.mtl-pnieuw>input,.mtl-pnieuw>select,.mtl-pnieuw>.ui-knop{width:100%;min-height:36px}.mtl-pvoet{padding:10px 12px}.mtl-pvoet .ui-knop{min-height:36px}
 }
@@ -713,8 +722,9 @@
   // ── Indeling van de kasregels (paneel) ──
   // Per vaste betaling (patroon) of leverancier (inkoopfactuur): in welke groep, en bij een vaste betaling of het een loon van Bart of Mathijs is.
   // Plus eigen terugkerende posten. Je werkt in een kopie; Opslaan stuurt alles in één keer met de versie die je zag (409 = intussen gewijzigd).
-  function openIndeling() {
+  function openIndeling(ymKeuze) {
     if (!st.tl) return;
+    const ym = /^\d{4}-\d{2}$/.test(String(ymKeuze || '')) ? ymKeuze : st.tl.vandaag.slice(0, 7);   // vanuit een maand: de kosten van die maand; zonder maand de huidige
     sluitIndeling();
     const kas = st.kas || {}, kopie = x => JSON.parse(JSON.stringify({ indeling: (x && x.indeling) || {}, loon: (x && x.loon) || {}, posten: (x && x.posten) || [] }));
     // nog nooit opgeslagen: je begint met de startindeling, ook als basis (zodat een 409-samenvoeging die niet als jouw toevoeging ziet)
@@ -723,24 +733,25 @@
     const regels = new Map();
     for (const e of st.tl.events) {
       const r = L.kasRegel(e, null, st.tl.vandaag); if (!r || (r.bron !== 'patroon' && r.bron !== 'inkoop')) continue;
-      const x = regels.get(r.sleutel) || { sleutel: r.sleutel, naam: r.naam, bron: r.bron, standaard: r.groep, loonStd: r.bron === 'patroon' ? L.loonVan(r.sleutel, r.naam, null) : null, bedrag: 0, n: 0, perYm: {} };
-      x.n++; if (r.bron === 'patroon') x.bedrag = Math.abs(r.c); else x.bedrag += Math.abs(r.c); x.perYm[r.ym] = (x.perYm[r.ym] || 0) + Math.abs(r.c); regels.set(r.sleutel, x);
+      const x = regels.get(r.sleutel) || { sleutel: r.sleutel, naam: r.naam, bron: r.bron, standaard: r.groep, loonStd: r.bron === 'patroon' ? L.loonVan(r.sleutel, r.naam, null) : null, bedrag: 0, n: 0 };
+      x.n++; regels.set(r.sleutel, x);
     }
     for (const sl of Object.keys(c.indeling).concat(Object.keys(c.loon))) if (!regels.has(sl)) regels.set(sl, { sleutel: sl, naam: sl.slice(2), bron: sl.startsWith('p:') ? 'patroon' : 'inkoop', standaard: sl.startsWith('p:') ? 'vast' : 'open', loonStd: null, bedrag: null, n: 0, weg: true });
-    const lijst = [...regels.values()].sort((a, b) => (a.bron === b.bron ? 0 : a.bron === 'patroon' ? -1 : 1) || (b.bedrag || 0) - (a.bedrag || 0));
+    const mnd = L.indelingMaand(kasRegels([ym]), ym, st.kasAan);   // het bedrag per regel is wat er in deze maand staat
+    for (const x of regels.values()) x.maand = mnd.per.get(x.sleutel) || 0;
+    const lijst = [...regels.values()].sort((a, b) => (!!b.maand - !!a.maand) || (a.bron === b.bron ? 0 : a.bron === 'patroon' ? -1 : 1) || Math.abs(b.maand) - Math.abs(a.maand));   // regels zonder bedrag in deze maand onderaan
     const dis = !st.mag;
     const sel = (opties, waarde, wijzig) => { const s = h('select', { disabled: dis, onchange: ev => wijzig(ev.target.value) }, opties.map(([v, t]) => h('option', { value: v }, t))); s.value = waarde; return s; };
     const groepVan = x => c.indeling[x.sleutel] || x.standaard, loonVan = x => { const l = c.loon[x.sleutel]; return l ? (l === 'geen' ? '' : l) : (x.loonStd || ''); };
-    const eerstTekst = x => { const ym = x.perYm && Object.keys(x.perYm).sort()[0]; return ym ? 'eerstvolgende: ' + maandTekst(ym) + ' ' + L.fmt(x.perYm[ym]) : ''; };
-    const bedragCel = x => !x.bedrag ? '' : x.bron === 'patroon' ? L.fmt(x.bedrag) + ' p/m' : [L.fmt(x.bedrag), h('small', { class: 'mtl-0 mtl-ik-ho' }, 'totaal komende 12 mnd'), eerstTekst(x) ? h('small', { class: 'mtl-0 mtl-ik-ho' }, eerstTekst(x)) : null];
+    const bedragCel = x => x.maand ? L.fmt(x.maand) : '\u2013';   // bedrag in de gekozen maand (negatief = betaling), net als in de kostenregels
     const tel = telefoon();   // op de telefoon geen brede tabel maar compacte kaarten
     const groepSel = x => sel(['open', 'vast', 'patroon', 'overig', 'uit'].map(g => [g, KAS_TEKST[g]]), groepVan(x), v => { if (v === x.standaard) delete c.indeling[x.sleutel]; else c.indeling[x.sleutel] = v; });
     const loonSel = x => sel([['', tel ? 'Geen loon' : '\u2014']].concat(L.LONEN.map(([k, n]) => [k, 'Loon ' + n])), loonVan(x), v => { const std = x.loonStd || ''; if (v === std) delete c.loon[x.sleutel]; else c.loon[x.sleutel] = v || 'geen'; });
-    const regelKaart = x => h('div', { class: 'mtl-ik' },
-      h('div', { class: 'mtl-ik-1' }, h('span', { class: 'mtl-ik-n' }, x.naam, x.weg ? h('span', { class: 'mtl-0' }, ' (nu niet in beeld)') : null), x.bedrag ? h('span', { class: 'mtl-ik-b' }, bedragCel(x)) : null),
+    const regelKaart = x => h('div', { class: 'mtl-ik' + (x.maand ? '' : ' nul') },
+      h('div', { class: 'mtl-ik-1' }, h('span', { class: 'mtl-ik-n' }, x.naam, x.weg ? h('span', { class: 'mtl-0' }, ' (nu niet in beeld)') : null), h('span', { class: 'mtl-ik-b' }, bedragCel(x))),
       h('div', { class: 'mtl-ik-2' }, x.bron === 'patroon' ? 'vaste betaling' : 'inkoopfactuur'),
       groepSel(x), x.bron === 'patroon' ? loonSel(x) : null);
-    const regelTr = x => h('tr', null, h('td', null, x.naam, x.weg ? h('span', { class: 'mtl-0' }, ' (nu niet in beeld)') : null),
+    const regelTr = x => h('tr', { class: x.maand ? null : 'nul' }, h('td', null, x.naam, x.weg ? h('span', { class: 'mtl-0' }, ' (nu niet in beeld)') : null),
       h('td', { class: 'mtl-0' }, x.bron === 'patroon' ? 'vaste betaling' : 'inkoopfactuur'),
       h('td', { class: 'num' }, bedragCel(x)),
       h('td', null, groepSel(x)),
@@ -786,7 +797,7 @@
     };
     const knopOk = knop('Opslaan', { class: 'ui-knop ui-knop--primair', onclick: () => bewaarIndeling(oudTs) });
     const paneel = h('div', { class: 'mtl-paneel', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Indeling kosten en patronen' },
-      h('div', { class: 'mtl-pkop' }, h('h2', null, 'Indeling kosten en patronen'), h('p', null, 'Kies per vaste betaling of leverancier waar hij onder de Forecast telt. Geldt voor de light en de uitgebreide forecast. Er gaat niets naar Moneybird of de bank.')),
+      h('div', { class: 'mtl-pkop' }, h('h2', null, 'Indeling kosten en patronen'), h('p', { class: 'mtl-ip-mnd' }, h('b', null, 'Kosten ' + MND_L[Number(ym.slice(5, 7)) - 1] + ' ' + ym.slice(0, 4)), ' ', h('span', { class: 'mtl-ip-tot', title: 'Gelijk aan Kosten in de voet voor deze maand' }, L.fmt(mnd.totaal))), h('p', null, 'Kies per vaste betaling of leverancier waar hij onder de Forecast telt. Geldt voor de light en de uitgebreide forecast. Er gaat niets naar Moneybird of de bank.')),
       h('div', { class: 'mtl-pinhoud' },
         tel ? h('div', { class: 'mtl-ikl' }, lijst.length ? lijst.map(regelKaart) : h('p', { class: 'mtl-0' }, 'Geen vaste betalingen of inkoopfacturen in het overzicht.'))
           : h('table', { class: 'mtl-ptabel' }, h('thead', null, h('tr', null, h('th', null, 'Naam'), h('th', null, 'Soort'), h('th', { class: 'num' }, 'Bedrag'), h('th', null, 'Groep'), h('th', null, 'Loon'))),
@@ -1161,7 +1172,7 @@
       if (g === 'vast') for (const [k, n] of L.LONEN) rijen.push(vink(L.loonAanSleutel(k), 'Loon ' + n, null, true));
     }
     if (st.fact) rijen.push(vink('gef', 'Facturen zonder offerte', c.losPer[i]));
-    rijen.push(h('button', { type: 'button', class: 'mtl-ks-ind', disabled: !st.tl, onclick: () => { sluitSheet(); openIndeling(); } }, 'Indeling kosten en patronen\u2026'));   // dezelfde indeling als in de tabel, ook vanuit het dagoverzicht bereikbaar
+    rijen.push(h('button', { type: 'button', class: 'mtl-ks-ind', disabled: !st.tl, onclick: () => { const ymI = ms[i]; sluitSheet(); openIndeling(ymI); } }, 'Indeling kosten en patronen\u2026'));   // dezelfde indeling als in de tabel, ook vanuit het dagoverzicht bereikbaar
     el.replaceChildren(sheetKop('Kosten die meetellen', 'Tik een maand om te wisselen'),
       h('div', { class: 'mtl-ks-mnd', role: 'group', 'aria-label': 'Maand' }, ms.map((m, j) => h('button', { type: 'button', class: 'mtl-ks-mk' + (j === i ? ' aan' : ''), 'aria-pressed': String(j === i), data: { m: String(j) }, onclick: () => { st.ksIdx = j; vulKostenSheet(); } }, MND_K[Number(m.slice(5, 7)) - 1]))),
       h('div', { class: 'mtl-ks-lijst' }, !st.tl ? h('p', { class: 'mtl-m-let' }, st.tlBezig ? 'Kosten laden…' : '⚠ De kosten zijn niet geladen. ', !st.tlBezig ? knop('Opnieuw', { onclick: () => laadKas(true) }) : null) : null, rijen),

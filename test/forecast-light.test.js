@@ -245,4 +245,16 @@ test('dagoverzicht: de filter werkt op de cijfers zoals in de tabel (L.filter), 
   assert.notDeepStrictEqual(som(['geaccepteerd']), som(['geaccepteerd', 'openstaand']), 'een filter verandert de cijfers');
 });
 
+test('indeling per maand: het totaal is gelijk aan Kosten in de voet; per regel het bedrag van die maand', () => {
+  const d = dagData(), ms = ['2026-10', '2026-11', '2026-12'];
+  for (const aan of [{}, { loonBart: false }, { open: false }, { vast: false, overig: false }, { open: false, vast: false, patroon: false, overig: false, betaald: false }]) {
+    const c = L.cijfers({ rijen: d.rijen, ms, fact: d.fact, fk: d.fk, regels: d.regels, aan, nuYm: '2026-10', hist: d.hist, histAsOf: d.histAsOf });
+    ms.forEach((m, i) => assert.strictEqual(L.indelingMaand(d.regels, m, aan).totaal, c.kosten[i], m + ' ' + JSON.stringify(aan)));
+  }
+  const okt = L.indelingMaand(d.regels, '2026-10', {}), nov = L.indelingMaand(d.regels, '2026-11', {}), dec = L.indelingMaand(d.regels, '2026-12', {});
+  assert.strictEqual(okt.per.get('p:1'), -400000); assert.strictEqual(okt.per.get('n:x') || 0, 0, 'geen inkoop in oktober: 0 (onderaan, grijs)');
+  assert.strictEqual(nov.per.get('n:x'), -150000); assert.strictEqual(nov.per.get('p:1'), -400000); assert.strictEqual(dec.per.size, 0);
+  assert.strictEqual(nov.totaal, -550000, 'alles aan: inkoop plus vast');
+  const som = [...nov.per.values()].reduce((a, b) => a + b, 0); assert.strictEqual(som, nov.totaal, 'zonder uitgezette groepen is de som van de regels het totaal');
+});
 console.log(`\n${n} tests geslaagd${process.exitCode ? ' (met fouten)' : ''}`);
