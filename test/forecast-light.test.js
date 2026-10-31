@@ -201,15 +201,14 @@ test('dagoverzicht: In + Kosten = Netto, en gelijk aan de tabelregels (L.totalen
 test('dagoverzicht: vier maanden geven dezelfde cijfers als de eerste vier maanden van de twaalf-maandentabel; voorbije maand uit de bank', () => {
   const d = dagData(), twaalf = L.maanden('2026-09', 12), vier = twaalf.slice(0, 4), inv = ms => ({ rijen: d.rijen, ms, fact: d.fact, fk: d.fk, regels: d.regels, aan: {}, nuYm: '2026-10', hist: d.hist, histAsOf: d.histAsOf });
   const a = L.cijfers(inv(twaalf)), b = L.cijfers(inv(vier));
-  for (const k of ['netto', 'kosten', 'inkomen', 'onbekend', 'zekerNetto']) assert.deepStrictEqual(b[k], a[k].slice(0, 4), k);
+  for (const k of ['netto', 'kosten', 'inkomen', 'onbekend']) assert.deepStrictEqual(b[k], a[k].slice(0, 4), k);
   assert.strictEqual(b.inkomen[0], 1200000, 'voorbije maand: werkelijk ontvangen (bank)'); assert.strictEqual(b.onbekend[0], false);
   const zonderBank = L.cijfers(Object.assign(inv(vier), { hist: null })); assert.strictEqual(zonderBank.onbekend[0], true); assert.strictEqual(zonderBank.onbekend[1], false);
 });
-test('dagoverzicht: kosten niet geladen = geen kosten, netto is dan het totaal; koers, korte bedragen', () => {
+test('dagoverzicht: kosten niet geladen = geen kosten, netto is dan het totaal; korte bedragen', () => {
   const d = dagData(), ms = ['2026-10', '2026-11'], c = L.cijfers({ rijen: d.rijen, ms, fact: null, fk: null, regels: null, aan: {}, nuYm: '2026-10' });
   assert.strictEqual(c.kt, null); assert.deepStrictEqual(c.kosten, [0, 0]); assert.deepStrictEqual(c.netto, c.tot.per);
-  assert.strictEqual(L.koers(100, 50, false), 'groen'); assert.strictEqual(L.koers(100, -1, false), 'oranje'); assert.strictEqual(L.koers(-1, -5, false), 'rood'); assert.strictEqual(L.koers(5, 5, true), 'onbekend');
-  assert.deepStrictEqual([2140000, 530359, 84000, -2369246, -40, 0, null].map(L.kortK), ['21k', '5,3k', '840', '−24k', '0', '0', '–']);
+  assert.deepStrictEqual([2140000, 530359, 84000, -2369246, -40, 0, null].map(L.kortK), ['21k', '5,3k', '840', '\u221224k', '0', '0', '\u2013']);
 });
 test('dagoverzicht: nu factureren en open offertes', () => {
   const d = dagData(), rijen = d.rijen.concat([{ id: 'a4', naam: 'Voorbij', status: 'geaccepteerd', zeker: true, cellen: { '2026-09': 90000 }, gef: null, fstatus: null, uitbeeld: false, los: false, inclC: 90000, exclC: 74380 },
@@ -229,4 +228,21 @@ test('dagoverzicht: nu factureren en open offertes', () => {
   assert.deepStrictEqual(L.nietIngepland([deel({ cellen: {}, gef: null, fstatus: null, zeker: false }), deel({ id: 'd2' }), deel({ id: 'd3', cellen: {}, fstatus: 'gefactureerd' })], 'incl').map(x => x.r.id), ['d1'], 'alleen geaccepteerd, zonder enig geplande maand, niet helemaal gefactureerd');
   assert.strictEqual(L.offertesMet(rijen.map(x => x.id === 'a2' ? Object.assign({}, x, { uitbeeld: true }) : x), '2026-10', 'openstaand', 'incl').length, 0, 'uit beeld telt niet');
 });
+test('dagoverzicht: blok maanden (voorkeuzen en vrije keuze) en bedragen in duizenden', () => {
+  assert.deepStrictEqual(L.periode(null, '2026-10'), { start: '2026-10', n: 4 }); assert.deepStrictEqual(L.periode({ p: 'std' }, '2026-10'), { start: '2026-10', n: 4 });
+  assert.deepStrictEqual(L.periode({ p: 'kw' }, '2026-10'), { start: '2026-10', n: 3 }); assert.deepStrictEqual(L.periode({ p: 'kw' }, '2026-08'), { start: '2026-07', n: 3 });
+  assert.deepStrictEqual(L.periode({ p: 'vkw' }, '2026-11'), { start: '2027-01', n: 3 }); assert.deepStrictEqual(L.periode({ p: 'vkw' }, '2026-02'), { start: '2026-04', n: 3 });
+  assert.deepStrictEqual(L.periode({ p: '6' }, '2026-10'), { start: '2026-10', n: 6 }); assert.deepStrictEqual(L.periode({ p: 'jaar' }, '2026-10'), { start: '2026-01', n: 12 });
+  assert.deepStrictEqual(L.periode({ p: 'vrij', s: '2026-12', n: 5 }, '2026-10'), { start: '2026-12', n: 5 });
+  for (const slecht of [{ p: 'vrij', s: '2026-12', n: 13 }, { p: 'vrij', s: '2026-13', n: 3 }, { p: 'vrij', s: '2026-12', n: 0 }, { p: 'vrij', s: 'x', n: 3 }, { p: 'rommel' }, 'tekst', 7]) assert.deepStrictEqual(L.periode(slecht, '2026-10'), { start: '2026-10', n: 4 }, JSON.stringify(slecht));
+  assert.deepStrictEqual([2400000, 530359, -960000, 84000, 4000, -4000, -12400000, 995000, null].map(L.kortD), ['24', '5,3', '\u22129,6', '0,8', '0', '0', '\u2212124', '10', '\u2013']);
+});
+test('dagoverzicht: de filter werkt op de cijfers zoals in de tabel (L.filter), ook voor het netto', () => {
+  const d = dagData(), ms = ['2026-10', '2026-11'], rij = (x, o) => Object.assign({}, x, o), alle = d.rijen.map((x, i) => rij(x, { status: ['geaccepteerd', 'openstaand', 'concept'][i] }));
+  const som = fl => L.cijfers({ rijen: L.filter(alle, fl, ms), ms, fact: null, fk: null, regels: null, aan: {}, nuYm: '2026-10' }).tot.per;
+  assert.deepStrictEqual(som(['geaccepteerd', 'openstaand', 'concept']), L.totalen(alle, ms).per);
+  assert.deepStrictEqual(som(['geaccepteerd']), L.totalen(alle.filter(x => x.status === 'geaccepteerd'), ms).per);
+  assert.notDeepStrictEqual(som(['geaccepteerd']), som(['geaccepteerd', 'openstaand']), 'een filter verandert de cijfers');
+});
+
 console.log(`\n${n} tests geslaagd${process.exitCode ? ' (met fouten)' : ''}`);
