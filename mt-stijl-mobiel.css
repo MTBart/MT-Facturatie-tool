@@ -137,3 +137,6 @@ html[data-stijl="nieuw"] .snack{position:fixed;left:12px;right:12px;bottom:calc(
 html[data-stijl="nieuw"] .snack[hidden]{display:none}
 html[data-stijl="nieuw"] .snack span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 html[data-stijl="nieuw"] .snack button{min-height:44px;padding:0 12px;border:0;border-radius:6px;background:none;color:var(--gold-mid);font:600 14px var(--sans);cursor:pointer}html[data-stijl="nieuw"] .kop-timer.zonder .kop-timer-p{color:var(--gold-mid);font-weight:600;opacity:1}
+html[data-stijl="nieuw"] .kop-timer.sync .kop-timer-p{color:#ffd9a0;font-weight:600;opacity:1}
+html[data-stijl="nieuw"] .kop-timer.sync::before{content:"";flex:none;width:8px;height:8px;border-radius:50%;background:#f0a030}
+html[data-stijl="nieuw"] .boven-knop:disabled{opacity:.5}
