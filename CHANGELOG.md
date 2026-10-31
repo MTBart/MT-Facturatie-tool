@@ -5,8 +5,41 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-31 — Release v2.30.0: Forecast op de telefoon als compacte tabel met maandkiezer, filters en sorteren zoals op de pc; backup = v2.29.0
+- Commit: `7433133` | Auteur: Bart Witte
+
 ## 2026-10-31 — Backup = v2.29.0
 - Commit: `d65fd33` | Auteur: Bart Witte
+
+## 2026-10-31 — Mobiel Forecast: één lijst met de filters en sortering van de desktop op de telefoon
+- Commit: `0a5e65d` | Auteur: Bart Witte
+
+## 2026-10-31 — Mobiel Forecast: status en bedrag in de naamcel en een vaste kop en voet met een eigen scrollgebied
+- Commit: `f9f552f` | Auteur: Bart Witte
+
+## 2026-10-31 — Mobiel Forecast: celranden in de telefoon-tabel
+- Commit: `f5a507c` | Auteur: Bart Witte
+
+## 2026-10-31 — Mobiel Forecast: offertenamen kleiner op twee regels in de telefoon-tabel
+- Commit: `ac350a0` | Auteur: Bart Witte
+
+## 2026-10-31 — Mobiel Forecast: klassieke compacte tabel en een versleepbare maandkiezer op de telefoon
+- Commit: `ee5e661` | Auteur: Bart Witte
+
+## 2026-10-31 — Mobiel Forecast: Vernieuwen als icoon-knop op de telefoon
+- Commit: `bfa903a` | Auteur: Bart Witte
+
+## 2026-10-31 — Mobiel Forecast: kostenschuifje in de Netto-rij, filter, maandkiezer en schaalbare maandkolommen
+- Commit: `0e93702` | Auteur: Bart Witte
+
+## 2026-10-31 — Forecast: zetZeker negeert een tweede aanroep zolang de eerste voor dezelfde offerte loopt
+- Commit: `44baa72` | Auteur: Bart Witte
+
+## 2026-10-31 — Mobiel Forecast: sheet spoelt getypte bedragen door bij sluiten; nu factureren, open offertes en zeker aangescherpt
+- Commit: `ebe2541` | Auteur: Bart Witte
+
+## 2026-10-31 — Mobiel Forecast: dagoverzicht in plaats van de tabel, met kosten-sheet en offerte-sheet
+- Commit: `77c8456` | Auteur: Bart Witte
 
 ## 2026-10-30 — Release v2.29.0: telefoon-app nieuwe opmaak (onderbalk, bovenrij kantoor, logo), Forecast in de app met bolletjes en maandenbalk
 - Commit: `bfe354d` | Auteur: Bart Witte
