@@ -1,5 +1,18 @@
 [
   {
+    "versie": "2.30.0",
+    "datum": "2026-10-31",
+    "titel": "Forecast op de telefoon: overzichtelijke tabel om dagelijks even te kijken",
+    "voor": "geld",
+    "punten": [
+      "De Forecast op de telefoon is een compacte tabel zoals op de pc: links de offertes (klant, omschrijving, status en bedrag), rechts per maand de bedragen.",
+      "Standaard zie je deze maand en de drie maanden erna. Met het kalendericoontje kies je zelf welke maanden je ziet (begin en einde verslepen, hooguit 12); de kolommen schalen mee zodat alles past.",
+      "Filter en sorteren werken zoals op de pc: tik op Offerte, Datum, Status, Bedrag of op een maand om te sorteren, nog een keer tikken draait de volgorde om.",
+      "De maanden blijven bovenin staan en In, Kosten en Netto onderaan; alleen de lijst ertussen scrolt. Netto is groen of rood.",
+      "Kosten aan of uit zetten doe je met het schuifje achter Netto. Tik op een offerte om bedragen per maand aan te passen of hem op zeker te zetten; wat je typt wordt bewaard, ook als je het venster sluit.",
+      "De volledige tabel blijft beschikbaar via de knop Volledige tabel."
+    ]
+  },{
     "versie": "2.29.0",
     "datum": "2026-10-30",
     "titel": "Telefoon-app: nieuwe opmaak en de Forecast in de app",

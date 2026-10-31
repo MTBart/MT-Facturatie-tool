@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-31 — Backup = v2.29.0
+- Commit: `d65fd33` | Auteur: Bart Witte
+
 ## 2026-10-30 — Release v2.29.0: telefoon-app nieuwe opmaak (onderbalk, bovenrij kantoor, logo), Forecast in de app met bolletjes en maandenbalk
 - Commit: `bfe354d` | Auteur: Bart Witte
 
