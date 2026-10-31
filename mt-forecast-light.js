@@ -458,7 +458,7 @@
 .mtl-os-rij{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:52px;border-bottom:1px solid var(--l-soft)}.mtl-os-rij .mtl-in{width:150px;height:44px;padding:0 10px;letter-spacing:normal}
 .mtl-os-gf{display:flex;flex-direction:column;align-items:flex-end;font-family:var(--l-mono);color:var(--l-f)}.mtl-os-gf small{font:13px/16px var(--l-ui)}
 .mtl--m .mtl-acties{flex-wrap:wrap;overflow:visible}
-.mtl-m-filter{display:inline-flex;align-items:center;gap:6px}.mtl-m-fn{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:var(--l-primary);color:#fff;font:600 12px/1 var(--l-ui)}
+.mtl-m-ver{width:44px;padding:0;display:inline-grid;place-items:center}.mtl-m-filter{display:inline-flex;align-items:center;gap:6px}.mtl-m-fn{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:var(--l-primary);color:#fff;font:600 12px/1 var(--l-ui)}
 .mtl-m-pt{flex:1;min-height:44px;display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;background:none;color:var(--l-ink);font:600 15px var(--l-ui)}
 .mtl-m-ksb{position:relative;flex:none;width:44px;height:44px;margin-left:-6px;border:0;background:none;color:var(--l-ink2);display:grid;place-items:center}.mtl-m-ksb.stip::after{content:"";position:absolute;top:10px;right:9px;width:8px;height:8px;border-radius:50%;background:var(--l-primary);border:2px solid var(--l-surface);box-sizing:content-box}
 .mtl-m-nl{overflow:visible;font-weight:600;color:var(--l-ink)}.mtl-m-cap{margin:6px 0 0;font-size:12px;line-height:16px;color:var(--l-ink3);text-align:center}.mtl-m-blok.d3{padding:8px 4px 12px}.mtl-m-grid .jr{box-shadow:inset 1px 0 0 var(--l-line)}
@@ -885,7 +885,7 @@
         h('div', { class: 'mtl-seg', role: 'group', 'aria-label': 'Offertebedrag' }, ['incl', 'excl'].map(b => knop(b + '. btw', { class: 'ui-knop' + (st.btw === b ? ' ui-knop--primair' : ''), 'aria-pressed': String(st.btw === b), title: 'Alleen de kolom Bedrag (offertetotaal uit Moneybird)',
           onclick: () => { st.btw = b; ls.set('mtl:btw', b); teken(); } }))),
         st.mob ? h('button', { type: 'button', class: 'ui-knop mtl-m-filter', 'aria-label': 'Filter' + (filterActief() ? ', ' + st.filter.length + ' aan' : ''), 'aria-haspopup': 'dialog', onclick: () => openFilterSheet() }, lijnIcoon(PAD_FILTER), 'Filter', filterActief() ? h('span', { class: 'mtl-m-fn' }, String(st.filter.length)) : null) : null,
-        knop('Vernieuwen', { disabled: st.bezig, onclick: () => L.laad({ vers: true }) }),
+        st.mob ? h('button', { type: 'button', class: 'ui-knop mtl-m-ver', 'aria-label': 'Vernieuwen', title: 'Vernieuwen', disabled: st.bezig, onclick: () => L.laad({ vers: true }) }, lijnIcoon(PAD_VERNIEUW)) : knop('Vernieuwen', { disabled: st.bezig, onclick: () => L.laad({ vers: true }) }),
         telefoon() && stijlNieuw() && !st.mob ? knop('Dagoverzicht', { onclick: () => { ls.set('mtl:volledig', '0'); teken(); } }) : null,
         st.opt.openUitgebreid ? knop('Uitgebreide forecast', { title: 'De uitgebreide Forecast (met de prognose van Financiën) staat bij Financiën', onclick: () => st.opt.openUitgebreid() }) : null));
   }
@@ -1006,7 +1006,7 @@
   const PAD_CHEV = 'M9 6l6 6l-6 6', PAD_X = 'M6 6l12 12M18 6L6 18', PAD_REGELS = 'M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1M15 4v4M9 10v4M17 16v4', PAD_LINKS = 'M15 6l-6 6l6 6';
   function lijnIcoon(pad) { const s = document.createElementNS(SVGNS, 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('class', 'mtl-ico'); s.setAttribute('aria-hidden', 'true'); s.setAttribute('focusable', 'false'); const p = document.createElementNS(SVGNS, 'path'); p.setAttribute('d', pad); s.appendChild(p); return s; }
   const ONBEKEND_TEKST = 'Geen (complete) bankgegevens voor deze maand';
-  const PAD_FILTER = 'M3 5h18l-7 8v6l-4 2v-8z', PAD_NEER = 'M6 9l6 6l6-6', FILTER_STANDAARD = ['geaccepteerd', 'openstaand', 'los', 'gefactureerd'];
+  const PAD_FILTER = 'M3 5h18l-7 8v6l-4 2v-8z', PAD_NEER = 'M6 9l6 6l6-6', PAD_VERNIEUW = 'M20 12a8 8 0 1 1-2.5-5.8M20 4v5h-5', FILTER_STANDAARD = ['geaccepteerd', 'openstaand', 'los', 'gefactureerd'];
   const eur = cc => (cc < 0 ? '\u2212' : '') + '\u20ac\u00a0' + duizend(Math.round(Math.abs(cc) / 100));
   // Het gekozen blok maanden (bewaard in mtl:mper): voorkeuzen rekenen elke keer vanaf deze maand, een vrije keuze of verschuiving ligt vast.
   const mobSel = () => { if (st.mSel === undefined) { try { const x = JSON.parse(ls.get('mtl:mper') || 'null'); st.mSel = x && typeof x === 'object' ? x : null; } catch (e) { st.mSel = null; } } return st.mSel; };
