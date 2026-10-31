@@ -29,9 +29,9 @@
 <link rel="manifest" href="manifest-mobiel.json">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jost:ital,wght@0,500;1,400&display=swap">
 <link rel="stylesheet" href="mt-merk.css?v=2026-10-24-logo">
-<link rel="icon" type="image/svg+xml" href="icons/icon.svg">
-<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
-<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" type="image/svg+xml" href="icons/icon.svg?v=2">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png?v=2">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?v=2">
 <!-- msal-browser lokaal gevendord (was jsdelivr @2 = 2.39.0, laatste v2-release).
      Bron: https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.39.0/lib/msal-browser.min.js
      sha256: c933092555a52d4ded0196d16578406dcb5d25dfdf987bf3e27606653e99f1d6
@@ -41,7 +41,7 @@
      één bron voor cockpit én app (audit-actie S2). Moet vóór de code laden die het
      gebruikt; ?v= = cachebuster, zelfde patroon als in v2.html. -->
 <script src="mt-core.js?v=2026-10-13a"></script>
-<script src="mt-iconen.js?v=2026-10-24z" defer></script>
+<script src="mt-iconen.js?v=2026-11-01a" defer></script>
 <script src="mt-project.js?v=2026-10-15b"></script>
 <script src="mt-rollen.js?v=2026-10-09a"></script>
 <script src="mt-dialog.js?v=2026-10-11b"></script>
@@ -860,7 +860,7 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 .pv-melding{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 10px;border-radius:6px;margin:6px 0;font-size:12.5px}.pv-melding.goed{background:#E3F1E7;color:#1F5C36}.pv-melding.af{background:#FDE8E8;color:#8B1A1A}.pv-melding.open{background:#FFF4D6;color:#7A5300}
 .pv-form{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}.pv-form input{min-height:40px;padding:0 8px;border:1px solid var(--border);border-radius:8px;font:inherit}.pv-form .vol{grid-column:1/-1}
 </style>
-<link rel="stylesheet" href="mt-stijl-mobiel.css?v=2026-10-30a">
+<link rel="stylesheet" href="mt-stijl-mobiel.css?v=2026-11-01a">
 <link rel="stylesheet" href="mt-rust.css?v=2026-10-24z">
 </head>
 <body>
@@ -884,6 +884,7 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 <!-- ── APP HEADER ── -->
 <header class="app-header">
   <div class="app-title" style="display:flex;align-items:center"><div class="mt-merkrij" style="font-size:16px"><svg class="mt-merk" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><rect x="2" y="2" width="96" height="96"/><path d="M55.4 2 V31.3 H34.2 V67.3 H55.4 V98"/></svg><b class="mt-woord">mortise <em>&amp;</em> tenon</b></div><span class="demo-badge" id="demoBadge" style="display:none">DEMO</span></div>
+  <button type="button" class="kop-timer" id="kopTimer" hidden onclick="kopTimerOpen()" aria-label="Lopende timer, open het timerscherm"><span class="kop-timer-t" id="kopTimerT">00:00:00</span><span class="kop-timer-p" id="kopTimerP"></span></button>
   <div class="header-btns">
     <button class="header-info-btn" id="zoekKnop" type="button" aria-label="Zoeken" aria-haspopup="dialog" title="Zoeken">🔍</button>
     <button class="header-info-btn" id="geldKnop" style="display:none" onclick="geldLaagOpen()" aria-label="Financiën" title="Financiën">€</button>
@@ -896,10 +897,11 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 
 <!-- ── BOVENRIJ (kantoor/admin, alleen nieuwe stijl): vier snelle ingangen; per knop eigen recht, alleen toegestane knoppen, gelijk verdeeld ── -->
 <div class="boven-rij" id="bovenRij" aria-label="Snelle ingangen" hidden>
-  <button type="button" class="boven-knop" id="bk-geld" data-recht="geld" onclick="geldLaagOpen()"><span class="boven-ic" data-ico="dash"></span><span>Financiën</span></button>
   <button type="button" class="boven-knop" id="bk-forecast" data-recht="geld" onclick="forecastLaagOpen()"><span class="boven-ic" data-ico="forecast"></span><span>Forecast</span></button>
   <button type="button" class="boven-knop" id="bk-planning" data-recht="projecten" onclick="switchTab('agenda',document.getElementById('nav-agenda'))"><span class="boven-ic" data-ico="planning"></span><span>Planning</span></button>
   <button type="button" class="boven-knop" id="bk-opname" data-recht="projecten" onclick="switchTab('capture',document.getElementById('nav-capture'))"><span class="boven-ic" data-ico="camera"></span><span>Opname</span></button>
+  <button type="button" class="boven-knop" id="bk-zoek" onclick="document.getElementById('zoekKnop').click()"><span class="boven-ic" data-ico="zoek"></span><span>Zoeken</span></button>
+  <button type="button" class="boven-knop" id="bk-timer" onclick="kopTimerTik()" aria-label="Timer starten"><span class="boven-ic" data-ico="timerPlay"></span><span id="bk-timer-l">Timer</span></button>
 </div>
 
 <!-- ── ZOEKLAAG (opent met het zoekicoon in de kop) ── -->
@@ -928,6 +930,8 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
   </div>
   <div class="geld-laag-body" id="forecastLaagBody" style="padding:8px 8px 12px"></div>
 </div>
+
+<div class="snack" id="snack" role="status" hidden></div>
 
 <!-- ── LOPENDE TIMER BAR ── -->
 <div class="timer-bar" id="timerBar">
@@ -1386,6 +1390,12 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
       <button class="sheet-action-btn meer-item" onclick="switchTab('feedback',this)" id="nav-feedback" data-recht="verbeterpunten">
         <span class="sheet-action-icon">💬</span><span class="sheet-action-label"><span class="sheet-action-title">Feedback</span></span><span class="sheet-action-arrow">›</span>
       </button>
+      <button class="sheet-action-btn meer-item meer-extra" id="mx-geld" type="button" onclick="sluitMeer();geldLaagOpen()"><span class="sheet-action-icon">€</span><span class="sheet-action-label"><span class="sheet-action-title">Financiën</span><span class="sheet-action-sub"></span></span><span class="sheet-action-arrow">›</span></button>
+      <button class="sheet-action-btn meer-item meer-extra" id="mx-meld" type="button" onclick="sluitMeer();openNotifs()"><span class="sheet-action-icon">🔔</span><span class="sheet-action-label"><span class="sheet-action-title">Meldingen</span><span class="sheet-action-sub"></span></span><span class="sheet-action-arrow">›</span></button>
+      <button class="sheet-action-btn meer-item meer-extra" id="mx-help" type="button" onclick="sluitMeer();openLarry()"><span class="sheet-action-icon">ⓘ</span><span class="sheet-action-label"><span class="sheet-action-title">Help (Larry)</span><span class="sheet-action-sub"></span></span><span class="sheet-action-arrow">›</span></button>
+      <button class="sheet-action-btn meer-item meer-extra" id="mx-melden" type="button" onclick="sluitMeer();MTVandaag.menu()"><span class="sheet-action-icon">＋</span><span class="sheet-action-label"><span class="sheet-action-title">Melden</span><span class="sheet-action-sub"></span></span><span class="sheet-action-arrow">›</span></button>
+      <button class="sheet-action-btn meer-item meer-extra" id="mx-verhuis" type="button" onclick="sluitMeer();verhuisOpen()"><span class="sheet-action-icon">⇄</span><span class="sheet-action-label"><span class="sheet-action-title">Verhuizen</span><span class="sheet-action-sub"></span></span><span class="sheet-action-arrow">›</span></button>
+      <button class="sheet-action-btn meer-item meer-extra" id="mx-uit" type="button" onclick="sluitMeer();msLogout()"><span class="sheet-action-icon">⎋</span><span class="sheet-action-label"><span class="sheet-action-title">Uitloggen</span><span class="sheet-action-sub"></span></span><span class="sheet-action-arrow">›</span></button>
       <button class="sheet-action-btn meer-item" id="stijlKnop" type="button" aria-pressed="false">
         <span class="sheet-action-icon">🎨</span><span class="sheet-action-label"><span class="sheet-action-title" id="stijlTitel">Oude stijl</span><span class="sheet-action-sub" id="stijlSub">Uit</span></span><span class="sheet-action-arrow" id="stijlPijl">›</span>
       </button>
@@ -2405,10 +2415,51 @@ function bovenRijBijwerken() {
   const geldOk = !!(window.MTRol && MTRol.me && MTRol.me.rechten && ('geld' in MTRol.me.rechten) && geldMagM());
   rij.querySelectorAll('.boven-knop').forEach(b => {
     if (b.dataset.recht === 'geld') b.hidden = !geldOk;
-    else if (window.MTRol && MTRol.pasToe && MTRol.me) { b.classList.toggle('mt-rol-verborgen', !MTRol.mag(b.dataset.recht)); }
+    else if (b.id === 'bk-timer') b.hidden = !timerMagM();
+    else if (b.dataset.recht && window.MTRol && MTRol.pasToe && MTRol.me) { b.classList.toggle('mt-rol-verborgen', !MTRol.mag(b.dataset.recht)); }
   });
   const zicht = [...rij.querySelectorAll('.boven-knop')].filter(b => !b.hidden && !b.classList.contains('mt-rol-verborgen'));
   rij.hidden = !zicht.length || document.documentElement.getAttribute('data-stijl') !== 'nieuw';   // de oude stijl blijft zoals voorheen: geen bovenrij
+}
+// Timer vanuit de bovenrij en de kop: één tik start de bestaande timer (startTimer, dus met de Toggl-race-guard en de offline-wachtrij) op het laatst gebruikte project;
+// loopt hij al, dan stopt dezelfde knop hem met stopTimer. Zonder laatst gebruikt project opent het timerscherm met de projectkiezer. Geen eigen API-aanroepen.
+function timerMagM() { try { return _demoMode || !window.MTRol || !MTRol.me || rolMagM(MTPlanning.ROL.UREN_BOEKEN); } catch (e) { return true; } }
+let _snackTimer = null;
+function snack(tekst, label, fn) {
+  const s = document.getElementById('snack'); if (!s) { showToast(tekst); return; }
+  s.replaceChildren(); const t = document.createElement('span'); t.textContent = tekst; s.appendChild(t);
+  if (label && fn) { const b = document.createElement('button'); b.type = 'button'; b.textContent = label; b.addEventListener('click', () => { s.hidden = true; fn(); }); s.appendChild(b); }
+  s.hidden = false; clearTimeout(_snackTimer); _snackTimer = setTimeout(() => { s.hidden = true; }, 6000);
+}
+function laatsteProjectM() { if (activeProject) return activeProject; try { const id = localStorage.getItem('mt_laatste_project'); return id ? (allProjects().find(p => String(p.id) === id) || null) : null; } catch (e) { return null; } }
+function kopTimerOpen() { switchTab('timer', document.getElementById('nav-timer')); }
+function kopTimerTik() {
+  if (timerRunning) { const naam = activeProject ? mProjNaam(activeProject) : ''; stopTimer(); snack('Timer gestopt' + (naam ? ': ' + naam : '')); return; }
+  if (!timerMagM()) { showToast('Je rol mag geen timer starten.'); return; }
+  const p = laatsteProjectM();
+  if (!p) { kopTimerOpen(); showToast('Kies eerst een project om de timer te starten.'); const l = document.getElementById('pickerList'); if (l && l.scrollIntoView) l.scrollIntoView({ block: 'center' }); return; }
+  activeProject = p; captureProject = p;
+  startTimer(); snack('Timer gestart: ' + mProjNaam(p), 'wijzigen', kopTimerOpen);
+}
+function kopTimerBijwerken() {
+  const nieuw = document.documentElement.getAttribute('data-stijl') === 'nieuw', loopt = !!(timerRunning && activeProject);
+  const k = document.getElementById('kopTimer');
+  if (k) { k.hidden = !(nieuw && loopt); if (!k.hidden) { const t = document.getElementById('timerDisplay'); document.getElementById('kopTimerT').textContent = (t && t.textContent) || '00:00:00'; document.getElementById('kopTimerP').textContent = mProjNaam(activeProject); } }
+  const bk = document.getElementById('bk-timer'); if (!bk) return;
+  bk.classList.toggle('loopt', loopt); bk.setAttribute('aria-label', loopt ? 'Timer stoppen' : 'Timer starten');
+  const l = document.getElementById('bk-timer-l'); if (l) l.textContent = loopt ? 'Stop' : 'Timer';
+  const ic = bk.querySelector('.boven-ic'), naam = loopt ? 'timerStop' : 'timerPlay';
+  if (ic && nieuw && window.mtIcoon && ic.dataset.ico !== naam) { ic.dataset.ico = naam; const i = mtIcoon(naam); if (i) ic.replaceChildren(i); }
+}
+// Meer (nieuwe stijl): wat uit de kop is gehaald blijft hier bereikbaar; de oorspronkelijke knoppen blijven bestaan en bepalen of een item er is.
+function meerExtraBijwerken() {
+  const nieuw = document.documentElement.getAttribute('data-stijl') === 'nieuw';
+  const zet = (id, aan, sub) => { const e = document.getElementById(id); if (!e) return; e.classList.toggle('aan', nieuw && !!aan); const s = e.querySelector('.sheet-action-sub'); if (s) s.textContent = sub || ''; };
+  const zichtbaar = id => { const e = document.getElementById(id); return !!e && e.style.display !== 'none'; };
+  const nb = document.getElementById('notifBadge'), n = nb && nb.style.display !== 'none' ? Number(nb.textContent) || 0 : 0, gb = document.querySelector('#geldKnop .geld-badge');
+  zet('mx-geld', zichtbaar('geldKnop') && typeof geldLaagOpen === 'function', gb ? gb.textContent + ' ongelezen' : '');
+  zet('mx-meld', true, n ? n + ' ongelezen' : ''); zet('mx-help', true); zet('mx-melden', !!window.MTVandaag);
+  zet('mx-verhuis', zichtbaar('verhuisBtn')); zet('mx-uit', zichtbaar('userAvatarBtn') && !_demoMode);
 }
 function bovenRijActief(name) {
   const kaart = { agenda: 'bk-planning', capture: 'bk-opname', forecast: 'bk-forecast' };
@@ -2424,7 +2475,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const c = document.querySelector('.app-content'); if (c && window.ResizeObserver) new ResizeObserver(merkMaatM).observe(c);
   window.addEventListener('resize', merkMaatM);
   window.addEventListener('mt-rol', bovenRijBijwerken);
-  window.addEventListener('mt-stijl', () => { icoonVullenM(); bovenRijBijwerken(); merkMaatM(); });
+  window.addEventListener('mt-stijl', () => { icoonVullenM(); bovenRijBijwerken(); merkMaatM(); kopTimerBijwerken(); });
 });
 async function rolLaadMobiel() {
   if (!window.MTRol) return;
@@ -3489,7 +3540,7 @@ document.addEventListener("DOMContentLoaded", () => {
 // Stap 2e: Capture, Rapportage, Voorraad en Feedback staan in het Meer-menu; dezelfde tabs en functies, alleen via een sheet.
 // Is een van die tabs open, dan is "Meer" de actieve knop in de onderbalk (en het item in het menu).
 const MEER_TABS = ["capture", "oplevering", "voorraad", "feedback"];
-function openMeer() { const s = document.getElementById("meerSheet"); if (s) s.classList.add("visible"); }
+function openMeer() { try { meerExtraBijwerken(); } catch (e) {} const s = document.getElementById("meerSheet"); if (s) s.classList.add("visible"); }
 function sluitMeer() { const s = document.getElementById("meerSheet"); if (s) s.classList.remove("visible"); }
 function switchTab(name, btn) {
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
@@ -3612,6 +3663,7 @@ function startTimer(oms) {   // oms: omschrijving van de Toggl-entry (Vandaag ge
   updateSpMockPath();
   // Geserialiseerd: start echt klokkende entry op Track (alleen bij ingelogd + echt project)
   const proj = activeProject;
+  try { localStorage.setItem('mt_laatste_project', String(proj.id)); } catch (e) {}   // voor de timerknop in de bovenrij: het laatst gebruikte project
   const entryOms = (typeof oms === 'string' && oms.trim()) ? oms.trim() : proj.name;
   return _tglEnqueue(() => startTimerOnToggl(proj, entryOms)).catch(() => false);   // de uitkomst van de Toggl-start (true/false); de meeste aanroepers negeren die
 }
@@ -3646,12 +3698,14 @@ function tickTimer() {
   const str = `${h}:${m}:${s}`;
   document.getElementById("timerDisplay").textContent = str;
   document.getElementById("timerBarTime").textContent = str;
+  const kt = document.getElementById("kopTimerT"); if (kt) kt.textContent = str;
   // also update bar display in other tabs
   const barDisplay = document.querySelectorAll(".timer-bar-time");
   barDisplay.forEach(el => el.textContent = str);
 }
 
 function updateTimerUI() {
+  setTimeout(kopTimerBijwerken, 0);   // kop en bovenrij volgen de timerstand (nieuwe stijl)
   const circle = document.getElementById("timerCircle");
   const icon = document.getElementById("timerIcon");
   const label = document.getElementById("timerLabel");

@@ -123,3 +123,17 @@ html[data-stijl="nieuw"] .stijl-melding{position:fixed;left:12px;right:12px;bott
 html[data-stijl="nieuw"] .stijl-melding span{flex:1;min-width:0}
 html[data-stijl="nieuw"] .stijl-melding-knop{min-height:44px;padding:0 14px;border:1px solid var(--line-strong);border-radius:4px;background:var(--surface);color:var(--ink);font:600 14px/20px var(--sans);cursor:pointer;white-space:nowrap}
 html[data-stijl="nieuw"] .stijl-melding-x{width:44px;min-height:44px;border:0;border-radius:4px;background:none;color:var(--ink-2);font:400 22px/1 var(--sans);cursor:pointer}
+/* ── 6. Kop zonder groene knoppen, lopende timer in de kop, timerknop in de bovenrij, verplaatste items in Meer ── */
+.meer-extra{display:none}
+html[data-stijl="nieuw"] .header-btns{display:none}   /* zoeken, meldingen, help, verhuizen en uitloggen: bovenrij en Meer (de knoppen blijven bestaan, ze worden aangeroepen) */
+html[data-stijl="nieuw"] .meer-extra.aan{display:flex}
+html[data-stijl="nieuw"] .timer-bar,html[data-stijl="nieuw"] .timer-bar.visible{display:none}   /* de lopende tijd staat nu in de kop, stoppen kan met de Stop-knop in de bovenrij */
+html[data-stijl="nieuw"] .kop-timer:not([hidden]){display:flex;align-items:center;gap:8px;min-width:0;max-width:62%;min-height:44px;padding:0 12px;border:1px solid rgba(255,255,255,.28);border-radius:8px;background:rgba(255,255,255,.12);color:#fff;font:inherit;cursor:pointer}
+html[data-stijl="nieuw"] .kop-timer:active{background:rgba(255,255,255,.28)}
+html[data-stijl="nieuw"] .kop-timer-t{flex:none;font:600 17px/1 var(--mono);letter-spacing:.02em}
+html[data-stijl="nieuw"] .kop-timer-p{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:500 12px/1.2 var(--sans);opacity:.9}
+html[data-stijl="nieuw"] .boven-knop.loopt{background:var(--error-50);border-color:#e9b3af;color:var(--error)}
+html[data-stijl="nieuw"] .snack{position:fixed;left:12px;right:12px;bottom:calc(var(--nav-h) + 16px + env(safe-area-inset-bottom,0px));z-index:450;display:flex;align-items:center;gap:8px;padding:6px 6px 6px 14px;border-radius:8px;background:var(--n-900);color:#fff;box-shadow:var(--shadow-pop);font:500 14px/20px var(--sans)}
+html[data-stijl="nieuw"] .snack[hidden]{display:none}
+html[data-stijl="nieuw"] .snack span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+html[data-stijl="nieuw"] .snack button{min-height:44px;padding:0 12px;border:0;border-radius:6px;background:none;color:var(--gold-mid);font:600 14px var(--sans);cursor:pointer}
