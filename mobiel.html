@@ -160,6 +160,7 @@ body{
 .zb-laag-kop .zb-veld{flex:1 1 auto;width:auto;font-size:16px;padding:10px 16px}   /* 16px: iOS zoomt anders in op het veld */
 .geld-laag{position:fixed;left:0;top:0;width:100%;height:100%;z-index:1200;background:var(--bg,#f6f5f0);display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0)}
 .geld-laag[hidden]{display:none}
+@supports (height:100dvh){#forecastLaag{height:100dvh}}   /* iOS: de adresbalk telt niet mee, de voet van de Forecast blijft in beeld */
 .geld-laag-kop{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);background:var(--n-0,#fff)}
 .geld-terug{min-height:44px;padding:0 18px;border:0;border-radius:22px;background:var(--n-150,#EDF1F0);color:var(--text,#172521);font-size:16px;font-weight:600;cursor:pointer}
 .geld-laag-titel{font-size:18px;font-weight:600}
@@ -6844,7 +6845,7 @@ window.geldLaagOpen = window.geldLaagOpen || function () {};
    dezelfde worker-routes en dezelfde Moneybird-leesroute als v2.html; rol "lezen" kan niets wijzigen (magWijzigen false).
    De uitgebreide forecast blijft op de computer (geen openUitgebreid op de telefoon).
    ===================================================================== */
-const FORECAST_SCRIPTS = ["mt-forecast.js?v=2026-10-30e","mt-forecast-light.js?v=2026-11-01f"];
+const FORECAST_SCRIPTS = ["mt-forecast.js?v=2026-10-30e","mt-forecast-light.js?v=2026-11-01g"];
 let _forecastScripts = null;
 function forecastLaadScripts() {
   if (window.MTForecast && window.MTForecastLight) return Promise.resolve();

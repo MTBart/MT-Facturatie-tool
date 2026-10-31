@@ -423,7 +423,7 @@
 .mtl-sw{display:flex;align-items:center;justify-content:center;width:32px;height:48px}
 .mtl-sw span{position:static;inset:auto;width:20px;height:20px;border-radius:50%;box-sizing:border-box;background:var(--l-surface);border:2px solid var(--l-strong);transition:none}.mtl-sw span::after{display:none}
 .mtl-sw input:checked+span{background:var(--l-primary);border-color:var(--l-primary)}
-.mtl--m{min-height:0;gap:14px;font-size:15px;line-height:22px}.mtl--m .mtl-titelblok{display:none}.mtl--m .mtl-kop{margin:0}
+.mtl--m{flex:1 1 auto;min-height:0;gap:8px;font-size:15px;line-height:22px}.mtl--m .mtl-titelblok{display:none}.mtl--m .mtl-kop{margin:0}
 .mtl-ico{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
 .mtl-m-blok{background:var(--l-surface);border:1px solid var(--l-line);border-radius:var(--l-rp);padding:8px 8px 12px}
 .mtl-m-per{display:flex;align-items:center;gap:4px;margin-bottom:4px}.mtl-m-pt{flex:1;text-align:center;font-size:15px;font-weight:600}
@@ -469,10 +469,15 @@
 .mtl-mp-jaar{display:flex;align-items:center;justify-content:space-between;padding:4px 0}.mtl-mp-jaar b{font-size:17px}
 .mtl-mp-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:6px 0 10px}.mtl-mp-m{min-height:52px;border:1px solid var(--l-line);border-radius:var(--l-r);background:var(--l-surface);color:var(--l-ink);font:500 15px var(--l-ui)}.mtl-mp-m.in{background:var(--l-psoft);border-color:var(--l-psoft);color:var(--l-ptext)}.mtl-mp-m.end{background:var(--l-primary);border-color:var(--l-primary);color:#fff;font-weight:600}
 .mtl-mp-t{flex:1;font-size:14px;line-height:20px;color:var(--l-ink2)}.mtl-mp-ok{min-height:48px;padding:0 20px}
-.mtl-mtw{position:relative}.mtl-mt{width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed;font:13px/16px var(--l-ui);color:var(--l-ink)}
+.mtl-host-m{display:flex;flex-direction:column;overflow:hidden!important;padding-bottom:calc(8px + env(safe-area-inset-bottom,0px))!important}
+.mtl-mtw{position:relative;flex:1 1 auto;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}.mtl-mt{min-height:100%}.mtl-mt tr.vul th,.mtl-mt tr.vul td{height:100%;padding:0;border-bottom:0}
+.mtl-m-vt{flex:none;display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px}.mtl-m-vt .mtl-m-cap{margin:0;flex:1;text-align:left}.mtl-m-vt .mtl-m-tabel{width:auto;min-height:44px;padding:0 14px}.mtl-mt{width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed;font:13px/16px var(--l-ui);color:var(--l-ink)}
 .mtl-mt th,.mtl-mt td{padding:0 2px;background:var(--l-surface);border-bottom:1px solid var(--l-soft);font-weight:400;box-sizing:border-box}
 .mtl-mt .n{text-align:left;padding-left:6px;overflow:hidden;white-space:nowrap}.mtl-mt .n span{display:block;overflow:hidden;text-overflow:ellipsis}.mtl-mt .num{text-align:center;white-space:nowrap;font-variant-numeric:tabular-nums}
-.mtl-mt tbody th.n{color:var(--l-ink);padding-top:2px;padding-bottom:2px}.mtl-mt tbody th.n .nm{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;white-space:normal;word-break:break-word;font-size:11px;line-height:1.2}.mtl-mt tbody th.n .nm.s2{display:block}.mtl-mt tbody th.n .nm .kl,.mtl-mt tbody th.n .nm .om{display:block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.mtl-mt tbody th.n .kl{color:var(--l-ink);font-weight:500}.mtl-mt tbody th.n .om{color:var(--l-ink2)}.mtl-mt-d1 tbody th.n .nm{font-size:12px}.mtl-mt th,.mtl-mt td{border-right:1px solid var(--l-line);border-bottom:1px solid var(--l-line)}.mtl-mt tr>:first-child{border-left:1px solid var(--l-line)}.mtl-mt thead tr>*{border-top:1px solid var(--l-line)}.mtl-mt .gef{color:var(--l-f)}.mtl-mt .nu{background:var(--l-surface2)}
+.mtl-mt tbody th.n{color:var(--l-ink);padding-top:2px;padding-bottom:2px}.mtl-mt tbody th.n .nm{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;white-space:normal;word-break:break-word;font-size:11px;line-height:1.2}.mtl-mt tbody th.n .nm.s2{display:block}.mtl-mt tbody th.n .nm .kl,.mtl-mt tbody th.n .nm .om{display:block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.mtl-mt tbody th.n .nmw{display:block;overflow:hidden}.mtl-mt tbody th.n .nm3{display:flex;align-items:center;gap:4px;margin-top:2px;overflow:hidden}
+.mtl-mt tbody th.n .nm3 .mtl-st{display:block;flex:0 1 auto;min-width:0;height:15px;padding:0 5px;font-size:10px;line-height:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mtl-mt tbody th.n .nm3 .mtl-st.dot{flex:none;width:9px;height:9px;padding:0;border-radius:50%;background:currentColor}
+.mtl-mt tbody th.n .nm3 .bd{display:block;flex:none;margin-left:auto;font:11px/15px var(--l-ui);color:var(--l-ink);text-align:right}
+.mtl-mt tbody th.n .kl{color:var(--l-ink);font-weight:500}.mtl-mt tbody th.n .om{color:var(--l-ink2)}.mtl-mt-d1 tbody th.n .nm{font-size:12px}.mtl-mt th,.mtl-mt td{border-right:1px solid var(--l-line);border-bottom:1px solid var(--l-line)}.mtl-mt tr>:first-child{border-left:1px solid var(--l-line)}.mtl-mt thead tr>*{border-top:1px solid var(--l-line)}.mtl-mt .gef{color:var(--l-f)}.mtl-mt .nu{background:var(--l-surface2)}
 .mtl-mt thead th{position:sticky;top:0;z-index:4;height:44px;border-bottom:1px solid var(--l-line)}.mtl-mt thead .n{font-size:12px;color:var(--l-ink2)}
 .mtl-mt-mk{display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:44px;padding:0;border:0;background:none;color:var(--l-ink);font:inherit}.mtl-mt-mk b{font-size:13px;line-height:16px}.mtl-mt-mk span{font-size:11px;line-height:13px;color:var(--l-ink3)}
 .mtl-mt tr.g td{height:30px;background:var(--l-surface2);font:600 12px/16px var(--l-ui);color:var(--l-ink2);text-align:left;padding-left:6px;border-bottom:1px solid var(--l-line)}
@@ -482,7 +487,7 @@
 .mtl-mt tfoot tr.netto th,.mtl-mt tfoot tr.netto td{height:44px;font-weight:600;border-bottom:0}.mtl-mt tfoot th{font-weight:500;color:var(--l-ink2);overflow:visible}.mtl-mt tfoot tr.netto th{color:var(--l-ink);font-weight:600}
 .mtl-mt tfoot tr.netto th,.mtl-mt tfoot tr.netto td{border-bottom:1px solid var(--l-line)}.mtl-mt td.netto.groen{color:var(--l-ok)}.mtl-mt td.netto.rood{color:var(--l-err)}.mtl-mt td.netto.zonder{font-style:italic}
 .mtl-mt tfoot .n .mtl-mt-nl{display:flex;align-items:center;overflow:visible}.mtl-mt-nl .mtl-m-ksb{margin-left:-6px}
-.mtl-mt-d1{font-size:13px}.mtl-mt-d2{font-size:12px}.mtl-mt-d2 tr.k{height:38px}.mtl-mt-d3{font-size:11px;letter-spacing:-.02em}.mtl-mt-d3 tr.k{height:36px}.mtl-mt-d3 .n{padding-left:4px}.mtl-mt-d3 th.n,.mtl-mt-d3 td{padding-left:0;padding-right:0}.mtl-mt-d3 thead .mtl-mt-mk b{font-size:11px}.mtl-mt-d2 thead .mtl-mt-mk b{font-size:12px}
+.mtl-mt-d1{font-size:13px}.mtl-mt-d2{font-size:12px}.mtl-mt-d1 tr.k{height:50px}.mtl-mt-d2 tr.k{height:48px}.mtl-mt-d3{font-size:11px;letter-spacing:-.02em}.mtl-mt-d3 tr.k{height:44px}.mtl-mt-d3 .n{padding-left:4px}.mtl-mt-d3 th.n,.mtl-mt-d3 td{padding-left:0;padding-right:0}.mtl-mt-d3 thead .mtl-mt-mk b{font-size:11px}.mtl-mt-d2 thead .mtl-mt-mk b{font-size:12px}
 .mtl-kz-lijst{display:flex;flex-direction:column;padding:6px 0;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .mtl-kz-r{display:flex;align-items:center;justify-content:space-between;height:34px;padding:0 12px;border-left:4px solid transparent;color:var(--l-ink2);font:500 14px var(--l-ui)}.mtl-kz-r.in{background:var(--l-psoft);border-left-color:var(--l-primary);color:var(--l-ptext)}.mtl-kz-r.begin,.mtl-kz-r.eind{font-weight:700;color:var(--l-ink)}
 .mtl-kz-r.begin .mtl-kz-t::after{content:"  \u00b7 begin"}.mtl-kz-r.eind .mtl-kz-t::after{content:"  \u00b7 einde"}.mtl-kz-r.begin.eind .mtl-kz-t::after{content:"  \u00b7 begin en einde"}
@@ -773,6 +778,7 @@
 
   // ── Tekenen ──
   function pasHoogte() {
+    if (st.mob) return;
     const w = st.el && st.el.querySelector('.mtl'); if (!w) return;
     const top = w.getBoundingClientRect().top, hgt = Math.max(420, window.innerHeight - Math.max(0, top) - 16);
     w.style.height = hgt + 'px';
@@ -912,6 +918,7 @@
     if (!st.el) return;
     st.mob = mobielAan();                                           // telefoon in de nieuwe stijl: een eigen dagoverzicht; de tabel is er één tik achter ("Volledige tabel")
     if (st.mob) return tekenMobiel();
+    st.el.classList.remove('mtl-host-m');
     const sl = st.el.querySelector('.mtl-scroll'), sx = sl ? sl.scrollLeft : 0, sy = sl ? sl.scrollTop : 0;
     const oudeBalk = st.el.querySelector('.mtl-mbar'), bx = oudeBalk ? oudeBalk.scrollLeft : null;
     // wie aan het typen is houdt zijn vakje, tekst en cursor bij een hertekening (bv. Vernieuwen of het laden na het openen van de tab)
@@ -1040,6 +1047,7 @@
   const filterActief = () => st.filter.length !== FILTER_STANDAARD.length || !FILTER_STANDAARD.every(f => st.filter.includes(f));
   function tekenMobiel() {
     if (!st.el) return;
+    st.el.classList.add('mtl-host-m');   // de laag is een kolom: kop, scrollgebied van de tabel, voet
     const ms = mobMaanden(), n = ms.length, delen = [kopBouw()];
     if (st.fout) delen.push(h('div', { class: 'mtl-fout', role: 'alert' }, 'Kon niet laden: ' + st.fout + ' ', knop('Opnieuw', { onclick: () => L.laad({ vers: true }) })));
     if (!st.schets || !st.schatten) delen.push(h('div', { class: 'mtl-melding' }, st.bezig ? 'Offertes en schets laden\u2026' : 'Nog niets geladen.'));
@@ -1057,14 +1065,19 @@
       const groep = (titel, k, toggle) => h('tr', { class: 'g' }, h('td', { colspan: String(n + 1) }, toggle ? h('button', { type: 'button', class: 'mtl-mt-gk', 'aria-expanded': String(!!st.mConcept), onclick: toggle }, titel + ' (' + k + ')', lijnIcoon(st.mConcept ? PAD_NEER : PAD_CHEV)) : titel + ' (' + k + ')'));
       const leeg = tekst => h('tr', { class: 'leeg' }, h('td', { colspan: String(n + 1) }, tekst));
       // klant op regel 1 en omschrijving op regel 2 (gesplitst op ' \u2014 '); zonder streep een gewone naam op hooguit twee regels
-      const naamCel = naam => { const i = naam.indexOf(' \u2014 '); return i > 0 ? h('span', { class: 'nm s2' }, h('span', { class: 'kl' }, naam.slice(0, i)), h('span', { class: 'om' }, naam.slice(i + 3))) : h('span', { class: 'nm' }, naam); };
+      const pil = r => { const cls = r.uitbeeld ? 'uitbeeld' : r.fstatus ? 'f-' + r.fstatus : r.status, tekst = r.uitbeeld ? 'Uit beeld' : r.fstatus ? FSTATUS_TEKST[r.fstatus] : STATUS_TEKST[r.status];   // dezelfde klassen en teksten als de statusbadge in de tabel
+        return h('span', { class: 'mtl-st ' + cls + (dens === 'd3' ? ' dot' : ''), title: tekst, 'aria-label': tekst }, dens === 'd3' ? null : tekst); };
+      const naamCel = r => { const naam = r.naam, i = naam.indexOf(' \u2014 '), b = L.bedrag(r, st.btw);
+        return h('span', { class: 'nmw' }, i > 0 ? h('span', { class: 'nm s2' }, h('span', { class: 'kl' }, naam.slice(0, i)), h('span', { class: 'om' }, naam.slice(i + 3))) : h('span', { class: 'nm' }, naam),
+          h('span', { class: 'nm3' }, pil(r), b != null ? h('span', { class: 'bd', title: L.fmt(b) }, L.kortK(b)) : null)); };
       const rij = it => h('tr', { class: 'k', tabindex: '0', role: 'button', 'aria-label': it.r.naam + ', openen', onclick: () => openOfferteSheet(it.r.id), onkeydown: ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openOfferteSheet(it.r.id); } } },
-        h('th', { class: 'n', scope: 'row', title: it.r.naam }, naamCel(it.r.naam)),
+        h('th', { class: 'n', scope: 'row', title: it.r.naam }, naamCel(it.r)),
         ms.map((m, i) => { const v = L.cel(it.r, m); return h('td', { class: 'num' + (L.vast(it.r, m) ? ' gef' : '') + jr(m, i), title: v ? L.fmt(v) : null }, v ? fm(v) : ''); }));
       const tbody = h('tbody', null,
         groep('Nu factureren', nf.length), nf.length ? nf.map(rij) : leeg('Niets dat nu gefactureerd kan worden.'),
         groep('Open offertes', op.length), op.length ? op.map(rij) : leeg('Geen openstaande offertes.'),
-        co.length ? groep('Concept', co.length, () => { st.mConcept = !st.mConcept; teken(); }) : null, co.length && st.mConcept ? co.map(rij) : null);
+        co.length ? groep('Concept', co.length, () => { st.mConcept = !st.mConcept; teken(); }) : null, co.length && st.mConcept ? co.map(rij) : null,
+        h('tr', { class: 'vul', 'aria-hidden': 'true' }, h('th', { class: 'n' }), ms.map(() => h('td'))));   // vulrij: de voet staat ook bij weinig offertes onderaan
       const tel = (cls, label, vals, bottom) => h('tr', { class: cls }, h('th', { class: 'n', scope: 'row', style: 'bottom:' + bottom + 'px' }, label), vals.map((td, i) => { td.style.bottom = bottom + 'px'; return td; }));
       const cel = (tekst, titel, klasse, m, i) => h('td', { class: 'num' + (klasse ? ' ' + klasse : '') + jr(m, i), title: titel || null }, tekst);
       const tfoot = h('tfoot', null,
@@ -1072,13 +1085,13 @@
         tel('kosten', 'Kosten', ms.map((m, i) => !st.tl ? cel(st.tlBezig ? '\u2026' : '\u2013', st.tlFout || null, '', m, i) : cel(fm(c.kosten[i]), L.fmt(c.kosten[i]), '', m, i)), 44),
         tel('netto', h('span', { class: 'mtl-mt-nl' }, 'Netto', kostenKnop), ms.map((m, i) => c.onbekend[i] ? cel('\u2013', ONBEKEND_TEKST, 'netto', m, i) : cel(fm(c.netto[i]), L.fmt(c.netto[i]), 'netto ' + (c.netto[i] < 0 ? 'rood' : 'groen') + (st.tl ? '' : ' zonder'), m, i)), 0));
       const col = h('colgroup', null, h('col', { style: 'width:' + (dens === 'd3' ? '72px' : dens === 'd2' ? '30%' : '36%') }), ms.map(() => h('col')));
-      delen.push(h('div', { class: 'mtl-mtw' }, h('table', { class: 'mtl-mt mtl-mt-' + dens }, col, thead, tbody, tfoot), dens === 'd3' ? h('p', { class: 'mtl-m-cap' }, 'Bedragen in duizenden euro\u2019s') : null));
+      delen.push(h('div', { class: 'mtl-mtw' }, h('table', { class: 'mtl-mt mtl-mt-' + dens }, col, thead, tbody, tfoot)));   // eigen scrollgebied tussen kop en voet
       const melding = !st.tl ? h('div', { class: 'mtl-m-let' }, st.tlBezig ? 'Kosten laden\u2026' : '\u26a0 Kosten niet geladen: netto is nu alleen de facturatie. ', !st.tlBezig ? knop('Opnieuw', { onclick: () => laadKas(true) }) : null)
         : st.tl.onvolledig.length ? h('div', { class: 'mtl-m-let' }, '\u26a0 Het overzicht van Financi\u00ebn is mogelijk onvolledig; er kunnen kosten ontbreken.') : null;
       if (melding) delen.push(melding);
       const w = [st.afgekapt ? 'Let op: niet alle offertes uit Moneybird zijn geladen.' : null, st.factFout ? 'De facturen uit Moneybird zijn niet geladen (' + st.factFout + '): alleen de schets telt. Probeer Vernieuwen.' : null].filter(Boolean);
       if (w.length) delen.push(h('div', { class: 'mtl-m-let' }, w.join(' ')));
-      delen.push(knop('Volledige tabel', { class: 'ui-knop mtl-m-tabel', onclick: () => { ls.set('mtl:volledig', '1'); sluitSheet(); teken(); } }));
+      delen.push(h('div', { class: 'mtl-m-vt' }, h('span', { class: 'mtl-m-cap' }, dens === 'd3' ? 'Bedragen in duizenden euro\u2019s' : ''), knop('Volledige tabel', { class: 'ui-knop mtl-m-tabel', onclick: () => { ls.set('mtl:volledig', '1'); sluitSheet(); teken(); } })));
     }
     st.el.replaceChildren(h('div', { class: 'mtl mtl--m' + (st.bezig ? ' bezig' : '') }, delen));
   }
