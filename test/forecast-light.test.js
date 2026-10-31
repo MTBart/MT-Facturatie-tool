@@ -219,6 +219,14 @@ test('dagoverzicht: nu factureren en open offertes', () => {
   assert.deepStrictEqual(nf.map(x => x.r.id), ['a1', 'a3', 'a4'].sort((p, q) => nf.find(x => x.r.id === q).bedrag - nf.find(x => x.r.id === p).bedrag), 'geplande maand ≤ nu, nog niet gefactureerd, grootste eerst; a2 (open) en a5/a6 niet');
   assert.strictEqual(nf.find(x => x.r.id === 'a1').bedrag, 500000, 'zonder factuur: het geplande bedrag'); assert.strictEqual(nf.find(x => x.r.id === 'a3').bedrag, 400000, 'deels gefactureerd: nog openstaand');
   const op = L.offertesMet(rijen, '2026-10', 'openstaand', 'incl'); assert.deepStrictEqual(op.map(x => [x.r.id, x.eerstvolgende]), [['a2', '2026-11']]);
+  // deels gefactureerd in dezelfde maand: 1.000 gepland, 600 gefactureerd = nog 400 (met en zonder offertebedrag)
+  const deel = (o) => Object.assign({ id: 'd1', naam: 'Deels', status: 'geaccepteerd', zeker: true, cellen: { '2026-10': 100000 }, gef: { inclC: 60000, exclC: 49587, maand: { '2026-10': 60000 }, facturen: [] }, fstatus: 'deels', uitbeeld: false, los: false, inclC: 100000, exclC: 82645 }, o);
+  assert.deepStrictEqual(L.nuFactureren([deel()], '2026-10', 'incl').map(x => [x.r.id, x.bedrag]), [['d1', 40000]], 'deels gefactureerd in dezelfde maand blijft staan');
+  assert.deepStrictEqual(L.nuFactureren([deel({ inclC: null, exclC: null })], '2026-10', 'incl').map(x => [x.r.id, x.bedrag]), [['d1', 40000]], 'zonder offertebedrag: gepland min al gefactureerd');
+  assert.deepStrictEqual(L.nuFactureren([deel({ gef: { inclC: 100000, exclC: 82645, maand: { '2026-10': 100000 }, facturen: [] }, fstatus: 'deels' })], '2026-10', 'incl'), [], 'precies gefactureerd: weg');
+  // volledig gefactureerd telt niet bij open offertes; geaccepteerd zonder planning verdwijnt niet
+  assert.strictEqual(L.offertesMet([deel({ status: 'openstaand', fstatus: 'gefactureerd' })], '2026-10', 'openstaand', 'incl').length, 0);
+  assert.deepStrictEqual(L.nietIngepland([deel({ cellen: {}, gef: null, fstatus: null, zeker: false }), deel({ id: 'd2' }), deel({ id: 'd3', cellen: {}, fstatus: 'gefactureerd' })], 'incl').map(x => x.r.id), ['d1'], 'alleen geaccepteerd, zonder enig geplande maand, niet helemaal gefactureerd');
   assert.strictEqual(L.offertesMet(rijen.map(x => x.id === 'a2' ? Object.assign({}, x, { uitbeeld: true }) : x), '2026-10', 'openstaand', 'incl').length, 0, 'uit beeld telt niet');
 });
 console.log(`\n${n} tests geslaagd${process.exitCode ? ' (met fouten)' : ''}`);
