@@ -5,8 +5,26 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-30 — Release v2.29.0: telefoon-app nieuwe opmaak (onderbalk, bovenrij kantoor, logo), Forecast in de app met bolletjes en maandenbalk
+- Commit: `bfe354d` | Auteur: Bart Witte
+
 ## 2026-10-30 — Backup = v2.28.2
 - Commit: `c340053` | Auteur: Bart Witte
+
+## 2026-10-30 — Mobiel v2.29.0: versie en wat-is-er-nieuw
+- Commit: `7de5c12` | Auteur: Bart Witte
+
+## 2026-10-30 — Mobiel Forecast: compacte tabel, zeker als bolletje en een maandenbalk voor de telefoon
+- Commit: `5cba5d4` | Auteur: Bart Witte
+
+## 2026-10-30 — Mobiel Forecast: labels binnen hun kolom, geen dubbele titel in de laag
+- Commit: `3ff4769` | Auteur: Bart Witte
+
+## 2026-10-30 — Mobiel: Forecast als laag in de app, met bladwerk voor het kostenlijstje op de telefoon
+- Commit: `4fa2f27` | Auteur: Bart Witte
+
+## 2026-10-30 — Mobiel: nieuwe stijl met lijn-iconen in de onderbalk, bovenrij voor kantoor en beeldmerk als watermerk
+- Commit: `ee638dc` | Auteur: Bart Witte
 
 ## 2026-10-30 — Release v2.28.2: Forecast kostencellen klikbaar, betaalde posten doorgehaald
 - Commit: `6bda4c4` | Auteur: Bart Witte
