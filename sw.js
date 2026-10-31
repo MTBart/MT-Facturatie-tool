@@ -6,7 +6,8 @@
    - API-calls naar de Cloudflare-Worker / Microsoft Graph / Moneybird gaan
      ALTIJD rechtstreeks (cross-origin → niet aangeraakt, nooit gecachet).
    ===================================================================== */
-const CACHE = "mt-app-v2-2026-10-17n";   // v2.14.2: push-handlers erbij; restyling brok 1+2: mt-stijl-nieuw.css en mt-zijbalk.js erbij. Een nieuwe naam ruimt de oude cache op (er is geen precache-lijst: network-first, bestanden komen bij het eerste bezoek in de cache)
+const CACHE = "mt-app-v2-2026-11-01a";   // 1-11: nieuw app-icoon en apple-touch-icon (icons/*?v=2) en nieuwe naam, zodat een geïnstalleerde app de iconen opnieuw ophaalt.
+// v2.14.2: push-handlers erbij; restyling brok 1+2: mt-stijl-nieuw.css en mt-zijbalk.js erbij. Een nieuwe naam ruimt de oude cache op (er is geen precache-lijst: network-first, bestanden komen bij het eerste bezoek in de cache)
 
 self.addEventListener("install", () => {
   self.skipWaiting();               // nieuwe SW meteen actief maken
