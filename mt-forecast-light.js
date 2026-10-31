@@ -492,6 +492,11 @@
 .mtl-kz-r{display:flex;align-items:center;justify-content:space-between;height:34px;padding:0 12px;border-left:4px solid transparent;color:var(--l-ink2);font:500 14px var(--l-ui)}.mtl-kz-r.in{background:var(--l-psoft);border-left-color:var(--l-primary);color:var(--l-ptext)}.mtl-kz-r.begin,.mtl-kz-r.eind{font-weight:700;color:var(--l-ink)}
 .mtl-kz-r.begin .mtl-kz-t::after{content:"  \u00b7 begin"}.mtl-kz-r.eind .mtl-kz-t::after{content:"  \u00b7 einde"}.mtl-kz-r.begin.eind .mtl-kz-t::after{content:"  \u00b7 begin en einde"}
 .mtl-kz-grip{display:none;width:28px;height:8px;border-radius:4px;background:var(--l-primary)}.mtl-kz-r.begin .mtl-kz-grip,.mtl-kz-r.eind .mtl-kz-grip{display:block}.mtl-kz-std{min-height:44px;padding:0 6px;font-size:14px}
+.mtl-m-kal{width:44px;padding:0;display:inline-grid;place-items:center}
+.mtl-mt thead th{height:52px}.mtl-mt-mk{height:52px}.mtl-mt-sorts{display:flex;flex-wrap:wrap;align-content:center;gap:0 4px;padding:2px 0}
+.mtl-mt-sk{position:relative;min-height:22px;padding:0 3px;border:0;border-radius:3px;background:none;color:var(--l-ink2);font:500 10px/22px var(--l-ui)}.mtl-mt-sk.actief,.mtl-mt-mk.actief b{color:var(--l-ink);font-weight:700}
+.mtl-mt-pj{font-style:normal;color:var(--l-primary);font-size:7px;line-height:8px}.mtl-mt-sk .mtl-mt-pj{position:absolute;right:-2px;top:2px}.mtl-mt-mk b .mtl-mt-pj{margin-left:1px;vertical-align:middle}
+.mtl-m-vt .mtl-m-cap{display:flex;flex-direction:column;align-items:flex-start;line-height:15px}.mtl-m-vt .mtl-m-cap b{font-size:13px;color:var(--l-ink);font-weight:600}.mtl-m-vt .mtl-m-cap small{font-size:11px;color:var(--l-ink3)}
 .mtl-overlay{padding:8px;align-items:flex-start}.mtl-paneel{max-height:calc(100vh - 16px);border-radius:var(--l-rp)}.mtl-pkop{padding:12px}.mtl-pkop h2{font-size:18px;line-height:23px}.mtl-pinhoud{padding:8px 12px 12px}.mtl-ptabel{min-width:560px}.mtl-paneel select,.mtl-paneel input{height:36px}.mtl-pnieuw{display:grid;grid-template-columns:1fr;gap:8px}.mtl-pnieuw>input,.mtl-pnieuw>select,.mtl-pnieuw>.ui-knop{width:100%;min-height:36px}.mtl-pvoet{padding:10px 12px}.mtl-pvoet .ui-knop{min-height:36px}
 }
 `;
@@ -909,6 +914,7 @@
         h('div', { class: 'mtl-seg', role: 'group', 'aria-label': 'Offertebedrag' }, ['incl', 'excl'].map(b => knop(b + '. btw', { class: 'ui-knop' + (st.btw === b ? ' ui-knop--primair' : ''), 'aria-pressed': String(st.btw === b), title: 'Alleen de kolom Bedrag (offertetotaal uit Moneybird)',
           onclick: () => { st.btw = b; ls.set('mtl:btw', b); teken(); } }))),
         st.mob ? h('button', { type: 'button', class: 'ui-knop mtl-m-filter', 'aria-label': 'Filter' + (filterActief() ? ', ' + st.filter.length + ' aan' : ''), 'aria-haspopup': 'dialog', onclick: () => openFilterSheet() }, lijnIcoon(PAD_FILTER), 'Filter', filterActief() ? h('span', { class: 'mtl-m-fn' }, String(st.filter.length)) : null) : null,
+        st.mob ? h('button', { type: 'button', class: 'ui-knop mtl-m-kal', 'aria-label': 'Maanden kiezen', 'aria-haspopup': 'dialog', title: 'Maanden kiezen', onclick: () => openMaandSheet() }, lijnIcoon(PAD_KAL)) : null,
         st.mob ? h('button', { type: 'button', class: 'ui-knop mtl-m-ver', 'aria-label': 'Vernieuwen', title: 'Vernieuwen', disabled: st.bezig, onclick: () => L.laad({ vers: true }) }, lijnIcoon(PAD_VERNIEUW)) : knop('Vernieuwen', { disabled: st.bezig, onclick: () => L.laad({ vers: true }) }),
         telefoon() && stijlNieuw() && !st.mob ? knop('Dagoverzicht', { onclick: () => { ls.set('mtl:volledig', '0'); teken(); } }) : null,
         st.opt.openUitgebreid ? knop('Uitgebreide forecast', { title: 'De uitgebreide Forecast (met de prognose van Financiën) staat bij Financiën', onclick: () => st.opt.openUitgebreid() }) : null));
@@ -1023,7 +1029,7 @@
     if (typ) { const i = st.el.querySelector(`input.mtl-in[data-id="${typ.id}"][data-ym="${typ.ym}"]`); if (i && !i.disabled) { i.value = typ.v; i.focus({ preventScroll: true }); try { i.setSelectionRange(typ.s, typ.e); } catch (e) { } } }
   }
   // ── Dagoverzicht voor de telefoon (alleen telefoon() én nieuwe stijl; "Volledige tabel" schakelt naar de tabel en terug, onthouden in mtl:volledig) ──
-  // Alle cijfers komen uit L.cijfers / L.nuFactureren / L.offertesMet (dus uit dezelfde L.*-regels als de tabel); opslaan gaat via verwerk/bewaar/stuur/zetZeker
+  // Alle cijfers komen uit L.cijfers en de rijen uit L.rijen/L.filter/L.sorteer (dus uit dezelfde L.*-regels als de tabel); opslaan gaat via verwerk/bewaar/stuur/zetZeker
   // (concepten, 409, oud-vergelijking): een offerte-sheet die je alleen opent en sluit slaat nooit iets op, want opslaan volgt pas op een wijziging (change).
   const stijlNieuw = () => document.documentElement.getAttribute('data-stijl') === 'nieuw';
   const mobielAan = () => telefoon() && stijlNieuw() && ls.get('mtl:volledig') !== '1';
@@ -1031,7 +1037,7 @@
   const PAD_CHEV = 'M9 6l6 6l-6 6', PAD_X = 'M6 6l12 12M18 6L6 18', PAD_REGELS = 'M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1M15 4v4M9 10v4M17 16v4', PAD_LINKS = 'M15 6l-6 6l6 6';
   function lijnIcoon(pad) { const s = document.createElementNS(SVGNS, 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('class', 'mtl-ico'); s.setAttribute('aria-hidden', 'true'); s.setAttribute('focusable', 'false'); const p = document.createElementNS(SVGNS, 'path'); p.setAttribute('d', pad); s.appendChild(p); return s; }
   const ONBEKEND_TEKST = 'Geen (complete) bankgegevens voor deze maand';
-  const PAD_FILTER = 'M3 5h18l-7 8v6l-4 2v-8z', PAD_NEER = 'M6 9l6 6l6-6', PAD_VERNIEUW = 'M20 12a8 8 0 1 1-2.5-5.8M20 4v5h-5', FILTER_STANDAARD = ['geaccepteerd', 'openstaand', 'los', 'gefactureerd'];
+  const PAD_FILTER = 'M3 5h18l-7 8v6l-4 2v-8z', PAD_NEER = 'M6 9l6 6l6-6', PAD_VERNIEUW = 'M20 12a8 8 0 1 1-2.5-5.8M20 4v5h-5', PAD_KAL = 'M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM4 10h16M8 2v4M16 2v4', FILTER_STANDAARD = ['geaccepteerd', 'openstaand', 'los', 'gefactureerd'];
   const eur = cc => (cc < 0 ? '\u2212' : '') + '\u20ac\u00a0' + duizend(Math.round(Math.abs(cc) / 100));
   // Het gekozen blok maanden (bewaard in mtl:mper): voorkeuzen rekenen elke keer vanaf deze maand, een vrije keuze of verschuiving ligt vast.
   const mobSel = () => { if (st.mSel === undefined) { try { const x = JSON.parse(ls.get('mtl:mper') || 'null'); st.mSel = x && typeof x === 'object' ? x : null; } catch (e) { st.mSel = null; } } return st.mSel; };
@@ -1052,17 +1058,17 @@
     if (st.fout) delen.push(h('div', { class: 'mtl-fout', role: 'alert' }, 'Kon niet laden: ' + st.fout + ' ', knop('Opnieuw', { onclick: () => L.laad({ vers: true }) })));
     if (!st.schets || !st.schatten) delen.push(h('div', { class: 'mtl-melding' }, st.bezig ? 'Offertes en schets laden\u2026' : 'Nog niets geladen.'));
     else {
-      // Eén klassieke tabel: links de offertes, per gekozen maand een kolom, groepkoppen voor Nu factureren / Open offertes / Concept, onderaan In, Kosten en Netto.
-      // De cijfers komen uit L.cijfers / L.nuFactureren / L.offertesMet, met dezelfde filter als de tabel (L.filter); de kolommen schalen mee, dus geen horizontaal scrollen.
+      // Eén klassieke tabel: links de offertes, per gekozen maand een kolom, onderaan In, Kosten en Netto. Precies de rijen van de desktoptabel (L.filter met dezelfde st.filter, L.sorteer met dezelfde st.sort);
+      // de cijfers komen uit L.cijfers; de kolommen schalen mee, dus geen horizontaal scrollen.
       const { rijen, c } = mobCijfers(ms), nuYm = nu(), dens = n <= 4 ? 'd1' : n <= 6 ? 'd2' : 'd3', fm = dens === 'd3' ? L.kortD : L.kortK, jr = (m, i) => m.slice(5) === '01' && i > 0 ? ' jr' : '';
-      const nf = L.nuFactureren(rijen, nuYm, st.btw), op = L.offertesMet(rijen, nuYm, 'openstaand', st.btw).concat(L.nietIngepland(rijen, st.btw)), co = L.offertesMet(rijen, nuYm, 'concept', st.btw);
       const x = kostenGroepen().filter(g => st.kasAan[g] !== false).length, y = kostenGroepen().length;
       const kostenKnop = h('button', { type: 'button', class: 'mtl-m-ksb' + (x < y ? ' stip' : ''), 'aria-label': 'Kosten die meetellen', title: 'Kosten die meetellen' + (x < y ? ' (niet alles staat aan)' : ''), onclick: () => openKostenSheet(0) }, lijnIcoon(PAD_REGELS));
-      const kz = () => openMaandSheet();
-      const thead = h('thead', null, h('tr', null, h('th', { class: 'n', scope: 'col' }, h('span', null, 'Offerte')),
-        ms.map((m, i) => h('th', { class: 'num' + (m === nuYm ? ' nu' : '') + jr(m, i), scope: 'col' }, h('button', { type: 'button', class: 'mtl-mt-mk', 'aria-haspopup': 'dialog', 'aria-label': maandTekst(m) + ': andere maanden kiezen', title: 'Andere maanden kiezen', onclick: kz },
-          h('b', null, MND_K[Number(m.slice(5, 7)) - 1]), dens === 'd3' ? null : h('span', null, m.slice(0, 4)))))));
-      const groep = (titel, k, toggle) => h('tr', { class: 'g' }, h('td', { colspan: String(n + 1) }, toggle ? h('button', { type: 'button', class: 'mtl-mt-gk', 'aria-expanded': String(!!st.mConcept), onclick: toggle }, titel + ' (' + k + ')', lijnIcoon(st.mConcept ? PAD_NEER : PAD_CHEV)) : titel + ' (' + k + ')'));
+      const sorteerOp = sleutel => { const act = st.sort.sleutel === sleutel; st.sort = { sleutel, richting: act && st.sort.richting === 'af' ? 'op' : 'af' }; ls.set('mtl:sort', st.sort.sleutel + ':' + st.sort.richting); teken(); };   // dezelfde sorteerstate en opslag als de tabel
+      const pijl = sleutel => st.sort.sleutel === sleutel ? h('i', { class: 'mtl-mt-pj', 'aria-hidden': 'true' }, st.sort.richting === 'op' ? '\u25b2' : '\u25bc') : null;
+      const sk = (sleutel, tekst) => h('button', { type: 'button', class: 'mtl-mt-sk' + (st.sort.sleutel === sleutel ? ' actief' : ''), 'aria-sort': st.sort.sleutel === sleutel ? (st.sort.richting === 'op' ? 'ascending' : 'descending') : null, title: 'Sorteren op ' + tekst.toLowerCase(), onclick: () => sorteerOp(sleutel) }, tekst, pijl(sleutel));
+      const thead = h('thead', null, h('tr', null, h('th', { class: 'n', scope: 'col' }, h('div', { class: 'mtl-mt-sorts' }, sk('offerte', 'Offerte'), sk('datum', 'Datum'), sk('status', 'Status'), sk('bedrag', 'Bedrag'))),
+        ms.map((m, i) => h('th', { class: 'num' + (m === nuYm ? ' nu' : '') + jr(m, i), scope: 'col', 'aria-sort': st.sort.sleutel === 'm:' + m ? (st.sort.richting === 'op' ? 'ascending' : 'descending') : null }, h('button', { type: 'button', class: 'mtl-mt-mk' + (st.sort.sleutel === 'm:' + m ? ' actief' : ''), 'aria-label': 'Sorteren op ' + maandTekst(m), title: 'Sorteren op ' + maandTekst(m), onclick: () => sorteerOp('m:' + m) },
+          h('b', null, MND_K[Number(m.slice(5, 7)) - 1], pijl('m:' + m)), dens === 'd3' ? null : h('span', null, m.slice(0, 4)))))));
       const leeg = tekst => h('tr', { class: 'leeg' }, h('td', { colspan: String(n + 1) }, tekst));
       // klant op regel 1 en omschrijving op regel 2 (gesplitst op ' \u2014 '); zonder streep een gewone naam op hooguit twee regels
       const pil = r => { const cls = r.uitbeeld ? 'uitbeeld' : r.fstatus ? 'f-' + r.fstatus : r.status, tekst = r.uitbeeld ? 'Uit beeld' : r.fstatus ? FSTATUS_TEKST[r.fstatus] : STATUS_TEKST[r.status];   // dezelfde klassen en teksten als de statusbadge in de tabel
@@ -1070,13 +1076,10 @@
       const naamCel = r => { const naam = r.naam, i = naam.indexOf(' \u2014 '), b = L.bedrag(r, st.btw);
         return h('span', { class: 'nmw' }, i > 0 ? h('span', { class: 'nm s2' }, h('span', { class: 'kl' }, naam.slice(0, i)), h('span', { class: 'om' }, naam.slice(i + 3))) : h('span', { class: 'nm' }, naam),
           h('span', { class: 'nm3' }, pil(r), b != null ? h('span', { class: 'bd', title: L.fmt(b) }, L.kortK(b)) : null)); };
-      const rij = it => h('tr', { class: 'k', tabindex: '0', role: 'button', 'aria-label': it.r.naam + ', openen', onclick: () => openOfferteSheet(it.r.id), onkeydown: ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openOfferteSheet(it.r.id); } } },
-        h('th', { class: 'n', scope: 'row', title: it.r.naam }, naamCel(it.r)),
-        ms.map((m, i) => { const v = L.cel(it.r, m); return h('td', { class: 'num' + (L.vast(it.r, m) ? ' gef' : '') + jr(m, i), title: v ? L.fmt(v) : null }, v ? fm(v) : ''); }));
-      const tbody = h('tbody', null,
-        groep('Nu factureren', nf.length), nf.length ? nf.map(rij) : leeg('Niets dat nu gefactureerd kan worden.'),
-        groep('Open offertes', op.length), op.length ? op.map(rij) : leeg('Geen openstaande offertes.'),
-        co.length ? groep('Concept', co.length, () => { st.mConcept = !st.mConcept; teken(); }) : null, co.length && st.mConcept ? co.map(rij) : null,
+      const rij = r => h('tr', { class: 'k', tabindex: '0', role: 'button', 'aria-label': r.naam + ', openen', onclick: () => openOfferteSheet(r.id), onkeydown: ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openOfferteSheet(r.id); } } },
+        h('th', { class: 'n', scope: 'row', title: r.naam }, naamCel(r)),
+        ms.map((m, i) => { const v = L.cel(r, m); return h('td', { class: 'num' + (L.vast(r, m) ? ' gef' : '') + jr(m, i), title: v ? L.fmt(v) : null }, v ? fm(v) : ''); }));
+      const tbody = h('tbody', null, rijen.length ? rijen.map(rij) : leeg('Geen offertes met dit filter.'),
         h('tr', { class: 'vul', 'aria-hidden': 'true' }, h('th', { class: 'n' }), ms.map(() => h('td'))));   // vulrij: de voet staat ook bij weinig offertes onderaan
       const tel = (cls, label, vals, bottom) => h('tr', { class: cls }, h('th', { class: 'n', scope: 'row', style: 'bottom:' + bottom + 'px' }, label), vals.map((td, i) => { td.style.bottom = bottom + 'px'; return td; }));
       const cel = (tekst, titel, klasse, m, i) => h('td', { class: 'num' + (klasse ? ' ' + klasse : '') + jr(m, i), title: titel || null }, tekst);
@@ -1091,7 +1094,8 @@
       if (melding) delen.push(melding);
       const w = [st.afgekapt ? 'Let op: niet alle offertes uit Moneybird zijn geladen.' : null, st.factFout ? 'De facturen uit Moneybird zijn niet geladen (' + st.factFout + '): alleen de schets telt. Probeer Vernieuwen.' : null].filter(Boolean);
       if (w.length) delen.push(h('div', { class: 'mtl-m-let' }, w.join(' ')));
-      delen.push(h('div', { class: 'mtl-m-vt' }, h('span', { class: 'mtl-m-cap' }, dens === 'd3' ? 'Bedragen in duizenden euro\u2019s' : ''), knop('Volledige tabel', { class: 'ui-knop mtl-m-tabel', onclick: () => { ls.set('mtl:volledig', '1'); sluitSheet(); teken(); } })));
+      const per = n === 1 ? maandTekst(ms[0]) : maandTekst(ms[0]) + ' \u2013 ' + maandTekst(ms[n - 1]);
+      delen.push(h('div', { class: 'mtl-m-vt' }, h('span', { class: 'mtl-m-cap' }, h('b', null, per), dens === 'd3' ? h('small', null, 'Bedragen in duizenden euro\u2019s') : null), knop('Volledige tabel', { class: 'ui-knop mtl-m-tabel', onclick: () => { ls.set('mtl:volledig', '1'); sluitSheet(); teken(); } })));
     }
     st.el.replaceChildren(h('div', { class: 'mtl mtl--m' + (st.bezig ? ' bezig' : '') }, delen));
   }
