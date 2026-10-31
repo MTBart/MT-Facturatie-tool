@@ -860,7 +860,7 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 .pv-melding{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 10px;border-radius:6px;margin:6px 0;font-size:12.5px}.pv-melding.goed{background:#E3F1E7;color:#1F5C36}.pv-melding.af{background:#FDE8E8;color:#8B1A1A}.pv-melding.open{background:#FFF4D6;color:#7A5300}
 .pv-form{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}.pv-form input{min-height:40px;padding:0 8px;border:1px solid var(--border);border-radius:8px;font:inherit}.pv-form .vol{grid-column:1/-1}
 </style>
-<link rel="stylesheet" href="mt-stijl-mobiel.css?v=2026-11-01d">
+<link rel="stylesheet" href="mt-stijl-mobiel.css?v=2026-11-01e">
 <link rel="stylesheet" href="mt-rust.css?v=2026-10-24z">
 </head>
 <body>
@@ -2454,7 +2454,8 @@ function snack(tekst, label, fn) {
 }
 function kopTimerOpen() {
   if (projSyncStatus() === 'mislukt') {   // opnieuw proberen (bij twijfel: eerst vragen)
-    if (_pend.twijfel) { if (!confirm('Toggl toont al een andere lopende timer. Deze uren toch apart opslaan?')) return; _pend.forceer = true; _pend.twijfel = false; }
+    if (_pend.twijfel) { if (!confirm('Toggl toont al een entry met deze starttijd. Deze uren toch apart opslaan?')) return; _pend.forceer = true; _pend.twijfel = false; }
+    _pend.keuze = false;
     _pend.status = 'wacht'; _pendPogingenSessie = 0; pendOpslaan(); kopTimerBijwerken(); _tglEnqueue(() => pendAfronden()).catch(() => {}); return;
   }
   if (timerRunning && _pend && !_pend.projectId) tkOpen(); else switchTab('timer', document.getElementById('nav-timer'));   // zonder project: de kiezer
@@ -3069,8 +3070,9 @@ function saveTasks() { localStorage.setItem("mt_tasks", JSON.stringify(TASKS)); 
 // TODO (stap 3 van het eindontwerp: offline-outbox en operation-id's): de mobiele Toggl-aanroepen (status, naam, aanmaken) krijgen nog GEEN tg_pending-intentie zoals v2; dat is bestaand gedrag.
 const ROL_TAAK_STATUS = 'taken:status-nieuw|alles', ROL_TAAK_ALLES = 'taken:alles';
 function rolMagM(spec) {   // schrijfacties (een spec met niveaus, 'kolom:niveau') zijn dicht zolang de rol niet geladen is (behalve demo en een oude worker zonder rollen); lezen blijft werken
-  if (!(window.MTRol && MTRol.mag)) return true;
-  if (!MTRol.me && String(spec || '').includes(':') && !_demoMode && MTRol.laadReden !== 'oude-worker') return false;
+  const schrijf = String(spec || '').includes(':');
+  if (!(window.MTRol && MTRol.mag)) return !schrijf || _demoMode;   // de rolmodule ontbreekt: schrijfacties dicht, lezen open
+  if (!MTRol.me && schrijf && !_demoMode && MTRol.laadReden !== 'oude-worker') return false;
   return MTRol.mag(spec);
 }
 function rolGeweigerdM(spec, wat) {
@@ -3686,41 +3688,75 @@ const projSyncStatus = () => (_pend && _pend.projectId) ? (_pend.status === 'mis
 const isoSec = ms => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
 async function togglCurrent() { const cur = await tgTrack('me/time_entries/current'), e = (cur && cur.id) ? cur : (cur && cur.data); return (e && e.id && e.duration < 0) ? e : null; }   // gooit bij een mislukte opvraag
 function pendPlan() {   // opnieuw proberen via dezelfde wachtrij: na 8, 16, 24 … s, hooguit 6 keer per sessie; bij het opstarten hervat pendHervat het
-  clearTimeout(_pendRetryT); if (!_pend || _pend.twijfel || _pendPogingenSessie >= 6) return; _pendPogingenSessie++;
+  clearTimeout(_pendRetryT); if (!_pend || _pend.twijfel || _pend.keuze || _pendPogingenSessie >= 6) return; _pendPogingenSessie++;
   _pendRetryT = setTimeout(() => { if (_pend && _pend.projectId) { _pend.status = 'wacht'; pendOpslaan(); kopTimerBijwerken(); _tglEnqueue(() => pendAfronden()).catch(() => {}); } }, 8000 * _pendPogingenSessie);
 }
 function pendHervat() {   // bij het opstarten en na het laden van de projecten: een nog niet bevestigde POST afronden (een eerdere poging kan zijn aangekomen: dus altijd eerst opvragen)
   if (!(_pend && _pend.projectId) || !_msAccount || _demoMode || !allProjects().length) return;
   _pend.poging = Math.max(_pend.poging || 0, 1); _pendPogingenSessie = 0; _tglEnqueue(() => pendAfronden()).catch(() => {});
 }
+async function togglVindEntry(startMs, togglProjectId) {   // onze eigen entry in de recente entries (ook een al gestopte): exact dezelfde startseconde én hetzelfde project; twijfel of een mislukte opvraag gooit (dan nooit een POST)
+  const van = new Date(startMs - 864e5).toISOString().slice(0, 10), tot = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
+  const res = await tgTrack(`me/time_entries?start_date=${van}&end_date=${tot}`), arr = Array.isArray(res) ? res : (res && Array.isArray(res.data) ? res.data : null);
+  if (!arr) throw new Error('lijst onleesbaar');
+  const sec = Math.floor(startMs / 1000), zelfde = arr.filter(e => e && e.id && Math.floor(new Date(e.start).getTime() / 1000) === sec);
+  const exact = zelfde.filter(e => String(e.project_id != null ? e.project_id : e.pid) === String(togglProjectId));
+  if (exact.length === 1) return exact[0];
+  if (zelfde.length) throw Object.assign(new Error('twijfel'), { twijfel: true });
+  return null;
+}
+const _tabId = Math.random().toString(36).slice(2), PEND_LOCK = 'mt_pend_lock';
+async function pendLockNemen() {   // één tabblad tegelijk werkt aan de pending POST; de lock verloopt na 15 s
+  try {
+    const l = JSON.parse(localStorage.getItem(PEND_LOCK) || 'null'); if (l && l.tab !== _tabId && Date.now() - l.t < 15000) return false;
+    localStorage.setItem(PEND_LOCK, JSON.stringify({ tab: _tabId, t: Date.now() })); await new Promise(r => setTimeout(r, 60));
+    const l2 = JSON.parse(localStorage.getItem(PEND_LOCK) || 'null'); return !!l2 && l2.tab === _tabId;
+  } catch (e) { return true; }
+}
+function pendLockVernieuw() { try { localStorage.setItem(PEND_LOCK, JSON.stringify({ tab: _tabId, t: Date.now() })); } catch (e) {} }
+function pendLockVrij() { try { const l = JSON.parse(localStorage.getItem(PEND_LOCK) || 'null'); if (l && l.tab === _tabId) localStorage.removeItem(PEND_LOCK); } catch (e) {} }
 async function pendAfronden() {
-  const p = _pend; if (!p || !p.projectId || !_msAccount || _demoMode || _pendLoopt) return false;
+  const p = _pend; if (!p) return true;   // niets (meer) te doen
+  if (!p.projectId || !_msAccount || _demoMode || _pendLoopt) return false;
   const proj = allProjects().find(x => String(x.id) === String(p.projectId)); if (!proj) return false;   // projecten nog niet geladen: later opnieuw
   if (!proj.togglProjectId) { p.status = 'mislukt'; pendOpslaan(); kopTimerBijwerken(); return false; }
   _pendLoopt = true;
   try {
-    let id = null;
-    if (p.poging > 0 && !p.forceer) {   // een vorige poging kan zijn aangekomen zonder dat het antwoord binnenkwam
-      const cur = await togglCurrent();
-      if (cur) { const exact = Math.floor(new Date(cur.start).getTime() / 1000) === Math.floor(p.start / 1000) && String(cur.project_id) === String(proj.togglProjectId); if (!exact) throw Object.assign(new Error('twijfel'), { twijfel: true }); id = cur.id; }
+    if (!(await pendLockNemen())) { pendPlan(); return false; }   // een ander tabblad werkt hieraan: geen eigen POST
+    let id = null, gestopt = false;
+    if (p.poging > 0 && !p.forceer) {   // een vorige poging kan zijn aangekomen zonder dat het antwoord binnenkwam: eerst in de recente entries kijken
+      const e = await togglVindEntry(p.start, proj.togglProjectId);
+      if (e) { id = e.id; gestopt = e.duration >= 0 || !!e.stop; }
     }
+    if (!id && !p.forceer) {   // vóór elke POST: loopt er al een timer (ander toestel of tabblad)? Nooit stil: de gebruiker kiest
+      const cur = await togglCurrent();
+      if (cur) {
+        const pr = allProjects().find(x => String(x.togglProjectId) === String(cur.project_id)), sinds = new Date(cur.start), hhmm = String(sinds.getHours()).padStart(2, '0') + ':' + String(sinds.getMinutes()).padStart(2, '0');
+        if (!confirm('Er loopt al een timer (' + (pr ? mProjNaam(pr) : 'ander project') + ' sinds ' + hhmm + ').\n\nOK: die stoppen en deze starten.\nAnnuleren: niets starten (je tijd blijft hier bewaard).')) throw Object.assign(new Error('keuze'), { keuze: true });
+        await tgTrack(`workspaces/${TG_WS}/time_entries/${cur.id}/stop`, 'PATCH');
+      }
+    }
+    pendLockVernieuw();
     if (!id) {
-      p.poging = (p.poging || 0) + 1; pendOpslaan();   // vanaf nu kan de POST onderweg zijn: een volgende poging vraagt eerst op
-      const body = { description: p.taak || proj.name, project_id: proj.togglProjectId, start: isoSec(p.start), duration: p.stop ? Math.max(1, Math.round((p.stop - p.start) / 1000)) : -1, created_with: 'mt-mobiel', workspace_id: TG_WS };
-      if (p.stop) body.stop = isoSec(p.stop);
+      p.poging = (p.poging || 0) + 1; pendOpslaan();   // vanaf nu kan de POST onderweg zijn: een volgende poging zoekt eerst
+      const stopBijPost = p.stop;
+      const body = { description: p.taak || proj.name, project_id: proj.togglProjectId, start: isoSec(p.start), duration: stopBijPost ? Math.max(1, Math.round((stopBijPost - p.start) / 1000)) : -1, created_with: 'mt-mobiel', workspace_id: TG_WS };
+      if (stopBijPost) body.stop = isoSec(stopBijPost);
       const made = await tgTrack(`workspaces/${TG_WS}/time_entries`, 'POST', body), nid = made && (made.id || (made.data && made.data.id)); if (!nid) throw new Error('geen entry-id');
-      id = nid;
-    } else if (p.stop) await tgTrack(`workspaces/${TG_WS}/time_entries/${id}/stop`, 'PATCH');
+      id = nid; gestopt = !!stopBijPost;
+    }
+    // de toestand bij Toggl gelijk maken aan de bedoelde: is er intussen gestopt (tijdens de POST of op een eerdere poging), dan de entry stoppen op de gevraagde stoptijd
+    if (p.stop && !gestopt) await tgTrack(`workspaces/${TG_WS}/time_entries/${id}`, 'PUT', { stop: isoSec(p.stop), duration: Math.max(1, Math.round((p.stop - p.start) / 1000)), workspace_id: TG_WS });
     if (!p.stop) { _togglTimerEntryId = id; saveTimerState(); }
-    _pend = null; pendOpslaan(); clearTimeout(_pendRetryT); kopTimerBijwerken(); return true;
+    if (_pend === p) { _pend = null; pendOpslaan(); }
+    clearTimeout(_pendRetryT); kopTimerBijwerken(); return true;
   } catch (e) {
     console.warn('pendAfronden fout:', e.message);
-    p.status = 'mislukt'; p.twijfel = !!e.twijfel; pendOpslaan(); pendPlan(); kopTimerBijwerken();
-    showToast(p.twijfel ? 'Toggl toont al een andere lopende timer — tik op de kop om te kiezen' : 'Nog niet bij Toggl opgeslagen — we proberen het opnieuw');
+    p.status = 'mislukt'; p.twijfel = !!e.twijfel; p.keuze = !!e.keuze; pendOpslaan(); pendPlan(); kopTimerBijwerken();
+    showToast(p.keuze ? 'Niet opgeslagen: er loopt al een timer bij Toggl — tik op de kop om te kiezen' : p.twijfel ? 'Toggl toont al een entry met deze starttijd — tik op de kop om te kiezen' : 'Nog niet bij Toggl opgeslagen — we proberen het opnieuw');
     return false;
-  } finally { _pendLoopt = false; }
-}
-function startTimerLokaal() {
+  } finally { _pendLoopt = false; pendLockVrij(); }
+}function startTimerLokaal() {
   activeProject = null; captureProject = null;
   timerRunning = true; timerStart = Math.floor(Date.now() / 1000) * 1000;
   _pend = { start: timerStart, projectId: null, taak: '', status: 'kiezen', poging: 0 }; pendOpslaan(); _pendPogingenSessie = 0;
@@ -3735,7 +3771,8 @@ function zetProjectOpTimer(proj, oms) {   // project (en taak) bij een lokale st
 function timerLokaalStoppen() { timerRunning = false; clearInterval(timerInterval); timerInterval = null; timerStart = null; saveTimerState(); updateTimerUI(); renderCaptureProject(); }
 function pendWeggooien() { _pend = null; pendOpslaan(); clearTimeout(_pendRetryT); timerLokaalStoppen(); activeProject = null; captureProject = null; updateTimerUI(); kopTimerBijwerken(); }
 window.addEventListener('beforeunload', ev => { if (projSyncStatus() || (_pend && _pend.stop)) { ev.preventDefault(); ev.returnValue = ''; } });   // extra vangnet; de pending-toestand zelf blijft bewaard
-window.addEventListener('online', () => { try { pendHervat(); } catch (e) {} });let _tkProj = null, _tkModus = 'normaal';
+window.addEventListener('online', () => { try { pendHervat(); } catch (e) {} });
+window.addEventListener('storage', ev => { if (ev.key !== 'mt_timer_pending') return; try { _pend = ev.newValue ? JSON.parse(ev.newValue) : null; kopTimerBijwerken(); } catch (e) {} });   // een ander tabblad werkt de pending toestand bij: die tonen, geen eigen POSTlet _tkProj = null, _tkModus = 'normaal';
 function tkOpen(modus) { _tkModus = modus || 'normaal'; _tkProj = null; tkTeken(); document.getElementById('tkSheet').classList.add('visible'); }
 function tkDicht() { document.getElementById('tkSheet').classList.remove('visible'); }
 function tkSluit() {   // sluiten zonder af te maken: een gekozen project (zonder taak) telt; zonder keuze loopt de timer lokaal door
