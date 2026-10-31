@@ -6844,7 +6844,7 @@ window.geldLaagOpen = window.geldLaagOpen || function () {};
    dezelfde worker-routes en dezelfde Moneybird-leesroute als v2.html; rol "lezen" kan niets wijzigen (magWijzigen false).
    De uitgebreide forecast blijft op de computer (geen openUitgebreid op de telefoon).
    ===================================================================== */
-const FORECAST_SCRIPTS = ["mt-forecast.js?v=2026-10-30e","mt-forecast-light.js?v=2026-10-30j"];
+const FORECAST_SCRIPTS = ["mt-forecast.js?v=2026-10-30e","mt-forecast-light.js?v=2026-10-31b"];
 let _forecastScripts = null;
 function forecastLaadScripts() {
   if (window.MTForecast && window.MTForecastLight) return Promise.resolve();
@@ -6907,7 +6907,7 @@ function forecastLaagInit() {
   }
   function dicht() {
     sessie++; laag.hidden = true; geblokkeerd.forEach(el => { el.inert = false; }); geblokkeerd = [];
-    document.querySelectorAll(".mtl-pop,.mtl-popbg,.mtl-overlay").forEach(b => b.remove());   // een open lijstje of paneel hoort bij de laag
+    document.querySelectorAll(".mtl-pop,.mtl-popbg,.mtl-sheet,.mtl-overlay").forEach(b => b.remove());   // een open lijstje of paneel hoort bij de laag
     const actief = document.querySelector(".tab.active"); bovenRijActief(actief ? actief.id.replace(/^tab-/, "") : "");
     if (vorigeFocus && vorigeFocus.focus) { try { vorigeFocus.focus(); } catch (e) {} }
   }
@@ -6924,7 +6924,7 @@ function forecastLaagInit() {
     if (!laag.hidden && histActief) { histActief = false; dicht(); }
   });
   document.getElementById("forecastTerug").addEventListener("click", () => sluit());
-  laag.addEventListener("keydown", e => { if (e.key === "Escape" && !document.querySelector(".mtl-pop,.mtl-overlay")) { e.preventDefault(); sluit(); } });
+  laag.addEventListener("keydown", e => { if (e.key === "Escape" && !document.querySelector(".mtl-pop,.mtl-sheet,.mtl-overlay")) { e.preventDefault(); sluit(); } });
   window.forecastLaagOpen = open; window.forecastLaagSluit = sluit;
 }
 forecastLaagInit();

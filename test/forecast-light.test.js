@@ -174,4 +174,51 @@ test('sorteren: op gaat zeker door, bedrag (leeg achteraan), maand en standaard 
   assert.deepStrictEqual(L.sorteer(rijen, null, 'incl', []).map(x => x.id), ['x3', 'x2', 'x1']);
   assert.deepStrictEqual(L.sortLees('m:2026-11:op'), { sleutel: 'm:2026-11', richting: 'op' }); assert.deepStrictEqual(L.sortLees('rommel'), L.SORT_STANDAARD);
 });
+// Dagoverzicht telefoon: In, Kosten en Netto komen uit L.cijfers, dezelfde regels als de voet van de tabel (vulVoet): totalen, kasTotalen, netto, nettoWerkelijk.
+const dagData = () => {
+  const r = (id, o) => Object.assign({ id, naam: 'Offerte ' + id, nummer: id, datum: '2026-10-01', status: 'geaccepteerd', inclC: 1000000, exclC: 826446, cellen: {}, zeker: false, uitbeeld: false, los: false, gef: null, fstatus: null }, o);
+  const rijen = [r('a1', { zeker: true, cellen: { '2026-10': 500000, '2026-11': 300000 } }), r('a2', { status: 'openstaand', cellen: { '2026-11': 200000, '2027-01': 400000 } }),
+    r('a3', { cellen: { '2026-09': 100000 }, gef: { inclC: 600000, exclC: 495868, maand: { '2026-10': 600000 }, facturen: [{ id: 'f1', ym: '2026-10', inclC: 600000 }], klant: 'K' }, fstatus: 'deels' })];
+  const regels = [{ sleutel: 'n:x', naam: 'Inkoop', groep: 'open', c: -150000, ym: '2026-11', loon: null, bron: 'inkoop' }, { sleutel: 'p:1', naam: 'Loon', groep: 'vast', c: -400000, ym: '2026-10', loon: 'bart', bron: 'patroon' },
+    { sleutel: 'p:1', naam: 'Loon', groep: 'vast', c: -400000, ym: '2026-11', loon: 'bart', bron: 'patroon' }, { sleutel: 'btw', naam: 'Btw', groep: 'overig', c: -250000, ym: '2027-01', loon: null, bron: 'btw' }];
+  const fact = [{ id: 'f1', ym: '2026-10', inclC: 600000 }, { id: 'f2', ym: '2026-11', inclC: 70000 }], fk = { perEid: {}, los: [{ id: 'f2', ym: '2026-11', inclC: 70000 }] };
+  return { rijen, regels, fact, fk, hist: { '2026-09': { in: 12000 } }, histAsOf: '2026-10-30' };
+};
+test('dagoverzicht: In + Kosten = Netto, en gelijk aan de tabelregels (L.totalen, L.kasTotalen, L.netto, L.nettoWerkelijk)', () => {
+  const d = dagData(), ms = ['2026-10', '2026-11', '2026-12', '2027-01'], aan = { loonBart: false };
+  const c = L.cijfers({ rijen: d.rijen, ms, fact: d.fact, fk: d.fk, regels: d.regels, aan, nuYm: '2026-10', hist: d.hist, histAsOf: d.histAsOf });
+  const tot = L.totalen(d.rijen, ms), kt = L.kasTotalen(d.regels, ms, aan), losPer = [0, 70000, 0, 0];
+  const netto = L.nettoWerkelijk(L.netto(tot.per, losPer, kt, aan), ms, '2026-10', d.hist, kt, aan, d.histAsOf);
+  assert.deepStrictEqual(c.netto, netto); assert.deepStrictEqual(c.tot.per, tot.per);
+  assert.deepStrictEqual(c.kosten, ms.map((_, i) => L.KAS_GROEPEN.reduce((a, g) => a + kt[g].per[i], 0)));
+  assert.deepStrictEqual(c.netto, c.inkomen.map((v, i) => v + c.kosten[i]));
+  assert.deepStrictEqual(c.kosten, [0, -150000, 0, -250000], 'loon van Bart staat uit en telt niet mee');
+  const alles = L.cijfers({ rijen: d.rijen, ms, fact: d.fact, fk: d.fk, regels: d.regels, aan: {}, nuYm: '2026-10', hist: d.hist, histAsOf: d.histAsOf });
+  assert.deepStrictEqual(alles.kosten, [-400000, -550000, 0, -250000], 'alles aan');
+  const uit = L.cijfers({ rijen: d.rijen, ms, fact: d.fact, fk: d.fk, regels: d.regels, aan: { open: false, vast: false, overig: false, gef: false }, nuYm: '2026-10', hist: d.hist, histAsOf: d.histAsOf });
+  assert.deepStrictEqual(uit.kosten, [0, 0, 0, 0]); assert.deepStrictEqual(uit.netto, tot.per, 'alles uit, ook de facturen zonder offerte: alleen het totaal');
+});
+test('dagoverzicht: vier maanden geven dezelfde cijfers als de eerste vier maanden van de twaalf-maandentabel; voorbije maand uit de bank', () => {
+  const d = dagData(), twaalf = L.maanden('2026-09', 12), vier = twaalf.slice(0, 4), inv = ms => ({ rijen: d.rijen, ms, fact: d.fact, fk: d.fk, regels: d.regels, aan: {}, nuYm: '2026-10', hist: d.hist, histAsOf: d.histAsOf });
+  const a = L.cijfers(inv(twaalf)), b = L.cijfers(inv(vier));
+  for (const k of ['netto', 'kosten', 'inkomen', 'onbekend', 'zekerNetto']) assert.deepStrictEqual(b[k], a[k].slice(0, 4), k);
+  assert.strictEqual(b.inkomen[0], 1200000, 'voorbije maand: werkelijk ontvangen (bank)'); assert.strictEqual(b.onbekend[0], false);
+  const zonderBank = L.cijfers(Object.assign(inv(vier), { hist: null })); assert.strictEqual(zonderBank.onbekend[0], true); assert.strictEqual(zonderBank.onbekend[1], false);
+});
+test('dagoverzicht: kosten niet geladen = geen kosten, netto is dan het totaal; koers, korte bedragen', () => {
+  const d = dagData(), ms = ['2026-10', '2026-11'], c = L.cijfers({ rijen: d.rijen, ms, fact: null, fk: null, regels: null, aan: {}, nuYm: '2026-10' });
+  assert.strictEqual(c.kt, null); assert.deepStrictEqual(c.kosten, [0, 0]); assert.deepStrictEqual(c.netto, c.tot.per);
+  assert.strictEqual(L.koers(100, 50, false), 'groen'); assert.strictEqual(L.koers(100, -1, false), 'oranje'); assert.strictEqual(L.koers(-1, -5, false), 'rood'); assert.strictEqual(L.koers(5, 5, true), 'onbekend');
+  assert.deepStrictEqual([2140000, 530359, 84000, -2369246, -40, 0, null].map(L.kortK), ['21k', '5,3k', '840', '−24k', '0', '0', '–']);
+});
+test('dagoverzicht: nu factureren en open offertes', () => {
+  const d = dagData(), rijen = d.rijen.concat([{ id: 'a4', naam: 'Voorbij', status: 'geaccepteerd', zeker: true, cellen: { '2026-09': 90000 }, gef: null, fstatus: null, uitbeeld: false, los: false, inclC: 90000, exclC: 74380 },
+    { id: 'a5', naam: 'Klaar', status: 'geaccepteerd', zeker: true, cellen: { '2026-09': 50000 }, gef: { inclC: 50000, exclC: 41322, maand: { '2026-09': 50000 }, facturen: [] }, fstatus: 'gefactureerd', uitbeeld: false, los: false, inclC: 50000, exclC: 41322 },
+    { id: 'a6', naam: 'Later', status: 'geaccepteerd', zeker: true, cellen: { '2026-12': 50000 }, gef: null, fstatus: null, uitbeeld: false, los: false, inclC: 50000, exclC: 41322 }]);
+  const nf = L.nuFactureren(rijen, '2026-10', 'incl');
+  assert.deepStrictEqual(nf.map(x => x.r.id), ['a1', 'a3', 'a4'].sort((p, q) => nf.find(x => x.r.id === q).bedrag - nf.find(x => x.r.id === p).bedrag), 'geplande maand ≤ nu, nog niet gefactureerd, grootste eerst; a2 (open) en a5/a6 niet');
+  assert.strictEqual(nf.find(x => x.r.id === 'a1').bedrag, 500000, 'zonder factuur: het geplande bedrag'); assert.strictEqual(nf.find(x => x.r.id === 'a3').bedrag, 400000, 'deels gefactureerd: nog openstaand');
+  const op = L.offertesMet(rijen, '2026-10', 'openstaand', 'incl'); assert.deepStrictEqual(op.map(x => [x.r.id, x.eerstvolgende]), [['a2', '2026-11']]);
+  assert.strictEqual(L.offertesMet(rijen.map(x => x.id === 'a2' ? Object.assign({}, x, { uitbeeld: true }) : x), '2026-10', 'openstaand', 'incl').length, 0, 'uit beeld telt niet');
+});
 console.log(`\n${n} tests geslaagd${process.exitCode ? ' (met fouten)' : ''}`);
