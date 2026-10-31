@@ -860,7 +860,7 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 .pv-melding{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 10px;border-radius:6px;margin:6px 0;font-size:12.5px}.pv-melding.goed{background:#E3F1E7;color:#1F5C36}.pv-melding.af{background:#FDE8E8;color:#8B1A1A}.pv-melding.open{background:#FFF4D6;color:#7A5300}
 .pv-form{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}.pv-form input{min-height:40px;padding:0 8px;border:1px solid var(--border);border-radius:8px;font:inherit}.pv-form .vol{grid-column:1/-1}
 </style>
-<link rel="stylesheet" href="mt-stijl-mobiel.css?v=2026-11-01c">
+<link rel="stylesheet" href="mt-stijl-mobiel.css?v=2026-11-01d">
 <link rel="stylesheet" href="mt-rust.css?v=2026-10-24z">
 </head>
 <body>
@@ -2438,6 +2438,13 @@ function bovenRijBijwerken() {
 // De timerknop werkt alleen na een bevestigde rol (rol-laden = uitgeschakeld), met recht op uren, een Microsoft-sessie en een gekoppeld Toggl-account; anders een melding en geen lokale schijntimer.
 function timerStatusM() { if (!(window.MTRol && MTRol.me)) return 'rol-laden'; try { return rolMagM(MTPlanning.ROL.UREN_BOEKEN) ? 'ok' : 'geen-recht'; } catch (e) { return 'rol-laden'; } }
 function togglGekoppeldM() { const s = window.MTToggl && MTToggl.status; if (!s) return false; return !!(s.track ? s.track.gekoppeld : (s.focus && s.focus.gekoppeld)); }
+function timerStartCheckM() {   // centrale controle voor elke manier om een timer te starten
+  const s = timerStatusM();
+  if (s === 'rol-laden') return { ok: false, melding: 'De rol wordt nog geladen \u2014 probeer het zo opnieuw.' };
+  if (s === 'geen-recht') return { ok: false, melding: 'Je rol mag geen timer starten.' };
+  if (_demoMode || !_msAccount || !togglGekoppeldM()) return { ok: false, melding: 'Timer niet beschikbaar: log in en koppel eerst je Toggl-account.' };
+  return { ok: true };
+}
 let _snackTimer = null;
 function snack(tekst, label, fn) {
   const s = document.getElementById('snack'); if (!s) { showToast(tekst); return; }
@@ -2446,26 +2453,27 @@ function snack(tekst, label, fn) {
   s.hidden = false; clearTimeout(_snackTimer); _snackTimer = setTimeout(() => { s.hidden = true; }, 6000);
 }
 function kopTimerOpen() {
-  if (_projSync === 'mislukt') { _projSync = 'wacht'; _projPogingen = 0; kopTimerBijwerken(); _tglEnqueue(() => projSyncAfronden()).catch(() => {}); return; }   // opnieuw proberen
-  if (timerRunning && !activeProject) tkOpen(); else switchTab('timer', document.getElementById('nav-timer'));   // zonder project: de kiezer
+  if (projSyncStatus() === 'mislukt') {   // opnieuw proberen (bij twijfel: eerst vragen)
+    if (_pend.twijfel) { if (!confirm('Toggl toont al een andere lopende timer. Deze uren toch apart opslaan?')) return; _pend.forceer = true; _pend.twijfel = false; }
+    _pend.status = 'wacht'; _pendPogingenSessie = 0; pendOpslaan(); kopTimerBijwerken(); _tglEnqueue(() => pendAfronden()).catch(() => {}); return;
+  }
+  if (timerRunning && _pend && !_pend.projectId) tkOpen(); else switchTab('timer', document.getElementById('nav-timer'));   // zonder project: de kiezer
 }
 let _kopTimerBezig = false;
 async function kopTimerTik() {
-  if (timerRunning) { const naam = activeProject ? mProjNaam(activeProject) : ''; stopTimer(); snack('Timer gestopt' + (naam ? ': ' + naam : '')); return; }
+  if (timerRunning) { const naam = activeProject ? mProjNaam(activeProject) : ''; stopTimer(); if (!timerRunning) snack('Timer gestopt' + (naam ? ': ' + naam : '')); return; }
   if (_kopTimerBezig) return; _kopTimerBezig = true;
   try {
-    const s = timerStatusM();
-    if (s === 'rol-laden') return;
-    if (s === 'geen-recht') { showToast('Je rol mag geen timer starten.'); return; }
+    const g = timerStartCheckM(); if (!g.ok) { if (timerStatusM() !== 'rol-laden') showToast(g.melding); return; }
     let token = false; try { const h = await authHeader(); token = !!(h && h['X-Auth-Token']); } catch (e) {}
-    if (_demoMode || !_msAccount || !token || !togglGekoppeldM()) { showToast('Timer niet beschikbaar: log in en koppel eerst je Toggl-account.'); return; }
-    startTimerZonderProject(); tkOpen();   // de tijd loopt meteen; project en taak kies je daarna
+    if (!token) { showToast('Timer niet beschikbaar: log in en koppel eerst je Toggl-account.'); return; }
+    startTimerLokaal(); tkOpen();   // de tijd loopt meteen (lokaal); project en taak kies je daarna, dan volgt één POST naar Toggl
   } finally { _kopTimerBezig = false; }
 }
 function kopTimerBijwerken() {
   const nieuw = document.documentElement.getAttribute('data-stijl') === 'nieuw', loopt = !!timerRunning;
   const k = document.getElementById('kopTimer');
-  if (k) { k.hidden = !(nieuw && loopt); if (!k.hidden) { const t = document.getElementById('timerDisplay'); document.getElementById('kopTimerT').textContent = (t && t.textContent) || '00:00:00'; document.getElementById('kopTimerP').textContent = _projSync === 'mislukt' ? 'Project niet opgeslagen \u2013 tik om opnieuw' : _projSync === 'wacht' ? 'Project wordt opgeslagen\u2026' : activeProject ? mProjNaam(activeProject) : 'Geen project \u2013 kiezen'; k.classList.toggle('zonder', !activeProject && !_projSync); k.classList.toggle('sync', !!_projSync); } }
+  if (k) { k.hidden = !(nieuw && loopt); if (!k.hidden) { const t = document.getElementById('timerDisplay'); document.getElementById('kopTimerT').textContent = (t && t.textContent) || '00:00:00'; document.getElementById('kopTimerP').textContent = projSyncStatus() === 'mislukt' ? 'Project niet opgeslagen \u2013 tik om opnieuw' : projSyncStatus() === 'wacht' ? 'Project wordt opgeslagen\u2026' : activeProject ? mProjNaam(activeProject) : 'Geen project \u2013 kiezen'; k.classList.toggle('zonder', !activeProject && !projSyncStatus()); k.classList.toggle('sync', !!projSyncStatus()); } }
   const bk = document.getElementById('bk-timer'); if (!bk) return;
   bk.classList.toggle('loopt', loopt); bk.setAttribute('aria-label', loopt ? 'Timer stoppen' : 'Timer starten');
   const l = document.getElementById('bk-timer-l'); if (l) l.textContent = loopt ? 'Stop' : 'Timer';
@@ -3060,7 +3068,11 @@ function saveTasks() { localStorage.setItem("mt_tasks", JSON.stringify(TASKS)); 
 // Buiten de modus "afdwingen" is alles toegestaan (MTRol.mag); de worker blijft voor Toggl de echte poortwachter.
 // TODO (stap 3 van het eindontwerp: offline-outbox en operation-id's): de mobiele Toggl-aanroepen (status, naam, aanmaken) krijgen nog GEEN tg_pending-intentie zoals v2; dat is bestaand gedrag.
 const ROL_TAAK_STATUS = 'taken:status-nieuw|alles', ROL_TAAK_ALLES = 'taken:alles';
-function rolMagM(spec) { return !(window.MTRol && MTRol.mag) || MTRol.mag(spec); }
+function rolMagM(spec) {   // schrijfacties (een spec met niveaus, 'kolom:niveau') zijn dicht zolang de rol niet geladen is (behalve demo en een oude worker zonder rollen); lezen blijft werken
+  if (!(window.MTRol && MTRol.mag)) return true;
+  if (!MTRol.me && String(spec || '').includes(':') && !_demoMode && MTRol.laadReden !== 'oude-worker') return false;
+  return MTRol.mag(spec);
+}
 function rolGeweigerdM(spec, wat) {
   if (rolMagM(spec)) return false;
   try { showToast('⛔ ' + (wat || 'Dit') + ' mag je niet met jouw rol. Er is niets gewijzigd.'); } catch (e) {}
@@ -3601,6 +3613,7 @@ function loadFromStorage() {
 // restoreTimer() is daarom herbruikbaar: hij draait nogmaals zodra de echte
 // projecten er zijn, en bij terugkeren uit de achtergrond.
 function restoreTimer() {
+  try { pendHervat(); } catch (e) {}   // een lokale start of een niet bevestigde POST uit een vorige sessie afronden
   if (timerRunning) return;
   try {
     const saved = JSON.parse(localStorage.getItem("mt_timer") || "null");
@@ -3661,66 +3674,74 @@ function saveTimerState() {
   }
 }
 
-/* ── Timer: één tik start meteen (nog zonder project), daarna kiest een sheet project en taak ──
-   Hergebruik: tgTrack, de Toggl-wachtrij (_tglEnqueue, dus start voor update voor stop), stopTimer en de taakaanmaak (maakTaakAan, ook voor Toggl 2.0 Focus).
-   Het project (en de taak als omschrijving) gaat daarna met een PUT op de lopende entry; zonder keuze loopt de timer gewoon door zonder project. */
-async function startTimerOnTogglZonder() {
-  if (_demoMode || !_msAccount) return false;
+/* ── Timer vanuit de bovenrij: lokaal starten, pas bij een gekozen project één POST naar Toggl ──
+   Tik: een lokale start (persistent in mt_timer_pending, status kiezen); er gaat nog niets naar Toggl. Project (en taak) gekozen: één POST met start = de tiktijd (terugwerkend),
+   via de bestaande wachtrij en tgTrack; daarna een gewone lopende timer. Stop zonder project: eerst een project kiezen (of weggooien), dan één POST met start en stop.
+   Valt een antwoord weg, dan vóór een nieuwe poging de lopende entry opvragen: alleen claimen bij exact dezelfde start (op de seconde) én hetzelfde project; bij twijfel nooit blind een tweede POST. */
+let _pend = null;   // { start (ms), projectId, taak, status: 'kiezen' | 'wacht' | 'mislukt', poging, stop (ms), twijfel, forceer }
+try { _pend = JSON.parse(localStorage.getItem('mt_timer_pending') || 'null'); } catch (e) { _pend = null; }
+let _pendRetryT = null, _pendLoopt = false, _pendPogingenSessie = 0;
+function pendOpslaan() { try { if (_pend) localStorage.setItem('mt_timer_pending', JSON.stringify(_pend)); else localStorage.removeItem('mt_timer_pending'); } catch (e) {} }
+const projSyncStatus = () => (_pend && _pend.projectId) ? (_pend.status === 'mislukt' ? 'mislukt' : 'wacht') : null;
+const isoSec = ms => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
+async function togglCurrent() { const cur = await tgTrack('me/time_entries/current'), e = (cur && cur.id) ? cur : (cur && cur.data); return (e && e.id && e.duration < 0) ? e : null; }   // gooit bij een mislukte opvraag
+function pendPlan() {   // opnieuw proberen via dezelfde wachtrij: na 8, 16, 24 … s, hooguit 6 keer per sessie; bij het opstarten hervat pendHervat het
+  clearTimeout(_pendRetryT); if (!_pend || _pend.twijfel || _pendPogingenSessie >= 6) return; _pendPogingenSessie++;
+  _pendRetryT = setTimeout(() => { if (_pend && _pend.projectId) { _pend.status = 'wacht'; pendOpslaan(); kopTimerBijwerken(); _tglEnqueue(() => pendAfronden()).catch(() => {}); } }, 8000 * _pendPogingenSessie);
+}
+function pendHervat() {   // bij het opstarten en na het laden van de projecten: een nog niet bevestigde POST afronden (een eerdere poging kan zijn aangekomen: dus altijd eerst opvragen)
+  if (!(_pend && _pend.projectId) || !_msAccount || _demoMode || !allProjects().length) return;
+  _pend.poging = Math.max(_pend.poging || 0, 1); _pendPogingenSessie = 0; _tglEnqueue(() => pendAfronden()).catch(() => {});
+}
+async function pendAfronden() {
+  const p = _pend; if (!p || !p.projectId || !_msAccount || _demoMode || _pendLoopt) return false;
+  const proj = allProjects().find(x => String(x.id) === String(p.projectId)); if (!proj) return false;   // projecten nog niet geladen: later opnieuw
+  if (!proj.togglProjectId) { p.status = 'mislukt'; pendOpslaan(); kopTimerBijwerken(); return false; }
+  _pendLoopt = true;
   try {
-    const startISO = new Date(timerStart || Date.now()).toISOString().replace(/\.\d{3}Z$/, 'Z');
-    const made = await tgTrack(`workspaces/${TG_WS}/time_entries`, 'POST', { description: '', start: startISO, duration: -1, created_with: 'mt-mobiel', workspace_id: TG_WS });
-    const id = made && (made.id || (made.data && made.data.id));
-    if (id) { _togglTimerEntryId = id; saveTimerState(); return true; }
-    return false;
-  } catch (e) { console.warn('startTimerOnTogglZonder fout:', e.message); return false; }
-}
-function startTimerZonderProject() {
-  activeProject = null; captureProject = null; _projDoel = null; _projSync = null; _projPogingen = 0; clearTimeout(_projRetryT);
-  timerRunning = true; timerStart = Date.now();
-  saveTimerState(); startTickInterval(); updateTimerUI(); renderCaptureProject();
-  return _tglEnqueue(() => startTimerOnTogglZonder()).catch(() => false);
-}
-let _projSync = null, _projDoel = null, _projPogingen = 0, _projRetryT = null;   // _projSync: null | 'wacht' | 'mislukt' = is het gekozen project al bij Toggl gezet?
-async function togglLopendeEntryNabij(startMs) {   // id van de lopende Toggl-entry als hij (±60 s) bij onze start hoort; null = aantoonbaar geen. Gooit bij een mislukte opvraag: dan nooit een tweede entry maken.
-  const cur = await tgTrack('me/time_entries/current'), e = (cur && cur.id) ? cur : (cur && cur.data);
-  if (e && e.id && e.duration < 0 && Math.abs(new Date(e.start).getTime() - startMs) <= 60000) return e.id;
-  return null;
-}
-function projSyncPlan() {   // opnieuw proberen via dezelfde wachtrij: na 8, 16, 24 … seconden, hooguit 6 keer; daarna wacht het op een tik in de kop
-  clearTimeout(_projRetryT); if (_projPogingen >= 6) return; _projPogingen++;
-  _projRetryT = setTimeout(() => { if (_projDoel) { _projSync = 'wacht'; kopTimerBijwerken(); _tglEnqueue(() => projSyncAfronden()).catch(() => {}); } }, 8000 * _projPogingen);
-}
-async function projSyncAfronden() {   // zet project (en taak als omschrijving) op de lopende entry; altijd binnen de wachtrij
-  const doel = _projDoel; if (!doel) return true;
-  const startMs = timerStart || Date.now();
-  if (!timerRunning && !_togglTimerEntryId) { _projDoel = null; _projSync = null; return false; }
-  try {
-    let id = _togglTimerEntryId;
-    if (!id) { id = await togglLopendeEntryNabij(startMs); if (id) { _togglTimerEntryId = id; saveTimerState(); } }   // de start-POST kwam wel aan maar het antwoord niet: die entry gebruiken
-    if (id) await tgTrack(`workspaces/${TG_WS}/time_entries/${id}`, 'PUT', { project_id: doel.proj.togglProjectId, description: doel.beschrijving, workspace_id: TG_WS });
-    else {   // aantoonbaar geen lopende entry: nu pas een nieuwe, vanaf de echte starttijd
-      const made = await tgTrack(`workspaces/${TG_WS}/time_entries`, 'POST', { description: doel.beschrijving, project_id: doel.proj.togglProjectId, start: new Date(startMs).toISOString().replace(/\.\d{3}Z$/, 'Z'), duration: -1, created_with: 'mt-mobiel', workspace_id: TG_WS });
-      const nid = made && (made.id || (made.data && made.data.id)); if (!nid) throw new Error('geen entry-id');
-      _togglTimerEntryId = nid; saveTimerState();
+    let id = null;
+    if (p.poging > 0 && !p.forceer) {   // een vorige poging kan zijn aangekomen zonder dat het antwoord binnenkwam
+      const cur = await togglCurrent();
+      if (cur) { const exact = Math.floor(new Date(cur.start).getTime() / 1000) === Math.floor(p.start / 1000) && String(cur.project_id) === String(proj.togglProjectId); if (!exact) throw Object.assign(new Error('twijfel'), { twijfel: true }); id = cur.id; }
     }
-    if (_projDoel === doel) { _projDoel = null; _projSync = null; _projPogingen = 0; clearTimeout(_projRetryT); }
-    kopTimerBijwerken(); return true;
+    if (!id) {
+      p.poging = (p.poging || 0) + 1; pendOpslaan();   // vanaf nu kan de POST onderweg zijn: een volgende poging vraagt eerst op
+      const body = { description: p.taak || proj.name, project_id: proj.togglProjectId, start: isoSec(p.start), duration: p.stop ? Math.max(1, Math.round((p.stop - p.start) / 1000)) : -1, created_with: 'mt-mobiel', workspace_id: TG_WS };
+      if (p.stop) body.stop = isoSec(p.stop);
+      const made = await tgTrack(`workspaces/${TG_WS}/time_entries`, 'POST', body), nid = made && (made.id || (made.data && made.data.id)); if (!nid) throw new Error('geen entry-id');
+      id = nid;
+    } else if (p.stop) await tgTrack(`workspaces/${TG_WS}/time_entries/${id}/stop`, 'PATCH');
+    if (!p.stop) { _togglTimerEntryId = id; saveTimerState(); }
+    _pend = null; pendOpslaan(); clearTimeout(_pendRetryT); kopTimerBijwerken(); return true;
   } catch (e) {
-    console.warn('projSyncAfronden fout:', e.message);
-    if (_projDoel === doel) { _projSync = 'mislukt'; projSyncPlan(); }
-    kopTimerBijwerken(); showToast('Project nog niet bij Toggl opgeslagen — we proberen het opnieuw'); return false;
-  }
+    console.warn('pendAfronden fout:', e.message);
+    p.status = 'mislukt'; p.twijfel = !!e.twijfel; pendOpslaan(); pendPlan(); kopTimerBijwerken();
+    showToast(p.twijfel ? 'Toggl toont al een andere lopende timer — tik op de kop om te kiezen' : 'Nog niet bij Toggl opgeslagen — we proberen het opnieuw');
+    return false;
+  } finally { _pendLoopt = false; }
 }
-function zetProjectOpTimer(proj, oms) {   // project (en taak als omschrijving) op de lopende timer; lokaal meteen, Toggl via de wachtrij met zichtbare status
-  activeProject = proj; captureProject = proj;
-  saveTimerState(); updateTimerUI(); renderCaptureProject();
-  if (_demoMode || !_msAccount || !proj.togglProjectId) { _projDoel = null; _projSync = null; kopTimerBijwerken(); return Promise.resolve(true); }
-  _projDoel = { proj, beschrijving: (typeof oms === 'string' && oms.trim()) ? oms.trim() : proj.name }; _projSync = 'wacht'; _projPogingen = 0; clearTimeout(_projRetryT); kopTimerBijwerken();
-  return _tglEnqueue(() => projSyncAfronden()).catch(() => false);
+function startTimerLokaal() {
+  activeProject = null; captureProject = null;
+  timerRunning = true; timerStart = Math.floor(Date.now() / 1000) * 1000;
+  _pend = { start: timerStart, projectId: null, taak: '', status: 'kiezen', poging: 0 }; pendOpslaan(); _pendPogingenSessie = 0;
+  saveTimerState(); startTickInterval(); updateTimerUI(); renderCaptureProject();
 }
-window.addEventListener('beforeunload', ev => { if (_projSync) { ev.preventDefault(); ev.returnValue = ''; } });   // het gekozen project staat nog niet bij Toggllet _tkProj = null;
-function tkOpen() { _tkProj = activeProject || null; tkTeken(); document.getElementById('tkSheet').classList.add('visible'); }
-function tkSluit() { document.getElementById('tkSheet').classList.remove('visible'); }
+function zetProjectOpTimer(proj, oms) {   // project (en taak) bij een lokale start: nu pas de POST; een timer die al bij Toggl loopt verandert hier alleen lokaal van project (zoals voorheen)
+  activeProject = proj; captureProject = proj; saveTimerState(); updateTimerUI(); renderCaptureProject();
+  if (!_pend) return Promise.resolve(true);
+  _pend.projectId = proj.id; _pend.taak = (typeof oms === 'string' && oms.trim()) ? oms.trim() : ''; _pend.status = 'wacht'; _pend.poging = _pend.poging || 0; pendOpslaan(); kopTimerBijwerken();
+  return _tglEnqueue(() => pendAfronden()).catch(() => false);
+}
+function timerLokaalStoppen() { timerRunning = false; clearInterval(timerInterval); timerInterval = null; timerStart = null; saveTimerState(); updateTimerUI(); renderCaptureProject(); }
+function pendWeggooien() { _pend = null; pendOpslaan(); clearTimeout(_pendRetryT); timerLokaalStoppen(); activeProject = null; captureProject = null; updateTimerUI(); kopTimerBijwerken(); }
+window.addEventListener('beforeunload', ev => { if (projSyncStatus() || (_pend && _pend.stop)) { ev.preventDefault(); ev.returnValue = ''; } });   // extra vangnet; de pending-toestand zelf blijft bewaard
+window.addEventListener('online', () => { try { pendHervat(); } catch (e) {} });let _tkProj = null, _tkModus = 'normaal';
+function tkOpen(modus) { _tkModus = modus || 'normaal'; _tkProj = null; tkTeken(); document.getElementById('tkSheet').classList.add('visible'); }
+function tkDicht() { document.getElementById('tkSheet').classList.remove('visible'); }
+function tkSluit() {   // sluiten zonder af te maken: een gekozen project (zonder taak) telt; zonder keuze loopt de timer lokaal door
+  if (_tkProj && _tkModus === 'normaal' && _pend && !_pend.projectId) zetProjectOpTimer(_tkProj, '');
+  tkDicht();
+}
 function tkTeken() {
   const root = document.getElementById('tkInhoud'), titel = document.getElementById('tkTitel'); root.replaceChildren();
   const el = (tag, cls, tekst) => { const e = document.createElement(tag); if (cls) e.className = cls; if (tekst != null) e.textContent = tekst; return e; };
@@ -3728,20 +3749,26 @@ function tkTeken() {
   const PI = 'width:100%;min-height:48px;margin:0;padding:8px 4px;border:0;border-bottom:1px solid var(--n-200,#ece7de);border-radius:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;';
   const lijstEl = () => { const l = el('div'); l.style.cssText = 'max-height:42vh;overflow-y:auto;margin-top:8px'; return l; };
   if (!_tkProj) {
-    titel.textContent = 'Waar werk je aan?';
+    titel.textContent = _tkModus === 'stop' ? 'Stoppen: kies een project' : 'Waar werk je aan?';
     const zoek = veld('tkZoek', 'Zoek project of code…'), lijst = lijstEl(); root.append(zoek, lijst);
     const vul = () => {
-      const q = zoek.value.trim().toLowerCase(), ps = allProjects().filter(p => !q || p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q) || mProjZoek(p).includes(q));
+      const q = zoek.value.trim().toLowerCase(), ps = allProjects().filter(p => p.togglProjectId && (!q || p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q) || mProjZoek(p).includes(q)));
       lijst.replaceChildren();
       for (const [kop, groep] of [['Toegewezen', ps.filter(p => p.assigned)], ['Alle projecten', ps.filter(p => !p.assigned)]]) {
         if (!groep.length) continue; lijst.appendChild(el('div', 'picker-group-label', kop));
         for (const p of groep) { const b = el('button', 'picker-item'); b.type = 'button'; b.style.cssText = PI; const n = el('div'); n.appendChild(el('div', 'picker-item-name', mProjNaam(p))); b.append(n, el('div', 'picker-item-code', mProjNr(p)));
-          b.addEventListener('click', () => { _tkProj = p; zetProjectOpTimer(p, ''); tkTeken(); }); lijst.appendChild(b); }
+          b.addEventListener('click', () => { _tkProj = p; if (_tkModus === 'stop') { if (_pend) { _pend.projectId = p.id; _pend.taak = ''; pendOpslaan(); } activeProject = p; captureProject = p; tkDicht(); stopTimer(); return; } tkTeken(); }); lijst.appendChild(b); }
       }
       if (!ps.length) lijst.appendChild(el('div', 'picker-group-label', 'Geen projecten gevonden'));
     };
     zoek.addEventListener('input', vul); vul();
-    const zonder = el('button', 'btn btn-secondary', 'Later kiezen'); zonder.type = 'button'; zonder.style.cssText = 'width:100%;min-height:48px;margin-top:12px'; zonder.addEventListener('click', tkSluit); root.appendChild(zonder);
+    if (_tkModus === 'stop') {
+      const weg = el('button', 'btn btn-secondary', 'Weggooien (geen uren opslaan)'); weg.type = 'button'; weg.style.cssText = 'width:100%;min-height:48px;margin-top:12px;color:var(--error,#c4322a)';
+      weg.addEventListener('click', () => { if (confirm('Deze tijd weggooien? Er wordt niets in Toggl opgeslagen.')) { pendWeggooien(); tkDicht(); snack('Tijd weggegooid'); } });
+      const terug = el('button', 'btn btn-secondary', 'Terug, de timer loopt door'); terug.type = 'button'; terug.style.cssText = 'width:100%;min-height:48px;margin-top:8px'; terug.addEventListener('click', tkDicht); root.append(weg, terug);
+    } else {
+      const zonder = el('button', 'btn btn-secondary', 'Later kiezen'); zonder.type = 'button'; zonder.style.cssText = 'width:100%;min-height:48px;margin-top:12px'; zonder.addEventListener('click', tkSluit); root.appendChild(zonder);
+    }
   } else {
     titel.textContent = 'Taak erbij?';
     const kop = el('div'); kop.style.cssText = 'display:flex;align-items:center;gap:8px;justify-content:space-between;margin-bottom:8px';
@@ -3749,14 +3776,14 @@ function tkTeken() {
     const anders = el('button', 'btn btn-secondary btn-sm', 'Ander project'); anders.type = 'button'; anders.style.cssText = 'flex:none;white-space:nowrap;min-height:44px;padding:0 12px'; anders.addEventListener('click', () => { _tkProj = null; tkTeken(); });
     kop.append(tekst, anders);
     const inp = veld('tkTaak', 'Taak typen…'), lijst = lijstEl(); root.append(kop, inp, lijst);
-    const klaar = (taak) => { snack('Timer loopt op ' + mProjNaam(_tkProj) + (taak ? ' \u00b7 ' + taak : ''), 'wijzigen', tkOpen); tkSluit(); };
+    const klaar = taak => { zetProjectOpTimer(_tkProj, taak); snack('Timer loopt op ' + mProjNaam(_tkProj) + (taak ? ' \u00b7 ' + taak : '')); tkDicht(); };   // één POST met project en taak
     const vul = () => {
       const q = inp.value.trim(), ql = q.toLowerCase(), ts = tasksFor(_tkProj.code).filter(t => !ql || t.name.toLowerCase().includes(ql)).sort((a, b) => (a.status === 'klaar') - (b.status === 'klaar')).slice(0, 8);
       lijst.replaceChildren();
-      for (const t of ts) { const b = el('button', 'picker-item'); b.type = 'button'; b.style.cssText = PI; b.append(el('div', 'picker-item-name', t.name)); b.addEventListener('click', () => { zetProjectOpTimer(_tkProj, t.name); klaar(t.name); }); lijst.appendChild(b); }
+      for (const t of ts) { const b = el('button', 'picker-item'); b.type = 'button'; b.style.cssText = PI; b.append(el('div', 'picker-item-name', t.name)); b.addEventListener('click', () => klaar(t.name)); lijst.appendChild(b); }
       if (q && !tasksFor(_tkProj.code).some(t => t.name.trim().toLowerCase() === ql)) {
         const b = el('button', 'picker-item', '+ Taak \u2018' + q + '\u2019 aanmaken'); b.type = 'button'; b.style.cssText = PI + 'font-weight:600;';
-        b.addEventListener('click', () => { if (b.disabled) return; b.disabled = true; const t = maakTaakAan(_tkProj, q, null, null); if (!t) { b.disabled = false; return; } zetProjectOpTimer(_tkProj, t.name); klaar(t.name); }); lijst.appendChild(b);
+        b.addEventListener('click', () => { if (b.disabled) return; b.disabled = true; const t = maakTaakAan(_tkProj, q, null, null); if (!t) { b.disabled = false; return; } klaar(t.name); }); lijst.appendChild(b);
       }
     };
     inp.addEventListener('input', vul); vul();
@@ -3773,6 +3800,7 @@ function toggleTimer() {
 }
 
 function startTimer(oms) {   // oms: omschrijving van de Toggl-entry (Vandaag geeft de taaknaam mee); zonder: de projectnaam
+  const toegang = timerStartCheckM(); if (!toegang.ok) { if (toegang.melding) showToast(toegang.melding); return Promise.resolve(false); }   // bevestigde rol, Microsoft-sessie en Toggl-koppeling: ook voor de timercirkel, de projectsheet en Vandaag
   if (!activeProject) {
     alert("Selecteer eerst een project.");
     return Promise.resolve(false);
@@ -3792,6 +3820,7 @@ function startTimer(oms) {   // oms: omschrijving van de Toggl-entry (Vandaag ge
 }
 
 function stopTimer() {
+  if (_pend && !_pend.projectId) { tkOpen('stop'); return; }   // een lokale timer zonder project: eerst een project kiezen of weggooien, nooit stil verliezen
   timerRunning = false;
   clearInterval(timerInterval);
   timerInterval = null;
@@ -3801,7 +3830,11 @@ function stopTimer() {
   renderCaptureProject();
   // Geserialiseerd (na een evt. lopende start-POST); niet bevestigd → melden,
   // het pending-id wordt bij de volgende sync/stop alsnog gestopt.
-  if (_projDoel) _tglEnqueue(() => projSyncAfronden()).then(ok => { if (ok === false) showToast('⚠ Project niet bij Toggl gezet — pas de entry in Toggl aan'); }).catch(() => {});   // eerst het gekozen project afronden, dan stoppen
+  if (_pend && _pend.projectId) {   // de entry bestaat nog niet (of niet bevestigd) bij Toggl: één POST met start en stop
+    _pend.stop = Math.max(Math.floor(Date.now() / 1000) * 1000, _pend.start + 1000); _pend.status = 'wacht'; pendOpslaan(); kopTimerBijwerken();
+    _tglEnqueue(() => pendAfronden()).then(ok => { if (ok === false) showToast('⚠ Uren nog niet bij Toggl opgeslagen — we proberen het opnieuw'); }).catch(() => {});
+    return;
+  }
   _tglEnqueue(() => stopTimerOnToggl()).then(ok => {
     if (ok === false) showToast('⚠ Toggl-stop niet bevestigd — wordt automatisch opnieuw geprobeerd');
   }).catch(() => {});
