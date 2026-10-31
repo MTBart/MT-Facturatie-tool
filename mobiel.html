@@ -860,7 +860,7 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 .pv-melding{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 10px;border-radius:6px;margin:6px 0;font-size:12.5px}.pv-melding.goed{background:#E3F1E7;color:#1F5C36}.pv-melding.af{background:#FDE8E8;color:#8B1A1A}.pv-melding.open{background:#FFF4D6;color:#7A5300}
 .pv-form{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}.pv-form input{min-height:40px;padding:0 8px;border:1px solid var(--border);border-radius:8px;font:inherit}.pv-form .vol{grid-column:1/-1}
 </style>
-<link rel="stylesheet" href="mt-stijl-mobiel.css?v=2026-11-01a">
+<link rel="stylesheet" href="mt-stijl-mobiel.css?v=2026-11-01b">
 <link rel="stylesheet" href="mt-rust.css?v=2026-10-24z">
 </head>
 <body>
@@ -1368,6 +1368,18 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
     <span>Meer</span>
   </button>
 </nav>
+
+<!-- ── TIMER: project en taak kiezen (nieuwe stijl: na een tik op de timerknop) ── -->
+<div class="sheet-overlay" id="tkSheet" onclick="if(event.target===this)tkSluit()">
+  <div class="sheet" role="dialog" aria-label="Project en taak voor de timer">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head" style="position:relative">
+      <button class="sheet-close" onclick="tkSluit()" aria-label="Sluiten">×</button>
+      <div class="sheet-title" id="tkTitel">Waar werk je aan?</div>
+    </div>
+    <div id="tkInhoud" style="padding:0 16px 16px"></div>
+  </div>
+</div>
 
 <!-- ── MEER (Capture, Rapportage, Voorraad, Feedback: dezelfde tabs, via het menu) ── -->
 <div class="sheet-overlay" id="meerSheet" onclick="if(event.target===this)sluitMeer()">
@@ -2431,20 +2443,16 @@ function snack(tekst, label, fn) {
   if (label && fn) { const b = document.createElement('button'); b.type = 'button'; b.textContent = label; b.addEventListener('click', () => { s.hidden = true; fn(); }); s.appendChild(b); }
   s.hidden = false; clearTimeout(_snackTimer); _snackTimer = setTimeout(() => { s.hidden = true; }, 6000);
 }
-function laatsteProjectM() { if (activeProject) return activeProject; try { const id = localStorage.getItem('mt_laatste_project'); return id ? (allProjects().find(p => String(p.id) === id) || null) : null; } catch (e) { return null; } }
-function kopTimerOpen() { switchTab('timer', document.getElementById('nav-timer')); }
+function kopTimerOpen() { if (timerRunning && !activeProject) tkOpen(); else switchTab('timer', document.getElementById('nav-timer')); }   // zonder project: de kiezer
 function kopTimerTik() {
   if (timerRunning) { const naam = activeProject ? mProjNaam(activeProject) : ''; stopTimer(); snack('Timer gestopt' + (naam ? ': ' + naam : '')); return; }
   if (!timerMagM()) { showToast('Je rol mag geen timer starten.'); return; }
-  const p = laatsteProjectM();
-  if (!p) { kopTimerOpen(); showToast('Kies eerst een project om de timer te starten.'); const l = document.getElementById('pickerList'); if (l && l.scrollIntoView) l.scrollIntoView({ block: 'center' }); return; }
-  activeProject = p; captureProject = p;
-  startTimer(); snack('Timer gestart: ' + mProjNaam(p), 'wijzigen', kopTimerOpen);
+  startTimerZonderProject(); tkOpen();   // de tijd loopt meteen; project en taak kies je daarna
 }
 function kopTimerBijwerken() {
-  const nieuw = document.documentElement.getAttribute('data-stijl') === 'nieuw', loopt = !!(timerRunning && activeProject);
+  const nieuw = document.documentElement.getAttribute('data-stijl') === 'nieuw', loopt = !!timerRunning;
   const k = document.getElementById('kopTimer');
-  if (k) { k.hidden = !(nieuw && loopt); if (!k.hidden) { const t = document.getElementById('timerDisplay'); document.getElementById('kopTimerT').textContent = (t && t.textContent) || '00:00:00'; document.getElementById('kopTimerP').textContent = mProjNaam(activeProject); } }
+  if (k) { k.hidden = !(nieuw && loopt); if (!k.hidden) { const t = document.getElementById('timerDisplay'); document.getElementById('kopTimerT').textContent = (t && t.textContent) || '00:00:00'; document.getElementById('kopTimerP').textContent = activeProject ? mProjNaam(activeProject) : 'Geen project \u2013 kiezen'; k.classList.toggle('zonder', !activeProject); } }
   const bk = document.getElementById('bk-timer'); if (!bk) return;
   bk.classList.toggle('loopt', loopt); bk.setAttribute('aria-label', loopt ? 'Timer stoppen' : 'Timer starten');
   const l = document.getElementById('bk-timer-l'); if (l) l.textContent = loopt ? 'Stop' : 'Timer';
@@ -3583,9 +3591,9 @@ function restoreTimer() {
   if (timerRunning) return;
   try {
     const saved = JSON.parse(localStorage.getItem("mt_timer") || "null");
-    if (!(saved && saved.running && saved.projectId)) return;
-    const proj = allProjects().find(p => p.id === saved.projectId);
-    if (!proj) return;   // projecten mogelijk nog niet geladen — volgende poging pakt 'm
+    if (!(saved && saved.running)) return;
+    const proj = saved.projectId ? allProjects().find(p => p.id === saved.projectId) : null;   // een timer zonder project (nog niet gekozen) herstelt ook
+    if (saved.projectId && !proj) return;   // projecten mogelijk nog niet geladen — volgende poging pakt 'm
     activeProject = proj;
     captureProject = proj;
     timerStart = saved.start;
@@ -3630,9 +3638,9 @@ async function syncTimerWithToggl() {
 }
 
 function saveTimerState() {
-  if (timerRunning && activeProject) {
+  if (timerRunning) {
     localStorage.setItem("mt_timer", JSON.stringify({
-      running:true,projectId:activeProject.id,start:timerStart,
+      running:true,projectId:activeProject?activeProject.id:null,start:timerStart,
       togglEntryId:_togglTimerEntryId
     }));
   } else {
@@ -3640,6 +3648,87 @@ function saveTimerState() {
   }
 }
 
+/* ── Timer: één tik start meteen (nog zonder project), daarna kiest een sheet project en taak ──
+   Hergebruik: tgTrack, de Toggl-wachtrij (_tglEnqueue, dus start voor update voor stop), stopTimer en de taakaanmaak (maakTaakAan, ook voor Toggl 2.0 Focus).
+   Het project (en de taak als omschrijving) gaat daarna met een PUT op de lopende entry; zonder keuze loopt de timer gewoon door zonder project. */
+async function startTimerOnTogglZonder() {
+  if (_demoMode || !_msAccount) return false;
+  try {
+    const startISO = new Date(timerStart || Date.now()).toISOString().replace(/\.\d{3}Z$/, 'Z');
+    const made = await tgTrack(`workspaces/${TG_WS}/time_entries`, 'POST', { description: '', start: startISO, duration: -1, created_with: 'mt-mobiel', workspace_id: TG_WS });
+    const id = made && (made.id || (made.data && made.data.id));
+    if (id) { _togglTimerEntryId = id; saveTimerState(); return true; }
+    return false;
+  } catch (e) { console.warn('startTimerOnTogglZonder fout:', e.message); return false; }
+}
+function startTimerZonderProject() {
+  activeProject = null; captureProject = null;
+  timerRunning = true; timerStart = Date.now();
+  saveTimerState(); startTickInterval(); updateTimerUI(); renderCaptureProject();
+  return _tglEnqueue(() => startTimerOnTogglZonder()).catch(() => false);
+}
+function zetProjectOpTimer(proj, oms) {   // project (en taak als omschrijving) op de lopende timer; lokaal meteen, Toggl via de wachtrij
+  activeProject = proj; captureProject = proj;
+  saveTimerState(); updateTimerUI(); renderCaptureProject();
+  if (_demoMode || !_msAccount || !proj.togglProjectId) return Promise.resolve(true);
+  const beschrijving = (typeof oms === 'string' && oms.trim()) ? oms.trim() : proj.name;
+  return _tglEnqueue(async () => {
+    if (!timerRunning || activeProject !== proj) return false;   // intussen gestopt of een ander project gekozen
+    try {
+      if (_togglTimerEntryId) { await tgTrack(`workspaces/${TG_WS}/time_entries/${_togglTimerEntryId}`, 'PUT', { project_id: proj.togglProjectId, description: beschrijving, workspace_id: TG_WS }); return true; }
+      const startISO = new Date(timerStart || Date.now()).toISOString().replace(/\.\d{3}Z$/, 'Z');   // de start-POST kwam niet aan: nu alsnog een entry met project, vanaf de echte starttijd
+      const made = await tgTrack(`workspaces/${TG_WS}/time_entries`, 'POST', { description: beschrijving, project_id: proj.togglProjectId, start: startISO, duration: -1, created_with: 'mt-mobiel', workspace_id: TG_WS });
+      const id = made && (made.id || (made.data && made.data.id)); if (id) { _togglTimerEntryId = id; saveTimerState(); return true; }
+      return false;
+    } catch (e) { console.warn('zetProjectOpTimer fout:', e.message); showToast('Project niet bijgewerkt bij Toggl — kies het opnieuw'); return false; }
+  }).catch(() => false);
+}
+let _tkProj = null;
+function tkOpen() { _tkProj = activeProject || null; tkTeken(); document.getElementById('tkSheet').classList.add('visible'); }
+function tkSluit() { document.getElementById('tkSheet').classList.remove('visible'); }
+function tkTeken() {
+  const root = document.getElementById('tkInhoud'), titel = document.getElementById('tkTitel'); root.replaceChildren();
+  const el = (tag, cls, tekst) => { const e = document.createElement(tag); if (cls) e.className = cls; if (tekst != null) e.textContent = tekst; return e; };
+  const veld = (id, ph) => { const i = el('input', 'picker-search'); i.type = 'search'; i.id = id; i.placeholder = ph; i.setAttribute('aria-label', ph); i.autocomplete = 'off'; i.style.cssText = 'width:100%;font-size:16px;min-height:44px'; return i; };
+  const PI = 'width:100%;min-height:48px;margin:0;padding:8px 4px;border:0;border-bottom:1px solid var(--n-200,#ece7de);border-radius:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;';
+  const lijstEl = () => { const l = el('div'); l.style.cssText = 'max-height:42vh;overflow-y:auto;margin-top:8px'; return l; };
+  if (!_tkProj) {
+    titel.textContent = 'Waar werk je aan?';
+    const zoek = veld('tkZoek', 'Zoek project of code…'), lijst = lijstEl(); root.append(zoek, lijst);
+    const vul = () => {
+      const q = zoek.value.trim().toLowerCase(), ps = allProjects().filter(p => !q || p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q) || mProjZoek(p).includes(q));
+      lijst.replaceChildren();
+      for (const [kop, groep] of [['Toegewezen', ps.filter(p => p.assigned)], ['Alle projecten', ps.filter(p => !p.assigned)]]) {
+        if (!groep.length) continue; lijst.appendChild(el('div', 'picker-group-label', kop));
+        for (const p of groep) { const b = el('button', 'picker-item'); b.type = 'button'; b.style.cssText = PI; const n = el('div'); n.appendChild(el('div', 'picker-item-name', mProjNaam(p))); b.append(n, el('div', 'picker-item-code', mProjNr(p)));
+          b.addEventListener('click', () => { _tkProj = p; zetProjectOpTimer(p, ''); tkTeken(); }); lijst.appendChild(b); }
+      }
+      if (!ps.length) lijst.appendChild(el('div', 'picker-group-label', 'Geen projecten gevonden'));
+    };
+    zoek.addEventListener('input', vul); vul();
+    const zonder = el('button', 'btn btn-secondary', 'Later kiezen'); zonder.type = 'button'; zonder.style.cssText = 'width:100%;min-height:48px;margin-top:12px'; zonder.addEventListener('click', tkSluit); root.appendChild(zonder);
+  } else {
+    titel.textContent = 'Taak erbij?';
+    const kop = el('div'); kop.style.cssText = 'display:flex;align-items:center;gap:8px;justify-content:space-between;margin-bottom:8px';
+    const tekst = el('div'); tekst.style.cssText = 'min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'; tekst.textContent = mProjNaam(_tkProj) + ' · ' + mProjNr(_tkProj);
+    const anders = el('button', 'btn btn-secondary btn-sm', 'Ander project'); anders.type = 'button'; anders.style.cssText = 'flex:none;white-space:nowrap;min-height:44px;padding:0 12px'; anders.addEventListener('click', () => { _tkProj = null; tkTeken(); });
+    kop.append(tekst, anders);
+    const inp = veld('tkTaak', 'Taak typen…'), lijst = lijstEl(); root.append(kop, inp, lijst);
+    const klaar = (taak) => { snack('Timer loopt op ' + mProjNaam(_tkProj) + (taak ? ' \u00b7 ' + taak : ''), 'wijzigen', tkOpen); tkSluit(); };
+    const vul = () => {
+      const q = inp.value.trim(), ql = q.toLowerCase(), ts = tasksFor(_tkProj.code).filter(t => !ql || t.name.toLowerCase().includes(ql)).sort((a, b) => (a.status === 'klaar') - (b.status === 'klaar')).slice(0, 8);
+      lijst.replaceChildren();
+      for (const t of ts) { const b = el('button', 'picker-item'); b.type = 'button'; b.style.cssText = PI; b.append(el('div', 'picker-item-name', t.name)); b.addEventListener('click', () => { zetProjectOpTimer(_tkProj, t.name); klaar(t.name); }); lijst.appendChild(b); }
+      if (q && !tasksFor(_tkProj.code).some(t => t.name.trim().toLowerCase() === ql)) {
+        const b = el('button', 'picker-item', '+ Taak \u2018' + q + '\u2019 aanmaken'); b.type = 'button'; b.style.cssText = PI + 'font-weight:600;';
+        b.addEventListener('click', () => { const t = maakTaakAan(_tkProj, q, null, null); if (!t) return; zetProjectOpTimer(_tkProj, t.name); klaar(t.name); }); lijst.appendChild(b);
+      }
+    };
+    inp.addEventListener('input', vul); vul();
+    const gereed = el('button', 'btn btn-primary', 'Klaar, zonder taak'); gereed.type = 'button'; gereed.style.cssText = 'width:100%;min-height:48px;margin-top:12px'; gereed.addEventListener('click', () => klaar('')); root.appendChild(gereed);
+    setTimeout(() => { try { inp.focus(); } catch (e) {} }, 60);
+  }
+}
 function toggleTimer() {
   if (timerRunning) {
     stopTimer();
@@ -3663,7 +3752,6 @@ function startTimer(oms) {   // oms: omschrijving van de Toggl-entry (Vandaag ge
   updateSpMockPath();
   // Geserialiseerd: start echt klokkende entry op Track (alleen bij ingelogd + echt project)
   const proj = activeProject;
-  try { localStorage.setItem('mt_laatste_project', String(proj.id)); } catch (e) {}   // voor de timerknop in de bovenrij: het laatst gebruikte project
   const entryOms = (typeof oms === 'string' && oms.trim()) ? oms.trim() : proj.name;
   return _tglEnqueue(() => startTimerOnToggl(proj, entryOms)).catch(() => false);   // de uitkomst van de Toggl-start (true/false); de meeste aanroepers negeren die
 }
@@ -3717,16 +3805,16 @@ function updateTimerUI() {
   const projCode = document.getElementById("timerProjectCode");
   document.getElementById("timerEditStartBtn").style.display = (timerRunning && timerStart) ? "" : "none";
 
-  if (timerRunning && activeProject) {
+  if (timerRunning) {
     circle.classList.add("running");
     icon.textContent = "⏸";
     label.textContent = "STOP";
     display.style.display = "block";
     bar.classList.add("visible");
-    barProject.textContent = activeProject.name;
-    barCode.textContent = activeProject.code;
-    projName.textContent = activeProject.name;
-    projCode.textContent = activeProject.code;
+    barProject.textContent = activeProject ? activeProject.name : "Geen project";
+    barCode.textContent = activeProject ? activeProject.code : "";
+    projName.textContent = activeProject ? activeProject.name : "Geen project";
+    projCode.textContent = activeProject ? activeProject.code : "kies een project";
   } else {
     circle.classList.remove("running");
     icon.textContent = "▶";
@@ -3783,8 +3871,10 @@ function pickerItemHtml(p) {
 }
 
 function selectProject(id) {
+  const was = activeProject;
   activeProject = allProjects().find(p => p.id === id);
   captureProject = activeProject;
+  if (timerRunning && !was && activeProject) zetProjectOpTimer(activeProject, "");   // een timer zonder project krijgt nu zijn project (ook bij Toggl)
   if (timerRunning) {
     // update running project
     saveTimerState();
@@ -7132,19 +7222,23 @@ function saveNewTask() {
   if (rolGeweigerdM(ROL_TAAK_STATUS, 'Een taak toevoegen')) { addingTask = false; renderSheetTasks(); return; }
   const name = document.getElementById("tfNewName").value.trim();
   if (!name) { alert("Geef de taak een naam."); return; }
+  const task = maakTaakAan(currentSheetProject, name, document.getElementById("tfNewDate").value.trim(), document.getElementById("tfNewEst").value.trim());
+  addingTask = false;
+  renderSheetTasks();   // geweigerd of gelukt: het formulier gaat dicht
+}
+
+// Een taak bij een project aanmaken (lokaal + Toggl 2.0 Focus als het project een Toggl-ID heeft); ook gebruikt door de timerkiezer. null = geweigerd (rol).
+function maakTaakAan(proj, name, datum, est) {
   const task = {
     id: "t"+Date.now(), name,
     status: "todo",
-    date: document.getElementById("tfNewDate").value.trim() || null,
-    est: document.getElementById("tfNewEst").value.trim() || null,
+    date: datum || null,
+    est: est || null,
     tag: null, note: "", togglTaskId: null
   };
-  if (!addTaskToProject(currentSheetProject.code, task)) { addingTask = false; renderSheetTasks(); return; }   // geweigerd: ook geen Toggl-aanroep
-  addingTask = false;
-  renderSheetTasks();
+  if (!addTaskToProject(proj.code, task)) return null;   // geweigerd: ook geen Toggl-aanroep
 
   // Sync naar Toggl 2.0 Focus als project een echte Toggl-ID heeft
-  const proj = currentSheetProject;
   if (!_demoMode && _msAccount && proj.togglProjectId) {
     focusFetch('tasks', 'POST', {name, status_id: _PLAN_TG_STATUS.todo, project_id: proj.togglProjectId})
       .then(res => {
@@ -7162,6 +7256,7 @@ function saveNewTask() {
         showToast('Taak lokaal opgeslagen — sync naar Toggl 2.0 later');
       });
   }
+  return task;
 }
 
 /* =====================================================================

@@ -136,4 +136,4 @@ html[data-stijl="nieuw"] .boven-knop.loopt{background:var(--error-50);border-col
 html[data-stijl="nieuw"] .snack{position:fixed;left:12px;right:12px;bottom:calc(var(--nav-h) + 16px + env(safe-area-inset-bottom,0px));z-index:450;display:flex;align-items:center;gap:8px;padding:6px 6px 6px 14px;border-radius:8px;background:var(--n-900);color:#fff;box-shadow:var(--shadow-pop);font:500 14px/20px var(--sans)}
 html[data-stijl="nieuw"] .snack[hidden]{display:none}
 html[data-stijl="nieuw"] .snack span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-html[data-stijl="nieuw"] .snack button{min-height:44px;padding:0 12px;border:0;border-radius:6px;background:none;color:var(--gold-mid);font:600 14px var(--sans);cursor:pointer}
+html[data-stijl="nieuw"] .snack button{min-height:44px;padding:0 12px;border:0;border-radius:6px;background:none;color:var(--gold-mid);font:600 14px var(--sans);cursor:pointer}html[data-stijl="nieuw"] .kop-timer.zonder .kop-timer-p{color:var(--gold-mid);font-weight:600;opacity:1}
