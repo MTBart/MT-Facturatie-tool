@@ -792,6 +792,12 @@
   // Een opname die van v0.3 gemigreerd is hasht als de oorspronkelijke versie (_versie_oud): zo blijft een bestaande vrijgave geldig na het lezen. Alleen de versie-velden worden zo gelezen, de inhoud niet.
   const hashVorm = o => { if (!isObj(o) || o._versie_oud === undefined) return o; const c = Object.assign({}, o, { versie: o._versie_oud }); delete c._versie_oud; return c; };
   K.inhoudsHash = opname => hash53(canon(hashVorm(opname)) + '#fotos:' + JSON.stringify(werkzoneFotos(opname)));
+  // Met welke kern is de vrijgave gevalideerd? Een vrijgave uit v0.3 blijft geldig (de hash is gelijk), maar de N-hoekkern van v0.4 heeft hem niet gecontroleerd: dat staat er dan bij.
+  K.vrijgaveKern = opname => {
+    if (!opname || opname.status !== 'vrijgegeven' || !isObj(opname.vrijgave) || !K.isVrijgaveGeldig(opname)) return null;
+    const versie = String(opname.vrijgave.kern || (opname._versie_oud !== undefined ? opname._versie_oud : opname.versie) || K.VERSIE), oud = geldigeVersie(versie) && nieuwerDan(K.VERSIE, versie);
+    return { versie, oud, tekst: oud ? 'Gevalideerd met oude kern (v' + versie + ')' : 'Gevalideerd met kern v' + versie };
+  };
   K.isVrijgaveGeldig = opname => !!opname && opname.status === 'vrijgegeven' && isObj(opname.vrijgave) && opname.vrijgave.hash === K.inhoudsHash(opname);
   // De status zoals hij nu geldt: een vrijgave waarvan de inhoud veranderd is, heet "vrijgave-vervallen".
   K.effectieveStatus = opname => !opname ? null : opname.status === 'vrijgegeven' ? (K.isVrijgaveGeldig(opname) ? 'vrijgegeven' : 'vrijgave-vervallen') : (opname.status || 'concept');
@@ -807,7 +813,7 @@
     if (!c.kan) return { opname: null, fout: 'Vrijgeven kan nog niet: ' + c.redenen.length + (c.redenen.length === 1 ? ' reden.' : ' redenen.'), check: c };
     const o = kloon(opname), t = tijd || nu();
     o.status = 'vrijgegeven'; o.bijgewerkt = t;
-    o.vrijgave = { hash: K.inhoudsHash(o), tijd: t, door: door || null, scope: c.scope, uitzonderingen: c.uitzonderingen, volledig_gemeten: c.volledig_gemeten };
+    o.vrijgave = { hash: K.inhoudsHash(o), tijd: t, door: door || null, scope: c.scope, uitzonderingen: c.uitzonderingen, volledig_gemeten: c.volledig_gemeten, kern: K.VERSIE };
     return { opname: o, fout: null, check: c };
   };
 

@@ -165,7 +165,8 @@
   };
   X.statusTekst = rec => {
     const st = K.effectieveStatus(rec.opname);
-    return st === 'vrijgegeven' ? 'Vrijgegeven' : st === 'vrijgave-vervallen' ? 'Vrijgave vervallen' : st === 'opgeslagen' ? 'Opgeslagen' : 'Concept';
+    const kern = st === 'vrijgegeven' ? K.vrijgaveKern(rec.opname) : null;
+    return st === 'vrijgegeven' ? (kern && kern.oud ? 'Vrijgegeven, oude kern v' + kern.versie : 'Vrijgegeven') : st === 'vrijgave-vervallen' ? 'Vrijgave vervallen' : st === 'opgeslagen' ? 'Opgeslagen' : 'Concept';
   };
 
   // ── Scherm: lijst ──
@@ -456,6 +457,7 @@
       tegel('Rondje', rd.bekeken + ' van ' + rd.tot, rd.later ? rd.later + ' later' : ''),
       tegel('Optioneel', t.optie.compleet + ' van ' + t.optie.n, 'mag leeg')));
     body.appendChild(h('div', { class: 'opn-statusregel' }, h('span', { class: 'opn-pil opn-pil-' + st, text: X.statusTekst(S.rec) }), st === 'vrijgave-vervallen' ? h('span', { class: 'opn-rij-sub', text: 'er is na het vrijgeven iets gewijzigd' }) : null));
+    { const kern = st === 'vrijgegeven' ? K.vrijgaveKern(o) : null; if (kern && kern.oud) body.appendChild(h('p', { class: 'opn-waarschuwing', text: kern.tekst + ': de vrijgave blijft geldig, maar de nieuwe kern (v' + K.VERSIE + ') heeft deze opname niet opnieuw gecontroleerd. Geef hem opnieuw vrij om dat wel te doen.' })); }
     body.appendChild(X.planBlok(r, { titel: 'Plattegrond', opWand: w => X.openWand(w, null) }));
     body.appendChild(sluitKaart(r));
     // wat moet er nog voor vrijgeven (elke regel is tikbaar)

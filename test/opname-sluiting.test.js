@@ -202,4 +202,16 @@ test('meerdere foto\'s van hetzelfde vlak geven geen extra wand: een extra foto 
   let met = goed(K.voegFotoToe(ruimteVier(), foto('G1', 'W4'))); met = goed(K.voegFotoToe(met, foto('G2', 'W4', true))); const weg = goed(K.verwijderLaatsteWand(goed(K.openRond(met, 'R1')), 'R1'));
   assert.strictEqual(K.fotosVan(weg, 'R1', 'W4').length, 0); assert.strictEqual(weg.fotos_verwijderd.length, 2);
 });
+test('historische v0.3-vrijgave blijft geldig maar staat als "gevalideerd met oude kern (v0.3)"; een nieuwe vrijgave staat op de huidige kern', () => {
+  const fs = require('fs'), path = require('path');
+  const oud = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'opname-v03-vrijgegeven.json'), 'utf8')), gelezen = K.lees(oud);
+  assert.strictEqual(K.effectieveStatus(gelezen.opname), 'vrijgegeven', 'de oude vrijgave blijft geldig');
+  const kern = K.vrijgaveKern(gelezen.opname); assert.deepStrictEqual([kern.versie, kern.oud, kern.tekst], ['0.3', true, 'Gevalideerd met oude kern (v0.3)']);
+  // een wijziging laat de vrijgave vervallen (dan is er geen kernlabel meer)
+  const gewijzigd = goed(K.zetMaat(gelezen.opname, 'R1', 'wanden.N.maten.lengte', { staat: 'gemeten', waarde: 5770, bron: 'hand' }, T0)); assert.strictEqual(K.vrijgaveKern(gewijzigd), null);
+  // opnieuw vrijgeven met de nieuwe kern: dan staat de huidige kern erop
+  const opnieuw = K.vrijgeven(gelezen.opname, 'test', T0); assert.strictEqual(opnieuw.fout, null, opnieuw.fout);
+  const k2 = K.vrijgaveKern(opnieuw.opname); assert.deepStrictEqual([k2.versie, k2.oud, k2.tekst], [K.VERSIE, false, 'Gevalideerd met kern v' + K.VERSIE]); assert.strictEqual(opnieuw.opname.vrijgave.kern, K.VERSIE);
+  assert.strictEqual(K.vrijgaveKern(K.nieuweOpname({ ruimtes: [K.nieuweRuimte({ id: 'R1' })] })), null, 'zonder vrijgave geen kernlabel');
+});
 console.log('\n' + n + ' tests geslaagd');
