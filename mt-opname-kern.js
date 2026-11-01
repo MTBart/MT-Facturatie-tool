@@ -379,7 +379,11 @@
       for (const x of c.redenen) redenen.push(Object.assign({ ruimte: r.id }, x));
       for (const x of c.waarschuwingen) waarschuwingen.push(Object.assign({ ruimte: r.id }, x));
       scope.push(c.scope); for (const x of c.uitzonderingen) uitzonderingen.push(x);
-      for (const w of K.WANDEN) if (!K.fotosVan(opname, r.id, w).length) waarschuwingen.push({ ruimte: r.id, code: 'foto-ontbreekt', wand: w, tekst: (r.naam || r.id) + ': nog geen foto van de ' + wandTekst(w) + '.' });
+      // een foto van elke werkzone-wand is verplicht (maat + foto); van de andere wanden is een ontbrekende foto een waarschuwing
+      for (const w of K.WANDEN) if (!K.fotosVan(opname, r.id, w).length) {
+        if (lijst(r.werkzone).includes(w)) redenen.push({ ruimte: r.id, code: 'foto', wand: w, tekst: (r.naam || r.id) + ': maak eerst een foto van de ' + wandTekst(w) + ' (werkzone).' });
+        else waarschuwingen.push({ ruimte: r.id, code: 'foto-ontbreekt', wand: w, tekst: (r.naam || r.id) + ': nog geen foto van de ' + wandTekst(w) + '.' });
+      }
     }
     for (const f of lijst(opname && opname.fotos)) if (f && !f.ruimte) waarschuwingen.push({ code: 'foto-zonder-ruimte', tekst: 'Foto ' + (f.bestand || f.id) + ' heeft geen ruimte.' });
     const kan = redenen.length === 0;

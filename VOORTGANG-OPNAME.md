@@ -28,7 +28,7 @@ Basis: 4 wandlengtes + plafond + diagonaal A (6) + breedte en positie van 4 open
 1. **Rondje op "later" blokkeert het vrijgeven** (nu vastgelegd door Bart/ChatGPT punt C).
 2. **Extra punten tellen mee voor het vrijgeven**, zoals in het prototype.
 3. **Een ontbrekende definitie** blokkeert in de werkzone en is daarbuiten een waarschuwing (besluit regie).
-4. **Een ontbrekende wandfoto is een waarschuwing** (`foto-ontbreekt`), geen blokkade. Besluit 1 zegt "maat + foto verplicht"; zeg het als de foto het vrijgeven moet blokkeren.
+4. **Een ontbrekende foto van een werkzone-wand blokkeert** (reden `foto`), van de andere wanden is het een waarschuwing (`foto-ontbreekt`). Foto's tellen niet mee in de inhoudshash: een foto verwijderen maakt een vrijgave dus niet ongeldig.
 5. **Een optionele maat op later blokkeert** (het is een bewust uitgestelde taak). Optioneel en leeg mag.
 6. **De wandbevestiging telt mee in de basis** (x van n) en moet gekozen zijn voor het vrijgeven. "Afgedekt" en "niet beoordeeld" mogen, maar staan in de uitzonderingen.
 7. **Rondje afwijkingen = de stap "bijzonderheden op deze wand?"**: dezelfde keuze, de route vraagt hem niet twee keer. Het rondje blijft zes categorieën per wand.

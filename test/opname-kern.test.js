@@ -45,7 +45,8 @@ function allesGemeten(op) {
   return op;
 }
 const rondjeKlaar = (op, zone, afwezig) => { let r = R(op); for (const w of zone) for (const [c] of K.RONDJE_CATEGORIEEN) r = K.zetRondje(r, w, c, afwezig && (c === 'water' || c === 'afw') ? 'afwezig' : 'aanwezig', T0).ruimte; const o = kopie(op); o.ruimtes[0] = r; return o; };
-const klaar = () => rondjeKlaar(allesGemeten(joe()), ['O'], true);
+const metFoto = op => K.voegFotoToe(op, { bestand: 'joe-oost.jpg', ruimte: 'R1', wand: 'O' }).opname;     // een foto van de werkzone-wand is verplicht voor het vrijgeven
+const klaar = () => metFoto(rondjeKlaar(allesGemeten(joe()), ['O'], true));
 const redenCodes = c => c.redenen.map(x => x.code);
 // Een los te vullen ruimte voor de vormtests.
 function vormRuimte(nn, oo, zz, ww, a, b) {
@@ -296,7 +297,7 @@ test('rondje: "niet aanwezig" terwijl er wel iets vastgelegd is, geeft een waars
 // ── Vrijgeef-check ──
 test('vrijgeven: een lege opname kan niet, met alle redenen; opslaan kan altijd', () => {
   const op = joe(), c = K.vrijgeefCheck(op);
-  assert.strictEqual(c.kan, false); assert.deepStrictEqual(redenCodes(c).filter((x, i, a) => a.indexOf(x) === i), ['open', 'rondje']);
+  assert.strictEqual(c.kan, false); assert.deepStrictEqual(redenCodes(c).filter((x, i, a) => a.indexOf(x) === i), ['open', 'rondje', 'foto']);
   assert.ok(c.redenen.some(x => x.bucket === 'basis' && x.aantal === 17)); assert.ok(c.redenen.some(x => x.code === 'rondje' && x.aantal === 6));
   const s = K.samenvatting(op); assert.strictEqual(s.kan_opslaan, true); assert.strictEqual(s.open, 42); assert.strictEqual(s.taken, 0);
   assert.ok(redenCodes(K.vrijgeefCheck(joe([]))).includes('werkzone'));
@@ -349,7 +350,7 @@ test('de vrijgave geeft scope en uitzonderingen terug; niets staat stil als voll
   const nvt = zet(op, 'objecten.SC1.maten.hoogte', { staat: 'nvt', notitie: 'achter de kast' }); const u = K.vrijgeefCheck(nvt).uitzonderingen.find(x => x.soort === 'nvt');
   assert.deepStrictEqual([u.pad, u.notitie], ['objecten.SC1.maten.hoogte', 'achter de kast']);
   // helemaal schoon: geen bijzonderheden, geen nvt, rondje overal aanwezig, beide diagonalen
-  const schoon = rondjeKlaar(allesGemeten(joe()), ['O'], false); R(schoon).bijzonderheden = [];
+  const schoon = metFoto(rondjeKlaar(allesGemeten(joe()), ['O'], false)); R(schoon).bijzonderheden = [];
   const cs = K.vrijgeefCheck(schoon); assert.deepStrictEqual(cs.uitzonderingen, []); assert.strictEqual(cs.volledig_gemeten, true);
   const v = K.vrijgeven(op, 'Bart', T0);
   assert.deepStrictEqual(v.opname.vrijgave.uitzonderingen, c.uitzonderingen); assert.deepStrictEqual(v.opname.vrijgave.scope, c.scope); assert.strictEqual(v.opname.vrijgave.volledig_gemeten, false);
@@ -357,8 +358,21 @@ test('de vrijgave geeft scope en uitzonderingen terug; niets staat stil als voll
 test('vrijgeven: waarschuwingen blokkeren niet (definitie ontbreekt, onwaarschijnlijke maat, foto ontbreekt)', () => {
   let op = klaar(); delete R(op).openingen[0].definitie; op = meet(op, 'wanden.W.maten.lengte', W_J);
   const c = K.vrijgeefCheck(op); assert.strictEqual(c.kan, true); assert.ok(c.waarschuwingen.some(w => w.code === 'definitie-ontbreekt' && w.pad.startsWith('openingen.R1.')));
-  assert.strictEqual(c.waarschuwingen.filter(w => w.code === 'foto-ontbreekt').length, 4, 'nog geen enkele wandfoto');
+  assert.deepStrictEqual(c.waarschuwingen.filter(w => w.code === 'foto-ontbreekt').map(w => w.wand), ['N', 'Z', 'W'], 'alleen de wanden buiten de werkzone zonder foto');
   const klein = meet(op, 'plafondpunten.P1.maten.hoogte', 245); assert.ok(K.waarschuwingen(R(klein)).some(w => w.code === 'onwaarschijnlijk'), '245 mm plafond: tikfout?');
+});
+
+test('een foto van elke werkzone-wand is verplicht voor het vrijgeven; van de andere wanden is het een waarschuwing', () => {
+  const zonder = rondjeKlaar(allesGemeten(joe()), ['O'], true), c = K.vrijgeefCheck(zonder);
+  assert.deepStrictEqual(redenCodes(c), ['foto']); assert.strictEqual(c.redenen[0].wand, 'O'); assert.ok(/foto van de oostwand/.test(c.redenen[0].tekst)); assert.strictEqual(c.waarschuwingen.filter(w => w.code === 'foto-ontbreekt').length, 3);
+  const anders = K.voegFotoToe(zonder, { bestand: 'joe-noord.jpg', ruimte: 'R1', wand: 'N' }).opname;
+  assert.deepStrictEqual(redenCodes(K.vrijgeefCheck(anders)), ['foto'], 'een foto van een andere wand telt niet voor de werkzone-wand');
+  const overzicht = K.voegFotoToe(zonder, { bestand: 'joe-overzicht.jpg', ruimte: 'R1' }).opname; assert.deepStrictEqual(redenCodes(K.vrijgeefCheck(overzicht)), ['foto'], 'een overzichtsfoto zonder wand ook niet');
+  const andereRuimte = K.nieuweOpname({ opname_id: 'OPN-TEST-001', ruimtes: [R(zonder), K.nieuweRuimte({ id: 'R2', naam: 'Andere' })], fotos: [{ id: 'F1', bestand: 'x.jpg', ruimte: 'R2', wand: 'O' }] });
+  assert.ok(redenCodes(K.vrijgeefCheck(andereRuimte)).includes('foto'), 'een foto van een andere ruimte telt niet');
+  const ok = metFoto(zonder); assert.strictEqual(K.vrijgeefCheck(ok).kan, true); assert.deepStrictEqual(K.vrijgeefCheck(ok).waarschuwingen.filter(w => w.code === 'foto-ontbreekt').map(w => w.wand), ['N', 'Z', 'W']);
+  assert.strictEqual(K.vrijgeven(zonder, 'Bart', T0).opname, null); assert.ok(K.vrijgeven(ok, 'Bart', T0).opname);
+  const twee = joe(['O', 'N']); assert.deepStrictEqual(K.vrijgeefCheck(twee).redenen.filter(x => x.code === 'foto').map(x => x.wand), ['N', 'O'], 'elke werkzone-wand heeft een foto nodig');
 });
 
 // ── Vrijgave gekoppeld aan de inhoud ──
