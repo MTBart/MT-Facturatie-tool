@@ -61,6 +61,11 @@ Afgeleid, niet opgeslagen. Geeft de hoekpunten in mm (x naar rechts, y omlaag, e
 - Zolang `rond: false` is de vorm altijd `onvoldoende-bepaald`.
 - **Diagonalen A en B** bestaan alleen bij precies vier wanden (A van de eerste naar de derde hoek, B van de tweede naar de vierde). Komt er een wand bij, dan verdwijnt een A of B zonder meting uit de vragen; een gemeten diagonaal blijft als optionele controle staan.
 
+### Onwaarschijnlijk, onmogelijk en bevestigd
+
+- Er is geen vaste ondergrens voor een maat (een voeg of plintdikte kan klein zijn). Onwaarschijnlijke maar mogelijke maten (wandlengte buiten 300 tot 15000 mm, plafond buiten 2000 tot 5000 mm, een wand waarvan de lengte onder, midden en boven meer dan 100 mm verschilt) staan in `K.waarschuwingen` met code `onwaarschijnlijk` en blokkeren het vrijgeven tot ze bevestigd zijn: `K.bevestigOnwaarschijnlijk` zet `ruimte.bevestigingen[pad] = { waarde, tijd }`. De bevestiging geldt voor precies die waarde.
+- Geometrisch onmogelijke combinaties (een opening of uitsprong buiten de wand, overlappende uitsprongen) blokkeren zonder bevestiging (reden `onmogelijk`).
+
 ### Vrijgeven, hash en scope
 
 Alles uit v0.3 blijft gelden. Nieuw: vrijgeven kan pas als de ronde rond is en er minstens drie wanden zijn (`ronde`, `wanden`). De scope noemt `aantal_wanden`, `uitsprongen` en `veelhoek`. De hash bestrijkt de nieuwe velden (hoeken, knikken, uitsprongen) zoals alle inhoud; tijdstippen, historie en voorstellen tellen niet mee.

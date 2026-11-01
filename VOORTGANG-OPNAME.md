@@ -137,3 +137,15 @@ Bart (1-11): "als je kamer een vorm heeft of een uitstekend stukje wand oid dan 
 4. **Een geschatte hoek (schuin) maakt de vorm "onvoldoende bepaald"** bij elke vorm; dat blokkeert het vrijgeven niet maar staat bij de uitzonderingen.
 5. **De werkzone kies je na de fotoronde in het model,** niet meer bij de start.
 6. **Een inconsistente meting wordt in de tekening niet "mooi gemaakt"**: de sluitfout staat er als oranje streep. Kleine afwijkingen bij vier wanden zonder diagonaal (een paar mm) worden in de tekening wel gelijk verdeeld, zonder een maat te veranderen.
+
+
+### Brok 3, vervolg: visuele review ChatGPT (GESPREK 038 en 040, 1-11-2026)
+
+**Gedaan** (commits `59d0700` en `9ff8762`, plus de reviewset)
+1. **Wandfoto rustiger** (`R1-k`, `R1-l`): in de meetstand valt alleen de actieve maatlijn op (rood, dik, met label). Alle andere lijnen zijn dun en rustig, zonder label en zonder eindpunten; een lijn aantikken maakt hem actief en toont zijn maat. De omtrek van de wand is vager.
+2. **Hoeken met een loep** (`R1-d` tot `R1-i`): geen slepen meer. Tik ongeveer op een hoek, zet hem precies in een 6x uitvergrote uitsnede, "Ongedaan" en "Opnieuw" kunnen altijd, en een nummer aantikken zet die hoek opnieuw in de loep. Een hoek kan **onbekend** zijn (buiten beeld of achter een kast, bijvoorbeeld de kartonnen doos in `R2-a`): dan komt er geen homografie en geen fictieve hoek, maar een schematisch wandaanzicht met uitleg (`R2-d`); knikken en onderdelen plaatsen werken daarop ook. Het layout-veld `hoeken` mag `null` bevatten met `onbekend: true` (app-gegevens, niet de kern).
+3. **Geen vaste minimale maat meer**: de grens van 10 mm is weg (plintdikte, voeg). In plaats daarvan blokkeren **onwaarschijnlijke maar mogelijke** maten het vrijgeven tot ze expliciet bevestigd zijn (`K.bevestigOnwaarschijnlijk`, `ruimte.bevestigingen[pad] = { waarde, tijd }`, geldt voor precies die waarde): een wandlengte buiten 300 tot 15000 mm, een plafond buiten 2000 tot 5000 mm, en een wand waarvan de lengte onder, midden en boven meer dan 100 mm verschilt. Afronden toont "Klopt, bevestigen" of "Opnieuw meten" (`R4-a`, `R4-b`). **Geometrisch onmogelijke** combinaties blokkeren zonder bevestiging: een opening of uitsprong die buiten de wand valt of over een andere uitsprong ligt, en alles wat de sluitcontrole al als inconsistent kende.
+4. **Reviewset** in `brok3-screens\` met `INDEX.md` (bestandsnaam, afmeting, scenario, testdata, commit). Naast de getekende demowand: een **echte foto** (kamer Joe, oostwand, origineel JOE-03, privé: alleen gelezen via het bestandsveld, nooit in de repo), een afgedekte hoek, een scenario met het **toetsenbord open** (viewport 390 x 440: de foto blijft bovenin staan, het invoerveld, de pijl en de knoppen liggen binnen het beeld) en losse PNG's, geen montage. Origineel-ID, crop/overlay en schermafdruk hebben dezelfde ID (R1, R2, R3, R4).
+- Het toetsenbord: de laag volgt `visualViewport` (hoogte en offset), zodat het zichtbare gebied klopt, het invoerveld in beeld scrolt en de werkbalk bij weinig hoogte verdwijnt.
+
+**Niet getest:** een echt Android-toetsenbord (alleen een korte viewport en `visualViewport`); iOS.
