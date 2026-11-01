@@ -1,0 +1,306 @@
+{
+ "schema": "mt-opname",
+ "versie": "0.3",
+ "opname_id": "OPN-TEST-V03",
+ "project": {
+  "code": "TEST-001"
+ },
+ "status": "vrijgegeven",
+ "aangemaakt": "2026-11-01T09:00:00.000Z",
+ "bijgewerkt": "2026-11-01T09:00:00.000Z",
+ "ruimtes": [
+  {
+   "id": "R1",
+   "naam": "Testkamer",
+   "meubeltype": "kast",
+   "werkzone": [
+    "O"
+   ],
+   "wanden": [
+    {
+     "id": "N",
+     "van": "NW",
+     "naar": "NO",
+     "maten": {
+      "lengte": {
+       "staat": "gemeten",
+       "waarde": 5000,
+       "bron": "disto",
+       "tijd": "2026-11-01T09:00:00.000Z"
+      },
+      "bevestiging": {
+       "staat": "gemeten",
+       "waarde": null,
+       "bron": "hand",
+       "tijd": "2026-11-01T09:00:00.000Z",
+       "keuze": "bekeken"
+      }
+     }
+    },
+    {
+     "id": "O",
+     "van": "NO",
+     "naar": "ZO",
+     "maten": {
+      "lengte": {
+       "staat": "gemeten",
+       "waarde": 3000,
+       "bron": "disto",
+       "tijd": "2026-11-01T09:00:00.000Z"
+      },
+      "lengte_onder": {
+       "staat": "gemeten",
+       "waarde": 3000,
+       "bron": "disto",
+       "tijd": "2026-11-01T09:00:00.000Z"
+      },
+      "lengte_boven": {
+       "staat": "gemeten",
+       "waarde": 3000,
+       "bron": "disto",
+       "tijd": "2026-11-01T09:00:00.000Z"
+      },
+      "plafond_links": {
+       "staat": "gemeten",
+       "waarde": 2500,
+       "bron": "disto",
+       "tijd": "2026-11-01T09:00:00.000Z"
+      },
+      "plafond_midden": {
+       "staat": "gemeten",
+       "waarde": 2500,
+       "bron": "disto",
+       "tijd": "2026-11-01T09:00:00.000Z"
+      },
+      "plafond_rechts": {
+       "staat": "gemeten",
+       "waarde": 2500,
+       "bron": "disto",
+       "tijd": "2026-11-01T09:00:00.000Z"
+      }
+     }
+    },
+    {
+     "id": "Z",
+     "van": "ZO",
+     "naar": "ZW",
+     "maten": {
+      "lengte": {
+       "staat": "gemeten",
+       "waarde": 5000,
+       "bron": "disto",
+       "tijd": "2026-11-01T09:00:00.000Z"
+      },
+      "bevestiging": {
+       "staat": "gemeten",
+       "waarde": null,
+       "bron": "hand",
+       "tijd": "2026-11-01T09:00:00.000Z",
+       "keuze": "bekeken"
+      }
+     }
+    },
+    {
+     "id": "W",
+     "van": "ZW",
+     "naar": "NW",
+     "maten": {
+      "lengte": {
+       "staat": "gemeten",
+       "waarde": 3000,
+       "bron": "disto",
+       "tijd": "2026-11-01T09:00:00.000Z"
+      },
+      "bevestiging": {
+       "staat": "gemeten",
+       "waarde": null,
+       "bron": "hand",
+       "tijd": "2026-11-01T09:00:00.000Z",
+       "keuze": "bekeken"
+      }
+     }
+    }
+   ],
+   "plafondpunten": [
+    {
+     "id": "P1",
+     "plaats": "midden",
+     "maten": {
+      "hoogte": {
+       "staat": "gemeten",
+       "waarde": 2500,
+       "bron": "disto",
+       "tijd": "2026-11-01T09:00:00.000Z"
+      }
+     }
+    }
+   ],
+   "diagonalen": [
+    {
+     "id": "A",
+     "van": "NW",
+     "naar": "ZO",
+     "maten": {
+      "lengte": {
+       "staat": "gemeten",
+       "waarde": 5831,
+       "bron": "disto",
+       "tijd": "2026-11-01T09:00:00.000Z"
+      }
+     }
+    },
+    {
+     "id": "B",
+     "van": "NO",
+     "naar": "ZW",
+     "maten": {
+      "lengte": {
+       "staat": "gemeten",
+       "waarde": 5831,
+       "bron": "disto",
+       "tijd": "2026-11-01T09:00:00.000Z"
+      }
+     }
+    }
+   ],
+   "openingen": [
+    {
+     "id": "D1",
+     "soort": "deur",
+     "wand": "Z",
+     "definitie": "muursparing",
+     "maten": {
+      "breedte": {
+       "staat": "gemeten",
+       "waarde": 1000,
+       "bron": "disto",
+       "tijd": "2026-11-01T09:00:00.000Z"
+      },
+      "positie": {
+       "staat": "gemeten",
+       "waarde": 1000,
+       "bron": "disto",
+       "tijd": "2026-11-01T09:00:00.000Z"
+      },
+      "hoogte": {
+       "staat": "gemeten",
+       "waarde": 1000,
+       "bron": "disto",
+       "tijd": "2026-11-01T09:00:00.000Z"
+      }
+     }
+    }
+   ],
+   "objecten": [
+    {
+     "id": "SC1",
+     "type": "stopcontact",
+     "wand": "O",
+     "hoek": "ZO",
+     "maten": {
+      "hoogte": {
+       "staat": "gemeten",
+       "waarde": 1000,
+       "bron": "disto",
+       "tijd": "2026-11-01T09:00:00.000Z"
+      },
+      "afstand": {
+       "staat": "gemeten",
+       "waarde": 1000,
+       "bron": "disto",
+       "tijd": "2026-11-01T09:00:00.000Z"
+      },
+      "afdek": {
+       "staat": "gemeten",
+       "waarde": 1000,
+       "bron": "disto",
+       "tijd": "2026-11-01T09:00:00.000Z"
+      }
+     }
+    }
+   ],
+   "bijzonderheden": [],
+   "rondje": {
+    "O|kozijn": {
+     "waarde": "aanwezig",
+     "tijd": "2026-11-01T09:00:00.000Z"
+    },
+    "O|elektra": {
+     "waarde": "aanwezig",
+     "tijd": "2026-11-01T09:00:00.000Z"
+    },
+    "O|water": {
+     "waarde": "aanwezig",
+     "tijd": "2026-11-01T09:00:00.000Z"
+    },
+    "O|radiator": {
+     "waarde": "aanwezig",
+     "tijd": "2026-11-01T09:00:00.000Z"
+    },
+    "O|plint": {
+     "waarde": "aanwezig",
+     "tijd": "2026-11-01T09:00:00.000Z"
+    },
+    "O|afw": {
+     "waarde": "aanwezig",
+     "tijd": "2026-11-01T09:00:00.000Z"
+    }
+   },
+   "toegangsdeur": "D1"
+  }
+ ],
+ "fotos": [
+  {
+   "bestand": "t-oost.jpg",
+   "ruimte": "R1",
+   "wand": "O",
+   "tijd": "2026-11-01T09:00:00.000Z",
+   "id": "F1"
+  }
+ ],
+ "vrijgave": {
+  "hash": "0a222880ce118e",
+  "tijd": "2026-11-01T09:00:00.000Z",
+  "door": "test",
+  "scope": [
+   {
+    "ruimte": "R1",
+    "naam": "Testkamer",
+    "meubeltype": "kast",
+    "meubelset_gereed": true,
+    "werkzone": [
+     "O"
+    ],
+    "wanden_alleen_basis": [
+     "N",
+     "Z",
+     "W"
+    ],
+    "vorm": {
+     "status": "consistent",
+     "afwijkend": false,
+     "schematisch": false
+    },
+    "telling": {
+     "basis": {
+      "n": 11,
+      "gemeten": 11,
+      "nvt": 0
+     },
+     "werkzone": {
+      "n": 8,
+      "gemeten": 8,
+      "nvt": 0
+     },
+     "extra": {
+      "n": 0,
+      "gemeten": 0,
+      "nvt": 0
+     }
+    }
+   }
+  ],
+  "uitzonderingen": [],
+  "volledig_gemeten": true
+ }
+}

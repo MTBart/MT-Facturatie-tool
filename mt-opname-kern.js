@@ -1,4 +1,4 @@
-// mt-opname-kern.js — rekenkern en datamodel van de nieuwe opname-module (opname-JSON v0.3), zonder DOM en zonder netwerk.
+// mt-opname-kern.js — rekenkern en datamodel van de nieuwe opname-module (opname-JSON v0.4), zonder DOM en zonder netwerk.
 // Een telefoon-opname van een bestaande ruimte: wand voor wand foto's plus gemeten maten, waaruit later in Vectorworks een maatvaste ruimte gescript wordt.
 // Grootste pijn (Bart, 31-10): onvolledige opnames, net dat ene stopcontact of die deurmaat gemist en dan 3x terug. Gemeten maten zijn leidend; een
 // schatting uit de foto is alleen een grijs voorstel (voorstel) en telt nooit als meting.
@@ -7,13 +7,21 @@
 // Spelregels: er wordt niets automatisch gecorrigeerd en niets geforceerd haaks; een wijziging wist nooit stil een eerdere maat (historie, append-only);
 // onbekende velden blijven bij het lezen behouden. Alle functies geven nieuwe objecten terug en passen hun invoer niet aan.
 // Het prototype (src-v3.html in OPNAME-APP) is de bron van de vragen en de sluitcontrole; de uitkomsten voor kamer Joe zijn in de tests vastgelegd.
+// Brok 3 (v0.4, Bart 1-11): de vorm van de kamer ontstaat uit de foto's. Een ruimte heeft een geordende lijst wanden (zoveel als er foto's zijn, met de klok mee), met per wand de hoek naar de
+// volgende wand (standaard 90 graden, een aanname), uitsprongen en nissen als onderdeel van een wand en de knikken die op de foto zijn aangetikt. De vier vaste wanden N/O/Z/W van v0.3 zijn
+// het bijzondere geval van vier wanden en blijven werken (migratie zonder verlies). De plattegrond (K.plattegrond) tekent schattingen en metingen apart en schaalt mee met wat gemeten is.
 (function (root) {
   'use strict';
   const K = root.MTOpnameKern = root.MTOpnameKern || {};
 
   // ── Vaste lijsten ──
-  K.VERSIE = '0.3';
-  K.WANDEN = ['N', 'O', 'Z', 'W'];                                       // rond de klok: N loopt van NW naar NO, O van NO naar ZO, Z van ZO naar ZW, W van ZW naar NW
+  K.VERSIE = '0.4';
+  K.MIN_LEESBAAR = '0.3';                                                // 0.3 wordt additief aangevuld; ouder blijft volledig bewaard onder _oud
+  K.WANDEN = ['N', 'O', 'Z', 'W'];                                       // de vaste wanden van v0.3 (compat): N loopt van NW naar NO, O van NO naar ZO, Z van ZO naar ZW, W van ZW naar NW. Een ruimte uit de foto's heeft eigen wanden W1, W2, ...
+  K.HOEK_BRONNEN = ['aanname', 'foto-voorstel', 'gemeten'];               // de hoek naar de volgende wand: standaard een aanname (90 graden), nooit stil "haaks"
+  K.UITSPRONG_SOORTEN = { voor: 'Uitsprong', achter: 'Nis' };            // naar voren (schoorsteen, pilaster, koker) of naar achteren (nis, inham)
+  K.TUSSENSTUK_VORMEN = ['recht', 'voor', 'achter'];
+  K.UITSPRONG_DIEPTE_STANDAARD = 300;                                    // mm: grove standaardschatting zolang er niets gemeten is; altijd een foto-voorstel, nooit een meting
   K.STATEN = ['gemeten', 'nvt', 'later', 'open'];
   K.BRONNEN = ['disto', 'hand', 'foto-voorstel'];                        // een meting (staat gemeten) is disto of hand; foto-voorstel hoort alleen in het grijze voorstel
   K.MEUBELTYPES = ['kast', 'keuken', 'badmeubel'];
@@ -21,7 +29,7 @@
   K.BIJZONDERHEDEN = { stootplint: 'Hogere stootplint', balk: 'Ingestucte balk of verlaging', koof: 'Koof', nis: 'Nis', 'uit-het-lood': 'Uit het lood', 'leiding-in-zicht': 'Leiding in zicht', kabelgoot: 'Kabelgoot', anders: 'Anders' };
   // Toleranties. diagonaal: de gemeten controlediagonaal tegen de diagonaal die uit 4 zijden + 1 diagonaal volgt (mm). tegenover en hoek_graden: pas boven deze waarden is de ruimte
   // 'afwijkend van vorm' (informatie, geen fout). Er wordt geen rechthoek verondersteld.
-  K.TOLERANTIE = { diagonaal: 10, tegenover: 5, hoek_graden: 0.3, wand_scheef: 5 };
+  K.TOLERANTIE = { diagonaal: 10, tegenover: 5, hoek_graden: 0.3, wand_scheef: 5, sluit: 10, hoek_haaks: 0.5 };      // sluit: sluitfout van een veelhoek (mm); hoek_haaks: zo dicht bij 90 of 270 graden telt als haaks
   K.PLAFOND_UIT_HOEK = 300;                                              // mm: het plafond links en rechts langs een werkzone-wand wordt zo ver uit de hoek gemeten (regie, 1-11)
   K.RONDJE_LATER_BLOKKEERT = true;                                       // een categorie van het rondje op "later" is een open taak en blokkeert het vrijgeven (Bart, 1-11)
   K.WANDBEVESTIGING = ['bekeken', 'afgedekt', 'niet-beoordeeld'];          // buiten de werkzone: "gehele wand bekeken, geen relevante obstakels" of bewust afgedekt / niet beoordeeld
@@ -29,14 +37,17 @@
   // Vragensets per meubeltype. Alleen 'kast' is een echte, gevalideerde set (ChatGPT-review 035, punt I). Voor keuken en badmeubel is er een hook (extraSlots) maar nog geen set:
   // zo'n ruimte kan niet vrijgegeven worden en de app claimt geen keuken- of badmeubelvragen.
   K.MEUBELSETS = { kast: { gereed: true }, keuken: { gereed: false, extraSlots: null }, badmeubel: { gereed: false, extraSlots: null } };
+  const LEGACY = K.WANDEN.slice();
   const WAND_NAAM = { N: 'noord', O: 'oost', Z: 'zuid', W: 'west' };
   const WAND_VAN_NAAR = { N: ['NW', 'NO'], O: ['NO', 'ZO'], Z: ['ZO', 'ZW'], W: ['ZW', 'NW'] };
-  const WAND_VOLGENDE = { N: 'O', O: 'Z', Z: 'W', W: 'N' };                // met de klok mee
   const HOEK_NAAM = { NW: 'noordwesthoek', NO: 'noordoosthoek', ZO: 'zuidoosthoek', ZW: 'zuidwesthoek' };
-  const DIAGONALEN = [['A', 'NW', 'ZO'], ['B', 'NO', 'ZW']];
-  const wandTekst = w => WAND_NAAM[w] ? WAND_NAAM[w] + 'wand' : String(w);
   const hoofd = t => t.charAt(0).toUpperCase() + t.slice(1);
-  K.wandNaam = w => WAND_NAAM[w] ? hoofd(WAND_NAAM[w]) : String(w);
+  const wandNummer = w => { const m = /^W(\d+)$/.exec(String(w)); return m ? parseInt(m[1], 10) : null; };
+  const wandKort = w => WAND_NAAM[w] || (wandNummer(w) ? 'wand ' + wandNummer(w) : String(w));              // "noord" of "wand 2": in lopende tekst, bijvoorbeeld na "wandlengte"
+  const wandTekst = w => WAND_NAAM[w] ? WAND_NAAM[w] + 'wand' : wandNummer(w) ? 'wand ' + wandNummer(w) : String(w);      // "noordwand" of "wand 2"
+  K.wandNaam = w => WAND_NAAM[w] ? hoofd(WAND_NAAM[w]) : wandNummer(w) ? 'Wand ' + wandNummer(w) : String(w);          // "Noord" of "Wand 2"
+  K.wandLabel = w => WAND_NAAM[w] ? hoofd(WAND_NAAM[w]) + 'wand' : K.wandNaam(w);                                       // "Noordwand" of "Wand 2"
+  const hoekTekst = h => HOEK_NAAM[h] ? HOEK_NAAM[h] : /^H(\d+)$/.test(String(h)) ? 'hoek ' + String(h).slice(1) : String(h);
 
   // Rondje controle: per werkzone-wand en categorie kiest de opnemer bewust. Niet gekozen = "nog niet bekeken", nooit "afwezig".
   K.RONDJE_CATEGORIEEN = [['kozijn', 'Deuren en ramen'], ['elektra', 'Elektra'], ['water', 'Water, afvoer en leidingen'], ['radiator', 'Verwarming'], ['plint', 'Plinten'], ['afw', 'Afwijkingen']];
@@ -75,27 +86,54 @@
   const nu = () => new Date().toISOString();
   const vind = (arr, id) => lijst(arr).find(e => e && e.id === id);
 
+  // ── De wanden van een ruimte (v0.4: zoveel als er foto's zijn) ──
+  // De lijst r.wanden is de geordende segmentenlijst: met de klok mee, de eerste wand is de wand van de toegangsdeur. De vaste wanden N/O/Z/W van v0.3 staan altijd in die vaste volgorde.
+  // Een ruimte uit de foto's (nieuweRuimte met wanden: []) heeft rond: false tot de gebruiker "kamer rond" kiest; een ruimte zonder dat veld is een gesloten ring (v0.3).
+  function wandIds(r) {
+    const ids = lijst(r && r.wanden).filter(e => e && e.id).map(e => e.id);
+    return ids.length && ids.every(i => LEGACY.includes(i)) ? LEGACY.filter(i => ids.includes(i)) : ids;
+  }
+  K.wandIds = wandIds;
+  const isRond = r => !r || r.rond !== false;
+  K.isRond = isRond;
+  const wandHoeken = (r, w) => { const e = vind(r && r.wanden, w); return e && e.van && e.naar ? [e.van, e.naar] : (WAND_VAN_NAAR[w] || [null, null]); };
+  // De hoek naar de volgende wand: de binnenhoek in graden (90 = gewone hoek, 270 = inspringende hoek). Zonder gegevens is het 90 en een aanname: er wordt nergens stil "haaks" van gemaakt.
+  function hoekInfo(r, w) {
+    const e = vind(r && r.wanden, w), h = e && isObj(e.hoek_naar_volgende) ? e.hoek_naar_volgende : null, graden = h && getal(h.graden) ? h.graden : 90, bron = h && K.HOEK_BRONNEN.includes(h.bron) ? h.bron : 'aanname';
+    const t = K.TOLERANTIE.hoek_haaks, recht = Math.abs(graden - 90) <= t, inspringend = Math.abs(graden - 270) <= t;
+    return { graden, bron, haaks: recht || inspringend, inspringend, schuin: !(recht || inspringend) };
+  }
+  K.hoekVan = (ruimte, wand) => hoekInfo(ruimte, wand);
+
   // ── Constructors ──
   // Een maat (punt): waarde in mm, staat, bron, tijdstip en eventueel een grijs foto-voorstel. Alleen de aanwezige velden worden gezet.
   K.nieuweMaat = function (over) { return Object.assign({ staat: 'open', waarde: null, bron: null, tijd: null }, over || {}); };
   const legeMaten = () => ({});
+  // nieuweRuimte({ wanden: [] }) maakt een ruimte uit de foto's: nog geen wanden en rond: false. Zonder wanden-veld krijgt de ruimte de vier vaste wanden van v0.3.
   K.nieuweRuimte = function (o) {
     o = o || {};
-    const r = { id: o.id || 'R1', naam: o.naam || 'Ruimte', meubeltype: o.meubeltype || 'kast', werkzone: lijst(o.werkzone).filter(w => K.WANDEN.includes(w)),
-      wanden: [], plafondpunten: [], diagonalen: [], openingen: lijst(o.openingen), objecten: lijst(o.objecten), bijzonderheden: lijst(o.bijzonderheden), rondje: isObj(o.rondje) ? o.rondje : {} };
+    const uitFotos = Array.isArray(o.wanden) && !o.wanden.length;
+    const r = { id: o.id || 'R1', naam: o.naam || 'Ruimte', meubeltype: o.meubeltype || 'kast', werkzone: lijst(o.werkzone),
+      wanden: Array.isArray(o.wanden) ? o.wanden : [], plafondpunten: [], diagonalen: [], openingen: lijst(o.openingen), objecten: lijst(o.objecten), bijzonderheden: lijst(o.bijzonderheden), rondje: isObj(o.rondje) ? o.rondje : {} };
+    if (uitFotos) r.rond = false;
+    if (o.uitsprongen) r.uitsprongen = lijst(o.uitsprongen);
     if (o.toegangsdeur) r.toegangsdeur = o.toegangsdeur;                  // id van de opening waar je de ruimte binnenkomt: daar begint de fotoronde
-    return zorgEntiteiten(r);
+    zorgEntiteiten(r);
+    r.werkzone = r.werkzone.filter(w => wandIds(r).includes(w));
+    return r;
   };
   K.nieuweOpname = function (o) {
     o = o || {};
     return { schema: 'mt-opname', versie: K.VERSIE, opname_id: o.opname_id || o.id || null, project: Object.assign({ code: null }, o.project || {}), status: o.status || 'concept',
       aangemaakt: o.aangemaakt || nu(), bijgewerkt: o.bijgewerkt || null, ruimtes: lijst(o.ruimtes).length ? o.ruimtes : [K.nieuweRuimte()], fotos: lijst(o.fotos) };
   };
-  // Zorgt dat de vaste onderdelen bestaan (vier wanden, twee diagonalen, plafondpunt P1). Voegt alleen toe, verwijdert nooit iets.
+  // Zorgt dat de vaste onderdelen bestaan (de vaste wanden van v0.3 als de ruimte niet uit de foto's komt, bij precies vier wanden de diagonalen A en B, plafondpunt P1).
+  // Voegt alleen toe, verwijdert nooit iets. Bij vier wanden loopt A van de eerste naar de derde hoek en B van de tweede naar de vierde (N/O/Z/W: NW naar ZO en NO naar ZW).
   function zorgEntiteiten(r) {
     r.wanden = lijst(r.wanden); r.plafondpunten = lijst(r.plafondpunten); r.diagonalen = lijst(r.diagonalen);
-    for (const w of K.WANDEN) if (!vind(r.wanden, w)) r.wanden.push({ id: w, van: WAND_VAN_NAAR[w][0], naar: WAND_VAN_NAAR[w][1], maten: legeMaten() });
-    for (const [id, van, naar] of DIAGONALEN) if (!vind(r.diagonalen, id)) r.diagonalen.push({ id, van, naar, maten: legeMaten() });
+    if (r.rond !== false && r.wanden.filter(e => e && e.id).every(e => LEGACY.includes(e.id))) for (const w of LEGACY) if (!vind(r.wanden, w)) r.wanden.push({ id: w, van: WAND_VAN_NAAR[w][0], naar: WAND_VAN_NAAR[w][1], maten: legeMaten() });
+    const ids = wandIds(r);
+    if (ids.length === 4) for (const [id, i, j] of [['A', 0, 2], ['B', 1, 3]]) if (!vind(r.diagonalen, id)) r.diagonalen.push({ id, van: wandHoeken(r, ids[i])[0], naar: wandHoeken(r, ids[j])[0], maten: legeMaten() });
     if (!r.plafondpunten.length) r.plafondpunten.push({ id: 'P1', plaats: 'midden', maten: legeMaten() });
     return r;
   }
@@ -120,29 +158,52 @@
     if (s.sleutel.indexOf('plafond_') === 0) return 'vloerpeil';
     if (s.pad.startsWith('wanden.') || s.pad.startsWith('diagonalen.')) return 'hoek';
     if (s.pad.startsWith('plafondpunten.')) return 'vloerpeil';
+    if (s.pad.startsWith('uitsprongen.')) return s.sleutel === 'breedte' ? 'zijkanten' : s.sleutel === 'positie' ? 'hoek' : s.sleutel === 'hoogte' ? 'vloerpeil' : 'wand';
     if (s.pad.startsWith('openingen.')) return s.sleutel === 'breedte' ? 'zijkanten' : s.sleutel === 'hoogte' ? 'boven-onder' : s.sleutel === 'borstwering' ? 'vloerpeil' : (s.ent.positie_vanaf && s.ent.positie_vanaf !== 'hoek' ? 'opening' : 'hoek');
     if (s.sleutel === 'kraan' || s.sleutel === 'onderkant') return 'vloerpeil';
     if (s.sleutel === 'hoogte') return s.ent.type === 'radiator' ? 'object' : 'vloerpeil';
     return s.sleutel === 'afstand' ? 'hoek' : 'object';
   }
   function openingNaam(o) { return (o.soort === 'deur' ? 'deur ' : 'raam ') + (o.naam || o.id); }
+  function uitsprongNaam(u) { return (K.UITSPRONG_SOORTEN[u.soort] || 'Uitsprong').toLowerCase() + ' ' + (u.naam || u.id); }
+  // Wat de kern van een uitsprong of nis weet, per maat: gemeten, anders een voorstel uit de foto (de verhouding op de wand maal de GEMETEN wandlengte), anders voor de diepte een standaardschatting.
+  // Is de wandlengte nog niet gemeten, dan is er geen voorstel in mm (wel een verhouding): met Lref (de lengte uit de plattegrond) rekent de plattegrond toch een schatting uit, als schatting herkenbaar.
+  // Alles wat hier uit de foto komt heeft bron foto-voorstel en telt nooit als meting; het schaalt vanzelf mee zodra de wandlengte of de maat zelf gemeten is.
+  function uitsprongWaarden(r, u, Lref) {
+    const we = vind(r.wanden, u.wand), L = we ? K.waarde(maatOp(we, 'lengte')) : null, v = isObj(u.verhouding) && getal(u.verhouding.van) && getal(u.verhouding.tot) ? u.verhouding : null;
+    const uit = { soort: u.soort === 'achter' ? 'achter' : 'voor' };
+    const kies = (sleutel, uitFoto) => {
+      const gem = K.waarde(maatOp(u, sleutel));
+      if (gem != null) return { mm: gem, gemeten: true, bron: 'gemeten' };
+      if (uitFoto != null && L != null) return { mm: Math.round(uitFoto(L)), gemeten: false, bron: 'voorstel', voorstel: { schatting_mm: Math.round(uitFoto(L)), bron: 'foto-voorstel', tijd: u.tijd || null, afgeleid: 'verhouding op de gemeten wandlengte' } };
+      if (uitFoto != null && Lref != null) return { mm: Math.round(uitFoto(Lref)), gemeten: false, bron: 'schatting' };
+      return null;
+    };
+    uit.positie = v ? kies('positie', l => v.van * l) : kies('positie', null);
+    uit.breedte = v ? kies('breedte', l => (v.tot - v.van) * l) : kies('breedte', null);
+    const dg = K.waarde(maatOp(u, 'diepte'));
+    uit.diepte = dg != null ? { mm: dg, gemeten: true, bron: 'gemeten' } : { mm: K.UITSPRONG_DIEPTE_STANDAARD, gemeten: false, bron: 'standaard', voorstel: { schatting_mm: K.UITSPRONG_DIEPTE_STANDAARD, bron: 'foto-voorstel', tijd: u.tijd || null, afgeleid: 'standaardschatting' } };
+    const hg = K.waarde(maatOp(u, 'hoogte'));
+    uit.hoogte = hg != null ? { mm: hg, gemeten: true, bron: 'gemeten' } : null;
+    return uit;
+  }
   function slotsVan(ruimte) {
-    const r = ruimte || {}, zone = lijst(r.werkzone).filter(w => K.WANDEN.includes(w)), inZone = w => zone.includes(w), out = [];
+    const r = ruimte || {}, ids = wandIds(r), zone = lijst(r.werkzone).filter(w => ids.includes(w)), inZone = w => zone.includes(w), out = [];
     const tijdelijk = (arr, id, rest) => vind(arr, id) || Object.assign({ id, maten: {} }, rest);          // ontbreekt een vast onderdeel, dan telt het als open zonder iets te schrijven
     const slot = (pad, ent, sleutel, bucket, o) => { const s = Object.assign({ pad, ent, sleutel, bucket, soort: 'maat', groep: 'maat', wand: null, object: null, eenheid: 'mm', keuzes: null, nvtKeuzes: null, definitie: '', uitleg: '', referentie: '', kritiek: false }, o); s.referentie = refVan(s); out.push(s); };
-    // basis: vier wandlengtes; buiten de werkzone daarbij één bevestiging per wand ("gehele wand bekeken, geen relevante obstakels", of afgedekt / niet beoordeeld)
-    for (const w of K.WANDEN) {
-      const we = tijdelijk(r.wanden, w, { van: WAND_VAN_NAAR[w][0], naar: WAND_VAN_NAAR[w][1] });
-      slot('wanden.' + w + '.maten.lengte', we, 'lengte', 'basis', { soort: 'wandlengte', wand: w, kort: 'Wandlengte ' + WAND_NAAM[w],
+    // basis: de wandlengtes; buiten de werkzone daarbij één bevestiging per wand ("gehele wand bekeken, geen relevante obstakels", of afgedekt / niet beoordeeld)
+    for (const w of ids) {
+      const we = tijdelijk(r.wanden, w, { van: wandHoeken(r, w)[0], naar: wandHoeken(r, w)[1] });
+      slot('wanden.' + w + '.maten.lengte', we, 'lengte', 'basis', { soort: 'wandlengte', wand: w, kort: 'Wandlengte ' + wandKort(w),
         vraag: 'Hoe lang is de ' + wandTekst(w) + ', van hoek tot hoek?', uitleg: 'Hoek tot hoek, afgewerkt tot afgewerkt, op 1000 mm boven de vloer.' + (inZone(w) ? ' Bij een werkzone-wand is dit de middelste van drie hoogtes.' : ''), kritiek: true });
       if (inZone(w)) {
         // werkzone-wand: de wandlengte ook net boven de plint en net onder het plafond (samen met de lengte op 1000 mm drie hoogtes) en het plafond op drie punten langs de wand
-        for (const [sl, k, waar] of [['lengte_onder', 'onder', 'net boven de plint'], ['lengte_boven', 'boven', 'net onder het plafond']]) slot('wanden.' + w + '.maten.' + sl, we, sl, 'werkzone', { soort: 'wandlengte', wand: w, kort: 'Wandlengte ' + WAND_NAAM[w] + ' ' + k,
+        for (const [sl, k, waar] of [['lengte_onder', 'onder', 'net boven de plint'], ['lengte_boven', 'boven', 'net onder het plafond']]) slot('wanden.' + w + '.maten.' + sl, we, sl, 'werkzone', { soort: 'wandlengte', wand: w, kort: 'Wandlengte ' + wandKort(w) + ' ' + k,
           vraag: 'Hoe lang is de ' + wandTekst(w) + ' ' + waar + ', van hoek tot hoek?', uitleg: 'Dezelfde meting als de wandlengte op 1000 mm, nu ' + waar + '. Een kast raakt de wand over de hele hoogte.', kritiek: true });
-        for (const pl of ['links', 'midden', 'rechts']) slot('wanden.' + w + '.maten.plafond_' + pl, we, 'plafond_' + pl, 'werkzone', { soort: 'wandplafond', wand: w, kort: 'Plafondhoogte ' + WAND_NAAM[w] + ' ' + pl,
+        for (const pl of ['links', 'midden', 'rechts']) slot('wanden.' + w + '.maten.plafond_' + pl, we, 'plafond_' + pl, 'werkzone', { soort: 'wandplafond', wand: w, kort: 'Plafondhoogte ' + wandKort(w) + ' ' + pl,
           vraag: 'Hoe hoog is het plafond ' + (pl === 'midden' ? 'in het midden van' : K.PLAFOND_UIT_HOEK + ' mm uit de ' + (pl === 'links' ? 'linker' : 'rechter') + 'hoek op') + ' de ' + wandTekst(w) + ' (kijkend naar de wand)?', uitleg: 'Afgewerkte vloer tot afgewerkt plafond, ' + (pl === 'midden' ? 'in het midden van de wand.' : 'op ' + K.PLAFOND_UIT_HOEK + ' mm van de ' + (pl === 'links' ? 'linker' : 'rechter') + 'hoek, gemeten langs de wand.'), kritiek: true });
       }
-      if (!inZone(w)) slot('wanden.' + w + '.maten.bevestiging', we, 'bevestiging', 'basis', { soort: 'wandbevestiging', wand: w, eenheid: 'keuze', keuzes: ['bekeken'], nvtKeuzes: ['afgedekt', 'niet-beoordeeld'], kort: 'Wand ' + WAND_NAAM[w] + ' bekeken',
+      if (!inZone(w)) slot('wanden.' + w + '.maten.bevestiging', we, 'bevestiging', 'basis', { soort: 'wandbevestiging', wand: w, eenheid: 'keuze', keuzes: ['bekeken'], nvtKeuzes: ['afgedekt', 'niet-beoordeeld'], kort: 'Wand ' + wandKort(w) + ' bekeken',
         vraag: 'Is de ' + wandTekst(w) + ' helemaal bekeken, zonder relevante obstakels?', uitleg: 'Kies "bekeken" als de hele wand in beeld was en er niets zit dat het meubel raakt. Is de wand afgedekt of niet beoordeeld, kies dat dan: het komt zo in het rapport.' });
     }
     // basis: plafondhoogte op één punt (het eerste punt); verdere punten zijn extra
@@ -152,30 +213,44 @@
       slot('plafondpunten.' + p.id + '.maten.hoogte', p, 'hoogte', i === 0 ? 'basis' : 'extra', { soort: 'plafond', wand: p.wand || null, kort: 'Plafondhoogte ' + p.id, vraag: 'Hoe hoog is het plafond ' + waar + '?',
         uitleg: 'Afgewerkte vloer tot afgewerkt plafond.', kritiek: true });
     });
-    // basis: één diagonaal; de tweede is optioneel (maar telt, als hij is ingevuld, mee in de controle en het vrijgeven)
-    DIAGONALEN.forEach(([id, van, naar], i) => {
-      const d = tijdelijk(r.diagonalen, id, { van, naar });
-      slot('diagonalen.' + id + '.maten.lengte', d, 'lengte', i === 0 ? 'basis' : 'optie', { soort: 'diagonaal', groep: 'ruimte', kort: 'Diagonaal ' + id,
-        vraag: 'Hoe lang is de diagonaal van de ' + HOEK_NAAM[d.van || van] + ' naar de ' + HOEK_NAAM[d.naar || naar] + '?', uitleg: 'Hoek tot hoek op 1000 mm boven de vloer, afgewerkt.', kritiek: true });
-    });
+    // diagonalen. Bij precies vier wanden: A is basis en B optioneel (maar telt, als hij is ingevuld, mee in de controle en het vrijgeven). Bij een andere vorm zijn diagonalen altijd optioneel:
+    // alleen de diagonalen die de opnemer zelf toevoegde (K.voegDiagonaalToe), als extra controle van de vorm.
+    const hoeken = ids.map(w => wandHoeken(r, w)[0]), diagonalen = [];
+    if (ids.length === 4) [['A', 0, 2, 'basis'], ['B', 1, 3, 'optie']].forEach(([id, i, j, bucket]) => diagonalen.push([id, tijdelijk(r.diagonalen, id, { van: hoeken[i], naar: hoeken[j] }), bucket]));
+    for (const d of lijst(r.diagonalen)) if (d && d.id && !(ids.length === 4 && (d.id === 'A' || d.id === 'B')) && hoeken.includes(d.van) && hoeken.includes(d.naar)) diagonalen.push([d.id, d, 'optie']);
+    for (const [id, d, bucket] of diagonalen) {
+      slot('diagonalen.' + id + '.maten.lengte', d, 'lengte', bucket, { soort: 'diagonaal', groep: 'ruimte', kort: 'Diagonaal ' + id,
+        vraag: 'Hoe lang is de diagonaal van de ' + hoekTekst(d.van) + ' naar de ' + hoekTekst(d.naar) + '?', uitleg: 'Hoek tot hoek op 1000 mm boven de vloer, afgewerkt.', kritiek: true });
+    }
+    // uitsprongen en nissen (v0.4): breedte, positie vanaf de linkerhoek en diepte zijn basis (ze bepalen de plattegrond); de hoogte hoort bij de werkzone-wanden.
+    // Het grijze voorstel komt uit de foto: de verhouding op de wand maal de gemeten wandlengte, en voor de diepte een standaardschatting. Nooit een meting.
+    for (const u of lijst(r.uitsprongen)) {
+      if (!u || !u.id || !ids.includes(u.wand)) continue;
+      const w = u.wand, nm = uitsprongNaam(u), wz = inZone(w), zijde = wandHoeken(r, w), vals = uitsprongWaarden(r, u, null), achter = u.soort === 'achter', woord = achter ? 'nis' : 'uitsprong';
+      const up = (bucket, sleutel, kort, vraag, uitleg, voorstel) => slot('uitsprongen.' + u.id + '.maten.' + sleutel, u, sleutel, bucket, { soort: 'uitsprong', groep: 'uitsprong', wand: w, object: u.id, kort: u.id + ' ' + kort, vraag, uitleg, kritiek: true, afleiding: voorstel || null });
+      up('basis', 'breedte', 'breedte', 'Hoe breed is de ' + nm + ' (langs de wand, aan de voorkant)?', 'De twee zijkanten van de ' + woord + ', gemeten langs de wand.', vals.breedte && vals.breedte.voorstel);
+      up('basis', 'positie', 'positie', 'Hoe ver zit de ' + nm + ' van de ' + (zijde[0] ? hoekTekst(zijde[0]) : 'linkerhoek') + ', tot de zijkant?', 'Vaste hoek (' + (zijde[0] ? hoekTekst(zijde[0]) : 'linkerhoek') + ') tot de eerste zijkant, langs de wand.', vals.positie && vals.positie.voorstel);
+      up('basis', 'diepte', 'diepte', achter ? 'Hoe diep is de ' + nm + ' (de inham in de wand)?' : 'Hoe ver steekt de ' + nm + ' uit de wand?', 'Haaks op de wand: van de wandlijn tot de ' + (achter ? 'achterkant van de nis' : 'voorkant van de uitsprong') + '.', vals.diepte && vals.diepte.voorstel);
+      if (wz) up('werkzone', 'hoogte', 'hoogte', 'Hoe hoog is de ' + nm + ', van de vloer tot de bovenkant?', 'Afgewerkte vloer tot de bovenkant van de ' + woord + ' (een schoorsteen of koker loopt vaak door tot het plafond).', null);
+    }
     // openingen: breedte en positie vanaf de linkerhoek (kijkend naar de wand) zijn basis. Hoogte en borstwering zijn verplicht in de werkzone, daarbuiten optioneel (grijs voorstel);
     // de positie tot de rechterhoek hoort bij de werkzone.
     for (const o of lijst(r.openingen)) {
       if (!o || !o.id) continue;
-      const w = o.wand, nm = openingNaam(o), df = K.DEFINITIES[o.definitie] || 'opening', zijde = WAND_VAN_NAAR[w] || [], wz = inZone(w), detail = wz ? 'werkzone' : 'optie';
-      const van = o.positie_vanaf && o.positie_vanaf !== 'hoek' ? o.positie_vanaf : (HOEK_NAAM[zijde[0]] || 'de linkerhoek');
+      const w = o.wand, nm = openingNaam(o), df = K.DEFINITIES[o.definitie] || 'opening', zijde = wandHoeken(r, w), wz = inZone(w), detail = wz ? 'werkzone' : 'optie';
+      const van = o.positie_vanaf && o.positie_vanaf !== 'hoek' ? o.positie_vanaf : (zijde[0] ? hoekTekst(zijde[0]) : 'de linkerhoek');
       const op = (bucket, sleutel, kort, vraag, uitleg, extra) => slot('openingen.' + o.id + '.maten.' + sleutel, o, sleutel, bucket, Object.assign({ soort: 'opening', groep: 'kozijn', wand: w, object: o.id, kort: o.id + ' ' + kort, vraag, definitie: o.definitie || '', uitleg, kritiek: bucket !== 'optie' }, extra));
       op('basis', 'breedte', 'breedte', 'Hoe breed is de ' + df + ' van ' + nm + '?', 'De twee zijkanten van de opening.');
       op(detail, 'hoogte', 'hoogte', 'Hoe hoog is de ' + df + ' van ' + nm + '?', 'Onderkant en bovenkant van de opening.');
-      op('basis', 'positie', 'positie', 'Hoe ver zit ' + nm + ' van de ' + van + ', tot de dagkant?', 'Vaste hoek (' + (HOEK_NAAM[zijde[0]] || 'linkerhoek') + ') tot de dagkant, niet tot de afwerklijst.');
+      op('basis', 'positie', 'positie', 'Hoe ver zit ' + nm + ' van de ' + van + ', tot de dagkant?', 'Vaste hoek (' + (zijde[0] ? hoekTekst(zijde[0]) : 'linkerhoek') + ') tot de dagkant, niet tot de afwerklijst.');
       if (o.soort !== 'deur') op(detail, 'borstwering', 'borstwering', 'Hoe hoog zit de onderkant van ' + nm + ' boven de vloer?', 'Afgewerkte vloer (vloerpeil) tot onderzijde van de raamopening.');
-      if (wz) op('werkzone', 'positie_rechts', 'tot rechterhoek', 'Hoe ver zit ' + nm + ' van de ' + (HOEK_NAAM[zijde[1]] || 'rechterhoek') + ', tot de dagkant?', 'Vaste hoek (' + (HOEK_NAAM[zijde[1]] || 'rechterhoek') + ') tot de dagkant.');
+      if (wz) op('werkzone', 'positie_rechts', 'tot rechterhoek', 'Hoe ver zit ' + nm + ' van de ' + (zijde[1] ? hoekTekst(zijde[1]) : 'rechterhoek') + ', tot de dagkant?', 'Vaste hoek (' + (zijde[1] ? hoekTekst(zijde[1]) : 'rechterhoek') + ') tot de dagkant.');
     }
     // objecten: in de werkzone volledig; erbuiten alleen als de opnemer "toch meten" koos of het object zelf toevoegde
     for (const ob of lijst(r.objecten)) {
       const t = K.OBJECTTYPES[ob && ob.type]; if (!t || !ob.id) continue;
       const bucket = ob.wand && inZone(ob.wand) ? 'werkzone' : (ob.gezien === 'toch-meten' || ob.eigen) ? 'extra' : null;
-      const nm = ob.naam || (t.naam + ' ' + ob.id), hoek = HOEK_NAAM[ob.hoek] ? 'de ' + HOEK_NAAM[ob.hoek] : 'de dichtstbijzijnde hoek';
+      const nm = ob.naam || (t.naam + ' ' + ob.id), hoek = ob.hoek ? 'de ' + hoekTekst(ob.hoek) : 'de dichtstbijzijnde hoek';
       const maten = t.maten.concat(t.zonderOpening && !ob.opening ? t.zonderOpening : []);
       for (const [sleutel, kort, vraag, definitie, keuzes] of maten) {
         slot('objecten.' + ob.id + '.maten.' + sleutel, ob, sleutel, bucket, { soort: ob.type === 'plint' ? 'plint' : 'object', groep: t.cat, wand: ob.wand || null, object: ob.id, eenheid: keuzes ? 'keuze' : 'mm', keuzes: keuzes || null, kort: ob.id + ' ' + kort,
@@ -196,7 +271,7 @@
   function slotNaarVraag(s, conf) {
     const m = maatOp(s.ent, s.sleutel), st = staatVan(m, s.keuzes);
     return { pad: s.pad, bucket: s.bucket, optioneel: s.bucket === 'optie', soort: s.soort, groep: s.groep, wand: s.wand, object: s.object, kort: s.kort, vraag: s.vraag, definitie: s.definitie, referentie: s.referentie, uitleg: s.uitleg, eenheid: s.eenheid, keuzes: s.keuzes, nvt_keuzes: s.nvtKeuzes, kritiek: s.kritiek,
-      staat: st, conflict: st === 'gemeten' && !!conf[s.pad], maat: m || null, voorstel: m && m.voorstel ? m.voorstel : null };
+      staat: st, conflict: st === 'gemeten' && !!conf[s.pad], maat: m || null, voorstel: m && m.voorstel ? m.voorstel : (s.afleiding || null) };
   }
   // De vragenlijst van een ruimte: alle punten die gevraagd worden, met hun huidige staat. Volgorde: basis, optie, werkzone, extra.
   K.vragen = function (ruimte) {
@@ -243,24 +318,56 @@
     const a = p[(i + 3) % 4], c = p[(i + 1) % 4], b = p[i], v1 = [a[0] - b[0], a[1] - b[1]], v2 = [c[0] - b[0], c[1] - b[1]];
     return Math.acos(Math.max(-1, Math.min(1, (v1[0] * v2[0] + v1[1] * v2[1]) / (Math.hypot(v1[0], v1[1]) * Math.hypot(v2[0], v2[1]))))) * 180 / Math.PI;
   }
+  // Een rondgang langs de wanden: lengtes in mm en per wand de binnenhoek aan het eind (graden). De eerste wand loopt langs de x-as (naar rechts), de y-as wijst omlaag en de ruimte ligt
+  // rechts van de looprichting (met de klok mee bekeken). Een binnenhoek van 90 graden draait de looprichting 90 graden met de klok mee, 270 graden tegen de klok in.
+  // Geeft n + 1 punten: het eerste is de begin- en het laatste het eindpunt. Sluit de rondgang, dan vallen die twee samen.
+  function rondgang(lengtes, graden) {
+    const pts = [[0, 0]]; let x = 0, y = 0, phi = 0;
+    for (let i = 0; i < lengtes.length; i++) { x += lengtes[i] * Math.cos(phi); y += lengtes[i] * Math.sin(phi); pts.push([x, y]); phi += (180 - graden[i]) * Math.PI / 180; }
+    return pts;
+  }
+  const oppervlakte = p => { let s = 0; for (let i = 0; i < p.length; i++) { const a = p[i], b = p[(i + 1) % p.length]; s += a[0] * b[1] - b[0] * a[1]; } return s / 2; };      // positief = met de klok mee (y wijst omlaag)
+  function kruisen(p) {                                                    // snijdt een zijde een niet-aangrenzende zijde? (de wanden kruisen elkaar: de hoeken kloppen niet)
+    const n = p.length, ccw = (a, b, c) => (c[1] - a[1]) * (b[0] - a[0]) - (b[1] - a[1]) * (c[0] - a[0]);
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+      if (j === i + 1 || (i === 0 && j === n - 1)) continue;
+      const a = p[i], b = p[(i + 1) % n], c = p[j], d = p[(j + 1) % n];
+      if (ccw(a, b, c) * ccw(a, b, d) < 0 && ccw(c, d, a) * ccw(c, d, b) < 0) return true;
+    }
+    return false;
+  }
+  const leegVorm = (n, reden) => ({ status: 'onvoldoende-bepaald', afwijkend: null, schematisch: true, reden, hoeken: null, hoekpunten_mm: null, controle: null, tegenover: [], diagonaal_gebruikt: null, betrokken: [], n });
   K.vorm = function (ruimte) {
-    const r = ruimte || {}, T = K.TOLERANTIE, z = {}, ontbreekt = [];
-    for (const w of K.WANDEN) { z[w] = lengte(r, 'wanden', w); if (z[w] == null) ontbreekt.push('wandlengte ' + WAND_NAAM[w]); }
+    const r = ruimte || {}, ids = wandIds(r), z = {}, ontbreekt = [];
+    if (ids.length < 3) return leegVorm(ids.length, ids.length ? 'De vorm is nog niet bepaald: er zijn minder dan drie wanden.' : 'De vorm is nog niet bepaald: er zijn nog geen wanden.');
+    if (!isRond(r)) return leegVorm(ids.length, 'De fotoronde is nog niet rond: de vorm is een schatting tot je kiest dat de kamer rond is (terug bij de eerste wand).');
+    for (const w of ids) { z[w] = lengte(r, 'wanden', w); if (z[w] == null) ontbreekt.push('wandlengte ' + wandKort(w)); }
+    // vier wanden zonder inspringende hoek: de bekende vierhoek-logica (vier zijden en één diagonaal); alle andere vormen: een rondgang langs de wanden met de binnenhoeken
+    return ids.length === 4 && ids.every(w => !hoekInfo(r, w).inspringend) ? vormVierhoek(r, ids, z, ontbreekt) : vormVeelhoek(r, ids, z, ontbreekt);
+  };
+  // Vierhoek: v0.3-logica. De hoeken volgen uit de metingen; hoeken die op 90 graden zijn gezet tellen hier niet mee (ze zijn een aanname die de diagonaal toetst).
+  function vormVierhoek(r, ids, z, ontbreekt) {
+    const T = K.TOLERANTIE, hoekIds = ids.map(w => wandHoeken(r, w)[0]);
     const dA = lengte(r, 'diagonalen', 'A'), dB = lengte(r, 'diagonalen', 'B');
     // tegenoverliggende wanden die meer dan 5 mm verschillen bewijzen al dat de kamer niet rechthoekig is
-    const verschil = [['N', 'Z'], ['W', 'O']].filter(([a, b]) => z[a] != null && z[b] != null && Math.abs(z[a] - z[b]) > T.tegenover).map(([a, b]) => ({ wanden: [a, b], verschil_mm: Math.abs(z[a] - z[b]) }));
-    const basis = { status: 'onvoldoende-bepaald', afwijkend: verschil.length ? true : null, schematisch: true, reden: '', hoeken: null, hoekpunten_mm: null, controle: null, tegenover: verschil, diagonaal_gebruikt: null };
+    const verschil = [[ids[0], ids[2]], [ids[3], ids[1]]].filter(([a, b]) => z[a] != null && z[b] != null && Math.abs(z[a] - z[b]) > T.tegenover).map(([a, b]) => ({ wanden: [a, b], verschil_mm: Math.abs(z[a] - z[b]) }));
+    const basis = { status: 'onvoldoende-bepaald', afwijkend: verschil.length ? true : null, schematisch: true, reden: '', hoeken: null, hoekpunten_mm: null, controle: null, tegenover: verschil, diagonaal_gebruikt: null, betrokken: [], n: 4 };
     if (ontbreekt.length) { basis.reden = 'Meet eerst ' + ontbreekt.join(', ') + '.'; return basis; }
-    if (dA == null && dB == null) { basis.reden = 'De vorm is nog niet bepaald: meet minstens één diagonaal. Tot dan is de tekening schematisch.'; return basis; }
-    const metA = dA != null, ids = metA ? ['NW', 'NO', 'ZO', 'ZW'] : ['NO', 'ZO', 'ZW', 'NW'], zijden = metA ? [z.N, z.O, z.Z, z.W] : [z.O, z.Z, z.W, z.N];
+    if (dA == null && dB == null) {
+      const schuin = ids.filter(w => hoekInfo(r, w).schuin && hoekInfo(r, w).bron !== 'gemeten');
+      basis.reden = schuin.length ? 'De vorm is onvoldoende bepaald: de hoek na ' + schuin.map(wandTekst).join(' en na ') + ' staat schuin en is alleen geschat. Meet een diagonaal (of de hoek). Tot dan is de tekening schematisch.'
+        : 'De vorm is nog niet bepaald: meet minstens één diagonaal. Tot dan is de tekening schematisch (hoeken aangenomen 90 graden).';
+      return basis;
+    }
+    const metA = dA != null, volg = metA ? [0, 1, 2, 3] : [1, 2, 3, 0], ids2 = volg.map(i => hoekIds[i]), zijden = volg.map(i => z[ids[i]]);
     const d1 = metA ? dA : dB, d2 = metA ? dB : dA, p = vierhoek(zijden, d1, T.diagonaal);
-    const betrokken = K.WANDEN.map(wandPad).concat(dA != null ? [diagPad('A')] : [], dB != null ? [diagPad('B')] : []);
+    const betrokken = ids.map(wandPad).concat(dA != null ? [diagPad('A')] : [], dB != null ? [diagPad('B')] : []);
     basis.diagonaal_gebruikt = metA ? 'A' : 'B'; basis.betrokken = betrokken;
     if (!p) { basis.status = 'inconsistent'; basis.reden = 'Met deze vier wandlengtes en diagonaal ' + basis.diagonaal_gebruikt + ' (' + d1 + ' mm) kan de ruimte niet bestaan. Controleer de diagonaal en de wandlengtes.'; return basis; }
-    // naar vaste assen: noordwesthoek in de oorsprong, noordoosthoek op de x-as, zuid is positief y
-    const i0 = ids.indexOf('NW'), i1 = ids.indexOf('NO'), o = p[i0], rx = p[i1][0] - o[0], ry = p[i1][1] - o[1], l = Math.hypot(rx, ry), c = rx / l, sn = -ry / l;
+    // naar vaste assen: de eerste hoek in de oorsprong, de tweede op de x-as, de ruimte onder de x-as (y wijst omlaag)
+    const i0 = ids2.indexOf(hoekIds[0]), i1 = ids2.indexOf(hoekIds[1]), o = p[i0], rx = p[i1][0] - o[0], ry = p[i1][1] - o[1], l = Math.hypot(rx, ry), c = rx / l, sn = -ry / l;
     const punten = {}, hoeken = {};
-    ids.forEach((id, i) => { const dx = p[i][0] - o[0], dy = p[i][1] - o[1]; punten[id] = [Math.round(dx * c - dy * sn) + 0, Math.round(dx * sn + dy * c) + 0]; hoeken[id] = afr(hoekIn(p, i)); });
+    ids2.forEach((id, i) => { const dx = p[i][0] - o[0], dy = p[i][1] - o[1]; punten[id] = [Math.round(dx * c - dy * sn) + 0, Math.round(dx * sn + dy * c) + 0]; hoeken[id] = afr(hoekIn(p, i)); });
     const afwijking = Math.max.apply(null, Object.keys(hoeken).map(k => Math.abs(hoeken[k] - 90)));
     basis.hoeken = hoeken; basis.hoekpunten_mm = punten; basis.afwijkend = verschil.length > 0 || afwijking > T.hoek_graden; basis.max_hoekafwijking_graden = afr(afwijking);
     if (d2 == null) { basis.status = 'onverifieerd'; basis.reden = 'Vorm berekend uit vier zijden en diagonaal ' + basis.diagonaal_gebruikt + '. Meet de andere diagonaal als controle (optioneel). Tot dan is de tekening schematisch.'; return basis; }
@@ -268,9 +375,46 @@
     basis.controle = { diagonaal: metA ? 'B' : 'A', gemeten_mm: d2, berekend_mm: berekend, verschil_mm: v, tolerantie_mm: T.diagonaal };
     if (Math.abs(v) > T.diagonaal) { basis.status = 'inconsistent'; basis.reden = 'Diagonaal ' + basis.controle.diagonaal + ' is ' + d2 + ' mm gemeten, maar uit de vier wanden en diagonaal ' + basis.diagonaal_gebruikt + ' volgt ' + berekend + ' mm (' + (v > 0 ? '+' : '') + v + ' mm). De metingen sluiten niet op elkaar: controleer de referentie en meet opnieuw. De app past niets aan.'; return basis; }
     basis.status = 'consistent'; basis.schematisch = false;
-    basis.reden = 'De metingen sluiten op elkaar: diagonaal ' + basis.controle.diagonaal + ' ' + d2 + ' mm gemeten, ' + berekend + ' mm berekend (' + (v > 0 ? '+' : '') + v + ' mm).' + (basis.afwijkend ? ' De ruimte is niet rechthoekig (hoeken: ' + ids.map(k => k + ' ' + hoeken[k] + ' graden').join(', ') + '). Dat is informatie, geen fout; houd er rekening mee bij het meubel.' : '');
+    basis.reden = 'De metingen sluiten op elkaar: diagonaal ' + basis.controle.diagonaal + ' ' + d2 + ' mm gemeten, ' + berekend + ' mm berekend (' + (v > 0 ? '+' : '') + v + ' mm).' + (basis.afwijkend ? ' De ruimte is niet rechthoekig (hoeken: ' + ids2.map(k => k + ' ' + hoeken[k] + ' graden').join(', ') + '). Dat is informatie, geen fout; houd er rekening mee bij het meubel.' : '');
     return basis;
-  };
+  }
+  // Veelhoek (meer of minder dan vier wanden, of een inspringende hoek): een rondgang langs de wanden met de binnenhoeken. Sluit de rondgang niet (sluitfout groter dan 10 mm), dan zijn de
+  // metingen inconsistent. Zijn alle hoeken 90 of 270 graden (aangenomen), dan is de vorm schematisch tot een diagonaal als controle klopt; een schuine hoek die alleen geschat is, maakt de vorm onvoldoende bepaald.
+  function vormVeelhoek(r, ids, z, ontbreekt) {
+    const T = K.TOLERANTIE, n = ids.length, hoekIds = ids.map(w => wandHoeken(r, w)[0]), info = ids.map(w => hoekInfo(r, w));
+    const basis = { status: 'onvoldoende-bepaald', afwijkend: null, schematisch: true, reden: '', hoeken: null, hoekpunten_mm: null, controle: null, tegenover: [], diagonaal_gebruikt: null, betrokken: [], n, veelhoek: true, sluitfout: null };
+    if (ontbreekt.length) { basis.reden = 'Meet eerst ' + ontbreekt.join(', ') + '.'; return basis; }
+    const schuin = ids.filter((w, i) => info[i].schuin && info[i].bron !== 'gemeten');
+    if (schuin.length) { basis.reden = 'De vorm is onvoldoende bepaald: de hoek na ' + schuin.map(wandTekst).join(' en na ') + ' staat schuin en is alleen geschat. Meet de hoek (of een diagonaal). Tot dan is de tekening schematisch.'; return basis; }
+    const p = rondgang(ids.map(w => z[w]), info.map(i => i.graden)), fx = p[n][0] - p[0][0], fy = p[n][1] - p[0][1], mm = Math.hypot(fx, fy);
+    basis.betrokken = ids.map(wandPad); basis.sluitfout = { x: Math.round(fx), y: Math.round(fy), mm: Math.round(mm) };
+    basis.hoeken = {}; ids.forEach((w, i) => { basis.hoeken[hoekIds[(i + 1) % n]] = info[i].graden; });
+    if (mm > T.sluit) {
+      basis.status = 'inconsistent';
+      basis.reden = 'Meetgegevens inconsistent: de wanden sluiten niet op elkaar. Na een rondgang langs alle wanden zit er ' + Math.round(mm) + ' mm tussen begin en eind (' + Math.round(fx) + ' mm in x, ' + Math.round(fy) + ' mm in y). Controleer de wandlengtes en de hoeken. De app past niets aan.';
+      return basis;
+    }
+    const pts = p.slice(0, n);
+    if (oppervlakte(pts) <= 0 || kruisen(pts)) { basis.status = 'inconsistent'; basis.reden = 'Meetgegevens inconsistent: de wanden lopen niet netjes met de klok mee rond een ruimte (of kruisen elkaar). Controleer de hoeken (90 of 270 graden) en de volgorde van de wanden.'; return basis; }
+    basis.hoekpunten_mm = {}; pts.forEach((q, i) => { basis.hoekpunten_mm[hoekIds[i]] = [Math.round(q[0]) + 0, Math.round(q[1]) + 0]; });
+    // een diagonaal als controle (optioneel): de afstand tussen twee hoekpunten uit de rondgang tegen de gemeten diagonaal
+    const checks = [];
+    for (const d of lijst(r.diagonalen)) {
+      const gem = d && d.id ? lengte(r, 'diagonalen', d.id) : null, i = hoekIds.indexOf(d && d.van), j = hoekIds.indexOf(d && d.naar);
+      if (gem == null || i < 0 || j < 0) continue;
+      const berekend = Math.round(afstand(pts[i], pts[j])), v = Math.round(gem - berekend);
+      checks.push({ diagonaal: d.id, gemeten_mm: gem, berekend_mm: berekend, verschil_mm: v, tolerantie_mm: T.diagonaal });
+      basis.betrokken.push(diagPad(d.id));
+    }
+    basis.controle = checks.length ? checks[0] : null; basis.controles = checks;
+    const fout = checks.find(c => Math.abs(c.verschil_mm) > T.diagonaal);
+    if (fout) { basis.status = 'inconsistent'; basis.reden = 'Diagonaal ' + fout.diagonaal + ' is ' + fout.gemeten_mm + ' mm gemeten, maar uit de wanden en hoeken volgt ' + fout.berekend_mm + ' mm (' + (fout.verschil_mm > 0 ? '+' : '') + fout.verschil_mm + ' mm). De metingen sluiten niet op elkaar: controleer de wandlengtes en de hoeken. De app past niets aan.'; return basis; }
+    const aangenomen = ids.some((w, i) => info[i].bron !== 'gemeten');
+    if (checks.length) { basis.status = 'consistent'; basis.schematisch = false; basis.reden = 'De wanden sluiten (sluitfout ' + basis.sluitfout.mm + ' mm) en diagonaal ' + checks.map(c => c.diagonaal).join(' en ') + ' klopt (' + checks.map(c => (c.verschil_mm > 0 ? '+' : '') + c.verschil_mm + ' mm').join(', ') + '). ' + (aangenomen ? 'De overige hoeken zijn aangenomen als 90 of 270 graden.' : ''); return basis; }
+    basis.status = 'onverifieerd';
+    basis.reden = (aangenomen ? 'Schematisch: de hoeken zijn aangenomen als 90 of 270 graden. ' : '') + 'De wanden sluiten op elkaar (sluitfout ' + basis.sluitfout.mm + ' mm). Meet een diagonaal als controle (optioneel).';
+    return basis;
+  }
   K.sluitcontrole = function (ruimte) {
     const v = K.vorm(ruimte), checks = [];
     const status = v.status === 'inconsistent' ? 'conflict' : v.status === 'consistent' ? (v.afwijkend ? 'afwijkend' : 'ok') : 'wacht';
@@ -283,12 +427,86 @@
   function conflictPaden(ruimte) { const s = {}; for (const c of K.sluitcontrole(ruimte).conflicten) for (const p of c.maten) s[p] = true; return s; }
   K.conflictPaden = ruimte => Object.keys(conflictPaden(ruimte));
 
+  // ── De plattegrond: de contour van de ruimte, uit wat er is (v0.4) ──
+  // De vorm ontstaat uit de foto's en wordt steeds nauwkeuriger (Bart, 1-11): zonder maten is het een schatting (gestippeld), elke gemeten wandlengte maakt de bijbehorende wand vast, en de
+  // geschatte delen schalen mee: een uitsprong die alleen als verhouding op de wand bekend is, volgt de gemeten wandlengte. Onbekende wandlengtes worden als schatting zo gekozen dat een
+  // rechthoekige ruimte (alle hoeken 90 of 270 graden) sluit. De kern past nooit een maat aan: de schatting staat alleen in deze tekening.
+  // Geeft { n, rond, punten (hoek-id naar [x, y] in mm), wanden (id naar { a, b, lengte, gemeten, geschat, hoek }), uitsprongen[], contour[] (segmenten langs de rand), schatting, sluitfout, vorm, bbox }.
+  // Het coordinatenstelsel: de eerste wand loopt langs de x-as, y wijst omlaag, de ruimte ligt rechts van de looprichting (met de klok mee).
+  const afstandPt = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+  function schatLengtes(ids, info, gem, rond) {
+    const n = ids.length, bekend = gem.filter(x => x != null), gemiddeld = bekend.length ? bekend.reduce((s, x) => s + x, 0) / bekend.length : null;
+    const std = i => gem[i] != null ? gem[i] : (n % 2 === 0 && gem[(i + n / 2) % n] != null) ? gem[(i + n / 2) % n] : gemiddeld != null ? gemiddeld : (i % 2 === 0 ? 4000 : 3000);
+    const L = ids.map((w, i) => std(i)), geschat = gem.map(x => x == null);
+    if (!rond || !info.every(i => i.haaks)) return { L, geschat, gesloten: false };
+    // Alle wanden gemeten maar de rondgang sluit niet precies (en er is geen diagonaal die de vorm vastlegt): voor de tekening de fout gelijk verdelen over de wanden op dezelfde as, als de fout klein is.
+    // Dat verandert geen maat; het is alleen de getekende schatting.
+    const alles = !geschat.some(Boolean);
+    if (alles) { const q = rondgang(L, info.map(i => i.graden)), fout = afstandPt(q[0], q[n]), omtrek = L.reduce((s, x) => s + x, 0); if (fout < 0.5 || fout > 0.015 * omtrek) return { L, geschat, gesloten: false }; }
+    const pas = i => alles || geschat[i];
+    // alle hoeken haaks: de looprichting van elke wand is een kwart slag; de aan te passen lengtes per as zo kiezen dat de rondgang sluit
+    let phi = 0; const dir = ids.map((w, i) => { const d = [Math.round(Math.cos(phi)), Math.round(Math.sin(phi))]; phi += (180 - info[i].graden) * Math.PI / 180; return d; });
+    const nieuw = L.slice();
+    for (const as of [0, 1]) {
+      const onbekend = ids.map((w, i) => i).filter(i => pas(i) && dir[i][as] !== 0);
+      if (!onbekend.length) continue;
+      const rest = -ids.reduce((s, w, i) => s + (pas(i) || dir[i][as] === 0 ? 0 : dir[i][as] * L[i]), 0) - onbekend.reduce((s, i) => s + dir[i][as] * L[i], 0), per = rest / onbekend.length;
+      const kandidaat = onbekend.map(i => L[i] + dir[i][as] * per);
+      if (kandidaat.some(x => !(x >= 300))) return { L, geschat, gesloten: false };          // de schatting past niet bij de hoeken: laat de standaardlengtes staan
+      onbekend.forEach((i, k) => { nieuw[i] = kandidaat[k]; });
+    }
+    return { L: nieuw, geschat, gesloten: true };
+  }
+  K.plattegrond = function (ruimte) {
+    const r = ruimte || {}, ids = wandIds(r), n = ids.length, T = K.TOLERANTIE, rond = n >= 3 && isRond(r), vorm = K.vorm(r);
+    const uit = { n, rond, punten: {}, wanden: {}, uitsprongen: [], contour: [], vorm, schatting: true, sluitfout: null, bbox: null, volgorde: ids.slice() };
+    if (!n) return uit;
+    const hoekIds = ids.map(w => wandHoeken(r, w)[0]), eindId = wandHoeken(r, ids[n - 1])[1], info = ids.map(w => hoekInfo(r, w)), gem = ids.map(w => lengte(r, 'wanden', w));
+    let pts, geschat = gem.map(x => x == null), vormGeschat = true;
+    if (rond && vorm.hoekpunten_mm && vorm.status !== 'inconsistent' && hoekIds.every(h => vorm.hoekpunten_mm[h])) {
+      pts = hoekIds.map(h => vorm.hoekpunten_mm[h]); pts.push(pts[0]); vormGeschat = vorm.status !== 'consistent';
+    } else {
+      const sl = schatLengtes(ids, info, gem, rond); geschat = sl.geschat;
+      pts = rondgang(sl.L, info.map(i => i.graden));
+    }
+    const gesloten = rond && afstandPt(pts[0], pts[n]) <= T.sluit + 0.5;
+    if (rond) uit.sluitfout = { x: Math.round(pts[n][0] - pts[0][0]), y: Math.round(pts[n][1] - pts[0][1]), mm: Math.round(afstandPt(pts[0], pts[n])) };
+    hoekIds.forEach((h, i) => { uit.punten[h] = pts[i]; });
+    if (!rond) uit.punten[eindId] = pts[n];
+    ids.forEach((w, i) => {
+      const a = pts[i], b = i === n - 1 && gesloten ? pts[0] : pts[i + 1];
+      uit.wanden[w] = { id: w, nr: i + 1, van: hoekIds[i], naar: i === n - 1 ? eindId : hoekIds[i + 1], a, b, lengte: gem[i] != null ? gem[i] : afstandPt(a, b), gemeten: gem[i] != null, geschat: gem[i] == null, hoek: info[i], laatste: i === n - 1 };
+    });
+    // uitsprongen en nissen op de wanden: vier hoekpunten per uitsprong (begin op de wand, de voorkant en weer terug op de wand)
+    ids.forEach((w, i) => {
+      const we = uit.wanden[w], dx = we.b[0] - we.a[0], dy = we.b[1] - we.a[1], len = Math.hypot(dx, dy) || 1, d = [dx / len, dy / len], nrm = [-d[1], d[0]];      // nrm wijst de ruimte in (rechts van de looprichting)
+      const lijstU = lijst(r.uitsprongen).filter(u => u && u.id && u.wand === w).map(u => ({ u, v: uitsprongWaarden(r, u, len) })).filter(x => x.v.positie && x.v.breedte).sort((a, b) => a.v.positie.mm - b.v.positie.mm);
+      let cursor = 0;
+      const seg = (soort, uid, van, naar, geschatFlag) => afstandPt(van, naar) >= 0.5 && uit.contour.push({ wand: w, soort, uitsprong: uid, van, naar, lengte: Math.round(afstandPt(van, naar)), geschat: geschatFlag });
+      const op = t => [we.a[0] + d[0] * t, we.a[1] + d[1] * t];
+      for (const { u, v } of lijstU) {
+        const p0 = Math.max(cursor, Math.min(len, v.positie.mm)), p1 = Math.max(p0, Math.min(len, v.positie.mm + v.breedte.mm)), dd = (v.soort === 'achter' ? -1 : 1) * v.diepte.mm;
+        const A = op(p0), B = op(p1), A2 = [A[0] + nrm[0] * dd, A[1] + nrm[1] * dd], B2 = [B[0] + nrm[0] * dd, B[1] + nrm[1] * dd];
+        const geschatU = { positie: !v.positie.gemeten, breedte: !v.breedte.gemeten, diepte: !v.diepte.gemeten };
+        seg('wand', null, op(cursor), A, we.geschat);
+        seg('zij', u.id, A, A2, geschatU.diepte); seg('front', u.id, A2, B2, geschatU.positie || geschatU.breedte); seg('zij', u.id, B2, B, geschatU.diepte);
+        uit.uitsprongen.push({ id: u.id, wand: w, soort: v.soort, positie: p0, breedte: p1 - p0, diepte: v.diepte.mm, hoogte: v.hoogte ? v.hoogte.mm : null, geschat: geschatU, punten: [A, A2, B2, B] });
+        cursor = p1;
+      }
+      seg('wand', null, op(cursor), we.b, we.geschat);
+    });
+    uit.schatting = !rond || vormGeschat || geschat.some(Boolean) || uit.uitsprongen.some(u => u.geschat.positie || u.geschat.breedte || u.geschat.diepte);
+    const alle = Object.keys(uit.punten).map(k => uit.punten[k]).concat(uit.contour.map(c => c.naar));
+    uit.bbox = { x0: Math.min.apply(null, alle.map(p => p[0])), x1: Math.max.apply(null, alle.map(p => p[0])), y0: Math.min.apply(null, alle.map(p => p[1])), y1: Math.max.apply(null, alle.map(p => p[1])) };
+    return uit;
+  };
+
   // ── Rondje controle ──
   // Alleen voor de werkzone-wanden. Per wand en categorie: aanwezig / afwezig / later; geen keuze = "nog niet bekeken".
   const rondjeSleutel = (w, c) => w + '|' + c;
   const rondjeWaarde = v => { const x = isObj(v) ? v.waarde : v; return K.RONDJE_KEUZES.includes(x) ? x : null; };
   K.rondje = function (ruimte) {
-    const r = ruimte || {}, wanden = K.WANDEN.filter(w => lijst(r.werkzone).includes(w)), regels = [];
+    const r = ruimte || {}, wanden = wandIds(r).filter(w => lijst(r.werkzone).includes(w)), regels = [];
     for (const w of wanden) for (const [cat, naam] of K.RONDJE_CATEGORIEEN) {
       const waarde = rondjeWaarde(isObj(r.rondje) ? r.rondje[rondjeSleutel(w, cat)] : null);
       regels.push({ sleutel: rondjeSleutel(w, cat), wand: w, categorie: cat, naam, waarde, status: waarde || 'nog-niet-bekeken', nadruk: cat === 'water' && r.meubeltype && r.meubeltype !== 'kast' });
@@ -298,7 +516,7 @@
   };
   // Legt een keuze van het rondje vast; null haalt de keuze weg. Geeft een nieuwe ruimte terug.
   K.zetRondje = function (ruimte, wand, categorie, waarde, tijd) {
-    if (!K.WANDEN.includes(wand) || !K.RONDJE_CATEGORIEEN.some(c => c[0] === categorie)) return { ruimte: null, fout: 'Onbekende wand of categorie.' };
+    if (!wandIds(ruimte).includes(wand) || !K.RONDJE_CATEGORIEEN.some(c => c[0] === categorie)) return { ruimte: null, fout: 'Onbekende wand of categorie.' };
     if (waarde !== null && !K.RONDJE_KEUZES.includes(waarde)) return { ruimte: null, fout: 'Onbekende keuze voor het rondje.' };
     const r = kloon(ruimte); r.rondje = isObj(r.rondje) ? r.rondje : {};
     const k = rondjeSleutel(wand, categorie), oud = r.rondje[k];
@@ -320,16 +538,26 @@
       if (v != null && (s.pad.startsWith('plafondpunten.') || s.sleutel.indexOf('plafond_') === 0) && (v < 2000 || v > 5000)) w.push({ code: 'onwaarschijnlijk', pad: s.pad, tekst: s.kort + ': ' + v + ' mm ligt buiten 2000 tot 5000 mm. Tikfout?' });
     }
     // een werkzone-wand waarvan de lengte onderaan, op 1000 mm en bovenaan meer dan 5 mm verschilt, staat niet te lood of is scheef: informatie voor het meubel, geen blokkade
-    for (const wd of K.WANDEN) if (lijst(r.werkzone).includes(wd)) {
+    for (const wd of wandIds(r)) if (lijst(r.werkzone).includes(wd)) {
       const hoogtes = [['onder', 'lengte_onder'], ['1000 mm', 'lengte'], ['boven', 'lengte_boven']].map(([n, k]) => [n, K.waarde(maatOp(vind(r.wanden, wd), k))]).filter(x => x[1] != null);
       if (hoogtes.length < 2) continue;
       const waarden = hoogtes.map(x => x[1]), verschil = Math.max.apply(null, waarden) - Math.min.apply(null, waarden);
-      if (verschil > K.TOLERANTIE.wand_scheef) w.push({ code: 'wand-scheef', pad: 'wanden.' + wd, wand: wd, verschil_mm: verschil, tekst: 'Wand ' + WAND_NAAM[wd] + ' niet te lood of scheef: de lengte verschilt ' + verschil + ' mm tussen ' + hoogtes.map(x => x[0] + ' ' + x[1] + ' mm').join(', ') + '. Informatie voor het meubel, geen blokkade.' });
+      if (verschil > K.TOLERANTIE.wand_scheef) w.push({ code: 'wand-scheef', pad: 'wanden.' + wd, wand: wd, verschil_mm: verschil, tekst: 'Wand ' + wandKort(wd) + ' niet te lood of scheef: de lengte verschilt ' + verschil + ' mm tussen ' + hoogtes.map(x => x[0] + ' ' + x[1] + ' mm').join(', ') + '. Informatie voor het meubel, geen blokkade.' });
+    }
+    // uitsprongen en nissen: binnen de wand en niet over elkaar (met de bekende waarden: gemeten, anders het voorstel uit de foto)
+    for (const wd of wandIds(r)) {
+      const L = K.waarde(maatOp(vind(r.wanden, wd), 'lengte')); if (L == null) continue;
+      const l = lijst(r.uitsprongen).filter(u => u && u.id && u.wand === wd).map(u => ({ u, v: uitsprongWaarden(r, u, null) })).filter(x => x.v.positie && x.v.breedte).sort((a, b) => a.v.positie.mm - b.v.positie.mm);
+      l.forEach((x, i) => {
+        const p0 = x.v.positie.mm, p1 = p0 + x.v.breedte.mm;
+        if (p0 < -5 || p1 > L + 5) w.push({ code: 'uitsprong-buiten-wand', pad: 'uitsprongen.' + x.u.id, wand: wd, tekst: K.UITSPRONG_SOORTEN[x.u.soort] + ' ' + x.u.id + ' (' + Math.round(p0) + ' tot ' + Math.round(p1) + ' mm) valt buiten de ' + wandTekst(wd) + ' van ' + L + ' mm. Controleer positie, breedte en wandlengte.' });
+        if (i && p0 < l[i - 1].v.positie.mm + l[i - 1].v.breedte.mm - 5) w.push({ code: 'uitsprong-overlap', pad: 'uitsprongen.' + x.u.id, wand: wd, tekst: K.UITSPRONG_SOORTEN[x.u.soort] + ' ' + x.u.id + ' en ' + l[i - 1].u.id + ' liggen over elkaar op de ' + wandTekst(wd) + '. Controleer positie en breedte.' });
+      });
     }
     // rondje zegt "afwezig" terwijl er in die wand en categorie wel iets is vastgelegd
     for (const x of K.rondje(r).regels) if (x.waarde === 'afwezig') {
       const iets = (cat => cat === 'kozijn' ? lijst(r.openingen).filter(o => o && o.wand === x.wand).length + lijst(r.objecten).filter(o => o && o.wand === x.wand && K.OBJECTTYPES[o.type] && K.OBJECTTYPES[o.type].cat === 'kozijn').length
-        : cat === 'afw' ? lijst(r.bijzonderheden).filter(b => b && b.wand === x.wand).length + lijst(r.objecten).filter(o => o && o.wand === x.wand && o.type === 'overig').length
+        : cat === 'afw' ? lijst(r.bijzonderheden).filter(b => b && b.wand === x.wand).length + lijst(r.uitsprongen).filter(b => b && b.wand === x.wand).length + lijst(r.objecten).filter(o => o && o.wand === x.wand && o.type === 'overig').length
         : lijst(r.objecten).filter(o => o && o.wand === x.wand && K.OBJECTTYPES[o.type] && K.OBJECTTYPES[o.type].cat === cat).length)(x.categorie);
       if (iets) w.push({ code: 'rondje-tegenspraak', pad: x.sleutel, tekst: 'Rondje ' + K.wandNaam(x.wand) + ' - ' + x.naam + ' staat op niet aanwezig, maar er is wel iets vastgelegd.' });
     }
@@ -346,24 +574,26 @@
     for (const v of K.vragen(r)) {
       if (v.staat !== 'nvt' || v.bucket === 'optie') continue;
       const m = v.maat || {};
-      if (v.soort === 'wandbevestiging') u.push({ ruimte: nm, soort: 'wand-niet-beoordeeld', wand: v.wand, pad: v.pad, tekst: 'Wand ' + WAND_NAAM[v.wand] + ': ' + (m.keuze === 'afgedekt' ? 'afgedekt' : 'niet beoordeeld'), notitie: m.notitie || '' });
+      if (v.soort === 'wandbevestiging') u.push({ ruimte: nm, soort: 'wand-niet-beoordeeld', wand: v.wand, pad: v.pad, tekst: 'Wand ' + wandKort(v.wand) + ': ' + (m.keuze === 'afgedekt' ? 'afgedekt' : 'niet beoordeeld'), notitie: m.notitie || '' });
       else u.push({ ruimte: nm, soort: 'nvt', wand: v.wand, pad: v.pad, tekst: v.kort + ': niet van toepassing, bewust niet maatvast', notitie: m.notitie || '' });
     }
     for (const b of lijst(r.bijzonderheden)) {
       if (!b || !b.id) continue;
       const m = isObj(b.maten) ? b.maten.maat : null;
-      if (!geldigeMeting(m)) u.push({ ruimte: nm, soort: 'bijzonderheid', wand: b.wand || null, pad: 'bijzonderheden.' + b.id, tekst: (K.BIJZONDERHEDEN[b.soort] || 'Bijzonderheid') + (b.wand ? ', ' + WAND_NAAM[b.wand] : '') + ': genoemd, niet bemeten', notitie: b.notitie || '' });
+      if (!geldigeMeting(m)) u.push({ ruimte: nm, soort: 'bijzonderheid', wand: b.wand || null, pad: 'bijzonderheden.' + b.id, tekst: (K.BIJZONDERHEDEN[b.soort] || 'Bijzonderheid') + (b.wand ? ', ' + wandKort(b.wand) : '') + ': genoemd, niet bemeten', notitie: b.notitie || '' });
     }
-    for (const x of K.rondje(r).regels) if (x.waarde === 'afwezig') u.push({ ruimte: nm, soort: 'rondje-niet-aanwezig', wand: x.wand, pad: 'rondje.' + x.sleutel, tekst: 'Rondje ' + WAND_NAAM[x.wand] + ': ' + x.naam.toLowerCase() + ' niet aanwezig of n.v.t.', notitie: '' });
+    for (const x of K.rondje(r).regels) if (x.waarde === 'afwezig') u.push({ ruimte: nm, soort: 'rondje-niet-aanwezig', wand: x.wand, pad: 'rondje.' + x.sleutel, tekst: 'Rondje ' + wandKort(x.wand) + ': ' + x.naam.toLowerCase() + ' niet aanwezig of n.v.t.', notitie: '' });
     const vorm = K.vorm(r);
-    if (vorm.status !== 'consistent') u.push({ ruimte: nm, soort: 'vorm', wand: null, pad: null, tekst: vorm.status === 'onverifieerd' ? 'Vorm van de ruimte niet gecontroleerd met de tweede diagonaal' : 'Vorm van de ruimte niet bepaald, schematisch', notitie: '' });
+    if (vorm.status !== 'consistent') u.push({ ruimte: nm, soort: 'vorm', wand: null, pad: null, tekst: vorm.status === 'onverifieerd' ? (vorm.veelhoek ? 'Vorm van de ruimte schematisch: de hoeken zijn aangenomen als 90 of 270 graden, niet met een diagonaal gecontroleerd' : 'Vorm van de ruimte niet gecontroleerd met de tweede diagonaal') : 'Vorm van de ruimte niet bepaald, schematisch', notitie: '' });
     return u;
   }
   K.vrijgeefCheckRuimte = function (ruimte) {
     const r = ruimte || {}, redenen = [], t = K.tellers(r), nm = r.naam || r.id || 'Ruimte', rd = K.rondje(r), sc = K.sluitcontrole(r), set = K.MEUBELSETS[r.meubeltype];
     if (!set || !set.gereed) redenen.push({ code: 'meubelset', tekst: nm + ': voor ' + (r.meubeltype || 'dit meubeltype') + ' bestaat nog geen eigen vragenset (alleen kast is gevalideerd), dus vrijgeven kan nog niet.' });
     for (const o of lijst(r.openingen)) if (o && o.id && lijst(r.werkzone).includes(o.wand) && !K.DEFINITIES[o.definitie]) redenen.push({ code: 'definitie', pad: 'openingen.' + o.id, tekst: nm + ': kies de definitie van ' + openingNaam(o) + ' (muursparing, dagmaat of kozijn buiten). In de werkzone is een maat zonder definitie dubbelzinnig.' });
-    if (!lijst(r.werkzone).filter(w => K.WANDEN.includes(w)).length) redenen.push({ code: 'werkzone', tekst: nm + ': kies waar het meubel komt (werkzone).' });
+    if (wandIds(r).length < 3) redenen.push({ code: 'wanden', tekst: nm + ': een ruimte heeft minstens drie wanden. Maak de fotoronde af.' });
+    else if (!isRond(r)) redenen.push({ code: 'ronde', tekst: nm + ': de fotoronde is nog niet rond. Kies "kamer rond" als je terug bent bij de eerste wand.' });
+    if (!lijst(r.werkzone).filter(w => wandIds(r).includes(w)).length) redenen.push({ code: 'werkzone', tekst: nm + ': kies waar het meubel komt (werkzone).' });
     [['basis', 'Basis'], ['werkzone', 'Werkzone'], ['extra', 'Extra']].forEach(([b, n]) => {
       const c = t[b]; if (!c.n) return;
       if (c.open) redenen.push({ code: 'open', bucket: b, aantal: c.open, tekst: nm + ' - ' + n + ': ' + c.open + (c.open === 1 ? ' punt moet' : ' punten moeten') + ' nog gemeten.' });
@@ -375,8 +605,8 @@
     if (K.RONDJE_LATER_BLOKKEERT && rd.later) redenen.push({ code: 'rondje-later', aantal: rd.later, tekst: nm + ': rondje controle, ' + rd.later + (rd.later === 1 ? ' categorie staat' : ' categorieën staan') + ' op later meten (open taak).' });
     const uitzonderingen = uitzonderingenVan(r), kan = redenen.length === 0;
     const tel = c => ({ n: c.n, gemeten: c.gemeten, nvt: c.nvt });
-    const scope = { ruimte: r.id, naam: nm, meubeltype: r.meubeltype || null, meubelset_gereed: !!(set && set.gereed), werkzone: lijst(r.werkzone).filter(w => K.WANDEN.includes(w)), wanden_alleen_basis: K.WANDEN.filter(w => !lijst(r.werkzone).includes(w)),
-      vorm: { status: sc.vorm.status, afwijkend: sc.vorm.afwijkend, schematisch: sc.vorm.schematisch }, telling: { basis: tel(t.basis), werkzone: tel(t.werkzone), extra: tel(t.extra) } };
+    const scope = { ruimte: r.id, naam: nm, meubeltype: r.meubeltype || null, meubelset_gereed: !!(set && set.gereed), werkzone: lijst(r.werkzone).filter(w => wandIds(r).includes(w)), wanden_alleen_basis: wandIds(r).filter(w => !lijst(r.werkzone).includes(w)),
+      vorm: { status: sc.vorm.status, afwijkend: sc.vorm.afwijkend, schematisch: sc.vorm.schematisch, veelhoek: !!sc.vorm.veelhoek, aantal_wanden: wandIds(r).length, uitsprongen: lijst(r.uitsprongen).filter(u => u && u.id).length }, telling: { basis: tel(t.basis), werkzone: tel(t.werkzone), extra: tel(t.extra) } };
     return { kan, redenen, waarschuwingen: K.waarschuwingen(r), scope, uitzonderingen, volledig_gemeten: kan && uitzonderingen.length === 0 };
   };
   K.vrijgeefCheck = function (opname) {
@@ -388,7 +618,7 @@
       for (const x of c.waarschuwingen) waarschuwingen.push(Object.assign({ ruimte: r.id }, x));
       scope.push(c.scope); for (const x of c.uitzonderingen) uitzonderingen.push(x);
       // een foto van elke werkzone-wand is verplicht (maat + foto); van de andere wanden is een ontbrekende foto een waarschuwing
-      for (const w of K.WANDEN) if (!K.fotosVan(opname, r.id, w).length) {
+      for (const w of wandIds(r)) if (!K.fotosVan(opname, r.id, w).length) {
         if (lijst(r.werkzone).includes(w)) redenen.push({ ruimte: r.id, code: 'foto', wand: w, tekst: (r.naam || r.id) + ': maak eerst een foto van de ' + wandTekst(w) + ' (werkzone).' });
         else waarschuwingen.push({ ruimte: r.id, code: 'foto-ontbreekt', wand: w, tekst: (r.naam || r.id) + ': nog geen foto van de ' + wandTekst(w) + '.' });
       }
@@ -427,10 +657,12 @@
   // Alleen de verwijzing (ruimte, wand, bestandsnaam) gaat de hash in, nooit het beeld of een tijdstip.
   function werkzoneFotos(opname) {
     const l = [];
-    for (const r of lijst(opname && opname.ruimtes)) for (const w of K.WANDEN) if (lijst(r && r.werkzone).includes(w)) for (const f of K.fotosVan(opname, r.id, w)) l.push([r.id, w, f.bestand || f.id || ''].join('|'));
+    for (const r of lijst(opname && opname.ruimtes)) for (const w of wandIds(r)) if (lijst(r && r.werkzone).includes(w)) for (const f of K.fotosVan(opname, r.id, w)) l.push([r.id, w, f.bestand || f.id || ''].join('|'));
     return l.sort();
   }
-  K.inhoudsHash = opname => hash53(canon(opname) + '#fotos:' + JSON.stringify(werkzoneFotos(opname)));
+  // Een opname die van v0.3 gemigreerd is hasht als de oorspronkelijke versie (_versie_oud): zo blijft een bestaande vrijgave geldig na het lezen. Alleen de versie-velden worden zo gelezen, de inhoud niet.
+  const hashVorm = o => { if (!isObj(o) || o._versie_oud === undefined) return o; const c = Object.assign({}, o, { versie: o._versie_oud }); delete c._versie_oud; return c; };
+  K.inhoudsHash = opname => hash53(canon(hashVorm(opname)) + '#fotos:' + JSON.stringify(werkzoneFotos(opname)));
   K.isVrijgaveGeldig = opname => !!opname && opname.status === 'vrijgegeven' && isObj(opname.vrijgave) && opname.vrijgave.hash === K.inhoudsHash(opname);
   // De status zoals hij nu geldt: een vrijgave waarvan de inhoud veranderd is, heet "vrijgave-vervallen".
   K.effectieveStatus = opname => !opname ? null : opname.status === 'vrijgegeven' ? (K.isVrijgaveGeldig(opname) ? 'vrijgegeven' : 'vrijgave-vervallen') : (opname.status || 'concept');
@@ -519,7 +751,7 @@
     foto = foto || {};
     if (!foto.bestand || typeof foto.bestand !== 'string') return { opname: null, fout: 'Een foto heeft een bestandsnaam.' };
     if (!zoekRuimte(opname, foto.ruimte)) return { opname: null, fout: 'Een foto hoort bij een ruimte van deze opname.' };
-    if (foto.wand != null && !K.WANDEN.includes(foto.wand)) return { opname: null, fout: 'Onbekende wand.' };
+    if (foto.wand != null && !wandIds(zoekRuimte(opname, foto.ruimte)).includes(foto.wand)) return { opname: null, fout: 'Onbekende wand.' };
     const o = kloon(opname); o.fotos = lijst(o.fotos);
     if (o.fotos.some(f => f && f.bestand === foto.bestand && f.ruimte === foto.ruimte)) return { opname: null, fout: 'Dit bestand staat al bij deze ruimte.' };
     let n = o.fotos.length + 1; while (vind(o.fotos, 'F' + n)) n++;
@@ -540,7 +772,7 @@
   // De route vraagt alleen naar wat bestaat; de opnemer legt per wand vast wat er zit (deur, raam, stopcontact, radiator, plint, ...). Een id is voorvoegsel + volgnummer en is
   // uniek binnen de ruimte. Weghalen archiveert het hele item in ruimte.verwijderd (append-only): maten die al genomen zijn gaan nooit stil verloren.
   const ID_VOORVOEGSEL = { deur: 'D', raam: 'R', stopcontact: 'SC', schakelaar: 'SW', leiding: 'LT', radiator: 'RAD', vensterbank: 'VB', plint: 'PL', overig: 'OV', bijzonderheid: 'B' };
-  const volgId = (r, voor) => { const gebruikt = {}; for (const l of [r.openingen, r.objecten, r.bijzonderheden]) for (const e of lijst(l)) if (e && e.id) gebruikt[e.id] = true; let n = 1; while (gebruikt[voor + n]) n++; return voor + n; };
+  const volgId = (r, voor) => { const gebruikt = {}; for (const l of [r.openingen, r.objecten, r.bijzonderheden, r.uitsprongen, r.verwijderd && lijst(r.verwijderd).map(x => x && x.item)]) for (const e of lijst(l)) if (e && e.id) gebruikt[e.id] = true; let n = 1; while (gebruikt[voor + n]) n++; return voor + n; };
   function wijzigRuimte(opname, ruimteId, fn) {
     const o = kloon(opname), r = zoekRuimte(o, ruimteId); if (!r) return { opname: null, fout: 'Onbekende ruimte.' };
     zorgEntiteiten(r); const res = fn(r, o); if (res && res.fout) return { opname: null, fout: res.fout };
@@ -550,13 +782,13 @@
     wijz = wijz || {};
     if (wijz.naam != null) { if (!String(wijz.naam).trim()) return { fout: 'Geef de ruimte een naam.' }; r.naam = String(wijz.naam).trim(); }
     if (wijz.meubeltype != null) { if (!K.MEUBELTYPES.includes(wijz.meubeltype)) return { fout: 'Onbekend meubeltype.' }; r.meubeltype = wijz.meubeltype; }
-    if (wijz.werkzone != null) { if (!Array.isArray(wijz.werkzone) || wijz.werkzone.some(w => !K.WANDEN.includes(w))) return { fout: 'Onbekende wand in de werkzone.' }; r.werkzone = K.WANDEN.filter(w => wijz.werkzone.includes(w)); }
+    if (wijz.werkzone != null) { const ids = wandIds(r); if (!Array.isArray(wijz.werkzone) || wijz.werkzone.some(w => !ids.includes(w))) return { fout: 'Onbekende wand in de werkzone.' }; r.werkzone = ids.filter(w => wijz.werkzone.includes(w)); }
     if (wijz.toegangsdeur !== undefined) { if (wijz.toegangsdeur === null) delete r.toegangsdeur; else if (!vind(r.openingen, wijz.toegangsdeur)) return { fout: 'Onbekende deur.' }; else r.toegangsdeur = wijz.toegangsdeur; }
   });
   K.voegOpeningToe = (opname, ruimteId, nieuw) => wijzigRuimte(opname, ruimteId, r => {
     nieuw = nieuw || {};
     if (nieuw.soort !== 'deur' && nieuw.soort !== 'raam') return { fout: 'Een opening is een deur of een raam.' };
-    if (!K.WANDEN.includes(nieuw.wand)) return { fout: 'Kies de wand waar de opening zit.' };
+    if (!wandIds(r).includes(nieuw.wand)) return { fout: 'Kies de wand waar de opening zit.' };
     if (nieuw.definitie && !K.DEFINITIES[nieuw.definitie]) return { fout: 'Onbekende definitie.' };
     const id = volgId(r, ID_VOORVOEGSEL[nieuw.soort]), e = { id, soort: nieuw.soort, wand: nieuw.wand, maten: {} };
     if (nieuw.definitie) e.definitie = nieuw.definitie;
@@ -566,8 +798,8 @@
   K.voegObjectToe = (opname, ruimteId, nieuw) => wijzigRuimte(opname, ruimteId, r => {
     nieuw = nieuw || {};
     if (!K.OBJECTTYPES[nieuw.type]) return { fout: 'Onbekend soort object.' };
-    if (!K.WANDEN.includes(nieuw.wand)) return { fout: 'Kies de wand waar het object zit.' };
-    if (nieuw.hoek && !HOEK_NAAM[nieuw.hoek]) return { fout: 'Onbekende hoek.' };
+    if (!wandIds(r).includes(nieuw.wand)) return { fout: 'Kies de wand waar het object zit.' };
+    if (nieuw.hoek && !lijst(r.wanden).some(e => e && (e.van === nieuw.hoek || e.naar === nieuw.hoek)) && !HOEK_NAAM[nieuw.hoek]) return { fout: 'Onbekende hoek.' };
     if (nieuw.opening && !vind(r.openingen, nieuw.opening)) return { fout: 'Onbekende opening.' };
     const id = volgId(r, ID_VOORVOEGSEL[nieuw.type]), e = { id, type: nieuw.type, wand: nieuw.wand, maten: {} };
     if (nieuw.hoek) e.hoek = nieuw.hoek;
@@ -579,7 +811,7 @@
   K.voegBijzonderheidToe = (opname, ruimteId, nieuw) => wijzigRuimte(opname, ruimteId, r => {
     nieuw = nieuw || {};
     if (!K.BIJZONDERHEDEN[nieuw.soort]) return { fout: 'Onbekende bijzonderheid.' };
-    if (!K.WANDEN.includes(nieuw.wand)) return { fout: 'Kies de wand.' };
+    if (!wandIds(r).includes(nieuw.wand)) return { fout: 'Kies de wand.' };
     const id = volgId(r, ID_VOORVOEGSEL.bijzonderheid), e = { id, soort: nieuw.soort, wand: nieuw.wand, maten: nieuw.bemeten ? { maat: K.nieuweMaat() } : {} };
     if (nieuw.notitie) e.notitie = String(nieuw.notitie);
     r.bijzonderheden = lijst(r.bijzonderheden).concat([e]); return { id };
@@ -591,12 +823,95 @@
   });
   // lijstNaam: openingen, objecten of bijzonderheden. Het item (met al zijn maten) gaat naar ruimte.verwijderd; was het de toegangsdeur, dan vervalt die keuze.
   K.verwijderItem = (opname, ruimteId, lijstNaam, id, tijd) => wijzigRuimte(opname, ruimteId, r => {
-    if (!['openingen', 'objecten', 'bijzonderheden'].includes(lijstNaam)) return { fout: 'Onbekende lijst.' };
+    if (!['openingen', 'objecten', 'bijzonderheden', 'uitsprongen'].includes(lijstNaam)) return { fout: 'Onbekende lijst.' };
     const e = vind(r[lijstNaam], id); if (!e) return { fout: 'Onbekend item.' };
     r[lijstNaam] = lijst(r[lijstNaam]).filter(x => x !== e);
     r.verwijderd = lijst(r.verwijderd).concat([{ lijst: lijstNaam, item: e, tijd: tijd || nu() }]);
     if (lijstNaam === 'openingen' && r.toegangsdeur === id) delete r.toegangsdeur;
     for (const ob of lijst(r.objecten)) if (ob && ob.opening === id) delete ob.opening;                   // een vensterbank die bij dit raam hoorde, vraagt dan zijn eigen hoogte
+    if (lijstNaam === 'uitsprongen') { const we = vind(r.wanden, e.wand); if (we && we.foto_vorm && Array.isArray(we.foto_vorm.tussenstukken) && getal(e.stuk)) we.foto_vorm.tussenstukken[e.stuk] = 'recht'; }          // het stuk is weer recht
+  });
+
+  // ── De vorm van de kamer: wanden uit de fotoronde, hoeken, knikken en uitsprongen (v0.4) ──
+  // De fotoronde begint bij de toegangsdeur en loopt met de klok mee: elke foto is een wand (W1, W2, ...). "Kamer rond" sluit de ring (de laatste wand loopt terug naar de eerste hoek).
+  // Alles werkt op een kopie en laat niets verdwijnen: een weggehaalde wand of uitsprong gaat naar ruimte.verwijderd, de foto's naar opname.fotos_verwijderd.
+  const wandNrMax = r => Math.max.apply(null, [0].concat(wandIds(r).map(w => wandNummer(w) || 0), lijst(r.verwijderd).filter(x => x && x.lijst === 'wanden' && x.item).map(x => wandNummer(x.item.id) || 0)));
+  K.voegWandToe = (opname, ruimteId) => wijzigRuimte(opname, ruimteId, r => {
+    if (r.rond !== false) return { fout: 'Deze ruimte heeft vaste wanden of is al rond.' };
+    const ids = wandIds(r), nr = wandNrMax(r) + 1, laatste = ids.length ? vind(r.wanden, ids[ids.length - 1]) : null, id = 'W' + nr;
+    r.wanden.push({ id, van: laatste ? laatste.naar : 'H1', naar: 'H' + (nr + 1), maten: {} });
+    return { id };
+  });
+  // De laatste wand weer weghalen (een foto te veel): alleen als er nog niets op die wand staat of gemeten is. De wand en zijn foto's gaan naar het archief.
+  K.verwijderLaatsteWand = (opname, ruimteId, tijd) => wijzigRuimte(opname, ruimteId, (r, o) => {
+    if (r.rond !== false) return { fout: 'Open de ronde eerst weer.' };
+    const ids = wandIds(r), laatste = ids.length ? vind(r.wanden, ids[ids.length - 1]) : null; if (!laatste) return { fout: 'Er is geen wand om weg te halen.' };
+    if (['openingen', 'objecten', 'bijzonderheden', 'uitsprongen'].some(l => lijst(r[l]).some(e => e && e.wand === laatste.id))) return { fout: 'Op deze wand staan onderdelen: haal die eerst weg.' };
+    if (Object.keys(isObj(laatste.maten) ? laatste.maten : {}).some(k => isObj(laatste.maten[k]) && laatste.maten[k].staat && laatste.maten[k].staat !== 'open')) return { fout: 'Van deze wand zijn al maten ingevuld.' };
+    const t = tijd || nu();
+    r.wanden = r.wanden.filter(x => x !== laatste); r.verwijderd = lijst(r.verwijderd).concat([{ lijst: 'wanden', item: laatste, tijd: t }]);
+    r.werkzone = lijst(r.werkzone).filter(w => w !== laatste.id);
+    const weg = lijst(o.fotos).filter(f => f && f.ruimte === r.id && f.wand === laatste.id);
+    o.fotos = lijst(o.fotos).filter(f => !weg.includes(f)); o.fotos_verwijderd = lijst(o.fotos_verwijderd).concat(weg.map(f => Object.assign({}, f, { verwijderd_op: t })));
+    return { id: laatste.id };
+  });
+  // Kamer rond: terug bij de eerste wand. Vraagt minstens drie wanden.
+  K.maakRond = (opname, ruimteId) => wijzigRuimte(opname, ruimteId, r => {
+    const ids = wandIds(r); if (r.rond !== false) return { fout: 'De ronde is al gesloten.' };
+    if (ids.length < 3) return { fout: 'Een ruimte heeft minstens drie wanden.' };
+    vind(r.wanden, ids[ids.length - 1]).naar = vind(r.wanden, ids[0]).van; r.rond = true;
+  });
+  K.openRond = (opname, ruimteId) => wijzigRuimte(opname, ruimteId, r => {
+    const ids = wandIds(r); if (r.rond !== false && !ids.every(w => wandNummer(w))) return { fout: 'Een ruimte met vaste wanden (v0.3) heeft geen ronde om te openen.' };
+    if (r.rond === false) return { fout: 'De ronde is al open.' };
+    vind(r.wanden, ids[ids.length - 1]).naar = 'H' + (wandNrMax(r) + 1); r.rond = false;
+  });
+  // De hoek naar de volgende wand, in graden (binnenhoek): 90 is een gewone hoek, 270 een inspringende hoek, alles ertussen is schuin. Standaard een aanname; een eigen waarde is een foto-voorstel
+  // (schatting) tot de hoek gemeten is. De vorige stand blijft in de historie.
+  K.zetHoek = (opname, ruimteId, wandId, graden, bron, tijd) => wijzigRuimte(opname, ruimteId, r => {
+    const e = vind(r.wanden, wandId); if (!e) return { fout: 'Onbekende wand.' };
+    if (!getal(graden) || graden < 20 || graden > 340 || Math.abs(graden - 180) < 1) return { fout: 'Geef een hoek tussen 20 en 340 graden, niet 180 (dan is het geen hoek).' };
+    const g = Math.round(graden * 10) / 10, haaks = Math.abs(g - 90) <= K.TOLERANTIE.hoek_haaks || Math.abs(g - 270) <= K.TOLERANTIE.hoek_haaks, b = bron || (haaks ? 'aanname' : 'foto-voorstel');
+    if (!K.HOEK_BRONNEN.includes(b)) return { fout: 'Onbekende bron voor de hoek.' };
+    const oud = isObj(e.hoek_naar_volgende) ? e.hoek_naar_volgende : null;
+    e.hoek_naar_volgende = { graden: g, bron: b, tijd: tijd || nu() };
+    if (oud) e.hoek_naar_volgende.historie = lijst(oud.historie).concat([{ graden: oud.graden, bron: oud.bron, tijd: oud.tijd || null }]);
+  });
+  // Een extra diagonaal als controle van de vorm (optioneel; bij precies vier wanden bestaan A en B al). van en naar zijn hoek-id's (H1, H2, ...).
+  K.voegDiagonaalToe = (opname, ruimteId, van, naar) => wijzigRuimte(opname, ruimteId, r => {
+    const hoeken = wandIds(r).map(w => wandHoeken(r, w)[0]); if (!hoeken.includes(van) || !hoeken.includes(naar) || van === naar) return { fout: 'Kies twee verschillende hoeken van deze ruimte.' };
+    if (lijst(r.diagonalen).some(d => d && ((d.van === van && d.naar === naar) || (d.van === naar && d.naar === van)))) return { fout: 'Deze diagonaal bestaat al.' };
+    let id = 'C'; while (vind(r.diagonalen, id)) id = String.fromCharCode(id.charCodeAt(0) + 1);
+    r.diagonalen = lijst(r.diagonalen).concat([{ id, van, naar, maten: {} }]); return { id };
+  });
+  // De vorm van een wand uit de foto: knikken = de op de vloerlijn aangetikte punten (x, y als fractie van de foto, u = waar op de wand, 0 tot 1, volgens de homografie van de wandhoeken),
+  // tussenstukken = per stuk tussen twee knikken 'recht' (standaard), 'voor' (uitsprong: schoorsteen, pilaster, koker) of 'achter' (nis, inham). Een voor- of achterstuk wordt een uitsprong met
+  // breedte, positie en diepte; de verhouding op de wand is een foto-voorstel. Een uitsprong in de hoek is geen tussenstuk: maak er een eigen wand van met een hoek van 90 of 270 graden.
+  K.zetWandVorm = (opname, ruimteId, wandId, vorm, tijd) => wijzigRuimte(opname, ruimteId, r => {
+    const e = vind(r.wanden, wandId); if (!e) return { fout: 'Onbekende wand.' };
+    vorm = vorm || {}; const kn = lijst(vorm.knikken).slice(), ts = lijst(vorm.tussenstukken).slice(), t = tijd || nu();
+    if (kn.length === 1) return { fout: 'Tik minstens twee knikken: het begin en het eind van het stuk dat afwijkt.' };
+    if (kn.length && ts.length !== kn.length - 1) return { fout: 'Elk stuk tussen twee knikken heeft een vorm nodig.' };
+    for (const k of kn) if (!isObj(k) || !getal(k.x) || !getal(k.y) || !getal(k.u) || k.u <= 0 || k.u >= 1) return { fout: 'Een knik moet binnen de wand liggen (niet in de hoek).' };
+    for (let i = 1; i < kn.length; i++) if (!(kn[i].u > kn[i - 1].u + 0.005)) return { fout: 'De knikken moeten van links naar rechts staan.' };
+    if (ts.some(v => !K.TUSSENSTUK_VORMEN.includes(v))) return { fout: 'Een stuk is recht, naar voren of naar achteren.' };
+    const bestaand = lijst(r.uitsprongen).filter(u => u && u.wand === wandId), blijft = {};
+    ts.forEach((v, i) => {
+      if (v === 'recht') return;
+      let u = bestaand.find(x => x.stuk === i);
+      const fotoVan = { x: kn[i].x, y: kn[i].y }, fotoTot = { x: kn[i + 1].x, y: kn[i + 1].y };
+      if (!u) {
+        const id = volgId(r, 'U'); u = { id, wand: wandId, soort: v, maten: {} }; r.uitsprongen = lijst(r.uitsprongen).concat([u]);
+      }
+      u.soort = v; u.stuk = i; u.verhouding = { van: Math.round(kn[i].u * 1000) / 1000, tot: Math.round(kn[i + 1].u * 1000) / 1000, bron: 'foto-voorstel' }; u.foto = { links: fotoVan, rechts: fotoTot };
+      if (!u.tijd) u.tijd = t;
+      blijft[u.id] = true;
+    });
+    for (const u of bestaand) if (!blijft[u.id]) {              // dit stuk is nu recht (of weg): de uitsprong gaat met zijn maten naar het archief
+      r.uitsprongen = lijst(r.uitsprongen).filter(x => x !== u); r.verwijderd = lijst(r.verwijderd).concat([{ lijst: 'uitsprongen', item: u, tijd: t }]);
+    }
+    if (kn.length) e.foto_vorm = { foto: vorm.foto || null, knikken: kn.map(k => ({ x: k.x, y: k.y, u: Math.round(k.u * 1000) / 1000 })), tussenstukken: ts, tijd: t }; else delete e.foto_vorm;
+    return { uitsprongen: lijst(r.uitsprongen).filter(u => u.wand === wandId).map(u => u.id) };
   });
 
   // ── De route: de vragen punt voor punt in een logische volgorde ──
@@ -609,8 +924,7 @@
   //   fase 4  rondje controle per werkzone-wand en categorie (afwijkingen komen al bij "bijzonderheden op deze wand?" aan bod).
   // Alternatieven: 'rondloop' (start bij de toegangsdeur, de foto is de eerste stap van elke wand) en 'per-soort' (eerst alle wandlengtes, dan alle openingen, enzovoort).
   // Later en n.v.t. houden de route niet op: alleen stappen die nog echt open staan zijn "open". Optionele stappen (grijze voorstellen) worden niet als open aangeboden.
-  const nextWand = w => WAND_VOLGENDE[w];
-  const klok = start => { const l = [start]; while (l.length < 4) l.push(nextWand(l[l.length - 1])); return l; };
+  const klok = (ids, start) => { const i = Math.max(0, ids.indexOf(start)); return ids.slice(i).concat(ids.slice(0, i)); };             // de wanden met de klok mee, beginnend bij start
   const ZONDER_FOTO_UITLEG = 'Gebruik de camera van de telefoon in volle resolutie. De wand recht van voren, met beide hoeken, de plafondrand en de vloerlijn in beeld.';
   const rondjeStaat = w => w === 'aanwezig' ? 'gemeten' : w === 'afwezig' ? 'nvt' : w === 'later' ? 'later' : 'open';
   // Links naar rechts: alleen als alle elementen een bekende x hebben (gemeten positie of positie_x), anders blijft de volgorde van de invoer staan.
@@ -622,22 +936,22 @@
   K.route = function (ruimte, opties) {
     opties = opties || {};
     const r = ruimte || {}, volgorde = K.ROUTE_VOLGORDES.includes(opties.volgorde) ? opties.volgorde : 'fotos-dan-rondloop', fotos = lijst(opties.fotos).filter(f => f && f.ruimte === r.id);
-    const zone = K.WANDEN.filter(w => lijst(r.werkzone).includes(w)), inZone = w => zone.includes(w), conf = conflictPaden(r), slots = slotsVan(r).filter(s => s.bucket);
-    const deur = vind(r.openingen, r.toegangsdeur) || lijst(r.openingen).find(o => o && o.soort === 'deur'), toegang = deur && K.WANDEN.includes(deur.wand) ? deur.wand : 'N';
-    const fotoWanden = klok(toegang), startMaten = fotoWanden.find(inZone) || toegang, matenWanden = klok(volgorde === 'rondloop' ? toegang : startMaten);
+    const alle = wandIds(r), N = alle.length, zone = alle.filter(w => lijst(r.werkzone).includes(w)), inZone = w => zone.includes(w), conf = conflictPaden(r), slots = slotsVan(r).filter(s => s.bucket);
+    const deur = vind(r.openingen, r.toegangsdeur) || lijst(r.openingen).find(o => o && o.soort === 'deur'), toegang = deur && alle.includes(deur.wand) ? deur.wand : (alle[0] || null);
+    const fotoWanden = klok(alle, toegang), startMaten = fotoWanden.find(inZone) || toegang, matenWanden = klok(alle, volgorde === 'rondloop' ? toegang : startMaten);
     const wandNr = (lijstW, w) => lijstW.indexOf(w) + 1;
     const stappen = [], geplaatst = {};
     const maatStap = (s, fase) => {
       geplaatst[s.pad] = true;
       const m = maatOp(s.ent, s.sleutel), st = staatVan(m, s.keuzes), nr = s.wand ? wandNr(matenWanden, s.wand) : null;
-      stappen.push({ id: 'maat:' + s.pad, type: s.soort === 'wandbevestiging' ? 'wandbevestiging' : 'maat', fase, wand: s.wand, wand_nr: nr, wanden_totaal: s.wand ? 4 : null, groep: s.bucket, soort: s.soort, label: s.kort, vraag: s.vraag, definitie: s.definitie, referentie: s.referentie,
+      stappen.push({ id: 'maat:' + s.pad, type: s.soort === 'wandbevestiging' ? 'wandbevestiging' : 'maat', fase, wand: s.wand, wand_nr: nr, wanden_totaal: s.wand ? N : null, groep: s.bucket, soort: s.soort, label: s.kort, vraag: s.vraag, definitie: s.definitie, referentie: s.referentie,
         uitleg: s.uitleg, pad: s.pad, eenheid: s.eenheid, keuzes: s.keuzes, nvt_keuzes: s.nvtKeuzes, staat: st, afgehandeld: st !== 'open', optioneel: s.bucket === 'optie', conflict: st === 'gemeten' && !!conf[s.pad], object: s.object });
     };
-    const fotoStap = (w, fase, lijstW) => stappen.push({ id: 'foto:' + w, type: 'foto', fase, wand: w, wand_nr: wandNr(lijstW, w), wanden_totaal: 4, groep: 'foto', soort: 'foto', label: 'Foto ' + wandTekst(w), vraag: 'Maak een foto van de ' + wandTekst(w) + '.',
+    const fotoStap = (w, fase, lijstW) => stappen.push({ id: 'foto:' + w, type: 'foto', fase, wand: w, wand_nr: wandNr(lijstW, w), wanden_totaal: N, groep: 'foto', soort: 'foto', label: 'Foto ' + wandTekst(w), vraag: 'Maak een foto van de ' + wandTekst(w) + '.',
       definitie: '', referentie: 'wand', uitleg: ZONDER_FOTO_UITLEG, pad: null, eenheid: 'foto', keuzes: null, nvt_keuzes: null, staat: fotos.some(f => f.wand === w) ? 'gemeten' : 'open', afgehandeld: fotos.some(f => f.wand === w), optioneel: false, conflict: false, object: null });
     const bijzStap = (w, fase) => {
       const waarde = rondjeWaarde(isObj(r.rondje) ? r.rondje[rondjeSleutel(w, 'afw')] : null), st = rondjeStaat(waarde);
-      stappen.push({ id: 'bijz:' + w, type: 'bijzonderheden', fase, wand: w, wand_nr: wandNr(matenWanden, w), wanden_totaal: 4, groep: 'werkzone', soort: 'bijzonderheden', label: 'Bijzonderheden ' + WAND_NAAM[w],
+      stappen.push({ id: 'bijz:' + w, type: 'bijzonderheden', fase, wand: w, wand_nr: wandNr(matenWanden, w), wanden_totaal: N, groep: 'werkzone', soort: 'bijzonderheden', label: 'Bijzonderheden ' + wandKort(w),
         vraag: 'Zijn er bijzonderheden op de ' + wandTekst(w) + '?', definitie: '', referentie: 'wand', uitleg: 'Bijvoorbeeld een hogere stootplint, een ingestucte balk of verlaging, een koof, nis, een wand die uit het lood staat, een leiding in zicht of een kabelgoot. Noem ze, meten mag.',
         pad: 'rondje.' + rondjeSleutel(w, 'afw'), eenheid: 'rondje', keuzes: K.RONDJE_KEUZES, nvt_keuzes: null, staat: st, afgehandeld: st !== 'open', optioneel: false, conflict: false, object: null });
     };
@@ -648,7 +962,9 @@
         const ids = []; soort(k).forEach(x => { if (!ids.includes(x.object)) ids.push(x.object); });
         return linksRechts(lijst(bron).filter(e => e && ids.includes(e.id)), sleutel).reduce((l, e) => l.concat(soort(k).filter(x => x.object === e.id)), []);
       };
-      return { lengte: soort('wandlengte'), plafond: soort('wandplafond'), openingen: geordend('opening', r.openingen, 'positie'), objecten: geordend('object', r.objecten, null), plint: geordend('plint', r.objecten, null), bijz: soort('bijzonderheid'), bevestiging: soort('wandbevestiging') };
+      const uitspr = (() => { const ids2 = []; soort('uitsprong').forEach(x => { if (!ids2.includes(x.object)) ids2.push(x.object); }); const L = K.waarde(maatOp(vind(r.wanden, w), 'lengte')) || 10000, pos = e => { const v = uitsprongWaarden(r, e, L); return v.positie ? v.positie.mm : 0; };
+        return lijst(r.uitsprongen).filter(e => e && ids2.includes(e.id)).sort((a, b) => pos(a) - pos(b)).reduce((l, e) => l.concat(soort('uitsprong').filter(x => x.object === e.id)), []); })();
+      return { lengte: soort('wandlengte'), plafond: soort('wandplafond'), uitspr, openingen: geordend('opening', r.openingen, 'positie'), objecten: geordend('object', r.objecten, null), plint: geordend('plint', r.objecten, null), bijz: soort('bijzonderheid'), bevestiging: soort('wandbevestiging') };
     };
     const blokken = {}; matenWanden.forEach(w => { blokken[w] = wandSlots(w); });
     const ruimteSlots = slots.filter(x => x.soort === 'plafond' || x.soort === 'diagonaal');
@@ -656,7 +972,7 @@
       for (const w of matenWanden.filter(inZone)) for (const [cat, naam] of K.RONDJE_CATEGORIEEN) {
         if (cat === 'afw') continue;                                       // staat al bij "bijzonderheden op deze wand?"
         const waarde = rondjeWaarde(isObj(r.rondje) ? r.rondje[rondjeSleutel(w, cat)] : null), st = rondjeStaat(waarde);
-        stappen.push({ id: 'rondje:' + rondjeSleutel(w, cat), type: 'rondje', fase: 'rondje', wand: w, wand_nr: wandNr(matenWanden, w), wanden_totaal: 4, groep: 'rondje', soort: 'rondje', categorie: cat, label: naam + ' ' + WAND_NAAM[w],
+        stappen.push({ id: 'rondje:' + rondjeSleutel(w, cat), type: 'rondje', fase: 'rondje', wand: w, wand_nr: wandNr(matenWanden, w), wanden_totaal: N, groep: 'rondje', soort: 'rondje', categorie: cat, label: naam + ' ' + wandKort(w),
           vraag: 'Rondje ' + wandTekst(w) + ': ' + naam.toLowerCase() + '. Is alles wat er is vastgelegd?', definitie: '', referentie: 'wand', uitleg: 'Kies aanwezig en vastgelegd, niet aanwezig of n.v.t., of later meten. Niet gekozen blijft "nog niet bekeken", nooit "afwezig".',
           pad: 'rondje.' + rondjeSleutel(w, cat), eenheid: 'rondje', keuzes: K.RONDJE_KEUZES, nvt_keuzes: null, staat: st, afgehandeld: st !== 'open', optioneel: false, conflict: false, object: null });
       }
@@ -664,14 +980,14 @@
     if (volgorde === 'per-soort') {
       fotoWanden.forEach(w => fotoStap(w, 'fotoronde', fotoWanden));
       const fase = 'soort';
-      for (const k of ['lengte', 'plafond', 'bevestiging', 'openingen', 'objecten', 'plint']) matenWanden.forEach(w => blokken[w][k].forEach(x => maatStap(x, fase)));
+      for (const k of ['lengte', 'plafond', 'uitspr', 'bevestiging', 'openingen', 'objecten', 'plint']) matenWanden.forEach(w => blokken[w][k].forEach(x => maatStap(x, fase)));
       matenWanden.filter(inZone).forEach(w => { bijzStap(w, fase); blokken[w].bijz.forEach(x => maatStap(x, fase)); });
     } else {
       if (volgorde === 'fotos-dan-rondloop') fotoWanden.forEach(w => fotoStap(w, 'fotoronde', fotoWanden));
       matenWanden.forEach(w => {
         const b = blokken[w];
         if (volgorde === 'rondloop') fotoStap(w, 'wand', matenWanden);
-        b.lengte.forEach(x => maatStap(x, 'wand')); b.plafond.forEach(x => maatStap(x, 'wand')); b.openingen.forEach(x => maatStap(x, 'wand')); b.objecten.forEach(x => maatStap(x, 'wand')); b.plint.forEach(x => maatStap(x, 'wand'));
+        b.lengte.forEach(x => maatStap(x, 'wand')); b.plafond.forEach(x => maatStap(x, 'wand')); b.uitspr.forEach(x => maatStap(x, 'wand')); b.openingen.forEach(x => maatStap(x, 'wand')); b.objecten.forEach(x => maatStap(x, 'wand')); b.plint.forEach(x => maatStap(x, 'wand'));
         if (inZone(w)) bijzStap(w, 'wand');
         b.bijz.forEach(x => maatStap(x, 'wand')); b.bevestiging.forEach(x => maatStap(x, 'wand'));
       });
@@ -724,7 +1040,8 @@
     if (!x.id) { x.id = 'R' + (i + 1); meld.push('Ruimte ' + (i + 1) + ' had geen id: ' + x.id + ' gezet.'); }
     if (!x.naam) x.naam = x.id;
     if (!x.meubeltype) x.meubeltype = 'kast';
-    const wzIn = x.werkzone, okW = w => K.WANDEN.includes(w); let goed = [], rest = null;
+    zorgEntiteiten(x);
+    const wzIn = x.werkzone, okW = w => wandIds(x).includes(w); let goed = [], rest = null;
     if (Array.isArray(wzIn)) { goed = wzIn.filter(okW); const f = wzIn.filter(w => !okW(w)); if (f.length) rest = f; }
     else if (typeof wzIn === 'string' && okW(wzIn)) goed = [wzIn];
     else if (wzIn != null) rest = wzIn;
@@ -733,9 +1050,8 @@
     x.openingen = lijst(x.openingen); x.objecten = lijst(x.objecten); x.bijzonderheden = lijst(x.bijzonderheden);
     if (!isObj(x.rondje)) x.rondje = {};
     for (const k of Object.keys(x.rondje)) if (!isObj(x.rondje[k]) && K.RONDJE_KEUZES.includes(x.rondje[k])) x.rondje[k] = { waarde: x.rondje[k], tijd: null };
-    zorgEntiteiten(x);
     const maten = (ent, waar) => { if (!isObj(ent)) return; if (!isObj(ent.maten)) ent.maten = {}; for (const k of Object.keys(ent.maten)) ent.maten[k] = normMaat(ent.maten[k], meld, x.naam + ' ' + waar + '.' + k); };
-    for (const l of [x.wanden, x.plafondpunten, x.diagonalen, x.openingen, x.objecten, x.bijzonderheden]) for (const e of l) maten(e, e && e.id);
+    for (const l of [x.wanden, x.plafondpunten, x.diagonalen, x.openingen, x.objecten, x.bijzonderheden, lijst(x.uitsprongen)]) for (const e of l) maten(e, e && e.id);
     return x;
   }
   K.lees = function (invoer) {
@@ -743,7 +1059,7 @@
     if (!isObj(invoer)) return { opname: null, alleenLezen: true, origineel: invoer === undefined ? null : kloon(invoer), meldingen: ['Geen opname-object: niets omgezet, origineel bewaard.'] };
     const o = kloon(invoer), v = o.versie != null ? o.versie : o.schema_versie;
     if (geldigeVersie(v) && nieuwerDan(v, K.VERSIE)) return { opname: o, alleenLezen: true, origineel: null, meldingen: ['Opname-versie ' + v + ' is nieuwer dan deze app (' + K.VERSIE + '): alleen lezen, niets wordt omgezet of teruggeschreven.'] };
-    if ((geldigeVersie(v) && nieuwerDan(K.VERSIE, v)) || (v != null && !geldigeVersie(v)) || (v == null && !Array.isArray(o.ruimtes))) {
+    if ((geldigeVersie(v) && nieuwerDan(K.MIN_LEESBAAR, v)) || (v != null && !geldigeVersie(v)) || (v == null && !Array.isArray(o.ruimtes))) {
       // ouder (v0.2 of eerder) of onbekend: de kern wordt nieuw, het hele origineel blijft in _oud
       const n = K.nieuweOpname({ opname_id: o.opname_id || o.id || null, project: o.project_nr ? { code: o.project_nr } : isObj(o.project) ? o.project : {}, ruimtes: [K.nieuweRuimte({ id: 'R1', naam: typeof o.ruimte === 'string' ? o.ruimte : 'Ruimte' })] });
       n._oud = Object.assign({ versie: v == null ? 'onbekend' : String(v) }, o);
@@ -759,6 +1075,9 @@
     return { opname: o, alleenLezen: false, origineel: null, meldingen: meld };
   };
 
-  K._intern = { slotsVan, staatVan, geldigeMeting };
+  K.uitsprongWaarden = (ruimte, u, lref) => uitsprongWaarden(ruimte || {}, u || {}, lref == null ? null : lref);
+  K.wandHoeken = wandHoeken;
+  K.hoekTekst = hoekTekst;
+  K._intern = { slotsVan, staatVan, geldigeMeting, rondgang };
   if (typeof module !== 'undefined' && module.exports) module.exports = K;
 })(typeof window !== 'undefined' ? window : globalThis);

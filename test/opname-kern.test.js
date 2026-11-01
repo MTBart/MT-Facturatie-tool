@@ -664,15 +664,15 @@ test('lezen: een voorstel met de oude namen (waarde, pm) krijgt schatting_mm en 
 test('lezen: v0.2 en onbekende vormen worden nooit weggegooid, het origineel staat in _oud', () => {
   const v02 = { schema: 'mt-opname', schema_versie: '0.2.0', opname_id: 'OPN-2026-11-0001', project_nr: 'TEST-002', ruimte: 'Woonkamer', maten: [{ id: 'M1', waarde_mm: 4012 }], punten: [{ id: 'P1', type: 'wcd' }] };
   const { opname, meldingen, alleenLezen } = K.lees(v02);
-  assert.strictEqual(opname.versie, '0.3'); assert.strictEqual(opname.opname_id, 'OPN-2026-11-0001'); assert.strictEqual(opname.project.code, 'TEST-002'); assert.strictEqual(opname.ruimtes[0].naam, 'Woonkamer'); assert.strictEqual(alleenLezen, false);
+  assert.strictEqual(opname.versie, K.VERSIE); assert.strictEqual(opname.opname_id, 'OPN-2026-11-0001'); assert.strictEqual(opname.project.code, 'TEST-002'); assert.strictEqual(opname.ruimtes[0].naam, 'Woonkamer'); assert.strictEqual(alleenLezen, false);
   assert.deepStrictEqual(opname._oud, Object.assign({ versie: '0.2.0' }, v02), 'het volledige origineel blijft bewaard'); assert.ok(/niet automatisch omgezet/.test(meldingen[0]));
   const onbekend = { iets: 'anders', lijst: [1, 2, 3] }; const o = K.lees(onbekend);
   assert.deepStrictEqual(o.opname._oud, Object.assign({ versie: 'onbekend' }, onbekend)); assert.strictEqual(K.lees({ versie: 'abc', x: 1 }).opname._oud.x, 1);
-  assert.strictEqual(K.lees({ ruimtes: [{ id: 'R1', naam: 'Zonder versie' }] }).opname.versie, '0.3');
-  assert.deepStrictEqual(K.lees({ ruimtes: [{ id: 'R1', naam: 'Zonder versie' }] }).meldingen, ['Versie ontbrak: gelezen als 0.3.']);
+  assert.strictEqual(K.lees({ ruimtes: [{ id: 'R1', naam: 'Zonder versie' }] }).opname.versie, K.VERSIE);
+  assert.deepStrictEqual(K.lees({ ruimtes: [{ id: 'R1', naam: 'Zonder versie' }] }).meldingen, ['Versie ontbrak: gelezen als ' + K.VERSIE + '.']);
 });
 test('lezen: een nieuwere versie wordt alleen gelezen, nooit omgezet; rommel geeft geen fout', () => {
-  const nw = { versie: '0.4', ruimtes: [{ id: 'R1', nieuw_model: { x: 1 } }], onbekend: true }, a = K.lees(nw);
+  const nw = { versie: '0.5', ruimtes: [{ id: 'R1', nieuw_model: { x: 1 } }], onbekend: true }, a = K.lees(nw);
   assert.strictEqual(a.alleenLezen, true); assert.deepStrictEqual(a.opname, nw); assert.notStrictEqual(a.opname, nw); assert.strictEqual(K.lees({ versie: '1.0' }).alleenLezen, true);
   assert.strictEqual(K.lees({ versie: '0.3.1', ruimtes: [] }).alleenLezen, false, 'een patchversie blijft leesbaar');
   for (const rommel of [null, undefined, 5, 'tekst', [], true]) { const r = K.lees(rommel); assert.strictEqual(r.opname, null); assert.strictEqual(r.alleenLezen, true); assert.deepStrictEqual(r.origineel, rommel === undefined ? null : rommel); }
@@ -688,7 +688,10 @@ test('het voorbeeld uit docs/opname-json-v0.3.md bestaat en is leesbaar', () => 
   const fs = require('fs'), tekst = fs.readFileSync(require('path').join(__dirname, '..', 'docs', 'opname-json-v0.3.md'), 'utf8');
   const m = /```json\n([\s\S]*?)\n```/.exec(tekst); assert.ok(m, 'een json-blok in de documentatie');
   const voorbeeld = JSON.parse(m[1]), r = K.lees(voorbeeld);
-  assert.deepStrictEqual(r.meldingen, [], 'het voorbeeld is al volledig v0.3'); assert.deepStrictEqual(r.opname, voorbeeld, 'lezen verandert het voorbeeld niet');
+  assert.deepStrictEqual(r.meldingen, [], 'het voorbeeld is al volledig v0.3');
+  // migratie van v0.3 naar v0.4 is additief: alleen de versie verschuift (het origineel staat in _versie_oud), verder verandert er niets
+  const g = kopie(r.opname); assert.strictEqual(g.versie, K.VERSIE); assert.strictEqual(g._versie_oud, '0.3'); g.versie = '0.3'; delete g._versie_oud;
+  assert.deepStrictEqual(g, voorbeeld, 'lezen verandert het voorbeeld niet');
   const t = K.tellers(r.opname.ruimtes[0]); assert.strictEqual(t.basis.n, 17); assert.strictEqual(t.werkzone.n, 25);
   assert.ok(K.vrijgeefCheck(r.opname).kan === false); assert.strictEqual(K.effectieveStatus(r.opname), 'concept');
 });

@@ -2,8 +2,8 @@
 // Drie dingen:
 //   1. Homografie: vier hoeken van een wand op de foto (links onder, rechts onder, rechts boven, links boven) leggen vast waar de wand in de foto zit.
 //      Daarmee gaat elk punt van de wand (u langs de wand, v omhoog, beide 0 tot 1) naar het beeld, en elk getikt punt van het beeld terug naar de wand.
-//   2. Draadmodel: de kamer als eenvoudig 3D-lijnenmodel (eigen projectie, geen bibliotheek). Gemeten wandlengtes en de vorm uit de kern, anders een duidelijk
-//      gelabelde schatting.
+//   2. Draadmodel: de kamer als eenvoudig 3D-lijnenmodel (eigen projectie, geen bibliotheek). De vorm komt uit de plattegrond van de kern (N wanden, hoeken, uitsprongen en nissen):
+//      gemeten wandlengtes en de vorm uit de kern, anders een duidelijk gelabelde schatting.
 //   3. Wandlijnen: per wand de lijnen die bij de maatvragen van de kern horen (wandlengte, plafondhoogte, opening, object), in mm in de wand zelf (x langs de wand
 //      vanaf de linkerhoek, y omhoog vanaf de vloer). De lijn van een vraag hoort bij hetzelfde pad als de vraag van de kern (bijvoorbeeld wanden.N.maten.lengte).
 // Niets hier verzint een maat: een lijn zonder maat is een schatting van de plek (grijs, gestippeld) en de app zegt dat ook zo. De getallen komen alleen uit de kern.
@@ -75,31 +75,23 @@
 
   // ── 2. Draadmodel ──
   const STANDAARD = { breedte: 4000, diepte: 3000, hoogte: 2600 };
-  const WAND_HOEKEN = { N: ['NW', 'NO'], O: ['NO', 'ZO'], Z: ['ZO', 'ZW'], W: ['ZW', 'NW'] };
-  G.WAND_HOEKEN = WAND_HOEKEN;
   const gem = a => a.length ? a.reduce((s, x) => s + x, 0) / a.length : null;
   const meting = (ent, sleutel) => (ent && ent.maten && ent.maten[sleutel]) ? K.waarde(ent.maten[sleutel]) : null;
 
-  // De kamer in mm: de vier hoekpunten in het plattegrondvlak (x = oost, y = zuid), de hoogte en wat daarvan een schatting is.
+  // De kamer in mm uit de plattegrond van de kern: de hoekpunten (x naar rechts, y omlaag in het plattegrondvlak), de hoogte en wat daarvan een schatting is. Met de wanden (a en b zijn
+  // de hoekpunten van de wand, lengte is de gemeten lengte of anders de afstand tussen de hoekpunten), de contour (ook de uitsprongen en nissen) en de uitsprongen zelf.
   G.kamer = function (ruimte) {
-    const r = ruimte || {}, vorm = K.vorm(r);
-    const len = {}; for (const w of K.WANDEN) len[w] = meting(vind(r.wanden, w), 'lengte');
-    let punten, vormSchatting;
-    if (vorm.hoekpunten_mm && vorm.status !== 'inconsistent') { punten = vorm.hoekpunten_mm; vormSchatting = vorm.status !== 'consistent'; }
-    else {
-      const b = gem([len.N, len.Z].filter(getal)), d = gem([len.O, len.W].filter(getal));
-      const B = b != null ? b : STANDAARD.breedte, D = d != null ? d : STANDAARD.diepte;
-      punten = { NW: [0, 0], NO: [B, 0], ZO: [B, D], ZW: [0, D] }; vormSchatting = true;
+    const r = ruimte || {}, plat = K.plattegrond(r), ids = plat.volgorde, wanden = {};
+    let punten = plat.punten;
+    if (!ids.length) { punten = { H1: [0, 0], H2: [STANDAARD.breedte, 0], H3: [STANDAARD.breedte, STANDAARD.diepte], H4: [0, STANDAARD.diepte] }; }
+    for (const w of ids) {
+      const p = plat.wanden[w], koorde = Math.hypot(p.b[0] - p.a[0], p.b[1] - p.a[1]);
+      wanden[w] = { van: p.van, naar: p.naar, a: p.a, b: p.b, koorde, lengte: p.gemeten && koorde > 0 ? p.lengte : koorde, lengteGemeten: p.gemeten, nr: p.nr };
     }
     const pp = lijst(r.plafondpunten).map(p => meting(p, 'hoogte')).filter(getal), wandHoog = [];
-    for (const w of K.WANDEN) for (const s of ['plafond_links', 'plafond_midden', 'plafond_rechts']) { const v = meting(vind(r.wanden, w), s); if (getal(v)) wandHoog.push(v); }
+    for (const w of ids) for (const s of ['plafond_links', 'plafond_midden', 'plafond_rechts']) { const v = meting(vind(r.wanden, w), s); if (getal(v)) wandHoog.push(v); }
     const hoogte = pp.length ? gem(pp) : wandHoog.length ? gem(wandHoog) : STANDAARD.hoogte;
-    const wanden = {};
-    for (const w of K.WANDEN) {
-      const [van, naar] = WAND_HOEKEN[w], a = punten[van], b = punten[naar], koorde = Math.hypot(b[0] - a[0], b[1] - a[1]);
-      wanden[w] = { van, naar, a, b, koorde, lengte: getal(len[w]) ? len[w] : koorde, lengteGemeten: getal(len[w]) };
-    }
-    return { punten, hoogte, hoogteGeschat: !(pp.length || wandHoog.length), vormGeschat: vormSchatting, vormStatus: vorm.status, wanden };
+    return { punten, hoogte, hoogteGeschat: !(pp.length || wandHoog.length), vormGeschat: plat.schatting, vormStatus: plat.vorm.status, wanden, volgorde: ids, rond: plat.rond, contour: plat.contour, uitsprongen: plat.uitsprongen, plattegrond: plat };
   };
   // Punt op een wand: x mm langs de wand vanaf de linkerhoek (kijkend naar de wand), y mm omhoog -> [oost, zuid, omhoog]
   G.wandNaar3D = function (kamer, wand, x, y) {
@@ -122,10 +114,11 @@
     const s = cam.afstand / (cam.afstand - dichtbij);
     return { x: x1 * s / cam.straal, y: -omhoog * s / cam.straal, d: dichtbij };
   };
-  // Welke twee wanden zijn de achterwanden (verste van de kijker): die kun je aantikken als vlak, de voorste twee alleen via hun label.
+  // Welke wanden zijn achterwanden (achter het midden van de kamer gezien van de kijker): die kun je aantikken als vlak, de voorste alleen via hun label. Minstens een en hooguit de helft.
   G.achterwanden = function (kamer, cam) {
-    const d = K.WANDEN.map(w => { const m = G.wandNaar3D(kamer, w, kamer.wanden[w].lengte / 2, kamer.hoogte / 2); return { w, d: G.projecteer(cam, m).d }; });
-    d.sort((a, b) => a.d - b.d); return d.slice(0, 2).map(x => x.w);
+    const ids = kamer.volgorde || [];
+    const d = ids.map(w => { const m = G.wandNaar3D(kamer, w, kamer.wanden[w].lengte / 2, kamer.hoogte / 2); return { w, d: G.projecteer(cam, m).d }; });
+    d.sort((a, b) => a.d - b.d); return d.slice(0, Math.max(1, Math.ceil(ids.length / 2))).map(x => x.w);
   };
 
   // ── 3. Wandlijnen ──
@@ -158,6 +151,15 @@
     // de wand zelf: lengte op drie hoogtes (werkzone), plafondhoogte op drie punten (werkzone)
     const inZone = lijst(r.werkzone).includes(wand);
     lijn('wanden.' + wand + '.maten.lengte', [0, 1000], [L, 1000], 'wandlengte', 'wand');
+    // uitsprongen en nissen op deze wand: een vak over de volle hoogte, met breedte, positie en (in een noodgreep zonder zicht op de diepte) de diepte als korte lijn
+    for (const u of lijst(k.uitsprongen).filter(x => x.wand === wand)) {
+      const ue = vind(r.uitsprongen, u.id) || {}, P = 'uitsprongen.' + u.id + '.maten.', x0 = u.positie, x1 = u.positie + u.breedte, hoog = u.hoogte != null ? u.hoogte : H, xm = (x0 + x1) / 2;
+      m.vormen.push({ id: u.id, soort: 'uitsprong', type: 'uitsprong', uitsprongSoort: u.soort, naam: (K.UITSPRONG_SOORTEN[u.soort] || 'Uitsprong') + ' ' + u.id, x0, x1, y0: 0, y1: Math.min(H, hoog), geschat: u.geschat.positie || u.geschat.breedte || u.geschat.diepte, getikt: false, rect: true, uitsprong: true });
+      lijn(P + 'breedte', [x0, 250], [x1, 250], 'breedte', 'uitsprong', u.id);
+      lijn(P + 'positie', [0, 120], [x0, 120], 'tot linkerhoek', 'uitsprong', u.id);
+      lijn(P + 'diepte', [xm, 450], [xm, 750], 'diepte (haaks op de wand)', 'uitsprong', u.id);
+      lijn(P + 'hoogte', [x1 - (x1 - x0) * 0.2, 0], [x1 - (x1 - x0) * 0.2, Math.min(H, hoog)], 'hoogte', 'uitsprong', u.id);
+    }
     if (inZone) {
       lijn('wanden.' + wand + '.maten.lengte_onder', [0, 150], [L, 150], 'lengte onderaan', 'wand');
       lijn('wanden.' + wand + '.maten.lengte_boven', [0, H - 150], [L, H - 150], 'lengte bovenaan', 'wand');
@@ -248,6 +250,15 @@
     const p = afb.naarBeeld(l.a[0] / model.lengte, l.a[1] / model.hoogte), q = afb.naarBeeld(l.b[0] / model.lengte, l.b[1] / model.hoogte);
     return p && q ? { a: p, b: q } : null;
   };
+  // Een getikt beeldpunt als knik op de vloerlijn: { x, y } als fractie van de foto (afmetingen fw en fh) en u = waar op de wand (0 tot 1) volgens de homografie van de wandhoeken. Een tik buiten
+  // de wand (of in de hoek) geeft null. Dit is een schatting uit de foto: de wandlengte maal u geeft nooit een gemeten maat.
+  G.knikVanTik = function (afb, foto, pt) {
+    if (!afb || !foto || !(foto.w > 0 && foto.h > 0)) return null;
+    const w = afb.naarWand(pt[0], pt[1]); if (!w || !(w[0] > 0.01 && w[0] < 0.99)) return null;
+    return { x: Math.round(pt[0] / foto.w * 10000) / 10000, y: Math.round(pt[1] / foto.h * 10000) / 10000, u: Math.round(w[0] * 1000) / 1000 };
+  };
+  // De knikken van een wandvorm terug naar het beeld: de vloerlijn (v = 0) op de plek van u, en de bovenkant (v = 1). Geeft [ondermaat, bovenmaat] in beeldruimte.
+  G.knikLijn = function (afb, u) { const a = afb && afb.naarBeeld(u, 0), b = afb && afb.naarBeeld(u, 1); return a && b ? [a, b] : null; };
   // Een getikt beeldpunt naar de wand als fracties (u, v) die begrensd blijven op 0 tot 1.
   G.beeldNaarFractie = function (afb, pt) {
     const w = afb && afb.naarWand(pt[0], pt[1]); if (!w) return null;

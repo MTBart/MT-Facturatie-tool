@@ -115,4 +115,55 @@ test('lijn naar beeld en terug: een getikt beeldpunt wordt een fractie binnen de
   const f = G.beeldNaarFractie(afb, afb.naarBeeld(0.25, 0.4)); assert.ok(dicht(f[0], 0.25) && dicht(f[1], 0.4));
   const buiten = G.beeldNaarFractie(afb, [5000, 5000]); assert.ok(buiten[0] <= 1 && buiten[1] <= 1 && buiten[0] >= 0);
 });
+// ── Brok 3: de kamer uit N wanden, uitsprongen en knikken ──
+function veelhoekRuimte(opties) {
+  opties = opties || {};
+  let op = K.nieuweOpname({ opname_id: 'OPN-TEST-004', project: { code: 'TEST-001' }, ruimtes: [K.nieuweRuimte({ id: 'R1', naam: 'Testkamer L', wanden: [] })] });
+  const doe = res => { assert.strictEqual(res.fout, null, res.fout); return res.opname; };
+  for (let i = 0; i < 6; i++) op = doe(K.voegWandToe(op, 'R1'));
+  op = doe(K.maakRond(op, 'R1')); op = doe(K.zetHoek(op, 'R1', 'W3', 270));
+  if (opties.maten !== false) for (const [w, l] of Object.entries({ W1: 6000, W2: 2000, W3: 3000, W4: 2000, W5: 3000, W6: 4000 })) op = doe(K.zetMaat(op, 'R1', 'wanden.' + w + '.maten.lengte', { staat: 'gemeten', waarde: l, bron: 'disto' }));
+  op = doe(K.zetRuimte(op, 'R1', { werkzone: ['W1'] }));
+  op = doe(K.zetWandVorm(op, 'R1', 'W1', { foto: 'F1', knikken: [{ x: 0.4, y: 0.9, u: 0.4 }, { x: 0.6, y: 0.9, u: 0.6 }], tussenstukken: ['voor'] }));
+  return op.ruimtes[0];
+}
+test('kamer uit zes wanden (L-vorm): de hoekpunten volgen de rondgang en de vorm is niet geschat als er een diagonaal klopt', () => {
+  const r = veelhoekRuimte(), k = G.kamer(r);
+  assert.deepStrictEqual(k.volgorde, ['W1', 'W2', 'W3', 'W4', 'W5', 'W6']); assert.deepStrictEqual(k.punten.H4.map(Math.round), [3000, 2000]); assert.strictEqual(k.vormStatus, 'onverifieerd'); assert.strictEqual(k.vormGeschat, true);
+  assert.strictEqual(k.wanden.W6.lengteGemeten, true); assert.ok(dicht(k.wanden.W6.koorde, 4000, 1)); assert.strictEqual(k.rond, true);
+  assert.ok(k.contour.length > 6, 'de uitsprong staat in de contour'); assert.strictEqual(k.uitsprongen.length, 1);
+});
+test('kamer zonder wanden of met twee wanden: nooit een fout, altijd een schatting om te tekenen', () => {
+  const leeg = K.nieuweRuimte({ id: 'R1', naam: 'Leeg', wanden: [] }), k0 = G.kamer(leeg);
+  assert.strictEqual(k0.vormGeschat, true); assert.ok(Object.keys(k0.punten).length >= 3); assert.doesNotThrow(() => G.camera(k0, -28, 30));
+  let op = K.nieuweOpname({ opname_id: 'X', ruimtes: [leeg] }); for (let i = 0; i < 2; i++) op = K.voegWandToe(op, 'R1').opname;
+  const k2 = G.kamer(op.ruimtes[0]); assert.strictEqual(k2.rond, false); assert.deepStrictEqual(Object.keys(k2.wanden), ['W1', 'W2']); assert.doesNotThrow(() => G.camera(k2, 10, 40));
+});
+test('achterwanden bij zes wanden: de helft, achter het midden gezien van de kijker', () => {
+  const k = G.kamer(veelhoekRuimte()), cam = G.camera(k, -28, 30), a = G.achterwanden(k, cam);
+  assert.strictEqual(a.length, 3); for (const w of a) assert.ok(k.volgorde.includes(w));
+  const cam2 = G.camera(k, 152, 30), b = G.achterwanden(k, cam2); assert.notDeepStrictEqual(a.slice().sort(), b.slice().sort(), 'van de andere kant zijn het andere wanden');
+});
+test('wandmodel: een uitsprong heeft een vak en lijnen voor breedte, positie, diepte en (werkzone) hoogte, op de plek van de kern', () => {
+  const r = veelhoekRuimte(), k = G.kamer(r), m = G.wandModel(r, 'W1', k, {});
+  const v = m.vormen.find(x => x.id === 'U1'); assert.ok(v && v.uitsprong && v.rect); assert.strictEqual(v.x0, 2400); assert.strictEqual(v.x1, 3600, 'de verhouding 0,4 tot 0,6 op de gemeten 6000 mm');
+  assert.strictEqual(v.geschat, true);
+  const pads = m.lijnen.filter(l => l.item === 'U1').map(l => l.pad.split('.').pop()).sort(); assert.deepStrictEqual(pads, ['breedte', 'diepte', 'hoogte', 'positie']);
+  const buiten = G.wandModel(r, 'W2', k, {}); assert.ok(!buiten.vormen.some(x => x.id === 'U1'), 'de uitsprong hoort alleen bij zijn eigen wand');
+  const geen = veelhoekRuimte(); geen.werkzone = []; const m2 = G.wandModel(geen, 'W1', G.kamer(geen), {}); assert.deepStrictEqual(m2.lijnen.filter(l => l.item === 'U1').map(l => l.pad.split('.').pop()).sort(), ['breedte', 'diepte', 'positie'], 'buiten de werkzone geen hoogte');
+});
+test('wandmodel: een objecthoek van een nieuwe wand (H1, H2, ...) zet het object bij de juiste hoek', () => {
+  let op = K.nieuweOpname({ opname_id: 'X', ruimtes: [K.nieuweRuimte({ id: 'R1', naam: 'T', wanden: [], werkzone: [] })] });
+  for (let i = 0; i < 4; i++) op = K.voegWandToe(op, 'R1').opname;
+  op = K.maakRond(op, 'R1').opname; op = K.zetRuimte(op, 'R1', { werkzone: ['W2'] }).opname; op = K.voegObjectToe(op, 'R1', { type: 'stopcontact', wand: 'W2', hoek: 'H3' }).opname;
+  const r = op.ruimtes[0], k = G.kamer(r), m = G.wandModel(r, 'W2', k, {});
+  assert.strictEqual(k.wanden.W2.naar, 'H3'); assert.ok(m.lijnen.some(l => l.pad === 'objecten.SC1.maten.afstand' && l.label === 'tot rechterhoek'), 'H3 is de rechterhoek van wand 2');
+});
+test('knik van een tik: de plek op de wand volgt de homografie; in de hoek of buiten de wand is geen knik', () => {
+  const foto = { w: 1000, h: 800 }, afb = G.wandAfbeelding([[100, 700], [900, 650], [900, 150], [100, 100]]);
+  const pt = afb.naarBeeld(0.4, 0), knik = G.knikVanTik(afb, foto, pt); assert.ok(knik && dicht(knik.u, 0.4, 0.001) && dicht(knik.x, pt[0] / 1000, 1e-4) && dicht(knik.y, pt[1] / 800, 1e-4));
+  assert.strictEqual(G.knikVanTik(afb, foto, afb.naarBeeld(0.001, 0)), null); assert.strictEqual(G.knikVanTik(afb, foto, afb.naarBeeld(0.999, 0)), null); assert.strictEqual(G.knikVanTik(afb, foto, [5000, 5000]), null);
+  assert.strictEqual(G.knikVanTik(null, foto, pt), null);
+  const lijn = G.knikLijn(afb, 0.4); assert.ok(lijn && lijn[0][1] > lijn[1][1], 'de vloerlijn ligt lager in beeld dan de bovenkant');
+});
 console.log('\n' + n + ' tests geslaagd');
