@@ -70,7 +70,7 @@ test('vier wanden uit de foto\'s: dezelfde vierhoek-logica als v0.3 (vier zijden
 test('veelhoek: een L-vorm met zes wanden en een inspringende hoek sluit en is schematisch (hoeken aangenomen 90 of 270 graden)', () => {
   const op = lVorm(), v = K.vorm(R(op));
   assert.strictEqual(v.status, 'onverifieerd'); assert.strictEqual(v.schematisch, true); assert.ok(v.sluitfout.mm <= 1, 'sluitfout ' + v.sluitfout.mm);
-  assert.ok(/aangenomen als 90 of 270 graden/.test(v.reden), 'nooit stil haaks: de aanname staat in de tekst');
+  assert.strictEqual(v.bepaling, 'getekend'); assert.ok(/onder hoekaanname/.test(v.reden) && /aangenomen \(90 of 270 graden\)/.test(v.reden), 'nooit stil haaks: de aanname staat in de tekst');
   assert.deepStrictEqual(v.hoekpunten_mm.H1, [0, 0]); assert.deepStrictEqual(v.hoekpunten_mm.H2, [6000, 0]); assert.deepStrictEqual(v.hoekpunten_mm.H3, [6000, 2000]); assert.deepStrictEqual(v.hoekpunten_mm.H4, [3000, 2000]);
   assert.deepStrictEqual(v.hoekpunten_mm.H5, [3000, 4000]); assert.deepStrictEqual(v.hoekpunten_mm.H6, [0, 4000]);
   assert.strictEqual(v.hoeken.H4, 270, 'de inspringende hoek staat bij het eindpunt van wand 3');
@@ -83,9 +83,9 @@ test('sluitfout: boven de 10 mm is de meting inconsistent, eronder sluit de L-vo
   // diagonaal H1 naar H4 (0,0) -> (3000,2000)
   let op = goed(K.voegDiagonaalToe(lVorm(), 'R1', 'H1', 'H4'));
   const dpad = 'diagonalen.C.maten.lengte'; assert.ok(K.vragen(R(op)).some(v => v.pad === dpad && v.bucket === 'optie'), 'optioneel');
-  assert.strictEqual(K.vorm(R(meet(op, dpad, Math.round(Math.hypot(3000, 2000))))).status, 'consistent');
+  const metC = K.vorm(R(meet(op, dpad, Math.round(Math.hypot(3000, 2000))))); assert.strictEqual(metC.status, 'onverifieerd', 'een diagonaal bewijst niet alle aangenomen hoeken'); assert.strictEqual(metC.bepaling, 'getekend'); assert.ok(/diagonaal C .*klopt/.test(metC.reden));
   const slecht = K.vorm(R(meet(op, dpad, 3800))); assert.strictEqual(slecht.status, 'inconsistent'); assert.ok(/Diagonaal C/.test(slecht.reden));
-  assert.ok(K.voegDiagonaalToe(op, 'R1', 'H1', 'H4').fout, 'dezelfde diagonaal twee keer kan niet');
+  assert.ok(K.voegDiagonaalToe(meet(op, dpad, 3606), 'R1', 'H1', 'H4').fout, 'dezelfde gemeten diagonaal twee keer kan niet');
 });
 test('een inconsistente meting wordt in de plattegrond niet mooi gemaakt: de sluitfout blijft zichtbaar', () => {
   const p = K.plattegrond(R(lVorm({ W6: 4050 })));
@@ -292,15 +292,15 @@ test('vrijgeven met zes wanden en een uitsprong: hash, scope en uitzonderingen w
   assert.deepStrictEqual(c.redenen, [], JSON.stringify(c.redenen)); assert.strictEqual(c.kan, true);
   assert.strictEqual(c.scope[0].vorm.aantal_wanden, 6); assert.strictEqual(c.scope[0].vorm.uitsprongen, 1); assert.strictEqual(c.scope[0].vorm.veelhoek, true);
   assert.deepStrictEqual(c.scope[0].wanden_alleen_basis, ['W1', 'W2', 'W3', 'W4', 'W5']);
-  assert.ok(c.uitzonderingen.some(u => u.soort === 'vorm' && /aangenomen als 90 of 270/.test(u.tekst)), 'niet gecontroleerd met een diagonaal staat als uitzondering');
+  assert.ok(c.uitzonderingen.some(u => u.soort === 'vorm' && /hoekaanname/.test(u.tekst)), 'getekend onder hoekaanname staat als uitzondering');
   assert.strictEqual(c.volledig_gemeten, false);
   const v = goed(K.vrijgeven(op, 'test', T0)); assert.strictEqual(K.effectieveStatus(v), 'vrijgegeven');
   const andereHoek = goed(K.zetHoek(v, 'R1', 'W1', 91, 'gemeten', T0)); assert.strictEqual(K.effectieveStatus(andereHoek), 'vrijgave-vervallen');
   const anderUit = goed(K.zetMaat(v, 'R1', 'uitsprongen.U1.maten.diepte', { staat: 'gemeten', waarde: 650, bron: 'hand' }, T0)); assert.strictEqual(K.effectieveStatus(anderUit), 'vrijgave-vervallen');
   const anderKnik = goed(K.zetWandVorm(v, 'R1', 'W6', { foto: 'F6', knikken: [{ x: 0.3, y: 0.9, u: 0.3 }, { x: 0.52, y: 0.9, u: 0.52 }], tussenstukken: ['voor'] }, T0)); assert.strictEqual(K.effectieveStatus(anderKnik), 'vrijgave-vervallen');
-  // met een diagonaal als controle is de vorm consistent en is er geen vormuitzondering meer
+  // met een enkele diagonaal als controle is de vorm niet bepaald
   let met = goed(K.voegDiagonaalToe(v, 'R1', 'H1', 'H4')); met = meet(met, 'diagonalen.C.maten.lengte', Math.round(Math.hypot(3000, 2000)));
-  assert.ok(!K.vrijgeefCheck(met).uitzonderingen.some(u => u.soort === 'vorm'));
+  assert.ok(K.vrijgeefCheck(met).uitzonderingen.some(u => u.soort === 'vorm'), 'een enkele diagonaal maakt de vorm nog niet bepaald: nog steeds een uitzondering');
 });
 test('een niet gesloten fotoronde of een wand zonder foto blokkeert het vrijgeven', () => {
   const open = goed(K.openRond(volledigeLVorm(), 'R1')); assert.ok(K.vrijgeefCheck(open).redenen.some(x => x.code === 'ronde'));

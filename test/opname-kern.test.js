@@ -169,10 +169,10 @@ test('meubeltype: alleen kast is een echte vragenset; keuken en badmeubel zijn e
 // ── Vorm en sluitcontrole (geen rechthoek veronderstellen) ──
 test('vorm: een rechthoek met één diagonaal is bepaald maar nog niet gecontroleerd; met de tweede is hij consistent', () => {
   let v = K.vorm(vormRuimte(5000, 3000, 5000, 3000, 5831, null));
-  assert.strictEqual(v.status, 'onverifieerd'); assert.strictEqual(v.schematisch, true); assert.strictEqual(v.afwijkend, false); assert.strictEqual(v.diagonaal_gebruikt, 'A');
+  assert.strictEqual(v.status, 'onverifieerd'); assert.strictEqual(v.bepaling, 'bepaald'); assert.strictEqual(v.schematisch, false); assert.strictEqual(v.afwijkend, false); assert.strictEqual(v.diagonaal_gebruikt, 'A');
   assert.deepStrictEqual(v.hoekpunten_mm, { NW: [0, 0], NO: [5000, 0], ZO: [5000, 3000], ZW: [0, 3000] }); assert.deepStrictEqual(v.hoeken, { NW: 90, NO: 90, ZO: 90, ZW: 90 });
   v = K.vorm(vormRuimte(5000, 3000, 5000, 3000, 5831, 5831));
-  assert.strictEqual(v.status, 'consistent'); assert.strictEqual(v.schematisch, false); assert.strictEqual(v.afwijkend, false); assert.deepStrictEqual(v.controle, { diagonaal: 'B', gemeten_mm: 5831, berekend_mm: 5831, verschil_mm: 0, tolerantie_mm: 10 });
+  assert.strictEqual(v.status, 'consistent'); assert.strictEqual(v.bepaling, 'gecontroleerd'); assert.strictEqual(v.schematisch, false); assert.strictEqual(v.afwijkend, false); assert.deepStrictEqual(v.controle, { diagonaal: 'B', gemeten_mm: 5831, berekend_mm: 5831, verschil_mm: 0, tolerantie_mm: 10 });
   assert.strictEqual(K.sluitcontrole(vormRuimte(5000, 3000, 5000, 3000, 5831, 5831)).checks[0].status, 'ok');
 });
 test('vorm: alleen diagonaal B werkt ook, met dezelfde vaste assen', () => {
