@@ -211,7 +211,7 @@
     body.appendChild(h('div', { class: 'opn-voortgang', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': String(vg.n), 'aria-valuenow': String(vg.klaar) }, h('span', { style: { width: vg.pct + '%' } })));
     body.appendChild(X.toestelBalk());
     const uitleg = [];
-    if (kamer.vormStatus === 'inconsistent') uitleg.push('De metingen sluiten niet op elkaar (zie Afronden): de vorm blijft een schatting.');
+    if (kamer.vormStatus === 'inconsistent') uitleg.push(kamer.vormSubstatus === 'aanname_past_niet' ? 'Vorm nog niet bepaald; hoekaanname controleren (zie Afronden). Je gemeten maten blijven staan: de vorm blijft een schatting.' : 'De metingen sluiten niet op elkaar (zie Afronden): de vorm blijft een schatting.');
     else if (kamer.vormBepaling === 'bepaald') uitleg.push(kamer.vormLabel + '.' + (kamer.vormVolgende ? ' ' + kamer.vormVolgende.tekst : ''));
     else if (kamer.vormBepaling === 'getekend' && kamer.vormStatus === 'onverifieerd') uitleg.push(kamer.vormLabel + ': de hoeken zijn aangenomen (90 of 270 graden) en dat bewijst een lengte of één diagonaal niet. ' + (kamer.vormVolgende ? kamer.vormVolgende.tekst : 'Bevestig de hoeken.') + ' Tot dan blijft de vorm gestippeld.');
     else if (kamer.vormGeschat) uitleg.push(ids.length === 4 ? 'Gestippeld is een schatting: de vorm klopt pas als de vier wanden en een diagonaal gemeten zijn.' : 'Gestippeld is een schatting: de vorm wordt vast naarmate je de wanden meet.');
@@ -417,6 +417,7 @@
     else if (plaatsen) body.appendChild(plaatsBalk());
     else {
       if (foto && !afb) body.appendChild(h('div', { class: 'opn-kaart opn-uitleg' }, h('div', { class: 'opn-kaart-titel', text: 'Eerst de vier hoeken van de wand aanwijzen' }), h('p', { text: 'Tik op de foto de hoeken van de wand: links onder, rechts onder, rechts boven, links boven. Daarna staan de maatlijnen op de foto.' }), h('button', { type: 'button', class: 'opn-btn opn-btn-groot opn-btn-primair', text: 'Hoeken aanwijzen', onclick: startKal })));
+      if (foto && afb) body.appendChild(h('p', { class: 'opn-hint opn-wandhint', text: 'De lijnen worden op het wandvlak berekend; voorwerpen ervoor zijn geen meetreferentie.' }));
       if (onbekend) body.appendChild(h('div', { class: 'opn-kaart opn-uitleg' }, h('div', { class: 'opn-kaart-titel', text: 'Een of meer hoeken zijn onbekend' }), h('p', { text: 'Een hoek was buiten beeld of afgedekt. De maatlijnen staan daarom op een schematisch wandaanzicht, niet op de foto. Je kunt de hoeken later alsnog aanwijzen.' }), h('div', { class: 'opn-onderrij' }, h('button', { type: 'button', class: 'opn-btn opn-btn-klein', onclick: () => startKal(true) }, 'Hoeken aanpassen'), h('button', { type: 'button', class: 'opn-btn opn-btn-klein', onclick: () => origineelBlad(fotoRec) }, 'Originele foto bekijken'))));
       else if (!foto) body.appendChild(h('div', { class: 'opn-hint-rij' }, h('span', { text: X.wandFotoRec(w) ? 'De foto van deze wand staat in de opname, maar het beeld is op dit toestel niet te laden. Je werkt nu op het schema.' : 'Schematisch wandaanzicht, nog geen foto van deze wand.' }),
         X.fotoKnop('Foto maken', async f => { await X.opslaanFoto(f, { wand: w }); await laadWandFoto(w); X.teken(); }, { klasse: 'opn-btn opn-btn-klein' })));

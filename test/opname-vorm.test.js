@@ -78,7 +78,7 @@ test('veelhoek: een L-vorm met zes wanden en een inspringende hoek sluit en is s
 test('sluitfout: boven de 10 mm is de meting inconsistent, eronder sluit de L-vorm; een diagonaal als controle maakt het consistent', () => {
   assert.strictEqual(K.vorm(R(lVorm({ W6: 4008 }))).status, 'onverifieerd', '8 mm is binnen de tolerantie');
   const fout = K.vorm(R(lVorm({ W6: 4050 })));
-  assert.strictEqual(fout.status, 'inconsistent'); assert.ok(/inconsistent/.test(fout.reden) && /50 mm/.test(fout.reden)); assert.strictEqual(fout.sluitfout.y, -50);
+  assert.strictEqual(fout.status, 'inconsistent'); assert.strictEqual(fout.substatus, 'aanname_past_niet', 'alleen aangenomen hoeken: de vorm is nog niet bepaald'); assert.ok(/hoekaanname controleren/.test(fout.reden) && /50 mm/.test(fout.reden)); assert.strictEqual(fout.sluitfout.y, -50);
   assert.ok(K.vrijgeefCheck(lVorm({ W6: 4050 })).redenen.some(x => x.code === 'conflict'));
   // diagonaal H1 naar H4 (0,0) -> (3000,2000)
   let op = goed(K.voegDiagonaalToe(lVorm(), 'R1', 'H1', 'H4'));

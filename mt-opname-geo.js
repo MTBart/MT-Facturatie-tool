@@ -91,7 +91,7 @@
     const pp = lijst(r.plafondpunten).map(p => meting(p, 'hoogte')).filter(getal), wandHoog = [];
     for (const w of ids) for (const s of ['plafond_links', 'plafond_midden', 'plafond_rechts']) { const v = meting(vind(r.wanden, w), s); if (getal(v)) wandHoog.push(v); }
     const hoogte = pp.length ? gem(pp) : wandHoog.length ? gem(wandHoog) : STANDAARD.hoogte;
-    return { punten, hoogte, hoogteGeschat: !(pp.length || wandHoog.length), vormGeschat: plat.schatting, vormStatus: plat.vorm.status, vormBepaling: plat.vorm.bepaling || null, vormLabel: K.vormLabel(plat.vorm).kort, vormVolgende: plat.vorm.volgende || null, wanden, volgorde: ids, rond: plat.rond, contour: plat.contour, uitsprongen: plat.uitsprongen, plattegrond: plat };
+    return { punten, hoogte, hoogteGeschat: !(pp.length || wandHoog.length), vormGeschat: plat.schatting, vormStatus: plat.vorm.status, vormSubstatus: plat.vorm.substatus || null, vormBepaling: plat.vorm.bepaling || null, vormLabel: K.vormLabel(plat.vorm).kort, vormVolgende: plat.vorm.volgende || null, wanden, volgorde: ids, rond: plat.rond, contour: plat.contour, uitsprongen: plat.uitsprongen, plattegrond: plat };
   };
   // Punt op een wand: x mm langs de wand vanaf de linkerhoek (kijkend naar de wand), y mm omhoog -> [oost, zuid, omhoog]
   G.wandNaar3D = function (kamer, wand, x, y) {

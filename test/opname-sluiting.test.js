@@ -131,7 +131,7 @@ test('vormLabel: de tekst volgt de bewezen stap en beweert nergens meer (scherm 
   assert.strictEqual(l(metDiagonaal(zesWanden(), 'H1', 'H3', D['H1-H3'])).kort, 'Lengtes gemeten; model onder hoekaanname; controle C klopt');
   assert.strictEqual(l(zesWanden({ bron: 'gemeten' })).bepaling, 'bepaald'); assert.ok(/nog niet met een controlemaat gecontroleerd/.test(l(zesWanden({ bron: 'gemeten' })).kort));
   assert.strictEqual(l(metDiagonaal(zesWanden({ bron: 'gemeten' }), 'H1', 'H3', D['H1-H3'])).kort, 'Vorm gecontroleerd met controlemaat C');
-  assert.strictEqual(l(zesWanden({ laatste: 270 })).pil, 'conflict');
+  assert.strictEqual(l(zesWanden({ laatste: 270 })).pil, 'later'); assert.strictEqual(l(zesWanden({ laatste: 270 })).kort, 'Vorm nog niet bepaald; hoekaanname controleren');   // alleen aangenomen hoeken passen niet (3d)
   for (const op of [zesWanden(), metDiagonaal(zesWanden(), 'H1', 'H3', D['H1-H3'])]) assert.ok(!/Alles/.test(l(op).kort) && !/^Vorm gecontroleerd/.test(l(op).kort));
   assert.ok(/Getekend/.test(K.vormLabel(K.vorm(R(K.nieuweOpname({ ruimtes: [K.nieuweRuimte({ id: 'R1', wanden: [] })] })))).kort));
 });
@@ -314,5 +314,39 @@ test('046 restfouten: sluitfout, hoekensom, diagonaalverschil en hoekconflict wo
   const conflict = K.restfouten(K.vorm(R(hoek(vierWanden({ diagonalen: [['A', 5000], ['B', 5000]] }), 'W1', 100, 'gemeten'))));
   assert.ok(conflict.some(x => /^hoek 2: 100° gemeten, 90° berekend/.test(x)), conflict.join(' | '));
   assert.deepStrictEqual(K.restfouten(null), []);
+});
+// 3d (GESPREK 049/050): inconsistent blijft, met een substatus: conflict_gemeten (gemeten informatie spreekt elkaar tegen) of aanname_past_niet (alleen aangenomen hoeken passen niet).
+test('3d: 89,6 gemeten met verder aangenomen 90 graden: aanname_past_niet, restfout in mm zichtbaar, gemeten hoek blijft 89,6, vervolgstap is een controlehoek (geen diagonaal beloofd)', () => {
+  const op = zesWandenMetHoek(89.6), v = K.vorm(R(op)), lab = K.vormLabel(v);
+  assert.strictEqual(v.status, 'inconsistent'); assert.strictEqual(v.substatus, 'aanname_past_niet');
+  assert.strictEqual(lab.kort, 'Vorm nog niet bepaald; hoekaanname controleren'); assert.strictEqual(lab.substatus, 'aanname_past_niet'); assert.notStrictEqual(lab.pil, 'conflict');
+  assert.ok(/^Vorm nog niet bepaald; hoekaanname controleren/.test(v.reden) && !/Meetgegevens inconsistent/.test(v.reden), v.reden);
+  assert.ok(K.restfouten(v).some(x => /^Sluitfout van de rondgang: 4\d mm/.test(x)), K.restfouten(v).join(' | '));
+  assert.strictEqual(v.volgende.soort, 'hoek'); assert.ok(/controlehoek/.test(v.volgende.tekst) && !/diagonaal/i.test(v.volgende.tekst), v.volgende.tekst);
+  assert.strictEqual(K.hoekVan(R(op), 'W1').graden, 89.6, 'gemeten invoer wordt nooit teruggezet naar 90');
+  const sc = K.sluitcontrole(R(op)); assert.strictEqual(sc.conflicten[0].substatus, 'aanname_past_niet');
+  const chk = K.vrijgeefCheck(op); assert.strictEqual(chk.kan, false, 'de vorm is niet bepaald: vrijgeven blijft geblokkeerd');
+  assert.ok(chk.redenen.some(x => x.code === 'conflict' && x.substatus === 'aanname_past_niet' && /hoekaanname controleren/.test(x.tekst)), JSON.stringify(chk.redenen));
+});
+test('3d: alleen aangenomen hoeken die niet sluiten (lengte W6 te groot) geeft aanname_past_niet; hoekensom en diagonaalfout met aangenomen hoeken ook', () => {
+  const l = K.vorm(R(meet(zesWanden(), 'wanden.W6.maten.lengte', 4100))); assert.strictEqual(l.substatus, 'aanname_past_niet');
+  const som = K.vorm(R(zesWanden({ laatste: 135, laatsteBron: 'gemeten' }))); assert.strictEqual(som.status, 'inconsistent'); assert.strictEqual(som.substatus, 'aanname_past_niet');
+  const diag = K.vorm(R(metDiagonaal(zesWanden(), 'H1', 'H3', 7000))); assert.strictEqual(diag.status, 'inconsistent'); assert.strictEqual(diag.substatus, 'aanname_past_niet'); assert.ok(/^Vorm nog niet bepaald; hoekaanname controleren/.test(diag.reden), diag.reden);
+});
+test('3d: de 100-graden-repro van ChatGPT (gemeten hoek, twee diagonalen) is conflict_gemeten met de bestaande conflicttekst en betrokken maten', () => {
+  const v = K.vorm(R(hoek(vierWanden({ diagonalen: [['A', 5000], ['B', 5000]] }), 'W1', 100, 'gemeten')));
+  assert.strictEqual(v.status, 'inconsistent'); assert.strictEqual(v.substatus, 'conflict_gemeten');
+  assert.strictEqual(K.vormLabel(v).kort, 'Meetgegevens inconsistent'); assert.strictEqual(K.vormLabel(v).pil, 'conflict'); assert.strictEqual(K.vormLabel(v).substatus, 'conflict_gemeten');
+  assert.ok(/^Meetgegevens inconsistent: hoek 2 is 100 graden gemeten/.test(v.reden), v.reden); assert.ok(v.betrokken.includes('wanden.W1.hoek_naar_volgende'));
+});
+test('3d: gemeten informatie die elkaar tegenspreekt (alle hoeken gemeten, lengte W6 te groot; vierhoek die niet kan bestaan; tweede diagonaal wijkt af) is conflict_gemeten', () => {
+  const zes = K.vorm(R(meet(zesWanden({ bron: 'gemeten' }), 'wanden.W6.maten.lengte', 4100))); assert.strictEqual(zes.status, 'inconsistent'); assert.strictEqual(zes.substatus, 'conflict_gemeten'); assert.ok(/^Meetgegevens inconsistent/.test(zes.reden), zes.reden);
+  const onmogelijk = K.vorm(R(vierWanden({ diagonalen: [['A', 9000]] }))); assert.strictEqual(onmogelijk.substatus, 'conflict_gemeten');
+  const tweede = K.vorm(R(vierWanden({ diagonalen: [['A', 5000], ['B', 5300]] }))); assert.strictEqual(tweede.status, 'inconsistent'); assert.strictEqual(tweede.substatus, 'conflict_gemeten');
+  const goed1 = K.vorm(R(vierWanden({ diagonalen: [['A', 5000], ['B', 5000]] }))); assert.strictEqual(goed1.status, 'consistent'); assert.ok(!goed1.substatus, 'zonder conflict geen substatus');
+});
+test('3d: 1 graad heet overal een voorlopige detectiedrempel', () => {
+  assert.ok(/voorlopige detectiedrempel/.test(K.CRITERIA_TEKST) && /105 mm/.test(K.CRITERIA_TEKST) && /geen onderbouwde meetonzekerheid/.test(K.CRITERIA_TEKST), K.CRITERIA_TEKST);
+  assert.ok(K.restfouten(K.vorm(R(zesWanden()))).some(x => /^Hoekensom: .*voorlopige detectiedrempel 1°/.test(x)), K.restfouten(K.vorm(R(zesWanden()))).join(' | '));
 });
 console.log('\n' + n + ' tests geslaagd');

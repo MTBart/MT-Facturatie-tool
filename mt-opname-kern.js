@@ -397,12 +397,12 @@
   // Wat een gecontroleerde vorm NIET bewijst: de controlemaat controleert de vorm globaal (een extra, onafhankelijke maat), niet elk deel van de ruimte. Dit blijft apart open (ChatGPT-review 046).
   K.OPEN_NA_VORM = 'Nog apart open: lokale haaksheid, obstakels en de montage- en hoogtematen van de werkzone.';
   // De toleranties zijn algoritmische criteria van deze beta (wanneer rekent de app iets als "klopt"), geen fysieke meetnauwkeurigheid en geen productietolerantie.
-  K.CRITERIA_TEKST = 'Criteria van de app (rekenregels, geen meetnauwkeurigheid of productietolerantie): hoekensom ' + K.TOLERANTIE.hoek_som + '° plus de onzekerheid van gemeten hoeken, raakpunt ' + K.TOLERANTIE.raak + ' mm, sluitfout en diagonaal ' + K.TOLERANTIE.sluit + ' mm, ongeveer haaks ' + dec(K.TOLERANTIE.hoek_haaks) + '°.';
+  K.CRITERIA_TEKST = 'Criteria van de app (rekenregels, geen meetnauwkeurigheid of productietolerantie): hoekensom ' + K.TOLERANTIE.hoek_som + '° (voorlopige detectiedrempel, op 6 m ongeveer ' + Math.round(6000 * Math.tan(K.TOLERANTIE.hoek_som * Math.PI / 180)) + ' mm; geen onderbouwde meetonzekerheid) plus de onzekerheid van gemeten hoeken, raakpunt ' + K.TOLERANTIE.raak + ' mm, sluitfout en diagonaal ' + K.TOLERANTIE.sluit + ' mm, ongeveer haaks ' + dec(K.TOLERANTIE.hoek_haaks) + '°.';
   // De restfouten van de vorm in woorden: wat er na de sluiting nog aan verschil over is, zodat groen nooit "perfect" suggereert. Pure functie, voor elk scherm en de export.
   K.restfouten = function (v) {
     v = v || {}; const u = [], teken = x => (x > 0 ? '+' : '') + x, komma = x => String(x).replace('.', ',');
     if (v.sluitfout) u.push('Sluitfout van de rondgang: ' + v.sluitfout.mm + ' mm (criterium ' + K.TOLERANTIE.sluit + ' mm)');
-    if (v.hoeksom) u.push('Hoekensom: ' + komma(teken(v.hoeksom.verschil)) + '° ten opzichte van ' + v.hoeksom.verwacht + '° (criterium ' + komma(v.hoeksom.tolerantie) + '°)');
+    if (v.hoeksom) u.push('Hoekensom: ' + komma(teken(v.hoeksom.verschil)) + '° ten opzichte van ' + v.hoeksom.verwacht + '° (voorlopige detectiedrempel ' + komma(v.hoeksom.tolerantie) + '°)');
     for (const c of (lijst(v.controles).length ? v.controles : (v.controle ? [v.controle] : []))) if (c) u.push('Diagonaal ' + c.diagonaal + ': ' + c.gemeten_mm + ' mm gemeten, ' + c.berekend_mm + ' mm berekend (' + teken(c.verschil_mm) + ' mm, criterium ' + c.tolerantie_mm + ' mm)');
     if (v.hoek_conflict) u.push(hoekTekst(v.hoek_conflict.hoek) + ': ' + komma(v.hoek_conflict.gemeten_graden) + '° gemeten, ' + komma(v.hoek_conflict.berekend_graden) + '° berekend (' + komma(teken(v.hoek_conflict.verschil_graden)) + '°, marge ' + komma(v.hoek_conflict.marge_graden) + '°)');
     return u;
@@ -410,7 +410,8 @@
   // De status van de vorm in woorden, in drie gescheiden stappen (getekend / geometrisch bepaald / onafhankelijk gecontroleerd). Eén tekst voor elk scherm, zodat nergens meer wordt beweerd dan er bewezen is.
   K.vormLabel = function (v) {
     v = v || {};
-    if (v.status === 'inconsistent') return { kort: 'Meetgegevens inconsistent', pil: 'conflict', bepaling: null };
+    if (v.status === 'inconsistent' && v.substatus === 'aanname_past_niet') return { kort: 'Vorm nog niet bepaald; hoekaanname controleren', pil: 'later', bepaling: null, substatus: 'aanname_past_niet' };       // alleen aangenomen hoeken passen niet: de gemeten invoer blijft staan
+    if (v.status === 'inconsistent') return { kort: 'Meetgegevens inconsistent', pil: 'conflict', bepaling: null, substatus: v.substatus || 'conflict_gemeten' };
     if (v.bepaling === 'gecontroleerd') {
       const namen = lijst(v.controle_diagonalen).length ? v.controle_diagonalen : (v.controle && v.controle.diagonaal ? [v.controle.diagonaal] : []);
       return { kort: 'Vorm gecontroleerd met ' + (namen.length > 1 ? 'controlematen ' : 'controlemaat ') + (namen.join(' en ') || 'een extra maat') + (v.afwijkend ? ', niet rechthoekig' : ''), pil: 'ok', bepaling: 'gecontroleerd', open: K.OPEN_NA_VORM };
@@ -439,7 +440,7 @@
     const d1 = metA ? dA : dB, d2 = metA ? dB : dA, p = vierhoek(zijden, d1, T.diagonaal);
     const betrokken = ids.map(wandPad).concat(dA != null ? [diagPad('A')] : [], dB != null ? [diagPad('B')] : []);
     basis.diagonaal_gebruikt = metA ? 'A' : 'B'; basis.betrokken = betrokken;
-    if (!p) { basis.status = 'inconsistent'; basis.reden = 'Met deze vier wandlengtes en diagonaal ' + basis.diagonaal_gebruikt + ' (' + d1 + ' mm) kan de ruimte niet bestaan. Controleer de diagonaal en de wandlengtes.'; return basis; }
+    if (!p) { basis.status = 'inconsistent'; basis.substatus = 'conflict_gemeten'; basis.reden = 'Met deze vier wandlengtes en diagonaal ' + basis.diagonaal_gebruikt + ' (' + d1 + ' mm) kan de ruimte niet bestaan. Controleer de diagonaal en de wandlengtes.'; return basis; }
     // naar vaste assen: de eerste hoek in de oorsprong, de tweede op de x-as, de ruimte onder de x-as (y wijst omlaag)
     const i0 = ids2.indexOf(hoekIds[0]), i1 = ids2.indexOf(hoekIds[1]), o = p[i0], rx = p[i1][0] - o[0], ry = p[i1][1] - o[1], l = Math.hypot(rx, ry), c = rx / l, sn = -ry / l;
     const punten = {}, hoeken = {};
@@ -453,7 +454,7 @@
       const wIn = ids[(k + 3) % 4], hk = hoekInfo(r, wIn); if (hk.bron !== 'gemeten') continue;
       const berekend = hoekIn(p, ids2.indexOf(hoekIds[k])), marge = T.hoek_som + (hk.onzekerheid || 0) + Math.atan(T.diagonaal / Math.min(z[wIn], z[ids[k]])) * 180 / Math.PI, verschilHoek = berekend - hk.graden;
       if (Math.abs(verschilHoek) <= marge) continue;
-      basis.status = 'inconsistent'; basis.bepaling = null; basis.schematisch = true; basis.betrokken = betrokken.concat([hoekPad(wIn)]);
+      basis.status = 'inconsistent'; basis.substatus = 'conflict_gemeten'; basis.bepaling = null; basis.schematisch = true; basis.betrokken = betrokken.concat([hoekPad(wIn)]);
       basis.hoek_conflict = { hoek: hoekIds[k], wand: wIn, pad: hoekPad(wIn), gemeten_graden: hk.graden, berekend_graden: afr(berekend), verschil_graden: afr(verschilHoek), marge_graden: afr(marge), methode: hk.methode };
       basis.reden = 'Meetgegevens inconsistent: ' + hoekTekst(hoekIds[k]) + ' is ' + dec(hk.graden) + ' graden gemeten, maar uit de vier wandlengtes en diagonaal ' + basis.diagonaal_gebruikt + ' volgt ' + dec(afr(berekend)) + ' graden (verschil ' + (verschilHoek > 0 ? '+' : '') + dec(afr(verschilHoek)) + ' graden, marge ' + dec(afr(marge)) + ' graden). Controleer de gemeten hoek, de wandlengtes en de diagonaal. De app past niets aan.';
       basis.volgende = { soort: 'hoek', wand: wIn, tekst: 'Meet de hoek bij ' + hoekTekst(hoekIds[k]) + ' opnieuw, of controleer de wandlengtes en de diagonaal.' };
@@ -462,7 +463,7 @@
     if (d2 == null) { basis.status = 'onverifieerd'; basis.bepaling = 'bepaald'; basis.schematisch = false; basis.reden = 'Vorm geometrisch bepaald uit vier zijden en diagonaal ' + basis.diagonaal_gebruikt + '. Nog niet met een controlemaat gecontroleerd: meet de andere diagonaal als controlemaat (optioneel).'; basis.volgende = { soort: 'controle', van: hoekIds[1], naar: hoekIds[3], tekst: 'Meet als controle de andere diagonaal.' }; return basis; }
     const berekend = Math.round(afstand(p[1], p[3])), v = Math.round(d2 - berekend);
     basis.controle = { diagonaal: metA ? 'B' : 'A', gemeten_mm: d2, berekend_mm: berekend, verschil_mm: v, tolerantie_mm: T.diagonaal };
-    if (Math.abs(v) > T.diagonaal) { basis.status = 'inconsistent'; basis.reden = 'Diagonaal ' + basis.controle.diagonaal + ' is ' + d2 + ' mm gemeten, maar uit de vier wanden en diagonaal ' + basis.diagonaal_gebruikt + ' volgt ' + berekend + ' mm (' + (v > 0 ? '+' : '') + v + ' mm). De metingen sluiten niet op elkaar: controleer de referentie en meet opnieuw. De app past niets aan.'; return basis; }
+    if (Math.abs(v) > T.diagonaal) { basis.status = 'inconsistent'; basis.substatus = 'conflict_gemeten'; basis.reden = 'Diagonaal ' + basis.controle.diagonaal + ' is ' + d2 + ' mm gemeten, maar uit de vier wanden en diagonaal ' + basis.diagonaal_gebruikt + ' volgt ' + berekend + ' mm (' + (v > 0 ? '+' : '') + v + ' mm). De metingen sluiten niet op elkaar: controleer de referentie en meet opnieuw. De app past niets aan.'; return basis; }
     basis.status = 'consistent'; basis.bepaling = 'gecontroleerd'; basis.schematisch = false;
     basis.reden = 'De metingen sluiten op elkaar: diagonaal ' + basis.controle.diagonaal + ' ' + d2 + ' mm gemeten, ' + berekend + ' mm berekend (' + (v > 0 ? '+' : '') + v + ' mm).' + (basis.afwijkend ? ' De ruimte is niet rechthoekig (hoeken: ' + ids2.map(k => k + ' ' + hoeken[k] + ' graden').join(', ') + '). Dat is informatie, geen fout; houd er rekening mee bij het meubel.' : '');
     return basis;
@@ -487,25 +488,26 @@
     const gemetenHoeken = ids.map((w, i) => info[i].bron === 'gemeten' ? hoekPad(w) : null).filter(Boolean), somMarge = T.hoek_som + info.reduce((s2, i) => s2 + (i.bron === 'gemeten' && i.onzekerheid ? i.onzekerheid : 0), 0);          // de marge van de som: 1 graad plus de meetonzekerheid van elke gemeten hoek
     basis.hoeksom = { som: afr(som), verwacht, verschil: afr(som - verwacht), tolerantie: afr(somMarge) };
     basis.hoeken = {}; ids.forEach((w, i) => { basis.hoeken[hoekIds[(i + 1) % n]] = graden[i]; });
+    const sub = aangenomen ? 'aanname_past_niet' : 'conflict_gemeten', kop = aangenomen ? 'Vorm nog niet bepaald; hoekaanname controleren: ' : 'Meetgegevens inconsistent: ';          // conflict_gemeten: gemeten informatie spreekt elkaar tegen; aanname_past_niet: alleen aangenomen hoeken passen niet
     const sluitNiet = 'sluit niet bij de aangenomen hoeken: meet een controlehoek (bijvoorbeeld een inspringende hoek of de hoek bij de laatste wand). Dit zegt niet dat de wandlengtes fout zijn.';
     if (Math.abs(som - verwacht) > somMarge) {                           // richtingssluiting: de draaiingen langs de wanden zijn samen precies 360 graden
-      basis.status = 'inconsistent'; basis.bepaling = null; basis.betrokken = gemetenHoeken.slice();
-      basis.reden = 'Meetgegevens inconsistent: de hoeken tellen op tot ' + afr(som) + ' graden, een ruimte met ' + n + ' wanden heeft er ' + verwacht + ' ((' + n + ' - 2) x 180). De ruimte ' + (aangenomen ? sluitNiet : 'sluit niet: controleer de gemeten hoeken.');
+      basis.status = 'inconsistent'; basis.substatus = sub; basis.bepaling = null; basis.betrokken = gemetenHoeken.slice();
+      basis.reden = kop + 'de hoeken tellen op tot ' + afr(som) + ' graden, een ruimte met ' + n + ' wanden heeft er ' + verwacht + ' ((' + n + ' - 2) x 180). De ruimte ' + (aangenomen ? sluitNiet : 'sluit niet: controleer de gemeten hoeken.');
       basis.volgende = { soort: 'hoek', tekst: 'Meet een controlehoek (de hoeken tellen niet op tot ' + verwacht + ' graden).' };
       return basis;
     }
     const p = rondgang(ids.map(w => z[w]), graden), fx = p[n][0] - p[0][0], fy = p[n][1] - p[0][1], mm = Math.hypot(fx, fy);
     basis.betrokken = ids.map(wandPad).concat(gemetenHoeken); basis.sluitfout = { x: Math.round(fx), y: Math.round(fy), mm: Math.round(mm) };
     if (mm > T.sluit) {                                                   // positiesluiting
-      basis.status = 'inconsistent'; basis.bepaling = null;
-      basis.reden = 'Meetgegevens inconsistent: na een rondgang langs alle wanden zit er ' + Math.round(mm) + ' mm tussen begin en eind (' + Math.round(fx) + ' mm in x, ' + Math.round(fy) + ' mm in y). De wanden ' + (aangenomen ? sluitNiet : 'sluiten niet: controleer de wandlengtes en de gemeten hoeken.') + ' De app past niets aan.';
+      basis.status = 'inconsistent'; basis.substatus = sub; basis.bepaling = null;
+      basis.reden = kop + 'na een rondgang langs alle wanden zit er ' + Math.round(mm) + ' mm tussen begin en eind (' + Math.round(fx) + ' mm in x, ' + Math.round(fy) + ' mm in y). De wanden ' + (aangenomen ? sluitNiet.replace('sluit niet', 'sluiten niet') : 'sluiten niet: controleer de wandlengtes en de gemeten hoeken.') + ' De app past niets aan.';
       basis.volgende = { soort: aangenomen ? 'hoek' : 'lengte', tekst: aangenomen ? 'Meet een controlehoek.' : 'Meet de wandlengtes en hoeken opnieuw.' };
       return basis;
     }
     const pts = p.slice(0, n), botsing = wandBotsing(pts, T.raak);
     if (oppervlakte(pts) <= 0 || botsing) {
-      basis.status = 'inconsistent'; basis.bepaling = null;
-      basis.reden = 'Meetgegevens inconsistent: ' + (botsing ? (botsing.soort === 'kruist' ? 'twee wanden kruisen elkaar' : botsing.soort === 'raakt' ? 'een hoek ligt op een andere wand' : 'twee wanden liggen over elkaar') + ' (' + wandTekst(ids[botsing.a]) + ' en ' + wandTekst(ids[botsing.b]) + ')' : 'de wanden lopen niet met de klok mee rond een ruimte') + '. Controleer de hoeken (90 of 270 graden) en de volgorde van de wanden.';
+      basis.status = 'inconsistent'; basis.substatus = sub; basis.bepaling = null;
+      basis.reden = kop + (botsing ? (botsing.soort === 'kruist' ? 'twee wanden kruisen elkaar' : botsing.soort === 'raakt' ? 'een hoek ligt op een andere wand' : 'twee wanden liggen over elkaar') + ' (' + wandTekst(ids[botsing.a]) + ' en ' + wandTekst(ids[botsing.b]) + ')' : 'de wanden lopen niet met de klok mee rond een ruimte') + '. Controleer de hoeken (90 of 270 graden) en de volgorde van de wanden.';
       basis.volgende = { soort: 'hoek', tekst: 'Controleer de hoeken en de volgorde van de wanden.' };
       return basis;
     }
@@ -515,8 +517,8 @@
       const invoer = graden[(k + n - 1) % n], marge = T.hoek_som + (info[(k + n - 1) % n].onzekerheid || 0) + Math.atan(T.sluit / Math.min(lw[(k + n - 1) % n], lw[k])) * 180 / Math.PI;
       basis.hoeken_gereconstrueerd[hoekIds[k]] = afr(rec[k]);
       if (Math.abs(rec[k] - invoer) > marge) {
-        basis.status = 'inconsistent'; basis.bepaling = null;
-        basis.reden = 'Meetgegevens inconsistent: uit de wanden volgt bij ' + hoekTekst(hoekIds[k]) + ' een hoek van ' + afr(rec[k]) + ' graden, maar ingevoerd is ' + invoer + ' graden. De ruimte ' + (aangenomen ? sluitNiet : 'sluit niet: controleer de gemeten hoeken.');
+        basis.status = 'inconsistent'; basis.substatus = sub; basis.bepaling = null;
+        basis.reden = kop + 'uit de wanden volgt bij ' + hoekTekst(hoekIds[k]) + ' een hoek van ' + afr(rec[k]) + ' graden, maar ingevoerd is ' + invoer + ' graden. De ruimte ' + (aangenomen ? sluitNiet : 'sluit niet: controleer de gemeten hoeken.');
         basis.volgende = { soort: 'hoek', tekst: 'Meet de hoek bij ' + hoekTekst(hoekIds[k]) + ' als controle.' };
         return basis;
       }
@@ -537,8 +539,8 @@
     basis.controle = checks.length ? checks[0] : null; basis.controles = checks;
     const fout = checks.find(c => !c.klopt);
     if (fout) {
-      basis.status = 'inconsistent'; basis.bepaling = null;
-      basis.reden = 'Diagonaal ' + fout.diagonaal + ' is ' + fout.gemeten_mm + ' mm gemeten, maar uit de wanden en hoeken volgt ' + fout.berekend_mm + ' mm (' + (fout.verschil_mm > 0 ? '+' : '') + fout.verschil_mm + ' mm). ' + (aangenomen ? 'Dat kan komen doordat een aangenomen hoek niet klopt: meet een controlehoek. ' : 'De metingen sluiten niet op elkaar: controleer de wandlengtes en de hoeken. ') + 'De app past niets aan.';
+      basis.status = 'inconsistent'; basis.substatus = sub; basis.bepaling = null;
+      basis.reden = (aangenomen ? kop : '') + 'Diagonaal ' + fout.diagonaal + ' is ' + fout.gemeten_mm + ' mm gemeten, maar uit de wanden en hoeken volgt ' + fout.berekend_mm + ' mm (' + (fout.verschil_mm > 0 ? '+' : '') + fout.verschil_mm + ' mm). ' + (aangenomen ? 'Dat kan komen doordat een aangenomen hoek niet klopt: meet een controlehoek. ' : 'De metingen sluiten niet op elkaar: controleer de wandlengtes en de hoeken. ') + 'De app past niets aan.';
       basis.volgende = { soort: aangenomen ? 'hoek' : 'lengte', tekst: aangenomen ? 'Meet een controlehoek.' : 'Meet de wandlengtes en hoeken opnieuw.' };
       return basis;
     }
@@ -567,9 +569,9 @@
   K.sluitcontrole = function (ruimte) {
     const v = K.vorm(ruimte), checks = [];
     const status = v.status === 'inconsistent' ? 'conflict' : v.status === 'consistent' ? (v.afwijkend ? 'afwijkend' : 'ok') : 'wacht';
-    checks.push({ id: 'vorm', titel: 'Vorm van de ruimte', status, vorm_status: v.status, detail: v.reden || (v.afwijkend ? 'Tegenoverliggende wanden verschillen: de ruimte is niet rechthoekig.' : ''), maten: status === 'conflict' ? v.betrokken.slice() : [],
+    checks.push({ id: 'vorm', titel: 'Vorm van de ruimte', status, vorm_status: v.status, substatus: v.substatus || null, detail: v.reden || (v.afwijkend ? 'Tegenoverliggende wanden verschillen: de ruimte is niet rechthoekig.' : ''), maten: status === 'conflict' ? v.betrokken.slice() : [],
       verschil_mm: v.controle ? v.controle.verschil_mm : null, tolerantie_mm: K.TOLERANTIE.diagonaal });
-    const conflicten = checks.filter(c => c.status === 'conflict').map(c => ({ id: c.id, titel: c.titel, uitleg: c.detail, maten: c.maten.slice() }));
+    const conflicten = checks.filter(c => c.status === 'conflict').map(c => ({ id: c.id, titel: c.titel, substatus: c.substatus, uitleg: c.detail, maten: c.maten.slice() }));
     return { checks, conflicten, vorm: v };
   };
   // De paden van de maten die in een conflict zitten (voor de oranje markering en het blokkeren van het vrijgeven).
@@ -764,7 +766,7 @@
       if (c.later) redenen.push({ code: 'later', bucket: b, aantal: c.later, tekst: nm + ' - ' + n + ': ' + c.later + ' op later meten (telt niet als compleet).' });
     });
     if (t.optie.later) redenen.push({ code: 'later', bucket: 'optie', aantal: t.optie.later, tekst: nm + ' - Optioneel: ' + t.optie.later + ' op later meten. Meet ze nu, zet ze op n.v.t. of haal ze weg.' });
-    for (const c of sc.conflicten) redenen.push({ code: 'conflict', id: c.id, tekst: nm + ': meetgegevens inconsistent, ' + c.titel + '. ' + c.uitleg });
+    for (const c of sc.conflicten) redenen.push({ code: 'conflict', id: c.id, substatus: c.substatus || null, tekst: nm + ': ' + (c.substatus === 'aanname_past_niet' ? 'vorm nog niet bepaald, hoekaanname controleren' : 'meetgegevens inconsistent') + ', ' + c.titel + '. ' + c.uitleg });
     if (rd.wanden.length && rd.mis) redenen.push({ code: 'rondje', aantal: rd.mis, tekst: nm + ': rondje controle, ' + rd.mis + (rd.mis === 1 ? ' categorie' : ' categorieën') + ' nog niet bekeken.' });
     if (K.RONDJE_LATER_BLOKKEERT && rd.later) redenen.push({ code: 'rondje-later', aantal: rd.later, tekst: nm + ': rondje controle, ' + rd.later + (rd.later === 1 ? ' categorie staat' : ' categorieën staan') + ' op later meten (open taak).' });
     const uitzonderingen = uitzonderingenVan(r), kan = redenen.length === 0;

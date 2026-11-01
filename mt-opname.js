@@ -510,6 +510,7 @@
     kaart.appendChild(h('p', { text: v.reden || 'De wanden sluiten op elkaar.' }));
     const rest = K.restfouten(v);
     if (rest.length) kaart.appendChild(h('div', { class: 'opn-hint' }, h('div', { class: 'opn-label', text: 'Restfouten' }), ...rest.map(x => h('div', { text: x }))));
+    if (v.status === 'inconsistent' && v.substatus === 'aanname_past_niet') kaart.appendChild(h('p', { class: 'opn-hint', text: 'Dit is geen bewijs dat een wandlengte of een gemeten hoek fout is: de hoeken die nog aangenomen zijn (90 of 270 graden) passen niet bij de metingen. Gemeten maten en hoeken blijven staan; de app zet nergens 90 graden terug om de vorm te laten kloppen.' }));
     if (lab.open) kaart.appendChild(h('p', { class: 'opn-hint', text: lab.open }));
     if (v.volgende && v.volgende.tekst) kaart.appendChild(volgendeMaat(r, v));
     kaart.appendChild(h('p', { class: 'opn-hint', text: K.CRITERIA_TEKST }));

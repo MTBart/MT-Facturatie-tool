@@ -190,3 +190,17 @@ Alleen deze reviewronde afgemaakt, geen nieuwe functies. Alles op branch `opname
 **Getest**: node-tests 170 (7 export, 22 geo, 72 kern, 3 opslag, 27 sluiting, 6 ui, 33 vorm; 9 nieuwe voor 046), `check-sinks`, `check-verwijzingen`, UTF-8, laadtest zonder EXC. Beelden op 390 px headless Chrome; niet op een echte telefoon of iOS.
 
 **Bewust niet gedaan**: geen vierhoek uit vier zijden en één hoek (zonder diagonaal blijft er niets om een hoek tegen te toetsen); geen vrije reconstructie uit diagonalen; geen Android-proef; geen Codex-ronde; geen upload.
+
+
+## Brok 3d: status en hint na review 049 (1-11-2026, Sonnet)
+
+Alleen tekst en classificatie, geen nieuwe rekenfunctie (aanpak uit GESPREK 050). Branch `opname`, niet gepusht.
+
+1. **Substatus bij `inconsistent`** (`vorm.substatus`): `conflict_gemeten` (echt gemeten informatie spreekt elkaar tegen: onmogelijke vierhoek, gemeten hoek tegen zijden en diagonaal, tweede diagonaal wijkt af, rondgang met alleen gemeten hoeken) en `aanname_past_niet` (er zijn nog aangenomen hoeken en de rondgang sluit er niet bij: hoekensom, sluitfout, topologie, gereconstrueerde hoek, diagonaal). `vormLabel`, `sluitcontrole` en `vrijgeefCheck` dragen de substatus mee; vrijgeven blijft bij beide geblokkeerd.
+2. **UI bij `aanname_past_niet`**: label "Vorm nog niet bepaald; hoekaanname controleren" (amber pil, niet rood), de restfouten (sluitfout in mm, hoekensom), een uitleg dat gemeten maten en hoeken blijven staan en dat de app nergens 90 graden terugzet, en als vervolgstap een controlehoek (geen diagonaal beloofd). Ook de regel boven het model en de reden bij Afronden gebruiken de nieuwe tekst. Bij `conflict_gemeten` is niets veranderd.
+3. **Wandfoto**: vaste hint onder het beeld "De lijnen worden op het wandvlak berekend; voorwerpen ervoor zijn geen meetreferentie." Het label "berekend, vloer hier afgedekt" is **niet** gebouwd: de app weet nergens of een eindpunt op een afgedekt deel valt (geen afdekkingsdata, en dat bepalen zou een nieuwe rekenfunctie zijn). Alleen de algemene hint.
+4. **1 graad** heet overal "voorlopige detectiedrempel" (criteriatekst op de sluitkaart met "op 6 m ongeveer 105 mm; geen onderbouwde meetonzekerheid", restfout van de hoekensom, docs).
+5. Tests: 175 (7 export, 22 geo, 72 kern, 3 opslag, 32 sluiting, 6 ui, 33 vorm); 5 nieuwe voor 3d, 2 bestaande aangepast omdat een alleen-aangenomen conflict nu een andere tekst en pil heeft.
+6. Pakket: `OPNAME-APP\BOUW\brok3d-screens\` (S1 sluitkaart, S2 wandfoto-hint, 390 px), `brok3c-ef0ca15\REVIEW.md` aangevuld met "Review 049 (ChatGPT): afgetekend", nieuw `BOUW\ANDROID-PROEF-CHECKLIST.md`.
+
+**Bewust niet gedaan**: geen label "berekend, vloer hier afgedekt" (zie 3), geen afstandsafhankelijke meetonzekerheid of projecttolerantie, geen Android-proef, geen Codex-ronde, geen upload. Bij een hoekensom-conflict is er geen sluitfout in mm (die wordt dan niet berekend); de restfout staat in graden.
