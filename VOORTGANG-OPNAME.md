@@ -64,3 +64,39 @@ Basis: 4 wandlengtes + plafond + diagonaal A (6) + breedte en positie van 4 open
 - Drie wandlengtes vergelijken: meer dan 5 mm verschil (`K.TOLERANTIE.wand_scheef`) geeft waarschuwing `wand-scheef` ("wand niet te lood of scheef"), geen blokkade.
 - Tests: 66 groen (drie nieuwe; twee bestaande aangepast omdat een foto bij een werkzone-wand nu in de hash zit).
 - Kern-uitbreiding voor de schermen: `K.zetRuimte`, `K.voegOpeningToe`, `K.voegObjectToe`, `K.voegBijzonderheidToe`, `K.zetDefinitie`, `K.verwijderItem` (archief in `ruimte.verwijderd`) en `K.verwijderFoto` (archief in `opname.fotos_verwijderd`). De route vraagt alleen naar wat bestaat, dus de app moet per wand kunnen vastleggen wat er zit. 72 tests groen.
+
+### Brok 2c: het draadmodel en de wandfoto met lijnenoverlay (1-11-2026, Sonnet)
+
+**Wat er staat** (alles achter de beta-schakelaar, alleen beheer; de oude Opname, Capture en Rapportage zijn niet aangeraakt)
+- `mt-opname-geo.js` (pure rekenfuncties, 16 tests): homografie van de vier getikte wandhoeken, 3D-projectie van het draadmodel (eigen SVG, geen bibliotheek), de kamergeometrie uit de kern (`K.vorm`; zonder maten een duidelijk gelabelde schatting) en per wand de maatlijnen die bij de vragen van de kern horen. Een lijn bestaat alleen als de kern ernaar vraagt (test).
+- `mt-opname-opslag.js`: eigen IndexedDB `mt-opname` (opnames, fotos). **Keuze:** niet `mt-fotostore.js`. Die is van de bestaande Capture/Rapportage (database `mt-rapporten`) en heeft een opruimfunctie voor gesynchroniseerde foto's; hier mag nooit iets stil verdwijnen en de oude opslag blijft onaangeroerd. Er is geen wis-functie; een foto die uit de opname gaat blijft als beeld bewaard (de kern archiveert de verwijzing). Het beeld wordt eerst bewaard, pas daarna komt de verwijzing in de opname. Een opslagfout staat als rode balk met "Opnieuw proberen" boven elk scherm.
+- `mt-opname.js`: lijst, start, fotoronde, rondje controle, afronden. `mt-opname-model.js`: draadmodel en wandscherm. `mt-opname.css`. Alleen DOM-methoden (`textContent`), geen `innerHTML`: geen nieuwe sink, `check-sinks` groen, geen baseline aangepast.
+- `mobiel.html` (minimaal): laag `#opnameLaag`, twee items in Meer (schakelaar "Nieuwe opname testen" en "Opname (beta)", alleen voor `MTRol.isBeheer()`), lazy loader met `?v=2026-11-01a` volgens het patroon van de Forecast-laag, Android-terugknop gaat eerst een stap terug in de module.
+- Het record in IndexedDB is `{ id, opname, layout, instellingen }`: de kern-opname (datamodel v0.3) is onveranderd; wat alleen de schermen nodig hebben (waar de wandhoeken op de foto zitten, waar een kozijn getekend staat, de plinthoogte van de kamer) staat in `layout` en `instellingen`. De inhoudshash en het datamodel zijn dus gelijk gebleven.
+
+**Hoe het werkt (zoals Bart vroeg)**
+- Start: project (de projectenlijst van de app, met zoeken), ruimtenaam, meubeltype (alleen kast actief), werkzone N/O/Z/W (meerdere), toegangsdeur-wand (maakt deur D1 en bepaalt waar de fotoronde begint).
+- Fotoronde: native camera (`<input type=file accept=image/* capture=environment>`), de originele file blijft ongemoeid (volle resolutie, EXIF, niet via `camSnap`), een foto per wand met de klok mee vanaf de toegangsdeur; opnieuw fotograferen kan, een foto overslaan ook (vrijgeven blokkeert dan bij een werkzone-wand).
+- Hoofdscherm: draadmodel, draaibaar met een vinger, wandlabels zijn de tikdoelen (44 px) en de twee achterwanden zijn ook als vlak aan te tikken. Rood = nog te meten, zwart = gemeten, oranje = later, groen accent = werkzone, gestippeld = schatting (met een uitlegregel waarom). Knop "Verder meten" volgt de route van de kern; plafond en diagonalen staan als chips onder het model.
+- Wandscherm: foto met lijnenoverlay. Eerste keer tik je de vier hoeken van de wand (daarna te slepen en later aan te passen). De actieve maatlijn is rood met label, gemeten lijnen zwart met hun maat, de rest fijn grijs; elke lijn is aantikbaar. Groot invulveld (30 px) en rode pijl "volgende"; Enter werkt ook. Niet van toepassing, Later meten (wordt Nameten) en Vorige staan eronder. Zonder foto precies hetzelfde op een schematisch wandaanzicht.
+- Toevoegen: "+ Toevoegen" (kozijn/raam, deur, stopcontact, schakelaar, radiator, leiding, vensterbank, plint van deze wand, bijzonderheid, anders). Kozijn, deur en radiator: twee hoeken tikken; punten: één tik. De definitie (muursparing, dagmaat, kozijn buiten) wordt bij het toevoegen gevraagd en staat anders in het paneel van de eerste maat van een opening.
+- Optioneel in de wandfoto: het labeltje (R1, SC1, ...) van een onderdeel aantikken geeft de extra maten, de definitie, een close-up-foto (niet verplicht, als foto met `soort: closeup` en `wand: null`, zodat het niet als wandfoto telt) en Verwijderen (archief, niets verdwijnt).
+- Plint: één keer per kamer (hoogte, dikte, blijft of gaat weg) voor alle werkzone-wanden; bij een wand komt "Zelfde als de hele kamer: 80 mm, Klopt, verder" met een knop "Wijzigen voor deze wand". Wijkt een wand al af, dan overschrijft een nieuwe kamerwaarde die niet.
+- Bijzonderheden per wand: bovenaan "Niets bijzonders" (één tik), pas bij "Er zit iets" komen de soorten.
+- Afronden: tegels basis, werkzone, rondje, optioneel; "Nog nodig om vrij te geven" met tikbare regels die naar het juiste scherm springen; waarschuwingen; de lijst Nameten (alleen een lijst, geen taken); wat de vrijgave zegt (scope en uitzonderingen); Rondje controle; Opslaan altijd; Vrijgeven alleen als `K.vrijgeefCheck.kan`, met een bevestiging en de scope; JSON-kopie bewaren. Na een wijziging staat de status op "Vrijgave vervallen".
+
+**Getest** (headless Chrome op 390 px, mobiel.html, rol geforceerd; eigen testfoto, geen klantfoto's): hele flow van start tot vrijgeven, schematisch zonder foto, herladen (opname bleef bewaard), terugknop, opslagfout zichtbaar en herstelbaar, lezer en beheer-zonder-beta zien niets. Schermen: `OPNAME-APP\BOUW\brok2-screens\` (28 bestanden). Node-tests: kern 72, geo 16, ui 5 (plus de bestaande Forecast-tests) groen; `check-sinks`, `check-verwijzingen`, UTF-8 en `laadtest` zonder EXC.
+
+**Bewust niet gedaan**
+- Geen automatische beeldherkenning, geen foto-voorstellen uit de foto berekenen (`K.zetVoorstel` wordt nog niet gebruikt), geen DISTO, geen upload, geen taken, geen worker, geen `sw.js` of `updates.json`, niet gepusht of gemerged.
+- Alleen kast (keuken en badmeubel staan uitgeschakeld), alleen een vierhoekige kamer met vier wanden.
+- Niet getest op een echte Android-telefoon of iOS; wel de native camera-input, maar de camera zelf is niet geprobeerd. Een opname uit een nieuwere kernversie wordt niet geopend (melding).
+- Geen aparte bewerkscherm voor project, ruimtenaam of werkzone na de start (alleen via een nieuwe opname).
+- De 3D-labels kunnen bij sommige draaihoeken over elkaar vallen; draaien lost dat op.
+
+**Keuzes ter bevestiging door Bart**
+1. Het hulpgetal `positie_x` (alleen voor de volgorde links naar rechts) zet de app zelf op een kopie van de opname, omdat de kern er geen functie voor heeft. Het wordt uit de getikte plek berekend, dus een schatting als de wandlengte nog niet gemeten is.
+2. Op een wand buiten de werkzone worden de maten van wat je zelf toevoegt wel helemaal gevraagd (kern: `eigen`); het toevoegen-blad zegt dat.
+3. Een maat onder 10 mm wordt geweigerd met de uitleg dat het geen millimeters lijkt (5,76 voor 5,76 m).
+4. De plint van de hele kamer geldt alleen voor de werkzone-wanden (daar vraagt de kern erom); op andere wanden gebeurt niets.
+5. Het record in IndexedDB bewaart de kern-opname en `layout` apart; een JSON-kopie bevat beide maar niet de foto's zelf.
