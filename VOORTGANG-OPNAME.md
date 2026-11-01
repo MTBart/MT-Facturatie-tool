@@ -4,34 +4,47 @@ Branch `opname` (vanaf main v2.31.0), worktree `C:\Users\BartWitte\mt-worktrees\
 
 ## Brok 1: rekenkern en datamodel (1-11-2026)
 
-**Gedaan**
-- `mt-opname-kern.js`: pure functies, globaal `MTOpnameKern` en `module.exports`, zelfde patroon als `mt-forecast-light.js`. Vragenlijst (`vragen`), tellers, sluitcontrole, rondje controle, vrijgeef-check, takenlijst, wijzigen met historie (`zetMaat`, `zetVoorstel`, `zetRondje`, `voegFotoToe`) en veilig lezen/migreren (`lees`).
-- `test/opname-kern.test.js`: 34 tests. Controleert onder meer dat kamer Joe met werkzone Oost 21 basis en 16 werkzone geeft, dat de documentatie-voorbeeld-JSON leesbaar en ongewijzigd blijft, en dat invoer nooit wordt aangepast. Vijf bewust ingebrachte fouten in de kern werden door de tests gevangen.
-- `docs/opname-json-v0.3.md`: het datamodel met een voorbeeld van kamer Joe (fictieve projectcode TEST-001).
+**Gedaan (eerste oplevering, commit 6fb1566)**
+- `mt-opname-kern.js`: pure functies, globaal `MTOpnameKern` en `module.exports`, zelfde patroon als `mt-forecast-light.js`.
+- `test/opname-kern.test.js`, `docs/opname-json-v0.3.md` (datamodel met voorbeeld van kamer Joe, fictieve projectcode TEST-001).
 
-**Uitkomst Joe:** basis 21, werkzone (Oost) 16, optioneel 1 (tweede diagonaal), extra 0. Gelijk aan het prototype. Basis: 4 wanden + plafond + diagonaal A + 3 ramen x 4 + 1 deur x 3. Werkzone: positie R3 tot rechterhoek + SC1 3 + SC2 3 + RAD2 3 + VB3 3 + PLO 3.
+**Gedaan (aanvulling 1-11 na Bart en ChatGPT-review 035)**
+- **Route** (`K.route`, `routeVanOpname`, `volgendeOpen`, `vorige`, `stap`): geordende stappen met `nr`, "stap x van y", "wand n van m", groep, label, definitie, referentie. Standaard `fotos-dan-rondloop` (fotoronde vanaf de toegangsdeur, rondloop vanaf de eerste werkzone-wand met de klok mee, dan plafond en diagonalen, dan rondje); alternatieven `rondloop` en `per-soort`. Later en n.v.t. houden de route niet op.
+- **A** Vorm uit 4 zijden + 1 diagonaal (twee driehoeken), tweede diagonaal als controle (10 mm). Geen gemiddelden, geen "haaks" uit gelijke diagonalen. `afwijkend` is informatie, alleen `inconsistent` is een conflict. Zonder diagonaal: onvoldoende bepaald (schematisch).
+- **C** Rondje op later = open taak en blokkeert (de schakelaar `RONDJE_LATER_BLOKKEERT` is weg: het is nu altijd zo).
+- **D** Een ingevulde optionele maat telt mee (een conflict op diagonaal B blokkeert; een optionele maat op later blokkeert ook).
+- **E** `inhoudsHash`, `isVrijgaveGeldig`, `effectieveStatus`, `vrijgeven`, `slaOp`: elke inhoudelijke wijziging maakt een vrijgave ongeldig.
+- **F** De vrijgave-uitkomst bevat `scope`, `uitzonderingen` en `volledig_gemeten`.
+- **H** Voorstel: `schatting_mm` en apart `onzekerheid_mm` (optioneel). Oude velden `waarde`/`pm` worden bij het lezen aangevuld.
+- **I** Alleen `kast` is een echte set; keuken en badmeubel zijn een hook (`K.MEUBELSETS`) en blokkeren het vrijgeven.
+- Openingen buiten de werkzone: alleen breedte en positie verplicht, hoogte en borstwering optioneel (grijs). Radiator: buitencontour inclusief kraan en leiding, uitsteek en bereikbaarheid. Per wand buiten de werkzone één bevestiging (bekeken / afgedekt / niet beoordeeld).
+
+**Uitkomst Joe, werkzone Oost (was 21 en 16):** basis **17**, werkzone **20**, optioneel **6**, extra 0.
+Basis: 4 wandlengtes + plafond + diagonaal A (6) + breedte en positie van 4 openingen (8) + bevestiging van de wanden N, Z en W (3). Werkzone: R3 hoogte, borstwering en tot rechterhoek (3) + SC1 3 + SC2 3 + RAD2 5 + VB3 3 + PLO 3. Optioneel: diagonaal B + hoogte en borstwering van R1 en R2 + hoogte van D1. Route: 53 stappen, waarvan 47 vereist.
 
 **Keuzes die ik zelf maakte (ter bevestiging)**
-1. **Rondje op "later" blokkeert het vrijgeven** (code `rondje-later`), al telt het als bekeken. Het prototype liet dat wel door. Reden: later is nergens compleet. Eén constante omzetten: `K.RONDJE_LATER_BLOKKEERT`.
-2. **Extra punten tellen mee voor het vrijgeven** (zoals in het prototype), ook al noemde de opdracht alleen basis en werkzone. Een punt dat de opnemer zelf koos te meten moet af of op n.v.t.
-3. **Een ontbrekende definitie (muursparing/dagmaat/kozijn-buiten) is een waarschuwing, geen blokkade.** De meetproef zegt "afdwingen"; strenger maken is een kleine wijziging in `vrijgeefCheckRuimte`.
-4. **Positie van een opening** is altijd vanaf de linkerhoek (kijkend naar de wand); de afstand tot de rechterhoek (`positie_rechts`) is een werkzonevraag. Zo komt het getal 16 uit. `positie_vanaf` laat een penant vanaf een andere opening meten (zoals R2 bij Joe).
-5. **Teller x van n** telt later mee (zoals het prototype); daarnaast staat `compleet` (zonder later) voor het vrijgeven.
-6. **Maat met staat gemeten maar bron foto-voorstel** (of zonder waarde) telt als open met een waarschuwing, en `zetMaat` weigert het. Het foto-voorstel zelf staat apart in `voorstel`.
-7. **Geschiedenis append-only:** elke nieuwe stand van een maat bewaart de vorige in `historie` (OPTIES C10). Ook het weghalen van een rondjekeuze laat een spoor in `rondje_historie`.
-8. **Object wordt bij `gezien: toch-meten` of `eigen` een extra punt**; een zelf toegevoegd object op een werkzone-wand telt als werkzone (prototype). `gezien` heeft de waarden `klopt`, `niet-aanwezig`, `toch-meten`.
-9. **Migratie:** v0.2 en onbekende vormen worden niet omgezet maar volledig bewaard onder `_oud` (de wandletters A/B/C/D van v0.2 passen niet op N/O/Z/W). Nieuwere versie: alleen lezen. Onbekende staat/bron/waarde/werkzone blijven in `_staat_oud`, `_bron_oud`, `_waarde_oud`, `_onbekend`.
-10. **Waarschuwingen (niet blokkerend):** meting-ongeldig, definitie-ontbreekt, onwaarschijnlijk (wand buiten 300 tot 15000 mm, plafond buiten 2000 tot 5000 mm), rondje-tegenspraak (afwezig terwijl er iets is vastgelegd), foto-zonder-ruimte.
+1. **Rondje op "later" blokkeert het vrijgeven** (nu vastgelegd door Bart/ChatGPT punt C).
+2. **Extra punten tellen mee voor het vrijgeven**, zoals in het prototype.
+3. **Een ontbrekende definitie (muursparing/dagmaat/kozijn buiten) is een waarschuwing, geen blokkade.** Strenger maken kan in `vrijgeefCheckRuimte`.
+4. **Een ontbrekende wandfoto is een waarschuwing** (`foto-ontbreekt`), geen blokkade. Besluit 1 zegt "maat + foto verplicht"; zeg het als de foto het vrijgeven moet blokkeren.
+5. **Een optionele maat op later blokkeert** (het is een bewust uitgestelde taak). Optioneel en leeg mag.
+6. **De wandbevestiging telt mee in de basis** (x van n) en moet gekozen zijn voor het vrijgeven. "Afgedekt" en "niet beoordeeld" mogen, maar staan in de uitzonderingen.
+7. **Rondje afwijkingen = de stap "bijzonderheden op deze wand?"**: dezelfde keuze, de route vraagt hem niet twee keer. Het rondje blijft zes categorieën per wand.
+8. **Vorm "afwijkend":** een hoek meer dan 0,3 graad van 90 of tegenoverliggende wanden meer dan 5 mm verschil. Informatie, nooit een blokkade. Een vorm die niet met de tweede diagonaal is gecontroleerd staat als uitzondering bij de vrijgave. Dit gaat uit van een bolle vierhoek (geen L-vorm).
+9. **Hash:** niet cryptografisch (cyrb53), bedoeld om een wijziging te zien. Foto's, tijdstippen, historie en grijze voorstellen tellen niet mee; notities en bronnen wel.
+10. **Een conflict wijst alle betrokken maten aan** (4 wanden + diagonalen): de kern kan niet weten welke maat fout is.
+11. **Route-nummering telt optionele stappen mee**; `volgendeOpen` slaat ze over en `samenvatting.nog_relevant` telt alleen de vereiste open stappen.
+12. **Velden erbij:** `ruimte.toegangsdeur` (id van een opening; anders de eerste deur, anders noord) en `positie_x` (optioneel, voor links naar rechts vóór er gemeten is). Zonder die getallen blijft de invoervolgorde staan.
+13. Overig uit de eerste oplevering: positie vanaf de linkerhoek (kijkend naar de wand), `positie_rechts` in de werkzone, `compleet` naast `beantwoord`, een foto-voorstel is nooit een meting, historie is append-only, v0.2 blijft onder `_oud`.
 
 **Bewust niet gedaan**
 - Geen UI, geen wijziging in `mobiel.html`, `v2.html`, `sw.js`, `worker.js`; de module wordt nergens geladen.
-- Geen opslag (SharePoint/IndexedDB), geen taken echt aanmaken (de kern levert alleen de lijst), geen DISTO-koppeling, geen foto-voorstellen berekenen.
-- Geen plattegrond-oplossing (hoekpunten, sluitfout over de rondgang uit OPTIES C1), geen controle dat een opening in de wand past (C5), geen plafondspreiding (C8). Alleen de sluitcontrole van het prototype.
-- Alleen vier wanden N/O/Z/W (rechthoekige topologie). L-vormen en nissen als aparte ruimte komen later.
-- Geen Codex-ronde (datamodel en endpoints: één bundelronde aan het eind, volgens de werkafspraak).
+- Geen opslag, geen echte taken, geen DISTO-koppeling, geen foto-voorstellen berekenen.
+- Geen keuken- of badmeubelvragen (alleen de hook). Geen plattegrondoplossing over de rondgang (OPTIES C1), geen "opening past in wand" (C5), geen plafondspreiding (C8).
+- Alleen vier wanden N/O/Z/W en een bolle vierhoek. Geen Codex-ronde (één bundelronde aan het eind).
 
 **Open vragen**
-- Kastwand: de meetproef wil de wandlengte op 3 hoogtes (boven plint, 1000 mm, onder plafond). FLOW-V3 vraagt één hoogte; ik volg FLOW-V3. Moet de werkzone-wand er twee extra lengtes bij krijgen?
-- Hoeveel plafondpunten wil Bart bij een werkzone (meetproef: 4 hoeken + midden)? Nu één punt in de basis, de rest extra.
-- Mag Mathijs (of Bart) een vrijgegeven opname weer openen, en moet dat in de historie staan? De kern kent alleen `status`; de overgangen komen met de UI.
-- `bron: hand` dekt rolmaat en getypte DISTO-waarde. Is een apart onderscheid rolmaat/disto-getypt nodig?
+- Kastwand: de meetproef wil de wandlengte op 3 hoogtes; FLOW-V3 en deze kern vragen één hoogte.
+- Hoeveel plafondpunten bij een werkzone (meetproef: 4 hoeken + midden)? Nu één in de basis, de rest extra.
+- Mag een vrijgegeven opname weer open, en wie? De kern kent nu alleen `status` en de hash.
+- Moet de bereikbaarheid van een radiator buiten de werkzone ook gevraagd worden? Nu alleen "gezien".
