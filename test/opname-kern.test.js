@@ -1,6 +1,7 @@
 // Tests van de opname-rekenkern (mt-opname-kern.js), zonder DOM. Draaien: node test/opname-kern.test.js — verzonnen project en ruimtenaam (kamer Joe), geen persoonsgegevens.
-// De maten van kamer Joe komen uit de meetproef (31-10). Na de review van 1-11 (ChatGPT 035 en Bart) tellen we voor Joe met werkzone Oost 17 basis, 20 werkzone en 6 optioneel
-// (het prototype had 21 en 16): openingen buiten de werkzone vragen alleen breedte en positie, de radiator heeft er twee vragen bij, en elke wand buiten de werkzone heeft één bevestiging.
+// De maten van kamer Joe komen uit de meetproef (31-10). Na de review van 1-11 (ChatGPT 035 en Bart) tellen we voor Joe met werkzone Oost 17 basis, 25 werkzone en 6 optioneel
+// (het prototype had 21 en 16): openingen buiten de werkzone vragen alleen breedte en positie, de radiator heeft er twee vragen bij, elke wand buiten de werkzone heeft één bevestiging
+// en een werkzone-wand vraagt de lengte op 3 hoogtes en het plafond op 3 punten.
 'use strict';
 const assert = require('assert');
 const K = require('../mt-opname-kern.js');
@@ -39,7 +40,7 @@ function allesGemeten(op) {
     if (v.pad.startsWith('wanden.') && v.pad.endsWith('.lengte')) continue;
     if (v.pad.startsWith('diagonalen.')) op = meet(op, v.pad, v.pad.includes('.A.') ? A_J : B_J);
     else if (v.eenheid === 'keuze') op = zet(op, v.pad, { staat: 'gemeten', keuze: v.keuzes[0], bron: 'hand' });
-    else op = meet(op, v.pad, v.pad.startsWith('plafond') ? 2450 : 1000 + (v.pad.length % 7) * 10, 'hand');
+    else op = meet(op, v.pad, v.pad.includes('plafond') ? 2450 : 1000 + (v.pad.length % 7) * 10, 'hand');
   }
   return op;
 }
@@ -53,12 +54,12 @@ function vormRuimte(nn, oo, zz, ww, a, b) {
 }
 
 // ── Vragenlijst en tellers ──
-test('kamer Joe, werkzone Oost: 17 basis, 20 werkzone en 6 optioneel (na de review van 1-11)', () => {
+test('kamer Joe, werkzone Oost: 17 basis, 25 werkzone en 6 optioneel (na de review van 1-11)', () => {
   const t = K.tellers(R(joe()));
   assert.strictEqual(t.basis.n, 17, 'basis: 4 wanden + plafond + diagonaal A + breedte en positie van 4 openingen (8) + bevestiging van de 3 wanden buiten de werkzone');
-  assert.strictEqual(t.werkzone.n, 20, 'werkzone Oost: R3 hoogte, borstwering en tot rechterhoek (3) + SC1 3 + SC2 3 + RAD2 5 + VB3 3 + PLO 3');
+  assert.strictEqual(t.werkzone.n, 25, 'werkzone Oost: lengte onder en boven (2) + plafond links, midden, rechts (3) + R3 hoogte, borstwering en tot rechterhoek (3) + SC1 3 + SC2 3 + RAD2 5 + VB3 3 + PLO 3');
   assert.strictEqual(t.extra.n, 0); assert.strictEqual(t.optie.n, 6, 'diagonaal B + hoogte en borstwering van R1 en R2 + hoogte van D1: optioneel (grijs voorstel)');
-  assert.strictEqual(t.basis.open, 17); assert.strictEqual(t.werkzone.open, 20);
+  assert.strictEqual(t.basis.open, 17); assert.strictEqual(t.werkzone.open, 25);
 });
 test('de vragen zijn uniek, hebben tekst, een emmer en een bruikbare referentie', () => {
   const v = K.vragen(R(joe())), paden = v.map(x => x.pad);
@@ -89,7 +90,8 @@ test('werkzone Oost: precies deze punten, de radiator met buitencontour, uitstee
     'objecten.SC1.maten.afdek', 'objecten.SC1.maten.afstand', 'objecten.SC1.maten.hoogte',
     'objecten.SC2.maten.afdek', 'objecten.SC2.maten.afstand', 'objecten.SC2.maten.hoogte',
     'objecten.VB3.maten.diepte', 'objecten.VB3.maten.dikte', 'objecten.VB3.maten.overstek',
-    'openingen.R3.maten.borstwering', 'openingen.R3.maten.hoogte', 'openingen.R3.maten.positie_rechts'].sort());
+    'openingen.R3.maten.borstwering', 'openingen.R3.maten.hoogte', 'openingen.R3.maten.positie_rechts',
+    'wanden.O.maten.lengte_boven', 'wanden.O.maten.lengte_onder', 'wanden.O.maten.plafond_links', 'wanden.O.maten.plafond_midden', 'wanden.O.maten.plafond_rechts'].sort());
   const rb = K.vragen(R(joe())).find(x => x.pad === 'objecten.RAD2.maten.bereikbaarheid'); assert.deepStrictEqual(rb.keuzes, ['vrij', 'beperkt', 'geblokkeerd']); assert.strictEqual(rb.eenheid, 'keuze');
   assert.ok(/kraan en leiding/.test(K.vragen(R(joe())).find(x => x.pad === 'objecten.RAD2.maten.breedte').uitleg), 'buitencontour inclusief kraan en leiding');
 });
@@ -100,9 +102,9 @@ test('een ruimte zonder openingen: 6 basisvragen als alle wanden werkzone zijn, 
 });
 test('andere werkzone of meer wanden geeft andere vragen; objecten buiten de werkzone worden niet gevraagd', () => {
   const t = z => K.tellers(joeRuimte(z));
-  assert.deepStrictEqual([t(['N']).basis.n, t(['N']).werkzone.n], [17, 14], 'noord: R1 en R2 (3 elk) + RAD1 5 + PLN 3');
-  assert.deepStrictEqual([t(['O', 'N']).basis.n, t(['O', 'N']).werkzone.n], [16, 34]);
-  assert.strictEqual(t(['Z']).werkzone.n, 2 + 3 + 3, 'D1 hoogte en tot rechterhoek + SW1 3 + PLZ 3');
+  assert.deepStrictEqual([t(['N']).basis.n, t(['N']).werkzone.n], [17, 19], 'noord: 5 wandpunten + R1 en R2 (3 elk) + RAD1 5 + PLN 3');
+  assert.deepStrictEqual([t(['O', 'N']).basis.n, t(['O', 'N']).werkzone.n], [16, 44]);
+  assert.strictEqual(t(['Z']).werkzone.n, 5 + 2 + 3 + 3, '5 wandpunten + D1 hoogte en tot rechterhoek + SW1 3 + PLZ 3');
   assert.ok(!K.vragen(joeRuimte(['O'])).some(x => x.pad.startsWith('objecten.SC3')), 'SC3 staat op de westwand, buiten de werkzone');
   assert.deepStrictEqual(t(['O']).gezien, { n: 7, bevestigd: 0 }, 'de 7 objecten buiten de werkzone zijn alleen gezien');
 });
@@ -112,13 +114,13 @@ test('toch meten en zelf toegevoegde objecten komen bij Extra; bijzonderheid met
   r.plafondpunten.push({ id: 'P2', plaats: 'hoek NO', maten: {} }); r.bijzonderheden[0].maten.maat = K.nieuweMaat();
   const t = K.tellers(r);
   assert.strictEqual(t.extra.n, 3 + 3 + 1 + 1, 'SC3 3 + leiding X1 3 + plafondpunt P2 + maat bij de kabelgoot');
-  assert.strictEqual(t.werkzone.n, 20 + 3, 'een zelf toegevoegd object op de werkzone-wand telt als werkzone (zoals in het prototype)');
+  assert.strictEqual(t.werkzone.n, 25 + 3, 'een zelf toegevoegd object op de werkzone-wand telt als werkzone (zoals in het prototype)');
   assert.deepStrictEqual(t.gezien, { n: 7, bevestigd: 1 }, 'toch meten is een bevestiging; het zelf toegevoegde X1 telt niet als gezien');
   r.objecten.find(o => o.id === 'SC4').gezien = 'klopt'; assert.strictEqual(K.tellers(r).gezien.bevestigd, 2);
 });
 test('een vensterbank zonder gekoppelde opening vraagt ook de hoogte', () => {
   const r = K.nieuweRuimte({ werkzone: ['W'], objecten: [{ id: 'V1', type: 'vensterbank', wand: 'W', maten: {} }] });
-  assert.deepStrictEqual(K.vragen(r).filter(x => x.bucket === 'werkzone').map(x => x.pad.split('.').pop()), ['diepte', 'dikte', 'overstek', 'hoogte']);
+  assert.deepStrictEqual(K.vragen(r).filter(x => x.bucket === 'werkzone' && x.pad.indexOf('objecten.') === 0).map(x => x.pad.split('.').pop()), ['diepte', 'dikte', 'overstek', 'hoogte']);
 });
 test('tellers: later telt als beantwoord (x van n) maar niet als compleet; n.v.t. telt als compleet', () => {
   let op = joe();
@@ -239,6 +241,38 @@ test('een conflict wist de meting niet en kleurt de betrokken maten', () => {
   assert.ok(K.tellers(R(op)).basis.conflict >= 5);
 });
 
+test('werkzone-wand: de lengte op 3 hoogtes (onder, midden, boven) en het plafond op 3 punten (links, midden, rechts); de basis houdt één plafondpunt', () => {
+  const v = K.vragen(R(joe())), get = p => v.find(x => x.pad === p);
+  const wz = v.filter(x => x.pad.indexOf('wanden.O.') === 0).map(x => [x.pad.split('.').pop(), x.bucket]);
+  assert.deepStrictEqual(wz, [['lengte', 'basis'], ['lengte_onder', 'werkzone'], ['lengte_boven', 'werkzone'], ['plafond_links', 'werkzone'], ['plafond_midden', 'werkzone'], ['plafond_rechts', 'werkzone']]);
+  assert.ok(/net boven de plint/.test(get('wanden.O.maten.lengte_onder').vraag) && /net onder het plafond/.test(get('wanden.O.maten.lengte_boven').vraag) && /middelste van drie hoogtes/.test(get('wanden.O.maten.lengte').uitleg));
+  assert.strictEqual(get('wanden.O.maten.plafond_links').referentie, 'vloerpeil'); assert.strictEqual(get('wanden.O.maten.lengte_onder').referentie, 'hoek');
+  assert.strictEqual(v.filter(x => x.pad.indexOf('plafondpunten.') === 0).length, 1, 'de basis houdt één plafondpunt');
+  assert.ok(!v.some(x => x.pad.indexOf('wanden.N.maten.lengte_') === 0 || x.pad.indexOf('wanden.N.maten.plafond_') === 0), 'wanden buiten de werkzone niet');
+  assert.strictEqual(v.filter(x => x.bucket === 'basis').length, 17, 'de basis blijft gelijk');
+  let op = meet(joe(), 'wanden.O.maten.plafond_links', 2447); assert.strictEqual(K.vragen(R(op)).find(x => x.pad === 'wanden.O.maten.plafond_links').staat, 'gemeten');
+  assert.ok(K.waarschuwingen(R(meet(joe(), 'wanden.O.maten.plafond_rechts', 245))).some(w => w.code === 'onwaarschijnlijk'));
+  const ids = K.route(R(joe())).stappen.map(s => s.id).slice(4, 11);
+  assert.deepStrictEqual(ids, ['maat:wanden.O.maten.lengte', 'maat:wanden.O.maten.lengte_onder', 'maat:wanden.O.maten.lengte_boven', 'maat:wanden.O.maten.plafond_links', 'maat:wanden.O.maten.plafond_midden', 'maat:wanden.O.maten.plafond_rechts', 'maat:openingen.R3.maten.breedte']);
+  const vorm = K.vorm(R(meet(metWanden(joe()), 'wanden.O.maten.lengte_onder', 2890))); assert.strictEqual(vorm.status, 'onvoldoende-bepaald', 'de extra hoogtes beïnvloeden de vorm niet: die gebruikt de lengte op 1000 mm');
+});
+test('een opening IN de werkzone zonder definitie blokkeert het vrijgeven; erbuiten is het een waarschuwing', () => {
+  const binnen = klaar(); delete R(binnen).openingen.find(o => o.id === 'R3').definitie;
+  const c = K.vrijgeefCheck(binnen); assert.strictEqual(c.kan, false); assert.deepStrictEqual(redenCodes(c), ['definitie']); assert.ok(/R3|raam R3/.test(c.redenen[0].tekst) && c.redenen[0].pad === 'openingen.R3');
+  assert.ok(!c.waarschuwingen.some(w => w.code === 'definitie-ontbreekt'), 'binnen de werkzone is het geen waarschuwing meer maar een reden');
+  const buiten = klaar(); delete R(buiten).openingen.find(o => o.id === 'R1').definitie;
+  const b = K.vrijgeefCheck(buiten); assert.strictEqual(b.kan, true); assert.ok(b.waarschuwingen.some(w => w.code === 'definitie-ontbreekt' && w.pad.indexOf('openingen.R1.') === 0));
+  assert.strictEqual(K.vrijgeefCheck(klaar()).kan, true, 'met definities kan het');
+  const z = klaar(); z.ruimtes[0].werkzone = ['O', 'N']; assert.ok(!redenCodes(K.vrijgeefCheck(z)).includes('definitie'), 'R1 en R2 hebben een definitie, dus geen reden');
+});
+test('K.RONDJE_LATER_BLOKKEERT blijft bestaan en staat aan; uitzetten laat een rondje op later door', () => {
+  assert.strictEqual(K.RONDJE_LATER_BLOKKEERT, true);
+  const rl = klaar(); rl.ruimtes[0] = K.zetRondje(rl.ruimtes[0], 'O', 'plint', 'later', T0).ruimte;
+  assert.deepStrictEqual(redenCodes(K.vrijgeefCheck(rl)), ['rondje-later']);
+  try { K.RONDJE_LATER_BLOKKEERT = false; assert.strictEqual(K.vrijgeefCheck(rl).kan, true); } finally { K.RONDJE_LATER_BLOKKEERT = true; }
+  assert.strictEqual(K.vrijgeefCheck(rl).kan, false);
+});
+
 // ── Rondje controle ──
 test('rondje: alleen de werkzone-wanden, 6 categorieën per wand, niet gekozen = nog niet bekeken', () => {
   const rd = K.rondje(R(joe(['O', 'N'])));
@@ -264,14 +298,14 @@ test('vrijgeven: een lege opname kan niet, met alle redenen; opslaan kan altijd'
   const op = joe(), c = K.vrijgeefCheck(op);
   assert.strictEqual(c.kan, false); assert.deepStrictEqual(redenCodes(c).filter((x, i, a) => a.indexOf(x) === i), ['open', 'rondje']);
   assert.ok(c.redenen.some(x => x.bucket === 'basis' && x.aantal === 17)); assert.ok(c.redenen.some(x => x.code === 'rondje' && x.aantal === 6));
-  const s = K.samenvatting(op); assert.strictEqual(s.kan_opslaan, true); assert.strictEqual(s.open, 37); assert.strictEqual(s.taken, 0);
+  const s = K.samenvatting(op); assert.strictEqual(s.kan_opslaan, true); assert.strictEqual(s.open, 42); assert.strictEqual(s.taken, 0);
   assert.ok(redenCodes(K.vrijgeefCheck(joe([]))).includes('werkzone'));
   assert.ok(redenCodes(K.vrijgeefCheck({ ruimtes: [] })).includes('geen-ruimte'));
 });
 test('vrijgeven: alles gemeten, werkzone gekozen, rondje gedaan, geen conflicten: kan', () => {
   const op = klaar(), c = K.vrijgeefCheck(op);
   assert.deepStrictEqual(c.redenen, []); assert.strictEqual(c.kan, true);
-  const t = K.tellers(R(op)); assert.strictEqual(t.basis.compleet, 17); assert.strictEqual(t.werkzone.compleet, 20); assert.strictEqual(t.optie.compleet, 6);
+  const t = K.tellers(R(op)); assert.strictEqual(t.basis.compleet, 17); assert.strictEqual(t.werkzone.compleet, 25); assert.strictEqual(t.optie.compleet, 6);
   assert.strictEqual(K.samenvatting(op).taken, 0);
 });
 test('vrijgeven: elk van de voorwaarden blokkeert apart', () => {
@@ -419,7 +453,7 @@ test('route voor Joe (fotos-dan-rondloop): fotoronde vanaf de toegangsdeur, rond
   assert.strictEqual(rt.volgorde, 'fotos-dan-rondloop'); assert.strictEqual(rt.toegangswand, 'Z'); assert.deepStrictEqual(rt.foto_wanden, ['Z', 'W', 'N', 'O']); assert.deepStrictEqual(rt.maten_wanden, ['O', 'Z', 'W', 'N']); assert.strictEqual(rt.start_wand, 'O');
   assert.deepStrictEqual(rt.stappen.map(s => s.id.replace(/^maat:/, '').replace(/\.maten\./, ':').replace(/^(objecten|openingen|wanden|diagonalen|plafondpunten)\./, '')), [
     'foto:Z', 'foto:W', 'foto:N', 'foto:O',
-    'O:lengte', 'R3:breedte', 'R3:hoogte', 'R3:positie', 'R3:borstwering', 'R3:positie_rechts',
+    'O:lengte', 'O:lengte_onder', 'O:lengte_boven', 'O:plafond_links', 'O:plafond_midden', 'O:plafond_rechts', 'R3:breedte', 'R3:hoogte', 'R3:positie', 'R3:borstwering', 'R3:positie_rechts',
     'SC1:hoogte', 'SC1:afstand', 'SC1:afdek', 'SC2:hoogte', 'SC2:afstand', 'SC2:afdek', 'RAD2:breedte', 'RAD2:hoogte', 'RAD2:onderkant', 'RAD2:uitsteek', 'RAD2:bereikbaarheid',
     'VB3:diepte', 'VB3:dikte', 'VB3:overstek', 'PLO:hoogte', 'PLO:dikte', 'PLO:keuze', 'bijz:O',
     'Z:lengte', 'D1:breedte', 'D1:hoogte', 'D1:positie', 'Z:bevestiging',
@@ -435,7 +469,7 @@ test('route: elke stap heeft nr, "stap x van y", "wand n van m", groep, label, d
   const s = rt.stappen.find(x => x.id === 'maat:openingen.R3.maten.breedte'); assert.deepStrictEqual([s.wand, s.wand_nr, s.wanden_totaal, s.wand_tekst, s.groep, s.definitie, s.referentie], ['O', 1, 4, 'wand 1 van 4', 'basis', 'muursparing', 'zijkanten']);
   const z = rt.stappen.find(x => x.id === 'maat:openingen.R3.maten.positie_rechts'); assert.strictEqual(z.groep, 'werkzone');
   assert.strictEqual(rt.stappen.find(x => x.id === 'maat:wanden.N.maten.lengte').wand_tekst, 'wand 4 van 4'); assert.strictEqual(rt.stappen.find(x => x.id === 'maat:plafondpunten.P1.maten.hoogte').wand_tekst, '');
-  assert.deepStrictEqual(rt.samenvatting, { totaal: 53, vereist: 47, optioneel: 6, afgehandeld: 0, nog_relevant: 47 });
+  assert.deepStrictEqual(rt.samenvatting, { totaal: 58, vereist: 52, optioneel: 6, afgehandeld: 0, nog_relevant: 52 });
   assert.strictEqual(rt.stappen.find(x => x.id === 'foto:W').wand_tekst, 'wand 2 van 4', 'in de fotoronde telt de wand vanaf de toegangsdeur');
 });
 test('route: elk gevraagd punt komt precies één keer voor, ook punten zonder wand', () => {
@@ -447,9 +481,10 @@ test('route: later en n.v.t. houden de route niet op; alleen open stappen worden
   let op = joe(); op = zet(op, 'wanden.O.maten.lengte', { staat: 'later', notitie: 'ladder' }); op = zet(op, 'openingen.R3.maten.breedte', { staat: 'nvt', notitie: 'niet nodig' }); op = meet(op, 'openingen.R3.maten.hoogte', 1219);
   const rt = K.routeVanOpname(op, 'R1'), eerste = K.volgendeOpen(rt);
   assert.strictEqual(eerste.id, 'foto:Z', 'de fotoronde komt eerst');
-  const na = K.volgendeOpen(rt, 'foto:O'); assert.strictEqual(na.id, 'maat:openingen.R3.maten.positie', 'lengte (later), breedte (n.v.t.) en hoogte (gemeten) worden overgeslagen');
+  assert.strictEqual(K.volgendeOpen(rt, 'foto:O').id, 'maat:wanden.O.maten.lengte_onder', 'de lengte (later) wordt overgeslagen');
+  const na = K.volgendeOpen(rt, 'maat:wanden.O.maten.plafond_rechts'); assert.strictEqual(na.id, 'maat:openingen.R3.maten.positie', 'breedte (n.v.t.) en hoogte (gemeten) worden overgeslagen');
   const by = id => K.stap(rt, id); assert.deepStrictEqual(['maat:wanden.O.maten.lengte', 'maat:openingen.R3.maten.breedte', 'maat:openingen.R3.maten.hoogte'].map(id => [by(id).staat, by(id).afgehandeld]), [['later', true], ['nvt', true], ['gemeten', true]]);
-  assert.strictEqual(rt.samenvatting.afgehandeld, 3); assert.strictEqual(rt.samenvatting.nog_relevant, 44);
+  assert.strictEqual(rt.samenvatting.afgehandeld, 3); assert.strictEqual(rt.samenvatting.nog_relevant, 49);
   // alles op later of n.v.t.: de route loopt door tot het eind
   let alles = joe(); for (const v of K.vragen(R(alles))) alles = zet(alles, v.pad, { staat: v.pad.length % 2 ? 'later' : 'nvt', keuze: v.nvt_keuzes ? v.nvt_keuzes[0] : undefined });
   const r2 = K.routeVanOpname(alles, 'R1'); let stap = K.volgendeOpen(r2), teller = 0; const gezien = [];
@@ -466,9 +501,9 @@ test('route: optionele stappen (grijze voorstellen) worden niet als open aangebo
 test('route: volgendeOpen, vorige en stap werken met nr of id; wrap begint opnieuw bij het begin', () => {
   let op = joe(); op = zet(op, 'wanden.O.maten.lengte', { staat: 'later' });
   const rt = K.routeVanOpname(op, 'R1');
-  assert.strictEqual(K.volgendeOpen(rt, 0).id, 'foto:Z'); assert.strictEqual(K.volgendeOpen(rt, 4).id, 'maat:openingen.R3.maten.breedte'); assert.strictEqual(K.volgendeOpen(rt, 'maat:openingen.R3.maten.breedte').id, 'maat:openingen.R3.maten.hoogte');
+  assert.strictEqual(K.volgendeOpen(rt, 0).id, 'foto:Z'); assert.strictEqual(K.volgendeOpen(rt, 4).id, 'maat:wanden.O.maten.lengte_onder'); assert.strictEqual(K.volgendeOpen(rt, 'maat:openingen.R3.maten.breedte').id, 'maat:openingen.R3.maten.hoogte');
   assert.strictEqual(K.vorige(rt, 6).id, 'maat:wanden.O.maten.lengte'); assert.strictEqual(K.vorige(rt, 'foto:W').id, 'foto:Z'); assert.strictEqual(K.vorige(rt, 1), null); assert.strictEqual(K.vorige(rt, 'onbekend'), null);
-  assert.strictEqual(K.stap(rt, 6).id, 'maat:openingen.R3.maten.breedte'); assert.strictEqual(K.stap(rt, 'foto:O').nr, 4); assert.strictEqual(K.stap(rt, 999), null);
+  assert.strictEqual(K.stap(rt, 6).id, 'maat:wanden.O.maten.lengte_onder'); assert.strictEqual(K.stap(rt, 'foto:O').nr, 4); assert.strictEqual(K.stap(rt, 999), null);
   const laatste = rt.stappen[rt.stappen.length - 1]; assert.strictEqual(K.volgendeOpen(rt, laatste.nr), null); assert.strictEqual(K.volgendeOpen(rt, laatste.nr, { wrap: true }).id, 'foto:Z');
   assert.strictEqual(K.volgendeOpen(null), null); assert.strictEqual(K.vorige(null, 3), null);
 });
@@ -483,7 +518,7 @@ test('route: alternatieve volgorde rondloop (start bij de toegangsdeur, foto per
   assert.deepStrictEqual(rl.stappen.slice(0, 7).map(s => s.id), ['foto:Z', 'maat:wanden.Z.maten.lengte', 'maat:openingen.D1.maten.breedte', 'maat:openingen.D1.maten.hoogte', 'maat:openingen.D1.maten.positie', 'maat:wanden.Z.maten.bevestiging', 'foto:W']);
   assert.strictEqual(staps(rl, s => s.type === 'foto').length, 4); assert.ok(staps(rl, s => s.type === 'foto').every(s => s.fase === 'wand'));
   const ps = K.route(R(joe()), { volgorde: 'per-soort' }), ids = ps.stappen.map(s => s.id);
-  assert.deepStrictEqual(ids.slice(0, 4), ['foto:Z', 'foto:W', 'foto:N', 'foto:O']); assert.deepStrictEqual(ids.slice(4, 8), ['maat:wanden.O.maten.lengte', 'maat:wanden.Z.maten.lengte', 'maat:wanden.W.maten.lengte', 'maat:wanden.N.maten.lengte'], 'eerst alle wandlengtes');
+  assert.deepStrictEqual(ids.slice(0, 4), ['foto:Z', 'foto:W', 'foto:N', 'foto:O']); assert.deepStrictEqual(ids.slice(4, 9), ['maat:wanden.O.maten.lengte', 'maat:wanden.O.maten.lengte_onder', 'maat:wanden.O.maten.lengte_boven', 'maat:wanden.Z.maten.lengte', 'maat:wanden.W.maten.lengte'], 'eerst alle wandlengtes');
   assert.ok(ids.indexOf('maat:openingen.R3.maten.breedte') > ids.indexOf('maat:wanden.Z.maten.bevestiging'));
   for (const rt of [rl, ps]) { assert.strictEqual(rt.stappen.length, K.route(R(joe())).stappen.length, 'dezelfde stappen, andere volgorde'); assert.deepStrictEqual(rt.stappen.map(s => s.id).sort(), K.route(R(joe())).stappen.map(s => s.id).sort()); }
   assert.strictEqual(K.route(R(joe()), { volgorde: 'onzin' }).volgorde, 'fotos-dan-rondloop'); assert.deepStrictEqual(K.ROUTE_VOLGORDES, ['fotos-dan-rondloop', 'rondloop', 'per-soort']);
@@ -563,7 +598,7 @@ test('het voorbeeld uit docs/opname-json-v0.3.md bestaat en is leesbaar', () => 
   const m = /```json\n([\s\S]*?)\n```/.exec(tekst); assert.ok(m, 'een json-blok in de documentatie');
   const voorbeeld = JSON.parse(m[1]), r = K.lees(voorbeeld);
   assert.deepStrictEqual(r.meldingen, [], 'het voorbeeld is al volledig v0.3'); assert.deepStrictEqual(r.opname, voorbeeld, 'lezen verandert het voorbeeld niet');
-  const t = K.tellers(r.opname.ruimtes[0]); assert.strictEqual(t.basis.n, 17); assert.strictEqual(t.werkzone.n, 20);
+  const t = K.tellers(r.opname.ruimtes[0]); assert.strictEqual(t.basis.n, 17); assert.strictEqual(t.werkzone.n, 25);
   assert.ok(K.vrijgeefCheck(r.opname).kan === false); assert.strictEqual(K.effectieveStatus(r.opname), 'concept');
 });
 console.log('\n' + n + ' tests geslaagd' + (process.exitCode ? ' (met fouten)' : ''));

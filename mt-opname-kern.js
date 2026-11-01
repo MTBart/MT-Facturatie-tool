@@ -22,6 +22,7 @@
   // Toleranties. diagonaal: de gemeten controlediagonaal tegen de diagonaal die uit 4 zijden + 1 diagonaal volgt (mm). tegenover en hoek_graden: pas boven deze waarden is de ruimte
   // 'afwijkend van vorm' (informatie, geen fout). Er wordt geen rechthoek verondersteld.
   K.TOLERANTIE = { diagonaal: 10, tegenover: 5, hoek_graden: 0.3 };
+  K.RONDJE_LATER_BLOKKEERT = true;                                       // een categorie van het rondje op "later" is een open taak en blokkeert het vrijgeven (Bart, 1-11)
   K.WANDBEVESTIGING = ['bekeken', 'afgedekt', 'niet-beoordeeld'];          // buiten de werkzone: "gehele wand bekeken, geen relevante obstakels" of bewust afgedekt / niet beoordeeld
   K.ROUTE_VOLGORDES = ['fotos-dan-rondloop', 'rondloop', 'per-soort'];
   // Vragensets per meubeltype. Alleen 'kast' is een echte, gevalideerde set (ChatGPT-review 035, punt I). Voor keuken en badmeubel is er een hook (extraSlots) maar nog geen set:
@@ -115,6 +116,7 @@
   function refVan(s) {
     if (s.soort === 'wandbevestiging') return 'wand';
     if (s.eenheid === 'keuze') return 'object';
+    if (s.sleutel.indexOf('plafond_') === 0) return 'vloerpeil';
     if (s.pad.startsWith('wanden.') || s.pad.startsWith('diagonalen.')) return 'hoek';
     if (s.pad.startsWith('plafondpunten.')) return 'vloerpeil';
     if (s.pad.startsWith('openingen.')) return s.sleutel === 'breedte' ? 'zijkanten' : s.sleutel === 'hoogte' ? 'boven-onder' : s.sleutel === 'borstwering' ? 'vloerpeil' : (s.ent.positie_vanaf && s.ent.positie_vanaf !== 'hoek' ? 'opening' : 'hoek');
@@ -131,7 +133,14 @@
     for (const w of K.WANDEN) {
       const we = tijdelijk(r.wanden, w, { van: WAND_VAN_NAAR[w][0], naar: WAND_VAN_NAAR[w][1] });
       slot('wanden.' + w + '.maten.lengte', we, 'lengte', 'basis', { soort: 'wandlengte', wand: w, kort: 'Wandlengte ' + WAND_NAAM[w],
-        vraag: 'Hoe lang is de ' + wandTekst(w) + ', van hoek tot hoek?', uitleg: 'Hoek tot hoek, afgewerkt tot afgewerkt, op 1000 mm boven de vloer.', kritiek: true });
+        vraag: 'Hoe lang is de ' + wandTekst(w) + ', van hoek tot hoek?', uitleg: 'Hoek tot hoek, afgewerkt tot afgewerkt, op 1000 mm boven de vloer.' + (inZone(w) ? ' Bij een werkzone-wand is dit de middelste van drie hoogtes.' : ''), kritiek: true });
+      if (inZone(w)) {
+        // werkzone-wand: de wandlengte ook net boven de plint en net onder het plafond (samen met de lengte op 1000 mm drie hoogtes) en het plafond op drie punten langs de wand
+        for (const [sl, k, waar] of [['lengte_onder', 'onder', 'net boven de plint'], ['lengte_boven', 'boven', 'net onder het plafond']]) slot('wanden.' + w + '.maten.' + sl, we, sl, 'werkzone', { soort: 'wandlengte', wand: w, kort: 'Wandlengte ' + WAND_NAAM[w] + ' ' + k,
+          vraag: 'Hoe lang is de ' + wandTekst(w) + ' ' + waar + ', van hoek tot hoek?', uitleg: 'Dezelfde meting als de wandlengte op 1000 mm, nu ' + waar + '. Een kast raakt de wand over de hele hoogte.', kritiek: true });
+        for (const pl of ['links', 'midden', 'rechts']) slot('wanden.' + w + '.maten.plafond_' + pl, we, 'plafond_' + pl, 'werkzone', { soort: 'wandplafond', wand: w, kort: 'Plafondhoogte ' + WAND_NAAM[w] + ' ' + pl,
+          vraag: 'Hoe hoog is het plafond ' + pl + ' op de ' + wandTekst(w) + ' (kijkend naar de wand)?', uitleg: 'Afgewerkte vloer tot afgewerkt plafond, ' + (pl === 'midden' ? 'in het midden van de wand.' : 'een stukje uit de ' + (pl === 'links' ? 'linker' : 'rechter') + 'hoek.'), kritiek: true });
+      }
       if (!inZone(w)) slot('wanden.' + w + '.maten.bevestiging', we, 'bevestiging', 'basis', { soort: 'wandbevestiging', wand: w, eenheid: 'keuze', keuzes: ['bekeken'], nvtKeuzes: ['afgedekt', 'niet-beoordeeld'], kort: 'Wand ' + WAND_NAAM[w] + ' bekeken',
         vraag: 'Is de ' + wandTekst(w) + ' helemaal bekeken, zonder relevante obstakels?', uitleg: 'Kies "bekeken" als de hele wand in beeld was en er niets zit dat het meubel raakt. Is de wand afgedekt of niet beoordeeld, kies dat dan: het komt zo in het rapport.' });
     }
@@ -304,10 +313,10 @@
       const m = maatOp(s.ent, s.sleutel);
       if (!isObj(m)) continue;
       if (m.staat === 'gemeten' && staatVan(m, s.keuzes) !== 'gemeten') w.push({ code: 'meting-ongeldig', pad: s.pad, tekst: s.kort + ': staat op gemeten, maar er is geen geldige waarde of de bron is geen DISTO of hand. Telt als nog meten.' });
-      if (m.staat === 'gemeten' && s.pad.startsWith('openingen.') && (s.sleutel === 'breedte' || s.sleutel === 'hoogte') && !K.DEFINITIES[s.ent.definitie]) w.push({ code: 'definitie-ontbreekt', pad: s.pad, tekst: s.kort + ': kies de definitie (muursparing, dagmaat of kozijn buiten), anders is de maat dubbelzinnig.' });
+      if (m.staat === 'gemeten' && s.pad.startsWith('openingen.') && (s.sleutel === 'breedte' || s.sleutel === 'hoogte') && !K.DEFINITIES[s.ent.definitie] && !lijst(r.werkzone).includes(s.ent.wand)) w.push({ code: 'definitie-ontbreekt', pad: s.pad, tekst: s.kort + ': kies de definitie (muursparing, dagmaat of kozijn buiten), anders is de maat dubbelzinnig.' });
       const v = K.waarde(m);
-      if (v != null && s.sleutel === 'lengte' && s.pad.startsWith('wanden.') && (v < 300 || v > 15000)) w.push({ code: 'onwaarschijnlijk', pad: s.pad, tekst: s.kort + ': ' + v + ' mm ligt buiten 300 tot 15000 mm. Tikfout?' });
-      if (v != null && s.pad.startsWith('plafondpunten.') && (v < 2000 || v > 5000)) w.push({ code: 'onwaarschijnlijk', pad: s.pad, tekst: s.kort + ': ' + v + ' mm ligt buiten 2000 tot 5000 mm. Tikfout?' });
+      if (v != null && s.sleutel.indexOf('lengte') === 0 && s.pad.startsWith('wanden.') && (v < 300 || v > 15000)) w.push({ code: 'onwaarschijnlijk', pad: s.pad, tekst: s.kort + ': ' + v + ' mm ligt buiten 300 tot 15000 mm. Tikfout?' });
+      if (v != null && (s.pad.startsWith('plafondpunten.') || s.sleutel.indexOf('plafond_') === 0) && (v < 2000 || v > 5000)) w.push({ code: 'onwaarschijnlijk', pad: s.pad, tekst: s.kort + ': ' + v + ' mm ligt buiten 2000 tot 5000 mm. Tikfout?' });
     }
     // rondje zegt "afwezig" terwijl er in die wand en categorie wel iets is vastgelegd
     for (const x of K.rondje(r).regels) if (x.waarde === 'afwezig') {
@@ -345,6 +354,7 @@
   K.vrijgeefCheckRuimte = function (ruimte) {
     const r = ruimte || {}, redenen = [], t = K.tellers(r), nm = r.naam || r.id || 'Ruimte', rd = K.rondje(r), sc = K.sluitcontrole(r), set = K.MEUBELSETS[r.meubeltype];
     if (!set || !set.gereed) redenen.push({ code: 'meubelset', tekst: nm + ': voor ' + (r.meubeltype || 'dit meubeltype') + ' bestaat nog geen eigen vragenset (alleen kast is gevalideerd), dus vrijgeven kan nog niet.' });
+    for (const o of lijst(r.openingen)) if (o && o.id && lijst(r.werkzone).includes(o.wand) && !K.DEFINITIES[o.definitie]) redenen.push({ code: 'definitie', pad: 'openingen.' + o.id, tekst: nm + ': kies de definitie van ' + openingNaam(o) + ' (muursparing, dagmaat of kozijn buiten). In de werkzone is een maat zonder definitie dubbelzinnig.' });
     if (!lijst(r.werkzone).filter(w => K.WANDEN.includes(w)).length) redenen.push({ code: 'werkzone', tekst: nm + ': kies waar het meubel komt (werkzone).' });
     [['basis', 'Basis'], ['werkzone', 'Werkzone'], ['extra', 'Extra']].forEach(([b, n]) => {
       const c = t[b]; if (!c.n) return;
@@ -354,7 +364,7 @@
     if (t.optie.later) redenen.push({ code: 'later', bucket: 'optie', aantal: t.optie.later, tekst: nm + ' - Optioneel: ' + t.optie.later + ' op later meten. Meet ze nu, zet ze op n.v.t. of haal ze weg.' });
     for (const c of sc.conflicten) redenen.push({ code: 'conflict', id: c.id, tekst: nm + ': meetgegevens inconsistent, ' + c.titel + '. ' + c.uitleg });
     if (rd.wanden.length && rd.mis) redenen.push({ code: 'rondje', aantal: rd.mis, tekst: nm + ': rondje controle, ' + rd.mis + (rd.mis === 1 ? ' categorie' : ' categorieën') + ' nog niet bekeken.' });
-    if (rd.later) redenen.push({ code: 'rondje-later', aantal: rd.later, tekst: nm + ': rondje controle, ' + rd.later + (rd.later === 1 ? ' categorie staat' : ' categorieën staan') + ' op later meten (open taak).' });
+    if (K.RONDJE_LATER_BLOKKEERT && rd.later) redenen.push({ code: 'rondje-later', aantal: rd.later, tekst: nm + ': rondje controle, ' + rd.later + (rd.later === 1 ? ' categorie staat' : ' categorieën staan') + ' op later meten (open taak).' });
     const uitzonderingen = uitzonderingenVan(r), kan = redenen.length === 0;
     const tel = c => ({ n: c.n, gemeten: c.gemeten, nvt: c.nvt });
     const scope = { ruimte: r.id, naam: nm, meubeltype: r.meubeltype || null, meubelset_gereed: !!(set && set.gereed), werkzone: lijst(r.werkzone).filter(w => K.WANDEN.includes(w)), wanden_alleen_basis: K.WANDEN.filter(w => !lijst(r.werkzone).includes(w)),
@@ -548,7 +558,7 @@
         const ids = []; soort(k).forEach(x => { if (!ids.includes(x.object)) ids.push(x.object); });
         return linksRechts(lijst(bron).filter(e => e && ids.includes(e.id)), sleutel).reduce((l, e) => l.concat(soort(k).filter(x => x.object === e.id)), []);
       };
-      return { lengte: soort('wandlengte'), openingen: geordend('opening', r.openingen, 'positie'), objecten: geordend('object', r.objecten, null), plint: geordend('plint', r.objecten, null), bijz: soort('bijzonderheid'), bevestiging: soort('wandbevestiging') };
+      return { lengte: soort('wandlengte'), plafond: soort('wandplafond'), openingen: geordend('opening', r.openingen, 'positie'), objecten: geordend('object', r.objecten, null), plint: geordend('plint', r.objecten, null), bijz: soort('bijzonderheid'), bevestiging: soort('wandbevestiging') };
     };
     const blokken = {}; matenWanden.forEach(w => { blokken[w] = wandSlots(w); });
     const ruimteSlots = slots.filter(x => x.soort === 'plafond' || x.soort === 'diagonaal');
@@ -564,14 +574,14 @@
     if (volgorde === 'per-soort') {
       fotoWanden.forEach(w => fotoStap(w, 'fotoronde', fotoWanden));
       const fase = 'soort';
-      for (const k of ['lengte', 'bevestiging', 'openingen', 'objecten', 'plint']) matenWanden.forEach(w => blokken[w][k].forEach(x => maatStap(x, fase)));
+      for (const k of ['lengte', 'plafond', 'bevestiging', 'openingen', 'objecten', 'plint']) matenWanden.forEach(w => blokken[w][k].forEach(x => maatStap(x, fase)));
       matenWanden.filter(inZone).forEach(w => { bijzStap(w, fase); blokken[w].bijz.forEach(x => maatStap(x, fase)); });
     } else {
       if (volgorde === 'fotos-dan-rondloop') fotoWanden.forEach(w => fotoStap(w, 'fotoronde', fotoWanden));
       matenWanden.forEach(w => {
         const b = blokken[w];
         if (volgorde === 'rondloop') fotoStap(w, 'wand', matenWanden);
-        b.lengte.forEach(x => maatStap(x, 'wand')); b.openingen.forEach(x => maatStap(x, 'wand')); b.objecten.forEach(x => maatStap(x, 'wand')); b.plint.forEach(x => maatStap(x, 'wand'));
+        b.lengte.forEach(x => maatStap(x, 'wand')); b.plafond.forEach(x => maatStap(x, 'wand')); b.openingen.forEach(x => maatStap(x, 'wand')); b.objecten.forEach(x => maatStap(x, 'wand')); b.plint.forEach(x => maatStap(x, 'wand'));
         if (inZone(w)) bijzStap(w, 'wand');
         b.bijz.forEach(x => maatStap(x, 'wand')); b.bevestiging.forEach(x => maatStap(x, 'wand'));
       });
