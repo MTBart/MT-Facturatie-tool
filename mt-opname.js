@@ -524,13 +524,24 @@
   M.start = async function (el, host) {
     S.host = host || {}; S.el = el; X.leeg(el);
     el.classList.add('opn');
+    zetToetsenbord();
     el.appendChild(h('div', { class: 'opn-fout', role: 'alert', hidden: true }));
     el.appendChild(h('div', { class: 'opn-scherm' }));
     el.appendChild(h('div', { class: 'opn-toast', role: 'status', hidden: true }));
     await X.naarLijst();
     O.beveilig().then(() => { if (S.scherm === 'lijst') X.teken(); }, () => {});
   };
-  M.stop = function () { for (const k of Object.keys(S.urls)) { try { URL.revokeObjectURL(S.urls[k]); } catch (e) {} } S.urls = {}; };
+  // Het schermtoetsenbord: de laag volgt de zichtbare hoogte (visualViewport), zodat het invoerveld en de knoppen eronder bereikbaar blijven. Bij weinig hoogte wordt de foto kleiner en gaat de werkbalk weg.
+  function zetToetsenbord() {
+    const vv = root.visualViewport; if (!vv || !S.el || S.vvPas) return;
+    S.vvPas = () => {
+      if (!S.el) return;
+      S.el.style.top = vv.offsetTop + 'px'; S.el.style.bottom = 'auto'; S.el.style.height = vv.height + 'px'; S.el.style.setProperty('--opn-vh', vv.height + 'px'); S.el.classList.toggle('opn-klein-scherm', vv.height < 520);
+      const a = doc.activeElement; if (a && /^(INPUT|TEXTAREA)$/.test(a.tagName) && S.el.contains(a)) setTimeout(() => { try { a.scrollIntoView({ block: 'center' }); } catch (e) {} }, 60);
+    };
+    vv.addEventListener('resize', S.vvPas); vv.addEventListener('scroll', S.vvPas); S.vvPas();
+  }
+  M.stop = function () { try { if (S.vvPas && root.visualViewport) { root.visualViewport.removeEventListener('resize', S.vvPas); root.visualViewport.removeEventListener('scroll', S.vvPas); } } catch (e) {} S.vvPas = null; if (S.el) { S.el.style.top = ''; S.el.style.bottom = ''; S.el.style.height = ''; } for (const k of Object.keys(S.urls)) { try { URL.revokeObjectURL(S.urls[k]); } catch (e) {} } S.urls = {}; };
   M.stand = () => ({ scherm: S.scherm, wand: S.wand, stap: S.stapId });
   if (typeof module !== 'undefined' && module.exports) module.exports = M;
 })(typeof window !== 'undefined' ? window : globalThis);

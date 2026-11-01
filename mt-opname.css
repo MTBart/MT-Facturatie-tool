@@ -172,3 +172,16 @@
 .opn-kies{border-color:var(--o-primary);box-shadow:0 0 0 2px var(--o-psoft)}
 .opn-schatting{font-size:13px;margin:6px 0}
 .opn-kies .opn-btn{margin-top:10px}
+/* brok 3d: loep voor de hoeken, schermtoetsenbord */
+.opn-loepvak{border:2px solid var(--o-primary);border-radius:10px;overflow:hidden;margin-top:6px}
+.opn-loep-svg{display:block;width:100%;height:auto;aspect-ratio:1/.78;background:#222;touch-action:manipulation;user-select:none;-webkit-user-select:none;cursor:crosshair}
+.opn-wand-svg{max-height:calc(var(--opn-vh,100vh)*.46)}
+.opn-klein-scherm .opn-wand-svg{max-height:calc(var(--opn-vh,100vh)*.3)}
+.opn-klein-scherm .opn-werkbalk,.opn-klein-scherm .opn-hint-rij{display:none}
+.opn-klein-scherm .opn-kop{min-height:48px}
+
+.opn-klein-scherm .opn-wandvak{position:sticky;top:0;z-index:3}
+.opn-klein-scherm .opn-paneel .opn-hint,.opn-klein-scherm .opn-paneel .opn-uitleg-d,.opn-klein-scherm .opn-paneel .opn-def{display:none}
+.opn-klein-scherm .opn-groot-veld{min-height:52px;font-size:26px}
+.opn-klein-scherm .opn-paneel{padding:8px 12px}
+.opn-klein-scherm .opn-body-wand{padding-top:0}

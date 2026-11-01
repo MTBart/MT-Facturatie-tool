@@ -7198,8 +7198,8 @@ window.forecastLaagOpen = window.forecastLaagOpen || function () {};
    "Nieuwe opname testen" in Meer aan staat (localStorage mt_opname_beta). De bestaande Opname/Capture/Rapportage blijven ongemoeid en standaard.
    Pas laden bij het openen (zelfde patroon als de Forecast-laag), eigen opslag alleen lokaal in IndexedDB (mt-opname), geen upload, geen taken, geen worker.
    ===================================================================== */
-const OPNAME_CSS = "mt-opname.css?v=2026-11-01b";
-const OPNAME_SCRIPTS = ["mt-opname-kern.js?v=2026-11-01b","mt-opname-geo.js?v=2026-11-01b","mt-opname-opslag.js?v=2026-11-01b","mt-opname.js?v=2026-11-01b","mt-opname-model.js?v=2026-11-01b"];
+const OPNAME_CSS = "mt-opname.css?v=2026-11-01c";
+const OPNAME_SCRIPTS = ["mt-opname-kern.js?v=2026-11-01c","mt-opname-geo.js?v=2026-11-01c","mt-opname-opslag.js?v=2026-11-01c","mt-opname.js?v=2026-11-01c","mt-opname-model.js?v=2026-11-01c"];
 let _opnameScripts = null;
 function opnameBetaMag() { try { return !!(window.MTRol && MTRol.me && MTRol.isBeheer()); } catch (e) { return false; } }
 function opnameBetaAan() { try { return localStorage.getItem("mt_opname_beta") === "1"; } catch (e) { return false; } }
