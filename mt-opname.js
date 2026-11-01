@@ -83,7 +83,7 @@
   X.wandFotoRec = wand => { const l = K.fotosVan(S.rec.opname, X.ruimte().id, wand).filter(f => f.soort !== 'closeup'); return l.length ? l[l.length - 1] : null; };
   const slug = t => String(t || 'ruimte').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'ruimte';
   const ext = f => { const m = /\.([a-z0-9]{2,5})$/i.exec(f.name || ''); if (m) return m[1].toLowerCase(); return (f.type || '').indexOf('png') >= 0 ? 'png' : (f.type || '').indexOf('webp') >= 0 ? 'webp' : 'jpg'; };
-  X.wandNaam = w => K.wandNaam(w) + 'wand';
+  X.wandNaam = w => K.wandLabel(w);
   X.mm = v => v == null ? '' : String(Math.round(v * 10) / 10).replace('.', ',');
 
   // ── Foto's: eerst het beeld veilig in IndexedDB, dan pas de verwijzing in de opname. De originele file blijft onaangeroerd (volle resolutie, EXIF), er wordt niets hernoemd of herschreven. ──
@@ -140,7 +140,7 @@
   const TERUG = { lijst: null, start: 'lijst', fotos: 'lijst', model: 'lijst', wand: 'model', rondje: 'afronden', afronden: 'model' };
   M.terug = function () {
     if (!S.el) return false;
-    if (S.kal || S.plaats) { S.kal = null; S.plaats = null; X.teken(); return true; }
+    if (S.kal || S.plaats || S.knik) { S.kal = null; S.plaats = null; S.knik = null; X.teken(); return true; }
     const naar = TERUG[S.scherm]; if (!naar) return false;
     if (naar === 'lijst') return X.naarLijst(), true;
     X.ga(naar, naar === 'model' ? { wandKlaar: false } : {}); return true;
@@ -193,14 +193,14 @@
       const g = K.lees(rec.opname); if (g.alleenLezen) { X.toast('Deze opname komt uit een nieuwere versie: alleen lezen is nog niet gebouwd.'); return; }
       rec.opname = g.opname; rec.layout = rec.layout || {}; rec.instellingen = rec.instellingen || {};
       S.rec = rec; S.ruimteId = rec.opname.ruimtes[0].id; S.urls = {};
-      const heeftFoto = lijst(rec.opname.fotos).some(f => f && f.soort !== 'closeup');
-      X.ga(heeftFoto ? 'model' : 'fotos', { wandKlaar: false, kal: null, plaats: null, modelStap: null });
+      const heeftFoto = lijst(rec.opname.fotos).some(f => f && f.soort !== 'closeup'), ronde = K.isRond(rec.opname.ruimtes[0]) && K.wandIds(rec.opname.ruimtes[0]).length >= 3;
+      X.ga(heeftFoto && ronde ? 'model' : 'fotos', { wandKlaar: false, kal: null, plaats: null, modelStap: null, knik: null, fotoWand: null, werkzoneKiezen: false });
     } catch (e) { X.toast('Openen mislukt: ' + e.message); X.opslagFoutZet(e); }
   };
 
-  // ── Scherm: start (project, ruimte, meubeltype, werkzone, toegangsdeur) ──
+  // ── Scherm: start (project, ruimte, meubeltype). Geen sjabloon en geen werkzone: de vorm ontstaat uit de foto's, de werkzone kies je daarna in het model. ──
   SCHERMEN.start = function (c) {
-    const F = S.formulier = S.formulier || { project: null, zoek: '', naam: '', meubeltype: 'kast', werkzone: [], deur: null };
+    const F = S.formulier = S.formulier || { project: null, zoek: '', naam: '', meubeltype: 'kast' };
     c.appendChild(X.kop('Nieuwe opname', 'Stap 1 van 3: de ruimte'));
     const body = h('div', { class: 'opn-body' });
     // project: de bestaande projectenlijst van de app (allProjects), met zoeken
@@ -227,80 +227,170 @@
         return h('button', { type: 'button', class: 'opn-chip' + (F.meubeltype === t ? ' is-aan' : '') + (actief ? '' : ' is-uit'), disabled: !actief, 'aria-pressed': F.meubeltype === t ? 'true' : 'false', onclick: () => { F.meubeltype = t; X.teken(); } },
           t === 'kast' ? 'Kast' : t === 'keuken' ? 'Keuken (nog niet)' : 'Badmeubel (nog niet)');
       }))));
-    // werkzone en toegangsdeur op een klein plattegrondje: kijk van boven, noord is de bovenste wand
-    const plan = planSvg(F);
-    body.appendChild(h('div', { class: 'opn-veld' }, h('div', { class: 'opn-label', text: 'Waar komt het meubel (werkzone)?' }),
-      h('p', { class: 'opn-hint', text: 'Kijk van boven op de kamer: noord is de bovenste wand, daarna met de klok mee oost, zuid, west. Meerdere wanden mag.' }),
-      h('div', { class: 'opn-chips' }, ...K.WANDEN.map(w => h('button', { type: 'button', class: 'opn-chip' + (F.werkzone.includes(w) ? ' is-aan' : ''), 'aria-pressed': F.werkzone.includes(w) ? 'true' : 'false', onclick: () => { F.werkzone = F.werkzone.includes(w) ? F.werkzone.filter(x => x !== w) : F.werkzone.concat([w]); X.teken(); } }, X.wandNaam(w))))));
-    body.appendChild(h('div', { class: 'opn-veld' }, h('div', { class: 'opn-label', text: 'Waar loop je de kamer in (toegangsdeur)?' }),
-      h('div', { class: 'opn-chips' }, ...K.WANDEN.map(w => h('button', { type: 'button', class: 'opn-chip' + (F.deur === w ? ' is-aan' : ''), 'aria-pressed': F.deur === w ? 'true' : 'false', onclick: () => { F.deur = w; X.teken(); } }, X.wandNaam(w)))),
-      h('p', { class: 'opn-hint', text: 'De fotoronde begint bij de wand van de toegangsdeur en gaat met de klok mee.' })));
-    body.appendChild(h('div', { class: 'opn-plan' }, plan));
+    body.appendChild(h('div', { class: 'opn-kaart opn-uitleg' }, h('div', { class: 'opn-kaart-titel', text: 'De vorm van de kamer ontstaat uit je foto\'s' }),
+      h('p', { text: 'Je kiest geen vorm vooraf. Begin bij de toegangsdeur en loop met de klok mee: een foto per wand, ook als de kamer geen rechthoek is. De plattegrond groeit mee en wordt nauwkeuriger naarmate je meer meet. Waar het meubel komt (de werkzone) kies je daarna in het model.' })));
     const kn = h('button', { type: 'button', class: 'opn-btn opn-btn-groot opn-btn-primair', text: 'Start de fotoronde', onclick: maakOpname });
     body.appendChild(kn);
-    function startKnop() { kn.disabled = !(F.project && F.naam.trim() && F.werkzone.length && F.deur); }
+    function startKnop() { kn.disabled = !(F.project && F.naam.trim()); }
     startKnop();
     c.appendChild(body);
   };
-  function planSvg(F) {
-    const p = (w, x1, y1, x2, y2) => sv('line', { x1, y1, x2, y2, stroke: F.werkzone.includes(w) ? COL.accent : COL.donker, 'stroke-width': F.werkzone.includes(w) ? 7 : 3, 'stroke-linecap': 'round' });
-    return sv('svg', { viewBox: '0 0 220 150', class: 'opn-plan-svg', role: 'img', 'aria-label': 'Plattegrondje met noord boven' },
-      p('N', 40, 30, 180, 30), p('O', 180, 30, 180, 120), p('Z', 180, 120, 40, 120), p('W', 40, 120, 40, 30),
-      sv('text', { x: 110, y: 22, 'text-anchor': 'middle', 'font-size': 12, fill: COL.donker, text: 'N' }), sv('text', { x: 192, y: 78, 'font-size': 12, fill: COL.donker, text: 'O' }),
-      sv('text', { x: 110, y: 140, 'text-anchor': 'middle', 'font-size': 12, fill: COL.donker, text: 'Z' }), sv('text', { x: 20, y: 78, 'font-size': 12, fill: COL.donker, text: 'W' }),
-      F.deur ? sv('circle', { cx: { N: 110, O: 180, Z: 110, W: 40 }[F.deur], cy: { N: 30, O: 75, Z: 120, W: 75 }[F.deur], r: 9, fill: '#d19a1f', stroke: COL.donker, 'stroke-width': 1.5 }) : null,
-      F.deur ? sv('text', { x: { N: 110, O: 180, Z: 110, W: 40 }[F.deur], y: { N: 34, O: 79, Z: 124, W: 79 }[F.deur], 'text-anchor': 'middle', 'font-size': 10, 'font-weight': 600, fill: COL.donker, text: 'D' }) : null);
-  }
   async function maakOpname() {
     const F = S.formulier;
-    if (!(F.project && F.naam.trim() && F.werkzone.length && F.deur)) return;
+    if (!(F.project && F.naam.trim())) return;
     try {
       const id = 'OPN-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
-      let op = K.nieuweOpname({ opname_id: id, project: { code: F.project.nr || F.project.code, naam: F.project.naam }, ruimtes: [K.nieuweRuimte({ id: 'R1', naam: F.naam.trim(), meubeltype: F.meubeltype, werkzone: F.werkzone })] });
-      let res = K.voegOpeningToe(op, 'R1', { soort: 'deur', wand: F.deur, naam: 'toegangsdeur' }); if (res.fout) throw new Error(res.fout);
-      op = res.opname; res = K.zetRuimte(op, 'R1', { toegangsdeur: res.id }); if (res.fout) throw new Error(res.fout);
-      S.rec = { id, opname: res.opname, layout: {}, instellingen: {}, schema: 'mt-opname-app', versie: 1 };
-      S.ruimteId = 'R1'; S.urls = {}; S.formulier = null; S.stapId = null; S.wandKlaar = false;
+      const op = K.nieuweOpname({ opname_id: id, project: { code: F.project.nr || F.project.code, naam: F.project.naam }, ruimtes: [K.nieuweRuimte({ id: 'R1', naam: F.naam.trim(), meubeltype: F.meubeltype, wanden: [] })] });
+      S.rec = { id, opname: op, layout: {}, instellingen: {}, schema: 'mt-opname-app', versie: 1 };
+      S.ruimteId = 'R1'; S.urls = {}; S.formulier = null; S.stapId = null; S.wandKlaar = false; S.fotoWand = null; S.werkzoneKiezen = false;
       await O.schrijf(S.rec); S.opslagFout = null;
       O.beveilig().catch(() => {});
       X.ga('fotos');
     } catch (e) { X.opslagFoutZet(e); X.toast('Opname starten mislukt: ' + (e.message || e)); }
   }
 
-  // ── Scherm: fotoronde (een foto per wand, met de klok mee vanaf de toegangsdeur) ──
+  // ── Het plattegrondkaartje: de contour van de ruimte uit de kern (K.plattegrond), groeit mee met elke foto en elke meting ──
+  // Vast = gemeten, gestippeld grijs = schatting. Uitsprongen en nissen staan in blauw. Met opties.opWand zijn de wanden aantikbaar (werkzone kiezen).
+  X.planKaart = function (r, o) {
+    o = o || {};
+    const plat = K.plattegrond(r), B = o.breed || 340, HH = o.hoog || 190, pad = 24, zone = lijst(r.werkzone);
+    const svg = sv('svg', { viewBox: '0 0 ' + B + ' ' + HH, class: 'opn-plan-svg opn-plankaart', role: 'img', 'aria-label': 'Plattegrond van ' + r.naam + (plat.schatting ? ', deels een schatting' : '') });
+    if (!plat.n) { svg.appendChild(sv('text', { x: B / 2, y: HH / 2, 'text-anchor': 'middle', 'font-size': 13, fill: COL.grijs, text: 'Nog geen wanden gefotografeerd' })); return svg; }
+    const bb = plat.bbox, bw = Math.max(1, bb.x1 - bb.x0), bh = Math.max(1, bb.y1 - bb.y0), sc = Math.min((B - 2 * pad) / bw, (HH - 2 * pad) / bh), ox = (B - bw * sc) / 2 - bb.x0 * sc, oy = (HH - bh * sc) / 2 - bb.y0 * sc;
+    const P = p => [p[0] * sc + ox, p[1] * sc + oy], f = p => p[0].toFixed(1) + ',' + p[1].toFixed(1);
+    const cx = (bb.x0 + bb.x1) / 2 * sc + ox, cy = (bb.y0 + bb.y1) / 2 * sc + oy;
+    if (plat.rond && plat.contour.length) svg.appendChild(sv('polygon', { points: plat.contour.map(s => f(P(s.van))).join(' '), fill: plat.schatting ? 'rgba(23,100,63,0.05)' : 'rgba(23,100,63,0.09)', stroke: 'none', 'pointer-events': 'none' }));
+    const u = id => lijst(r.uitsprongen).find(x => x.id === id);
+    for (const s of plat.contour) {
+      const a = P(s.van), b = P(s.naar), werk = s.soort === 'wand' && zone.includes(s.wand), uitspr = s.soort !== 'wand';
+      const kl = uitspr ? COL.blauw : werk ? COL.accent : (s.geschat ? '#8a8f89' : COL.donker), br = uitspr ? 3.2 : werk ? 4.6 : s.geschat ? 2 : 3;
+      svg.appendChild(sv('line', { x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: kl, 'stroke-width': br, 'stroke-linecap': 'round', 'stroke-dasharray': s.geschat ? '5 3.5' : null, 'pointer-events': 'none', 'data-soort': s.soort, 'data-wand': s.wand }));
+    }
+    if (plat.n && (!plat.rond || (plat.sluitfout && plat.sluitfout.mm > K.TOLERANTIE.sluit && plat.vorm.status !== 'inconsistent'))) {      // de ronde is nog open of de vorm nog niet bepaald: een lichte stippellijn terug naar het begin
+      const laatste = plat.wanden[plat.volgorde[plat.n - 1]], a = P(laatste.b), b = P(plat.wanden[plat.volgorde[0]].a);
+      svg.appendChild(sv('line', { x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: '#c9ccc6', 'stroke-width': 1.5, 'stroke-dasharray': '2 4', 'pointer-events': 'none' }));
+    }
+    if (plat.rond && plat.sluitfout && plat.sluitfout.mm > K.TOLERANTIE.sluit && plat.vorm.status === 'inconsistent') {         // de wanden sluiten niet: laat zien waar het eindpunt uitkomt
+      const l = plat.wanden[plat.volgorde[plat.n - 1]], a = P(l.b), b = P(plat.wanden[plat.volgorde[0]].a);
+      svg.appendChild(sv('line', { x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: COL.conflict, 'stroke-width': 2, 'stroke-dasharray': '3 3', 'pointer-events': 'none' }));
+      svg.appendChild(sv('circle', { cx: a[0], cy: a[1], r: 4, fill: COL.conflict, 'pointer-events': 'none' }));
+    }
+    // wandnummers en eventueel aantikbare wanden
+    for (const w of plat.volgorde) {
+      const we = plat.wanden[w], a = P(we.a), b = P(we.b), m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], dx = m[0] - cx, dy = m[1] - cy, dl = Math.hypot(dx, dy) || 1;
+      const t = [Math.max(11, Math.min(B - 11, m[0] + dx / dl * 15)), Math.max(11, Math.min(HH - 11, m[1] + dy / dl * 15))], werk = zone.includes(w), actief = o.actief === w;
+      if (o.opWand) svg.appendChild(sv('line', { x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: 'rgba(0,0,0,0.001)', 'stroke-width': 30, 'stroke-linecap': 'round', 'pointer-events': 'stroke', style: { cursor: 'pointer' }, 'data-wand': w, onclick: () => o.opWand(w) }));
+      const g = sv('g', { class: 'opn-plan-nr', 'data-wand': w, 'pointer-events': o.opWand ? 'all' : 'none', role: o.opWand ? 'button' : null, tabindex: o.opWand ? '0' : null, 'aria-label': o.opWand ? K.wandLabel(w) + (werk ? ', werkzone' : '') : null, style: o.opWand ? { cursor: 'pointer' } : null, onclick: o.opWand ? () => o.opWand(w) : null },
+        sv('circle', { cx: t[0], cy: t[1], r: 10.5, fill: werk ? COL.accent : '#fff', stroke: actief ? COL.rood : werk ? COL.accent : '#9a917f', 'stroke-width': actief ? 2.4 : 1.2 }),
+        sv('text', { x: t[0], y: t[1] + 4.2, 'text-anchor': 'middle', 'font-size': 11.5, 'font-weight': 700, fill: werk ? '#fff' : COL.donker, text: String(we.nr) }));
+      svg.appendChild(g);
+    }
+    // de toegangsdeur: een gouden stip aan het begin van de eerste wand
+    const deur = lijst(r.openingen).find(x => x.id === r.toegangsdeur);
+    if (deur && plat.wanden[deur.wand]) { const we = plat.wanden[deur.wand], a = P(we.a), b = P(we.b), m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], dx = cx - m[0], dy = cy - m[1], dl = Math.hypot(dx, dy) || 1;
+      svg.appendChild(sv('circle', { cx: m[0] + dx / dl * 9, cy: m[1] + dy / dl * 9, r: 6.5, fill: '#d19a1f', stroke: COL.donker, 'stroke-width': 1.2, 'pointer-events': 'none' }));
+      svg.appendChild(sv('text', { x: m[0] + dx / dl * 9, y: m[1] + dy / dl * 9 + 3.4, 'text-anchor': 'middle', 'font-size': 9, 'font-weight': 700, fill: COL.donker, 'pointer-events': 'none', text: 'D' })); }
+    return svg;
+  };
+  X.planBlok = function (r, opties) {
+    const plat = K.plattegrond(r), bij = [];
+    if (plat.n) bij.push(plat.schatting ? 'Gestippeld is een schatting; vast is gemeten.' : 'Alles is gemeten en gecontroleerd.');
+    if (plat.uitsprongen.length) bij.push('Blauw: ' + plat.uitsprongen.map(x => (K.UITSPRONG_SOORTEN[x.soort] || 'Uitsprong').toLowerCase()).filter((v, i, a) => a.indexOf(v) === i).join(' en ') + '.');
+    if (opties && opties.opWand && !opties.kies) bij.push('Tik een wandnummer om die wand te openen.');
+    return h('div', { class: 'opn-kaart opn-planblok' }, opties && opties.titel ? h('div', { class: 'opn-kaart-titel', text: opties.titel }) : null, h('div', { class: 'opn-plan' }, X.planKaart(r, opties)), bij.length ? h('p', { class: 'opn-hint', text: bij.join(' ') }) : null);
+  };
+
+  // ── De hoek naar de volgende wand: standaard 90 graden (een aanname), 270 voor een inspringende hoek, of schuin met een eigen waarde ──
+  X.hoekRij = function (wandId, opties) {
+    opties = opties || {};
+    const r = X.ruimte(), hk = K.hoekVan(r, wandId), volgende = K.wandIds(r)[(K.wandIds(r).indexOf(wandId) + 1) % K.wandIds(r).length], naarEerste = K.wandIds(r).indexOf(wandId) === K.wandIds(r).length - 1;
+    const kop = opties.kop || ('Hoek tussen ' + K.wandLabel(wandId).toLowerCase() + ' en ' + (naarEerste ? 'wand 1' : K.wandLabel(volgende).toLowerCase()));
+    const ververs = opties.vernieuw || (() => X.teken());
+    const zet = (g, bron) => { if (X.wijzig(K.zetHoek(S.rec.opname, r.id, wandId, g, bron))) ververs(); };
+    const blok = h('div', { class: 'opn-veld opn-hoekrij' }, h('div', { class: 'opn-label', text: kop }));
+    const chips = h('div', { class: 'opn-chips' });
+    const chip = (tekst, aan, fn) => h('button', { type: 'button', class: 'opn-chip' + (aan ? ' is-aan' : ''), 'aria-pressed': aan ? 'true' : 'false', onclick: fn }, tekst);
+    const haaks90 = Math.abs(hk.graden - 90) < 0.5, haaks270 = Math.abs(hk.graden - 270) < 0.5;
+    chips.appendChild(chip('90°', haaks90, () => zet(90, 'aanname')));
+    chips.appendChild(chip('270° (hoek springt naar binnen)', haaks270, () => zet(270, 'aanname')));
+    chips.appendChild(chip(hk.schuin ? hk.graden + '° schuin' : 'Schuin', hk.schuin, () => { S.hoekInvoer = S.hoekInvoer === wandId ? null : wandId; ververs(); }));
+    blok.appendChild(chips);
+    blok.appendChild(h('p', { class: 'opn-hint', text: hk.schuin ? (hk.bron === 'gemeten' ? 'Gemeten hoek.' : 'Geschatte hoek; meet hem of een diagonaal, dan is de vorm bepaald.') : '90° is een aanname tot een diagonaal de vorm controleert.' }));
+    if (S.hoekInvoer === wandId) {
+      const inp = h('input', { type: 'text', inputmode: 'decimal', class: 'opn-input', placeholder: 'graden, bijvoorbeeld 135', 'aria-label': 'Hoek in graden', value: hk.schuin ? String(hk.graden) : '' });
+      const lees = () => { const g = parseFloat(String(inp.value).replace(',', '.')); if (!(g > 0)) { X.toast('Vul de hoek in graden in.'); return null; } return g; };
+      blok.appendChild(h('div', { class: 'opn-invoerrij' }, inp, h('span', { class: 'opn-eenheid', text: '°' })));
+      blok.appendChild(h('div', { class: 'opn-onderrij' },
+        h('button', { type: 'button', class: 'opn-btn opn-btn-klein', text: 'Dit is een schatting', onclick: () => { const g = lees(); if (g != null) { S.hoekInvoer = null; zet(g, 'foto-voorstel'); } } }),
+        h('button', { type: 'button', class: 'opn-btn opn-btn-klein', text: 'Gemeten', onclick: () => { const g = lees(); if (g != null) { S.hoekInvoer = null; zet(g, 'gemeten'); } } })));
+    }
+    return blok;
+  };
+
+  // ── Scherm: fotoronde. Geen vast aantal wanden: vanaf de toegangsdeur met de klok mee, een foto per wand, tot je terug bent bij de eerste wand. ──
   SCHERMEN.fotos = function (c) {
-    const r = X.ruimte(), rt = X.route(), wanden = rt.foto_wanden, zonder = wanden.filter(w => !X.wandFotoRec(w));
-    const huidig = S.fotoWand && wanden.includes(S.fotoWand) ? S.fotoWand : (zonder[0] || wanden[0]);
-    c.appendChild(X.kop(r.naam, 'Stap 2 van 3: een foto per wand', { terugLabel: 'Naar de lijst' }));
+    const r = X.ruimte(), wanden = K.wandIds(r), rond = K.isRond(r) && wanden.length >= 3 && r.rond !== false;
+    const laatsteZonder = wanden.length && !X.wandFotoRec(wanden[wanden.length - 1]) ? wanden[wanden.length - 1] : null;
+    const huidig = S.fotoWand && wanden.includes(S.fotoWand) ? S.fotoWand : (S.fotoWand === 'nieuw' ? 'nieuw' : (rond ? wanden[0] : (laatsteZonder || 'nieuw')));
+    const nieuw = huidig === 'nieuw', nr = nieuw ? wanden.length + 1 : wanden.indexOf(huidig) + 1, rec = nieuw ? null : X.wandFotoRec(huidig);
+    c.appendChild(X.kop(r.naam, rond ? 'Stap 2 van 3: de foto\'s per wand' : 'Stap 2 van 3: fotoronde met de klok mee', { terugLabel: 'Naar de lijst' }));
     const body = h('div', { class: 'opn-body' });
-    const rec = X.wandFotoRec(huidig), nr = wanden.indexOf(huidig) + 1;
-    body.appendChild(h('div', { class: 'opn-kaart' },
-      h('div', { class: 'opn-kaart-titel', text: 'Foto ' + nr + ' van 4 · ' + X.wandNaam(huidig) }),
-      h('p', { text: 'Sta voor de ' + X.wandNaam(huidig).toLowerCase() + ' en maak de foto recht van voren, met beide hoeken, de plafondrand en de vloerlijn in beeld. Volle resolutie van de eigen camera; de foto wordt niet bewerkt.' }),
-      huidig === rt.toegangswand ? h('p', { class: 'opn-hint', text: 'Dit is de wand met de toegangsdeur: hier begint de ronde.' }) : null));
+    // wat nu
+    const kaart = h('div', { class: 'opn-kaart' }, h('div', { class: 'opn-kaart-titel', text: (nieuw ? 'Nieuwe foto' : 'Foto ' + nr) + ' · ' + (nieuw || huidig ? 'wand ' + nr : '') }));
+    if (!rond) {
+      kaart.appendChild(h('p', { text: nr === 1 ? 'Begin bij de toegangsdeur: sta in de kamer en maak de foto van de wand met de deur. Recht van voren, met beide hoeken, de plafondrand en de vloerlijn in beeld.' : 'Loop met de klok mee naar de volgende wand en maak de foto recht van voren, met beide hoeken, de plafondrand en de vloerlijn in beeld.' }));
+      kaart.appendChild(h('p', { class: 'opn-hint', text: 'Heeft de kamer een knik of een uitstekend stuk, zoals een schoorsteen of nis? Fotografeer de wand gewoon in één keer; de vorm wijs je daarna op de foto aan. Een uitsprong in de hoek mag een eigen wand zijn.' }));
+    } else kaart.appendChild(h('p', { text: 'De ronde is rond. Tik een wand hieronder om de foto te bekijken of opnieuw te maken.' }));
+    body.appendChild(kaart);
+    // de knoppen voor de foto staan bovenaan, zodat je niet hoeft te scrollen; daaronder de hoek, de plattegrond en de wanden tot nu toe
     const kaartFoto = h('div', { class: 'opn-fotovak' });
-    body.appendChild(kaartFoto);
-    const toon = async () => { if (rec) { const u = await X.fotoUrl(rec.id); if (u) { X.leeg(kaartFoto); kaartFoto.appendChild(h('img', { src: u, alt: 'Foto van de ' + X.wandNaam(huidig).toLowerCase(), class: 'opn-foto' })); } } };
-    if (rec) toon(); else kaartFoto.appendChild(h('div', { class: 'opn-fotovak-leeg', text: 'Nog geen foto van deze wand' }));
-    // eerst de nieuwe foto veilig opslaan, daarna pas de oude verwijzing archiveren (het beeld van de oude foto blijft bewaard)
+    const toon = async () => { if (rec) { const u = await X.fotoUrl(rec.id); if (u) { X.leeg(kaartFoto); kaartFoto.appendChild(h('img', { src: u, alt: 'Foto van wand ' + nr, class: 'opn-foto' })); } } };
+    if (rec) { body.appendChild(kaartFoto); toon(); } else if (!nieuw) { kaartFoto.appendChild(h('div', { class: 'opn-fotovak-leeg', text: 'Nog geen foto van deze wand' })); body.appendChild(kaartFoto); }
+    // eerst het beeld veilig opslaan, daarna pas de verwijzing; bij een nieuwe wand komt de wand eerst (en bij de eerste wand de toegangsdeur)
+    const maakWand = () => {
+      let res = K.voegWandToe(S.rec.opname, r.id); if (!X.wijzig(res)) throw new Error(res.fout || 'wand toevoegen mislukt');
+      const id = res.id;
+      if (K.wandIds(X.ruimte()).length === 1) {
+        res = K.voegOpeningToe(S.rec.opname, r.id, { soort: 'deur', wand: id, naam: 'toegangsdeur' }); if (!X.wijzig(res)) throw new Error(res.fout || 'toegangsdeur toevoegen mislukt');
+        const z = K.zetRuimte(S.rec.opname, r.id, { toegangsdeur: res.id }); if (!X.wijzig(z)) throw new Error(z.fout || 'toegangsdeur instellen mislukt');
+      }
+      return id;
+    };
     const vervang = async f => {
-      await X.opslaanFoto(f, { wand: huidig });
+      let wand = huidig;
+      if (nieuw) wand = maakWand();
+      try { await X.opslaanFoto(f, { wand }); } catch (e) { if (nieuw) { const w = K.verwijderLaatsteWand(S.rec.opname, r.id); if (w.opname) X.wijzig(w); } throw e; }
       if (rec) X.wijzig(K.verwijderFoto(S.rec.opname, rec.id));
-      S.fotoWand = null; X.teken();
+      S.fotoWand = nieuw ? 'nieuw' : (rond ? wand : 'nieuw'); X.teken();
     };
     body.appendChild(X.fotoKnop(rec ? 'Opnieuw fotograferen' : 'Foto maken', vervang, { klasse: 'opn-btn opn-btn-groot ' + (rec ? 'opn-btn-licht' : 'opn-btn-primair') }));
     body.appendChild(X.fotoKnop('Of kies een foto uit de galerij', vervang, { galerij: true, klasse: 'opn-btn opn-btn-licht' }));
-    // overzicht van de vier wanden
-    const rij = h('div', { class: 'opn-wandrij' });
-    for (const w of wanden) {
-      const fr = X.wandFotoRec(w);
-      rij.appendChild(h('button', { type: 'button', class: 'opn-wandtegel' + (w === huidig ? ' is-actief' : '') + (fr ? ' is-klaar' : ''), onclick: () => { S.fotoWand = w; X.teken(); } },
-        h('span', { class: 'opn-wandtegel-naam', text: K.wandNaam(w) }), h('span', { class: 'opn-wandtegel-staat', text: fr ? 'foto ✓' : 'nog niet' })));
+    // de hoek met de vorige wand
+    if (!rond && nr >= 2) body.appendChild(X.hoekRij(wanden[nr - 2], { kop: nieuw && wanden.length >= 3 ? 'Hoek na wand ' + (nr - 1) + ' (naar wand ' + nr + ', of terug naar wand 1)' : 'Hoek tussen wand ' + (nr - 1) + ' en wand ' + nr }));
+    body.appendChild(X.planBlok(r, { titel: 'Plattegrond (groeit met elke foto)', opWand: w => { S.fotoWand = w; X.teken(); } }));
+    // overzicht van de wanden tot nu toe
+    if (wanden.length) {
+      const rij = h('div', { class: 'opn-wandrij' });
+      for (const w of wanden) {
+        const fr = X.wandFotoRec(w);
+        rij.appendChild(h('button', { type: 'button', class: 'opn-wandtegel' + (w === huidig ? ' is-actief' : '') + (fr ? ' is-klaar' : ''), onclick: () => { S.fotoWand = w; X.teken(); } },
+          h('span', { class: 'opn-wandtegel-naam', text: K.wandNaam(w) }), h('span', { class: 'opn-wandtegel-staat', text: fr ? 'foto ✓' : 'nog niet' })));
+      }
+      if (!rond) rij.appendChild(h('button', { type: 'button', class: 'opn-wandtegel opn-wandtegel-plus' + (nieuw ? ' is-actief' : ''), 'aria-label': 'Volgende wand', onclick: () => { S.fotoWand = 'nieuw'; X.teken(); } }, h('span', { class: 'opn-wandtegel-naam', text: '+' }), h('span', { class: 'opn-wandtegel-staat', text: 'volgende' })));
+      body.appendChild(rij);
     }
-    body.appendChild(rij);
-    const klaar = zonder.length === 0;
-    body.appendChild(h('button', { type: 'button', class: 'opn-btn opn-btn-groot ' + (klaar ? 'opn-btn-primair' : 'opn-btn-licht'), text: klaar ? 'Klaar, naar het draadmodel' : 'Verder zonder alle foto\'s (' + zonder.length + ' mist)', onclick: () => { S.fotoWand = null; X.ga('model'); } }));
-    if (!klaar) body.appendChild(h('p', { class: 'opn-hint', text: 'Zonder foto van een werkzone-wand kun je later niet vrijgeven. Opslaan kan altijd.' }));
+    if (!rond) {
+      const kanRond = wanden.length >= 3;
+      if (kanRond && !nieuw) body.appendChild(X.hoekRij(wanden[wanden.length - 1], { kop: 'Hoek tussen wand ' + wanden.length + ' en wand 1 (terug bij het begin)' }));
+      body.appendChild(h('button', { type: 'button', class: 'opn-btn opn-btn-groot ' + (kanRond && !laatsteZonder ? 'opn-btn-primair' : 'opn-btn-licht'), disabled: !kanRond, text: 'Kamer rond: ik ben terug bij wand 1', onclick: () => { if (X.wijzig(K.maakRond(S.rec.opname, r.id))) { S.fotoWand = null; S.werkzoneKiezen = !lijst(X.ruimte().werkzone).length; X.ga('model'); } } }));
+      if (!kanRond) body.appendChild(h('p', { class: 'opn-hint', text: 'Een kamer heeft minstens drie wanden. Maak eerst alle foto\'s en kies dan "kamer rond".' }));
+      else if (laatsteZonder) body.appendChild(h('p', { class: 'opn-hint', text: 'Van wand ' + wanden.length + ' is nog geen foto. Zonder foto van een werkzone-wand kun je later niet vrijgeven.' }));
+      const weg = h('button', { type: 'button', class: 'opn-link', text: 'Laatste wand weghalen', onclick: () => { const res = K.verwijderLaatsteWand(S.rec.opname, r.id); if (X.wijzig(res)) { X.toast('Wand ' + wanden.length + ' is weggehaald (bewaard in het archief).'); S.fotoWand = null; X.teken(); } } });
+      if (wanden.length) body.appendChild(h('div', { class: 'opn-onderrij' }, weg));
+    } else {
+      body.appendChild(h('button', { type: 'button', class: 'opn-btn opn-btn-groot opn-btn-primair', text: 'Klaar, naar het draadmodel', onclick: () => { S.fotoWand = null; X.ga('model'); } }));
+      body.appendChild(h('div', { class: 'opn-onderrij' }, h('button', { type: 'button', class: 'opn-link', text: 'De ronde weer openen (om een wand toe te voegen)', onclick: () => { if (X.wijzig(K.openRond(S.rec.opname, r.id))) { S.fotoWand = 'nieuw'; X.teken(); } } })));
+    }
     c.appendChild(body);
   };
 
@@ -312,7 +402,7 @@
     body.appendChild(h('p', { class: 'opn-hint', text: 'Loop de werkzone-wanden na op wat je gemist kunt hebben. Kies per punt: aanwezig en vastgelegd, niet aanwezig, of later meten. Niets kiezen blijft "nog niet bekeken".' }));
     const tel = (w, cat) => {
       const dezeCat = Object.keys(K.OBJECTTYPES).filter(t => K.OBJECTTYPES[t].cat === cat);
-      const o = lijst(r.objecten).filter(x => x.wand === w && dezeCat.includes(x.type)).length + (cat === 'kozijn' ? lijst(r.openingen).filter(x => x.wand === w).length : 0) + (cat === 'afw' ? lijst(r.bijzonderheden).filter(x => x.wand === w).length : 0);
+      const o = lijst(r.objecten).filter(x => x.wand === w && dezeCat.includes(x.type)).length + (cat === 'kozijn' ? lijst(r.openingen).filter(x => x.wand === w).length : 0) + (cat === 'afw' ? lijst(r.bijzonderheden).filter(x => x.wand === w).length + lijst(r.uitsprongen).filter(x => x.wand === w).length : 0);
       return o ? o + ' vastgelegd' : 'niets vastgelegd';
     };
     for (const w of rd.wanden) {
@@ -340,6 +430,8 @@
       tegel('Rondje', rd.bekeken + ' van ' + rd.tot, rd.later ? rd.later + ' later' : ''),
       tegel('Optioneel', t.optie.compleet + ' van ' + t.optie.n, 'mag leeg')));
     body.appendChild(h('div', { class: 'opn-statusregel' }, h('span', { class: 'opn-pil opn-pil-' + st, text: X.statusTekst(S.rec) }), st === 'vrijgave-vervallen' ? h('span', { class: 'opn-rij-sub', text: 'er is na het vrijgeven iets gewijzigd' }) : null));
+    body.appendChild(X.planBlok(r, { titel: 'Plattegrond', opWand: w => X.openWand(w, null) }));
+    body.appendChild(sluitKaart(r));
     // wat moet er nog voor vrijgeven (elke regel is tikbaar)
     const reden = h('div', { class: 'opn-kaart' }, h('div', { class: 'opn-kaart-titel', text: chk.kan ? 'Alles op orde voor vrijgeven' : 'Nog nodig om vrij te geven (' + chk.redenen.length + ')' }));
     for (const rd2 of chk.redenen) reden.appendChild(h('button', { type: 'button', class: 'opn-lijstrij', onclick: () => naarReden(rd2) }, h('span', { text: hoofdletter(rd2.tekst.replace(r.naam + ' - ', '').replace(r.naam + ': ', '')) }), h('span', { class: 'opn-pijl', text: '›' })));
@@ -372,9 +464,20 @@
     c.appendChild(body);
   };
   const hoofdletter = t => t ? t.charAt(0).toUpperCase() + t.slice(1) : t;
-  function vormTekst(v) { return v.schematisch ? 'schematisch (nog niet bepaald of niet gecontroleerd)' : v.afwijkend ? 'bepaald, niet rechthoekig' : 'bepaald en gecontroleerd'; }
+  function vormTekst(v) { return v.schematisch ? (v.veelhoek ? 'schematisch (hoeken aangenomen 90 of 270 graden)' : 'schematisch (nog niet bepaald of niet gecontroleerd)') : v.veelhoek ? 'bepaald en gecontroleerd met een diagonaal' : v.afwijkend ? 'bepaald, niet rechthoekig' : 'bepaald en gecontroleerd'; }
+  // De sluitcontrole in woorden: sluit de rondgang langs de wanden, wat is aangenomen en wat is gecontroleerd. Nooit stil haaks.
+  function sluitKaart(r) {
+    const sc = K.sluitcontrole(r), v = sc.vorm, plat = K.plattegrond(r), kaart = h('div', { class: 'opn-kaart opn-sluitkaart' }, h('div', { class: 'opn-kaart-titel', text: 'Vorm en sluitcontrole' }));
+    const pil = v.status === 'inconsistent' ? ['Meetgegevens inconsistent', 'conflict'] : v.status === 'consistent' ? [v.afwijkend ? 'Gecontroleerd, niet rechthoekig' : 'Gecontroleerd', 'ok'] : v.status === 'onverifieerd' ? ['Schematisch', 'later'] : ['Onvoldoende bepaald', 'later'];
+    kaart.appendChild(h('div', { class: 'opn-statusregel' }, h('span', { class: 'opn-pil opn-pil-' + pil[1], text: pil[0] }), v.sluitfout ? h('span', { class: 'opn-rij-sub', text: 'sluitfout ' + v.sluitfout.mm + ' mm' }) : null));
+    kaart.appendChild(h('p', { text: v.reden || 'De wanden sluiten op elkaar.' }));
+    kaart.appendChild(h('p', { class: 'opn-hint', text: 'Hoeken: ' + K.wandIds(r).map((w, i) => { const hk = K.hoekVan(r, w); return (i + 1) + ' naar ' + (i + 2 > K.wandIds(r).length ? 1 : i + 2) + ': ' + hk.graden + '°' + (hk.bron === 'aanname' ? ' (aanname)' : hk.bron === 'gemeten' ? ' (gemeten)' : ' (schatting)'); }).join(' · ') }));
+    return kaart;
+  }
   function naarReden(rd) {
     if (rd.code === 'foto') { S.fotoWand = rd.wand; X.ga('fotos'); return; }
+    if (rd.code === 'ronde' || rd.code === 'wanden') { S.fotoWand = null; X.ga('fotos'); return; }
+    if (rd.code === 'werkzone') { S.werkzoneKiezen = true; X.ga('model'); return; }
     if (rd.code === 'rondje' || rd.code === 'rondje-later') { X.ga('rondje'); return; }
     if (rd.code === 'definitie') { const id = (rd.pad || '').split('.')[1], op = lijst(X.ruimte().openingen).find(x => x.id === id); if (op) { X.openWand(op.wand, null, id); return; } }
     if (rd.code === 'open' || rd.code === 'later') { const rt = X.route(), st = lijst(rt.stappen).find(s => !s.optioneel && (rd.code === 'later' ? s.staat === 'later' : !s.afgehandeld) && s.type !== 'rondje'); if (st) { X.naarStap(st); return; } }

@@ -100,3 +100,40 @@ Basis: 4 wandlengtes + plafond + diagonaal A (6) + breedte en positie van 4 open
 3. Een maat onder 10 mm wordt geweigerd met de uitleg dat het geen millimeters lijkt (5,76 voor 5,76 m).
 4. De plint van de hele kamer geldt alleen voor de werkzone-wanden (daar vraagt de kern erom); op andere wanden gebeurt niets.
 5. Het record in IndexedDB bewaart de kern-opname en `layout` apart; een JSON-kopie bevat beide maar niet de foto's zelf.
+
+
+## Brok 3: de vorm uit de foto's (1-11-2026, Sonnet)
+
+Bart (1-11): "als je kamer een vorm heeft of een uitstekend stukje wand oid dan moet hij dat wel mee modeleren" en "de vorm moet aanpassen aan de hand van de fotos en dan verduidelijken in verhouding naarmate er meer informatie is". Dus geen sjabloon (rechthoek of L) bij de start: de vorm ontstaat uit de foto's en wordt steeds nauwkeuriger. Datamodel `docs/opname-json-v0.4.md`.
+
+**Gedaan**
+- **Fotoronde zonder vast aantal wanden.** De start vraagt alleen project, ruimtenaam en meubeltype (geen werkzone, geen toegangsdeur-wand). De eerste foto is de wand van de toegangsdeur (daar komt D1 op), dan met de klok mee tot "Kamer rond: ik ben terug bij wand 1" (minstens drie wanden). Geen N/O/Z/W meer voor nieuwe opnames: wanden heten Wand 1, Wand 2, ... De laatste wand weghalen kan (archief). De wand-tegels en de nummers op de plattegrond zijn tikbaar.
+- **Hoek tussen de foto's:** standaard 90 graden (een aanname, ook zo genoemd), met een tik 270 (hoek springt naar binnen, L-vorm) of schuin (eigen waarde: "schatting" of "gemeten"). Staat in de fotoronde (één rij per hoek), in het wandscherm (knop Hoek) en als lijst in het model.
+- **Vorm per wandfoto:** knop "Vorm van de wand": tik op de vloerlijn de knikken (minstens twee); elk stuk ertussen is recht (standaard), naar voren (uitsprong) of naar achteren (nis). Daaruit ontstaat een uitsprong/nis met breedte, positie en diepte (en hoogte in de werkzone). De positie op de wand volgt de homografie van de vier wandhoeken en wordt als verhouding opgeslagen (`foto-voorstel`); in mm pas zodra de wandlengte gemeten is. De diepte is een standaardschatting van 300 mm, ook als foto-voorstel. Alles blijft grijs tot het gemeten is; een gemeten maat is altijd leidend.
+- **Plattegrond (K.plattegrond) en 3D groeien mee:** gestippeld grijs = schatting, vast = gemeten; uitsprongen en nissen in blauw; werkzone groen. Gemeten wandlengte schaalt de geschatte uitsprong mee (verhouding maal gemeten lengte). Onbekende wandlengtes sluiten als schatting bij een ruimte met alleen haakse hoeken; de kern schrijft zo'n schatting nooit als maat weg. Een inconsistente meting wordt niet mooi gemaakt: de sluitfout blijft zichtbaar.
+- **Route en meten:** uitsprongen/nissen komen in de kern-route na de wandlengte en vóór de openingen, van links naar rechts (basis: breedte, positie, diepte; werkzone: ook hoogte). Een foto-voorstel staat als "Schatting uit de foto: 948 mm. Dit is geen meting." boven het invoerveld.
+- **Werkzone kiezen:** na "kamer rond" kies je de wand(en) door ze aan te tikken in het 3D-model of op de plattegrond (meerdere mag). Later wijzigen kan op het modelscherm.
+- **Sluitcontrole met N wanden:** vier wanden zonder inspringende hoek: de oude vierhoek-logica (4 zijden + 1 diagonaal, de tweede als controle). Andere vormen: rondgang met de binnenhoeken, sluitfout > 10 mm is "meetgegevens inconsistent" (blokkeert vrijgeven), daaronder "schematisch (hoeken aangenomen 90 of 270 graden)", nooit stil haaks; een diagonaal als controle is optioneel (`+ Diagonaal als controle`). Een schuine hoek die niet gemeten is maakt de vorm "onvoldoende bepaald". Afronden toont plattegrond, status, sluitfout en alle hoeken met hun herkomst.
+- **Vrijgave, hash en scope** werken met N wanden (getest met een L-vorm van zes wanden en een uitsprong, ook "vrijgave vervallen" na een hoek- of knikwijziging). Nieuwe blokkades: fotoronde niet rond, minder dan drie wanden.
+- **Migratie v0.3 naar v0.4, additief en zonder verlies.** De vaste wanden N/O/Z/W blijven met hun namen; er komen geen velden bij. De versie verschuift (oude waarde in `_versie_oud`) en de hash behandelt zo'n opname als de oorspronkelijke versie, zodat een bestaande vrijgave geldig blijft. Bewezen met een echte vrijgave uit de v0.3-kern (`test/fixtures/opname-v03-vrijgegeven.json`), en in de app: de oude opname opent in het model met "vrijgegeven".
+
+**Getest**
+- Node: kern 72 (de oude, ongewijzigd groen op drie versie-checks na), geo 22, vorm 30 (nieuw: wanden uit foto's, hoeken, knikken, uitsprong/nis, voorstel en meeschalen, plattegrond, sluitfout met N wanden, schuin, diagonaal, migratie, vrijgave met zes wanden), ui 6.
+- Headless Chrome op 390 px (Playwright) over `mobiel.html`: de hele flow van start tot vrijgeven met een L-kamer van zes wanden en een uitsprong, plus het openen van een oude v0.3-opname. 0 console-fouten. 51 schermafdrukken in `OPNAME-APP\BOUW\brok3-screens\`.
+- `check-sinks`, `check-verwijzingen`, UTF-8 en `laadtest` zonder EXC.
+
+**Bewust niet gedaan**
+- Geen beeldherkenning: knikken, hoeken en wandhoeken tikt de gebruiker. Geen diepteschatting uit de foto (de standaard is 300 mm, als schatting herkenbaar).
+- Een uitsprong in de hoek is geen tussenstuk: die maak je als eigen wand (volgende foto, hoek 90 of 270). Een schuin stuk in een wand idem: een eigen wand met een schuine hoek.
+- Schuine hoeken worden alleen bepaald bij vier wanden (de diagonaal legt de vierhoek vast) of als de hoek gemeten is. Bij meer wanden is een diagonaal alleen een controle, geen oplossing voor een geschatte hoek.
+- Een wand tussen bestaande wanden invoegen kan niet (alleen de laatste wand weg of een wand erbij na "ronde weer openen").
+- Niet getest op iOS (WebKit is hier niet geïnstalleerd) of op een echte Android-telefoon; wel op een Chrome-viewport van 390 px met aanraking. Knikken slepen kan niet, wel "laatste knik weg" en opnieuw.
+- Geen Codex-ronde (de bundelronde aan het eind: datamodel v0.4 en migratie zijn de kandidaten).
+
+**Keuzes ter bevestiging door Bart**
+1. **Een uitsprong is een stuk tussen twee knikken, niet in een hoek.** In een hoek maak je een eigen wand. Klopt dat met hoe jij naar een schoorsteen of pilaster kijkt?
+2. **De wanden van een nieuwe opname heten Wand 1, 2, ...** (geen kompas). De eerste wand is de wand van de toegangsdeur.
+3. **De standaarddiepte van een uitsprong is 300 mm**, grijs en als schatting.
+4. **Een geschatte hoek (schuin) maakt de vorm "onvoldoende bepaald"** bij elke vorm; dat blokkeert het vrijgeven niet maar staat bij de uitzonderingen.
+5. **De werkzone kies je na de fotoronde in het model,** niet meer bij de start.
+6. **Een inconsistente meting wordt in de tekening niet "mooi gemaakt"**: de sluitfout staat er als oranje streep. Kleine afwijkingen bij vier wanden zonder diagonaal (een paar mm) worden in de tekening wel gelijk verdeeld, zonder een maat te veranderen.

@@ -161,3 +161,14 @@
 @media (min-width:600px){.opn{max-width:560px;margin:0 auto;left:0;right:0;border-left:1px solid var(--o-line);border-right:1px solid var(--o-line)}}
 .opn-bijz-vorm{display:flex;flex-direction:column;gap:8px}
 .opn-bijz-vorm[hidden]{display:none}
+
+/* brok 3: vorm uit de foto's (plattegrondkaartje, hoeken, knikken, werkzone kiezen) */
+.opn-planblok .opn-plan{display:flex;justify-content:center;margin-top:6px}
+.opn-plankaart{width:100%;max-width:100%;height:auto;max-height:230px;background:var(--o-sunken);border-radius:8px}
+.opn-pil-ok{background:#e3f3e8;color:#1a6e3b}.opn-pil-conflict{background:#fbe3d6;color:#9a3d06}.opn-pil-later{background:#fcefd9;color:#7a4a05}
+.opn-hoekrij{margin-top:8px}.opn-hoeken summary{cursor:pointer;min-height:44px;display:flex;align-items:center}.opn-hoeken[open] summary{margin-bottom:4px}
+.opn-stukrij{margin-top:8px}
+.opn-wandtegel-plus{border-style:dashed}
+.opn-kies{border-color:var(--o-primary);box-shadow:0 0 0 2px var(--o-psoft)}
+.opn-schatting{font-size:13px;margin:6px 0}
+.opn-kies .opn-btn{margin-top:10px}

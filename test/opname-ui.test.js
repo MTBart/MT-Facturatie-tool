@@ -30,5 +30,6 @@ test('maat lezen: leeg, geen getal, meters en onmogelijk grote maten worden gewe
   assert.strictEqual(X.leesMm('100000').v, undefined);
 });
 test('millimeters tonen met een komma', () => { assert.strictEqual(X.mm(2447), '2447'); assert.strictEqual(X.mm(1234.5), '1234,5'); assert.strictEqual(X.mm(null), ''); });
-test('wandnamen voor de schermen', () => { assert.strictEqual(X.wandNaam('O'), 'Oostwand'); assert.strictEqual(X.wandNaam('Z'), 'Zuidwand'); });
+test('wandnamen voor de schermen', () => { assert.strictEqual(X.wandNaam('O'), 'Oostwand'); assert.strictEqual(X.wandNaam('Z'), 'Zuidwand'); assert.strictEqual(X.wandNaam('W3'), 'Wand 3'); assert.strictEqual(X.wandNaam('W'), 'Westwand'); });
+test('de nieuwe schermonderdelen bestaan', () => { for (const f of ['planKaart', 'planBlok', 'hoekRij']) assert.strictEqual(typeof X[f], 'function', f); });
 console.log('\n' + n + ' tests geslaagd');

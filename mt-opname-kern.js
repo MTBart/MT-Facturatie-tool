@@ -44,6 +44,7 @@
   const hoofd = t => t.charAt(0).toUpperCase() + t.slice(1);
   const wandNummer = w => { const m = /^W(\d+)$/.exec(String(w)); return m ? parseInt(m[1], 10) : null; };
   const wandKort = w => WAND_NAAM[w] || (wandNummer(w) ? 'wand ' + wandNummer(w) : String(w));              // "noord" of "wand 2": in lopende tekst, bijvoorbeeld na "wandlengte"
+  const wandMetWoord = w => WAND_NAAM[w] ? 'Wand ' + WAND_NAAM[w] : K.wandNaam(w);                                         // "Wand noord" of "Wand 2"
   const wandTekst = w => WAND_NAAM[w] ? WAND_NAAM[w] + 'wand' : wandNummer(w) ? 'wand ' + wandNummer(w) : String(w);      // "noordwand" of "wand 2"
   K.wandNaam = w => WAND_NAAM[w] ? hoofd(WAND_NAAM[w]) : wandNummer(w) ? 'Wand ' + wandNummer(w) : String(w);          // "Noord" of "Wand 2"
   K.wandLabel = w => WAND_NAAM[w] ? hoofd(WAND_NAAM[w]) + 'wand' : K.wandNaam(w);                                       // "Noordwand" of "Wand 2"
@@ -203,7 +204,7 @@
         for (const pl of ['links', 'midden', 'rechts']) slot('wanden.' + w + '.maten.plafond_' + pl, we, 'plafond_' + pl, 'werkzone', { soort: 'wandplafond', wand: w, kort: 'Plafondhoogte ' + wandKort(w) + ' ' + pl,
           vraag: 'Hoe hoog is het plafond ' + (pl === 'midden' ? 'in het midden van' : K.PLAFOND_UIT_HOEK + ' mm uit de ' + (pl === 'links' ? 'linker' : 'rechter') + 'hoek op') + ' de ' + wandTekst(w) + ' (kijkend naar de wand)?', uitleg: 'Afgewerkte vloer tot afgewerkt plafond, ' + (pl === 'midden' ? 'in het midden van de wand.' : 'op ' + K.PLAFOND_UIT_HOEK + ' mm van de ' + (pl === 'links' ? 'linker' : 'rechter') + 'hoek, gemeten langs de wand.'), kritiek: true });
       }
-      if (!inZone(w)) slot('wanden.' + w + '.maten.bevestiging', we, 'bevestiging', 'basis', { soort: 'wandbevestiging', wand: w, eenheid: 'keuze', keuzes: ['bekeken'], nvtKeuzes: ['afgedekt', 'niet-beoordeeld'], kort: 'Wand ' + wandKort(w) + ' bekeken',
+      if (!inZone(w)) slot('wanden.' + w + '.maten.bevestiging', we, 'bevestiging', 'basis', { soort: 'wandbevestiging', wand: w, eenheid: 'keuze', keuzes: ['bekeken'], nvtKeuzes: ['afgedekt', 'niet-beoordeeld'], kort: wandMetWoord(w) + ' bekeken',
         vraag: 'Is de ' + wandTekst(w) + ' helemaal bekeken, zonder relevante obstakels?', uitleg: 'Kies "bekeken" als de hele wand in beeld was en er niets zit dat het meubel raakt. Is de wand afgedekt of niet beoordeeld, kies dat dan: het komt zo in het rapport.' });
     }
     // basis: plafondhoogte op één punt (het eerste punt); verdere punten zijn extra
@@ -217,7 +218,8 @@
     // alleen de diagonalen die de opnemer zelf toevoegde (K.voegDiagonaalToe), als extra controle van de vorm.
     const hoeken = ids.map(w => wandHoeken(r, w)[0]), diagonalen = [];
     if (ids.length === 4) [['A', 0, 2, 'basis'], ['B', 1, 3, 'optie']].forEach(([id, i, j, bucket]) => diagonalen.push([id, tijdelijk(r.diagonalen, id, { van: hoeken[i], naar: hoeken[j] }), bucket]));
-    for (const d of lijst(r.diagonalen)) if (d && d.id && !(ids.length === 4 && (d.id === 'A' || d.id === 'B')) && hoeken.includes(d.van) && hoeken.includes(d.naar)) diagonalen.push([d.id, d, 'optie']);
+    // een A of B uit de tijd dat er vier wanden waren, zonder meting, is niets meer waard bij een andere vorm: die vraag komt niet terug
+    for (const d of lijst(r.diagonalen)) if (d && d.id && !(ids.length === 4 && (d.id === 'A' || d.id === 'B')) && hoeken.includes(d.van) && hoeken.includes(d.naar) && !((d.id === 'A' || d.id === 'B') && !isObj(maatOp(d, 'lengte')))) diagonalen.push([d.id, d, 'optie']);
     for (const [id, d, bucket] of diagonalen) {
       slot('diagonalen.' + id + '.maten.lengte', d, 'lengte', bucket, { soort: 'diagonaal', groep: 'ruimte', kort: 'Diagonaal ' + id,
         vraag: 'Hoe lang is de diagonaal van de ' + hoekTekst(d.van) + ' naar de ' + hoekTekst(d.naar) + '?', uitleg: 'Hoek tot hoek op 1000 mm boven de vloer, afgewerkt.', kritiek: true });
@@ -434,11 +436,11 @@
   // Geeft { n, rond, punten (hoek-id naar [x, y] in mm), wanden (id naar { a, b, lengte, gemeten, geschat, hoek }), uitsprongen[], contour[] (segmenten langs de rand), schatting, sluitfout, vorm, bbox }.
   // Het coordinatenstelsel: de eerste wand loopt langs de x-as, y wijst omlaag, de ruimte ligt rechts van de looprichting (met de klok mee).
   const afstandPt = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
-  function schatLengtes(ids, info, gem, rond) {
+  function schatLengtes(ids, info, gem, rond, vorm) {
     const n = ids.length, bekend = gem.filter(x => x != null), gemiddeld = bekend.length ? bekend.reduce((s, x) => s + x, 0) / bekend.length : null;
     const std = i => gem[i] != null ? gem[i] : (n % 2 === 0 && gem[(i + n / 2) % n] != null) ? gem[(i + n / 2) % n] : gemiddeld != null ? gemiddeld : (i % 2 === 0 ? 4000 : 3000);
     const L = ids.map((w, i) => std(i)), geschat = gem.map(x => x == null);
-    if (!rond || !info.every(i => i.haaks)) return { L, geschat, gesloten: false };
+    if (!rond || !info.every(i => i.haaks) || (vorm && vorm.status === 'inconsistent')) return { L, geschat, gesloten: false };          // een inconsistente meting wordt niet mooi gemaakt: de sluitfout blijft zichtbaar
     // Alle wanden gemeten maar de rondgang sluit niet precies (en er is geen diagonaal die de vorm vastlegt): voor de tekening de fout gelijk verdelen over de wanden op dezelfde as, als de fout klein is.
     // Dat verandert geen maat; het is alleen de getekende schatting.
     const alles = !geschat.some(Boolean);
@@ -466,7 +468,7 @@
     if (rond && vorm.hoekpunten_mm && vorm.status !== 'inconsistent' && hoekIds.every(h => vorm.hoekpunten_mm[h])) {
       pts = hoekIds.map(h => vorm.hoekpunten_mm[h]); pts.push(pts[0]); vormGeschat = vorm.status !== 'consistent';
     } else {
-      const sl = schatLengtes(ids, info, gem, rond); geschat = sl.geschat;
+      const sl = schatLengtes(ids, info, gem, rond, vorm); geschat = sl.geschat;
       pts = rondgang(sl.L, info.map(i => i.graden));
     }
     const gesloten = rond && afstandPt(pts[0], pts[n]) <= T.sluit + 0.5;
@@ -542,7 +544,7 @@
       const hoogtes = [['onder', 'lengte_onder'], ['1000 mm', 'lengte'], ['boven', 'lengte_boven']].map(([n, k]) => [n, K.waarde(maatOp(vind(r.wanden, wd), k))]).filter(x => x[1] != null);
       if (hoogtes.length < 2) continue;
       const waarden = hoogtes.map(x => x[1]), verschil = Math.max.apply(null, waarden) - Math.min.apply(null, waarden);
-      if (verschil > K.TOLERANTIE.wand_scheef) w.push({ code: 'wand-scheef', pad: 'wanden.' + wd, wand: wd, verschil_mm: verschil, tekst: 'Wand ' + wandKort(wd) + ' niet te lood of scheef: de lengte verschilt ' + verschil + ' mm tussen ' + hoogtes.map(x => x[0] + ' ' + x[1] + ' mm').join(', ') + '. Informatie voor het meubel, geen blokkade.' });
+      if (verschil > K.TOLERANTIE.wand_scheef) w.push({ code: 'wand-scheef', pad: 'wanden.' + wd, wand: wd, verschil_mm: verschil, tekst: wandMetWoord(wd) + ' niet te lood of scheef: de lengte verschilt ' + verschil + ' mm tussen ' + hoogtes.map(x => x[0] + ' ' + x[1] + ' mm').join(', ') + '. Informatie voor het meubel, geen blokkade.' });
     }
     // uitsprongen en nissen: binnen de wand en niet over elkaar (met de bekende waarden: gemeten, anders het voorstel uit de foto)
     for (const wd of wandIds(r)) {
@@ -574,7 +576,7 @@
     for (const v of K.vragen(r)) {
       if (v.staat !== 'nvt' || v.bucket === 'optie') continue;
       const m = v.maat || {};
-      if (v.soort === 'wandbevestiging') u.push({ ruimte: nm, soort: 'wand-niet-beoordeeld', wand: v.wand, pad: v.pad, tekst: 'Wand ' + wandKort(v.wand) + ': ' + (m.keuze === 'afgedekt' ? 'afgedekt' : 'niet beoordeeld'), notitie: m.notitie || '' });
+      if (v.soort === 'wandbevestiging') u.push({ ruimte: nm, soort: 'wand-niet-beoordeeld', wand: v.wand, pad: v.pad, tekst: wandMetWoord(v.wand) + ': ' + (m.keuze === 'afgedekt' ? 'afgedekt' : 'niet beoordeeld'), notitie: m.notitie || '' });
       else u.push({ ruimte: nm, soort: 'nvt', wand: v.wand, pad: v.pad, tekst: v.kort + ': niet van toepassing, bewust niet maatvast', notitie: m.notitie || '' });
     }
     for (const b of lijst(r.bijzonderheden)) {

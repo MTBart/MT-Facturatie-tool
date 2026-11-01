@@ -59,6 +59,7 @@ Afgeleid, niet opgeslagen. Geeft de hoekpunten in mm (x naar rechts, y omlaag, e
   - Zet een rondgang de ruimte niet netjes met de klok mee, of kruisen wanden elkaar: `inconsistent`.
 - **Schuin**: een hoek die niet 90 of 270 is en niet `gemeten` is, maakt de vorm **onvoldoende bepaald**, ook bij vier wanden zonder diagonaal. Bij vier wanden bepaalt een gemeten diagonaal de hoeken zelf.
 - Zolang `rond: false` is de vorm altijd `onvoldoende-bepaald`.
+- **Diagonalen A en B** bestaan alleen bij precies vier wanden (A van de eerste naar de derde hoek, B van de tweede naar de vierde). Komt er een wand bij, dan verdwijnt een A of B zonder meting uit de vragen; een gemeten diagonaal blijft als optionele controle staan.
 
 ### Vrijgeven, hash en scope
 

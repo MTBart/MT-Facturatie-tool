@@ -165,7 +165,7 @@
   }
   function pasPlintToe(n) {
     const rid = X.ruimte().id, oud = (S.rec.instellingen && S.rec.instellingen.plint) || {};
-    for (const w of K.WANDEN.filter(x => lijst(X.ruimte().werkzone).includes(x))) {
+    for (const w of K.wandIds(X.ruimte()).filter(x => lijst(X.ruimte().werkzone).includes(x))) {
       let pl = lijst(X.ruimte().objecten).find(x => x.type === 'plint' && x.wand === w);
       if (!pl) { const res = K.voegObjectToe(S.rec.opname, rid, { type: 'plint', wand: w }); if (!X.wijzig(res)) return; pl = { id: res.id }; }
       const huidig = lijst(X.ruimte().objecten).find(x => x.id === pl.id) || pl;
@@ -195,27 +195,38 @@
 
   // ════════════════════════ Scherm: het draadmodel ════════════════════════
   const VB = { w: 390, h: 340 };
+  // Werkzone: de wand(en) waar het meubel komt; aantikken in het model of op de plattegrond (meerdere mag)
+  function zetWerkzone(w) {
+    const r = X.ruimte(), nu = lijst(r.werkzone), nieuw = nu.includes(w) ? nu.filter(x => x !== w) : nu.concat([w]);
+    if (X.wijzig(K.zetRuimte(S.rec.opname, r.id, { werkzone: nieuw }))) X.teken();
+  }
   SCHERMEN.model = function (c) {
-    const r = X.ruimte(), rt = X.route(), vg = X.voortgang(), vm = vragenMap(), kamer = G.kamer(r), lay = S.rec.layout && S.rec.layout[r.id] || {};
+    const r = X.ruimte(), rt = X.route(), vg = X.voortgang(), vm = vragenMap(), kamer = G.kamer(r), lay = S.rec.layout && S.rec.layout[r.id] || {}, ids = kamer.volgorde, kiezen = !!S.werkzoneKiezen, zone = lijst(r.werkzone);
     c.appendChild(X.kop(r.naam, vg.klaar + ' van ' + vg.n + ' maten gemeten', { terugLabel: 'Naar de lijst', rechts: h('button', { type: 'button', class: 'opn-kopknop', onclick: () => X.ga('afronden') }, 'Afronden') }));
     const body = h('div', { class: 'opn-body opn-body-model' });
     body.appendChild(h('div', { class: 'opn-voortgang', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': String(vg.n), 'aria-valuenow': String(vg.klaar) }, h('span', { style: { width: vg.pct + '%' } })));
     const uitleg = [];
     if (kamer.vormStatus === 'inconsistent') uitleg.push('De metingen sluiten niet op elkaar (zie Afronden): de vorm blijft een schatting.');
-    else if (kamer.vormStatus === 'onverifieerd') uitleg.push('De vorm volgt uit vier wanden en een diagonaal. Een tweede diagonaal als controle is optioneel; tot dan blijft de vorm gestippeld.');
-    else if (kamer.vormGeschat) uitleg.push('Gestippeld is een schatting: de vorm klopt pas als de vier wanden en een diagonaal gemeten zijn.');
+    else if (kamer.vormStatus === 'onverifieerd') uitleg.push(ids.length === 4 ? 'De vorm volgt uit vier wanden en een diagonaal. Een tweede diagonaal als controle is optioneel; tot dan blijft de vorm gestippeld.' : 'De wanden sluiten, maar de hoeken zijn aangenomen als 90 of 270 graden. Een diagonaal als controle is optioneel; tot dan blijft de vorm gestippeld.');
+    else if (kamer.vormGeschat) uitleg.push(ids.length === 4 ? 'Gestippeld is een schatting: de vorm klopt pas als de vier wanden en een diagonaal gemeten zijn.' : 'Gestippeld is een schatting: de vorm wordt vast naarmate je de wanden meet.');
     if (kamer.hoogteGeschat) uitleg.push('De hoogte is nog een schatting: meet het plafond.');
     if (uitleg.length) body.appendChild(h('p', { class: 'opn-schatting', text: uitleg.join(' ') }));
-    const modellen = {}; for (const w of K.WANDEN) modellen[w] = G.wandModel(r, w, kamer, lay[w]);
-    const status = {}; for (const w of K.WANDEN) { const st = rt.stappen.filter(s => s.wand === w && !s.optioneel && s.type !== 'foto' && s.type !== 'rondje'); status[w] = { n: st.length, klaar: st.filter(s => s.afgehandeld).length, open: st.filter(s => !s.afgehandeld).length, later: st.filter(s => s.staat === 'later').length }; }
-    const svg = sv('svg', { viewBox: '0 0 ' + VB.w + ' ' + VB.h, class: 'opn-model-svg', role: 'group', 'aria-label': 'Draadmodel van de ruimte. Sleep om te draaien, tik op een wand om te meten.' });
-    const teken = () => tekenModel(svg, { r, rt, vm, kamer, modellen, status });
+    const modellen = {}; for (const w of ids) modellen[w] = G.wandModel(r, w, kamer, lay[w]);
+    const status = {}; for (const w of ids) { const st = rt.stappen.filter(s => s.wand === w && !s.optioneel && s.type !== 'foto' && s.type !== 'rondje'); status[w] = { n: st.length, klaar: st.filter(s => s.afgehandeld).length, open: st.filter(s => !s.afgehandeld).length, later: st.filter(s => s.staat === 'later').length }; }
+    // werkzone kiezen: de uitnodiging staat bovenaan, zodat het meubel eerst een plek krijgt
+    if (kiezen) body.appendChild(h('div', { class: 'opn-kaart opn-kies' }, h('div', { class: 'opn-kaart-titel', text: 'Waar komt het meubel?' }),
+      h('p', { text: 'Tik de wand(en) aan waar het meubel komt, in het model of op de plattegrond. Meerdere mag. Daar vraagt de app alle maten; de andere wanden alleen het nodige voor de plattegrond.' }),
+      h('button', { type: 'button', class: 'opn-btn opn-btn-groot opn-btn-primair', disabled: !zone.length, text: zone.length ? 'Klaar: ' + zone.map(w => K.wandNaam(w).toLowerCase()).join(', ') : 'Kies minstens één wand', onclick: () => { S.werkzoneKiezen = false; X.teken(); } })));
+    const svg = sv('svg', { viewBox: '0 0 ' + VB.w + ' ' + VB.h, class: 'opn-model-svg', role: 'group', 'aria-label': 'Draadmodel van de ruimte. Sleep om te draaien, tik op een wand om ' + (kiezen ? 'de werkzone te kiezen.' : 'te meten.') });
+    const teken = () => tekenModel(svg, { r, rt, vm, kamer, modellen, status, kiezen });
     teken();
     koppelDraaien(svg, teken);
     body.appendChild(h('div', { class: 'opn-model-vak' }, svg,
       h('button', { type: 'button', class: 'opn-reset', 'aria-label': 'Weer recht zetten', onclick: () => { S.cam = { yaw: -28, pitch: 30 }; teken(); } }, '↺')));
     body.appendChild(h('div', { class: 'opn-legenda' },
-      leg(COL.rood, 'nog te meten'), leg(COL.donker, 'gemeten'), leg(COL.oranje, 'later'), leg(COL.accent, 'werkzone'), h('span', { class: 'opn-leg opn-leg-st', text: 'gestippeld = schatting' })));
+      leg(COL.rood, 'nog te meten'), leg(COL.donker, 'gemeten'), leg(COL.oranje, 'later'), leg(COL.accent, 'werkzone'), leg(COL.blauw, 'uitsprong of nis'), h('span', { class: 'opn-leg opn-leg-st', text: 'gestippeld = schatting' })));
+    body.appendChild(X.planBlok(r, { titel: kiezen ? 'Tik de wanden voor het meubel' : 'Plattegrond', opWand: kiezen ? zetWerkzone : (w => X.openWand(w, null)), kies: kiezen }));
+    if (kiezen) { c.appendChild(body); return; }
     // onderdeel: volgende, ruimte-maten, plint
     const actief = S.modelStap && lijst(rt.stappen).find(s => s.id === S.modelStap);
     if (actief) {
@@ -231,13 +242,23 @@
         vlg ? h('div', null, h('div', { class: 'opn-label', text: 'Volgende vraag · ' + vlg.stap }), h('div', { class: 'opn-vraag', text: (vlg.wand ? X.wandNaam(vlg.wand) + ': ' : '') + vlg.label }),
           h('button', { type: 'button', class: 'opn-btn opn-btn-groot opn-btn-primair', onclick: () => X.naarStap(vlg) }, 'Verder meten →'))
           : h('div', null, h('div', { class: 'opn-vraag', text: 'Alles is gemeten of uitgesteld.' }), h('button', { type: 'button', class: 'opn-btn opn-btn-groot opn-btn-primair', onclick: () => X.ga('afronden') }, 'Naar afronden'))));
+      // de werkzone
+      body.appendChild(h('div', { class: 'opn-kaart opn-plintkaart' },
+        h('div', null, h('div', { class: 'opn-kaart-titel', text: 'Werkzone' }), h('div', { class: 'opn-rij-sub', text: zone.length ? zone.map(w => K.wandNaam(w).toLowerCase()).join(', ') : 'Nog niet gekozen: tik de wand(en) waar het meubel komt' })),
+        h('button', { type: 'button', class: 'opn-btn opn-btn-klein', text: zone.length ? 'Wijzigen' : 'Kiezen', onclick: () => { S.werkzoneKiezen = true; X.teken(); } })));
       // ruimte-maten
       const rm = h('div', { class: 'opn-kaart' }, h('div', { class: 'opn-kaart-titel', text: 'Hele ruimte' }), h('div', { class: 'opn-chips' }));
       for (const st of lijst(rt.stappen).filter(s => !s.wand && s.type !== 'foto' && s.type !== 'rondje')) {
         const m = vm.get(st.pad), tekst = st.label + (st.staat === 'gemeten' && m && m.maat ? ' · ' + X.mm(m.maat.waarde) : st.optioneel ? ' (optioneel)' : '');
         rm.lastChild.appendChild(h('button', { type: 'button', class: 'opn-chip opn-chip-st-' + st.staat, onclick: () => { S.modelStap = st.id; X.teken(); } }, h('span', { class: 'opn-stip', style: { background: kleurVan(st.staat, st.conflict, st.optioneel) } }), tekst));
       }
+      if (ids.length !== 4) rm.lastChild.appendChild(h('button', { type: 'button', class: 'opn-chip', onclick: diagonaalBlad }, '+ Diagonaal als controle'));
       body.appendChild(rm);
+      // hoeken van de kamer: standaard 90 graden (een aanname)
+      body.appendChild(h('details', { class: 'opn-kaart opn-hoeken', open: S.hoekenOpen ? true : null, ontoggle: ev => { S.hoekenOpen = ev.target.open; } },
+        h('summary', { class: 'opn-kaart-titel', text: 'Hoeken van de kamer' }),
+        h('p', { class: 'opn-hint', text: 'Standaard 90 graden, een aanname. Staat een hoek naar binnen (L-vorm) of schuin, pas hem hier aan.' }),
+        ...ids.map(w => X.hoekRij(w))));
       // plint
       const pl = S.rec.instellingen && S.rec.instellingen.plint;
       body.appendChild(h('div', { class: 'opn-kaart opn-plintkaart' },
@@ -247,46 +268,71 @@
     }
     c.appendChild(body);
   };
+  // Een diagonaal als controle van de vorm (bij een andere vorm dan vier wanden is hij optioneel): kies twee hoeken
+  function diagonaalBlad() {
+    const r = X.ruimte(), hoeken = K.wandIds(r).map(w => K.wandHoeken(r, w)[0]), gekozen = [];
+    const rij = h('div', { class: 'opn-chips' });
+    const bouw = () => { X.leeg(rij); for (const hk of hoeken) rij.appendChild(h('button', { type: 'button', class: 'opn-chip' + (gekozen.includes(hk) ? ' is-aan' : ''), 'aria-pressed': gekozen.includes(hk) ? 'true' : 'false', onclick: () => { const i = gekozen.indexOf(hk); if (i >= 0) gekozen.splice(i, 1); else if (gekozen.length < 2) gekozen.push(hk); bouw(); knop.disabled = gekozen.length !== 2; } }, K.hoekTekst(hk))); };
+    const knop = h('button', { type: 'button', class: 'opn-btn opn-btn-groot opn-btn-primair', disabled: true, text: 'Diagonaal toevoegen', onclick: () => { const res = K.voegDiagonaalToe(S.rec.opname, r.id, gekozen[0], gekozen[1]); if (X.wijzig(res)) { X.sluitBlad(); S.modelStap = 'maat:diagonalen.' + res.id + '.maten.lengte'; X.teken(); } } });
+    bouw();
+    X.blad('Diagonaal als controle', [h('p', { class: 'opn-hint', text: 'Meet de diagonaal tussen twee hoeken (op 1000 mm boven de vloer). Klopt hij met de vorm, dan is de plattegrond gecontroleerd. Optioneel.' }), rij, knop]);
+  }
   const leg = (kl, t) => h('span', { class: 'opn-leg' }, h('span', { class: 'opn-stip', style: { background: kl } }), t);
 
   function tekenModel(svg, d) {
     X.leeg(svg);
-    const { r, rt, vm, kamer, modellen, status } = d, cam = G.camera(kamer, S.cam.yaw, S.cam.pitch), sc = Math.min(VB.w, VB.h) / 2.2, cx = VB.w / 2, cy = VB.h / 2 + 4;
+    const { r, rt, vm, kamer, modellen, status, kiezen } = d, ids = kamer.volgorde, cam = G.camera(kamer, S.cam.yaw, S.cam.pitch), sc = Math.min(VB.w, VB.h) / 2.2, cx = VB.w / 2, cy = VB.h / 2 + 4;
     const P = p3 => { const q = G.projecteer(cam, p3); return [cx + q.x * sc, cy + q.y * sc, q.d]; };
     const pt = a => a.map(q => q[0].toFixed(1) + ',' + q[1].toFixed(1)).join(' ');
     const achter = G.achterwanden(kamer, cam), zone = lijst(r.werkzone), hoog = kamer.hoogte;
     const lijnL = (a, b, kl, w, dash, extra) => sv('line', Object.assign({ x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: kl, 'stroke-width': w, 'stroke-linecap': 'round', 'stroke-dasharray': dash || null, 'vector-effect': 'non-scaling-stroke', 'pointer-events': 'none' }, extra || {}));
     const stat = pad => { const v = vm.get(pad); return v ? v : null; };
-    const stapVan = pad => lijst(rt.stappen).find(s => s.pad === pad) || null;
     const actiefPad = S.modelStap ? (lijst(rt.stappen).find(s => s.id === S.modelStap) || {}).pad : null;
+    const xs = Object.keys(kamer.punten).map(k => kamer.punten[k]), mx = (Math.min.apply(null, xs.map(p => p[0])) + Math.max.apply(null, xs.map(p => p[0]))) / 2, my = (Math.min.apply(null, xs.map(p => p[1])) + Math.max.apply(null, xs.map(p => p[1]))) / 2;
+    const open = (w, doe) => klik(() => { if (kiezen) zetWerkzone(w); else doe(); });
     // vlakken van de wanden (aantikbaar bij de achterwanden)
-    for (const w of K.WANDEN) {
+    for (const w of ids) {
       const a = kamer.wanden[w], A = P([a.a[0], a.a[1], 0]), B = P([a.b[0], a.b[1], 0]), B2 = P([a.b[0], a.b[1], hoog]), A2 = P([a.a[0], a.a[1], hoog]);
       const werk = zone.includes(w), isAchter = achter.includes(w);
-      svg.appendChild(sv('polygon', { points: pt([A, B, B2, A2]), fill: werk ? 'rgba(23,100,63,0.10)' : 'rgba(0,0,0,0.001)', stroke: 'none', 'pointer-events': isAchter ? 'all' : 'none', style: isAchter ? { cursor: 'pointer' } : null, onclick: () => klik(() => X.openWand(w, null)) }));
+      svg.appendChild(sv('polygon', { points: pt([A, B, B2, A2]), fill: werk ? 'rgba(23,100,63,0.10)' : 'rgba(0,0,0,0.001)', stroke: 'none', 'pointer-events': isAchter ? 'all' : 'none', style: isAchter ? { cursor: 'pointer' } : null, onclick: () => open(w, () => X.openWand(w, null)) }));
     }
-    // hoeklijnen, plafondranden en vloerranden
-    for (const w of K.WANDEN) {
-      const a = kamer.wanden[w], A = P([a.a[0], a.a[1], 0]), A2 = P([a.a[0], a.a[1], hoog]), B2 = P([a.b[0], a.b[1], hoog]);
-      svg.appendChild(lijnL(A, A2, '#9aa09a', 1, kamer.hoogteGeschat ? '4 3' : null));
-      svg.appendChild(lijnL(A2, B2, '#7b817c', 1.1, kamer.vormGeschat ? '4 3' : null));
+    // hoeklijnen en plafondranden, langs de hele contour (ook de uitsprongen en nissen)
+    for (const s of kamer.contour) {
+      const A = P([s.van[0], s.van[1], 0]), A2 = P([s.van[0], s.van[1], hoog]), B2 = P([s.naar[0], s.naar[1], hoog]);
+      svg.appendChild(lijnL(A, A2, s.soort === 'wand' ? '#9aa09a' : '#8aa0b3', 1, kamer.hoogteGeschat ? '4 3' : null));
+      svg.appendChild(lijnL(A2, B2, s.soort === 'wand' ? '#7b817c' : '#8aa0b3', 1.1, kamer.vormGeschat || s.geschat ? '4 3' : null));
     }
-    for (const w of K.WANDEN) {
-      const a = kamer.wanden[w], A = P([a.a[0], a.a[1], 0]), B = P([a.b[0], a.b[1], 0]), v = stat('wanden.' + w + '.maten.lengte'), st = v ? v.staat : 'open';
-      svg.appendChild(lijnL(A, B, kleurVan(st, v && v.conflict), 2.4, (!a.lengteGemeten || kamer.vormGeschat) ? '5 3' : null));
+    // de vloerrand: een stuk wand heeft de kleur van zijn wandlengte, een uitsprong of nis die van zijn maten
+    for (const s of kamer.contour) {
+      const A = P([s.van[0], s.van[1], 0]), B = P([s.naar[0], s.naar[1], 0]);
+      let kl, dik = 2.4, dash = null;
+      if (s.soort === 'wand') {
+        const v = stat('wanden.' + s.wand + '.maten.lengte'), st = v ? v.staat : 'open';
+        kl = kleurVan(st, v && v.conflict); if (zone.includes(s.wand) && st === 'gemeten') kl = COL.donker; dash = (s.geschat || kamer.vormGeschat) ? '5 3' : null;
+      } else {
+        const sts = ['breedte', 'positie', 'diepte'].map(k => { const v = stat('uitsprongen.' + s.uitsprong + '.maten.' + k); return v ? v.staat : 'open'; });
+        kl = sts.includes('open') ? COL.blauw : sts.includes('later') ? COL.oranje : COL.donker; dik = 2.8; dash = s.geschat ? '4 2.5' : null;
+      }
+      svg.appendChild(lijnL(A, B, kl, dik, dash));
     }
+    // een nog niet gesloten ronde: een lichte stippellijn terug naar de eerste hoek
+    if (!kamer.rond && ids.length) { const l = kamer.wanden[ids[ids.length - 1]], f = kamer.wanden[ids[0]]; svg.appendChild(lijnL(P([l.b[0], l.b[1], 0]), P([f.a[0], f.a[1], 0]), '#c9ccc6', 1.2, '2 4')); }
     // diagonalen op de vloer
-    for (const [id, van, naar] of [['A', 'NW', 'ZO'], ['B', 'NO', 'ZW']]) {
-      const pad = 'diagonalen.' + id + '.maten.lengte', v = stat(pad), st = v ? v.staat : 'open', act = actiefPad === pad, opt = v && v.optioneel;
-      svg.appendChild(lijnL(P([kamer.punten[van][0], kamer.punten[van][1], 0]), P([kamer.punten[naar][0], kamer.punten[naar][1], 0]), act ? COL.rood : kleurVan(st, v && v.conflict, opt), act ? 3.4 : 1.2, (st === 'gemeten' || act) ? null : '2 4'));
+    for (const [pad, v] of vm) {
+      if (pad.indexOf('diagonalen.') !== 0) continue;
+      const id = pad.split('.')[1], ent = lijst(r.diagonalen).find(x => x.id === id), hk = ids.map(w => kamer.wanden[w].van);
+      let van = ent && ent.van, naar = ent && ent.naar; if (!van && ids.length === 4) { van = id === 'A' ? hk[0] : hk[1]; naar = id === 'A' ? hk[2] : hk[3]; }
+      if (!kamer.punten[van] || !kamer.punten[naar]) continue;
+      const act = actiefPad === pad, st = v.staat;
+      svg.appendChild(lijnL(P([kamer.punten[van][0], kamer.punten[van][1], 0]), P([kamer.punten[naar][0], kamer.punten[naar][1], 0]), act ? COL.rood : kleurVan(st, v.conflict, v.optioneel), act ? 3.4 : 1.2, (st === 'gemeten' || act) ? null : '2 4'));
     }
     // plafondhoogte als paal in het midden
-    { const mx = (kamer.punten.NW[0] + kamer.punten.ZO[0]) / 2, my = (kamer.punten.NW[1] + kamer.punten.ZO[1]) / 2, pad = 'plafondpunten.P1.maten.hoogte', v = stat(pad), act = actiefPad === pad;
+    { const pad = 'plafondpunten.P1.maten.hoogte', v = stat(pad), act = actiefPad === pad;
       svg.appendChild(lijnL(P([mx, my, 0]), P([mx, my, hoog]), act ? COL.rood : kleurVan(v ? v.staat : 'open', false), act ? 3.4 : 1.2, '3 3')); }
     // openingen en objecten
-    for (const w of K.WANDEN) for (const f of modellen[w].vormen) {
-      if (f.band || f.bank) continue;
-      const sts = lijst(rt.stappen).filter(s => s.object === f.id && !s.optioneel), open = sts.some(s => !s.afgehandeld), later = sts.some(s => s.staat === 'later'), kl = open ? COL.rood : later ? COL.oranje : COL.donker;
+    for (const w of ids) for (const f of modellen[w].vormen) {
+      if (f.band || f.bank || f.uitsprong) continue;
+      const sts = lijst(rt.stappen).filter(s => s.object === f.id && !s.optioneel), openS = sts.some(s => !s.afgehandeld), later = sts.some(s => s.staat === 'later'), kl = openS ? COL.rood : later ? COL.oranje : COL.donker;
       if (f.rect) {
         const q = [[f.x0, f.y0], [f.x1, f.y0], [f.x1, f.y1], [f.x0, f.y1]].map(a => P(G.wandNaar3D(kamer, w, a[0], a[1])));
         svg.appendChild(sv('polygon', { points: pt(q), fill: 'none', stroke: kl, 'stroke-width': 1.2, 'stroke-dasharray': f.geschat ? '3 2' : null, 'vector-effect': 'non-scaling-stroke', 'pointer-events': 'none' }));
@@ -295,16 +341,18 @@
         svg.appendChild(sv('circle', { cx: q[0], cy: q[1], r: 3.2, fill: f.geschat ? '#fff' : kl, stroke: kl, 'stroke-width': 1.3, 'pointer-events': 'none' }));
       }
     }
-    // wandlabels: de dependabele tikdoelen (44 px hoog)
-    for (const w of K.WANDEN) {
-      const a = kamer.wanden[w], mf = P(G.wandNaar3D(kamer, w, a.lengte / 2, 0)), s = status[w], werk = zone.includes(w), mid = P([(kamer.punten.NW[0] + kamer.punten.ZO[0]) / 2, (kamer.punten.NW[1] + kamer.punten.ZO[1]) / 2, 0]);
-      const dx = mf[0] - mid[0], dy = mf[1] - mid[1], dl = Math.hypot(dx, dy) || 1, m = [mf[0] + dx / dl * 36, mf[1] + dy / dl * 30];      // het label staat net buiten de vloerrand van de wand
-      const kl = s.open ? COL.rood : s.later ? COL.oranje : COL.donker, bw = 84, bh = 46, x = Math.max(4, Math.min(VB.w - bw - 4, m[0] - bw / 2)), y = Math.max(4, Math.min(VB.h - bh - 4, m[1] - bh / 2));
-      const g = sv('g', { class: 'opn-chip-wand', role: 'button', tabindex: '0', 'aria-label': X.wandNaam(w) + ', ' + s.klaar + ' van ' + s.n + ' klaar' + (werk ? ', werkzone' : ''), style: { cursor: 'pointer' }, onclick: () => klik(() => X.openWand(w, null)), onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); X.openWand(w, null); } } },
-        sv('rect', { x, y, width: bw, height: bh, rx: 9, fill: '#fff', stroke: kl, 'stroke-width': 2 }),
-        werk ? sv('rect', { x: x + 2, y: y + 2, width: 5, height: bh - 4, rx: 2.5, fill: COL.accent }) : null,
-        sv('text', { x: x + bw / 2 + (werk ? 3 : 0), y: y + 19, 'text-anchor': 'middle', 'font-size': 14, 'font-weight': 600, fill: werk ? COL.accent : COL.donker, text: K.wandNaam(w) }),
-        sv('text', { x: x + bw / 2 + (werk ? 3 : 0), y: y + 37, 'text-anchor': 'middle', 'font-size': 12, fill: kl, text: s.open ? s.klaar + ' van ' + s.n : s.later ? 'later: ' + s.later : '✓ klaar' }));
+    // wandlabels: de dependabele tikdoelen (44 px hoog), net buiten de vloerrand van de wand
+    const mid = P([mx, my, 0]);
+    for (const w of ids) {
+      const a = kamer.wanden[w], mf = P(G.wandNaar3D(kamer, w, a.lengte / 2, 0)), s = status[w], werk = zone.includes(w);
+      const dx = mf[0] - mid[0], dy = mf[1] - mid[1], dl = Math.hypot(dx, dy) || 1, m = [mf[0] + dx / dl * 36, mf[1] + dy / dl * 30];
+      const kl = s.open ? COL.rood : s.later ? COL.oranje : COL.donker, bw = ids.length > 4 ? 74 : 84, bh = 46, x = Math.max(4, Math.min(VB.w - bw - 4, m[0] - bw / 2)), y = Math.max(4, Math.min(VB.h - bh - 4, m[1] - bh / 2));
+      const ondertitel = kiezen ? (werk ? '✓ zone' : '+ zone') : s.open ? s.klaar + ' van ' + s.n : s.later ? 'later: ' + s.later : '✓ klaar';
+      const g = sv('g', { class: 'opn-chip-wand', role: 'button', tabindex: '0', 'aria-label': X.wandNaam(w) + ', ' + s.klaar + ' van ' + s.n + ' klaar' + (werk ? ', werkzone' : ''), style: { cursor: 'pointer' }, onclick: () => open(w, () => X.openWand(w, null)), onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (kiezen) zetWerkzone(w); else X.openWand(w, null); } } },
+        sv('rect', { x, y, width: bw, height: bh, rx: 9, fill: werk && kiezen ? COL.accent : '#fff', stroke: kiezen ? (werk ? COL.accent : '#9a917f') : kl, 'stroke-width': 2 }),
+        werk && !kiezen ? sv('rect', { x: x + 2, y: y + 2, width: 5, height: bh - 4, rx: 2.5, fill: COL.accent }) : null,
+        sv('text', { x: x + bw / 2 + (werk && !kiezen ? 3 : 0), y: y + 19, 'text-anchor': 'middle', 'font-size': 14, 'font-weight': 600, fill: werk && kiezen ? '#fff' : werk ? COL.accent : COL.donker, text: K.wandNaam(w) }),
+        sv('text', { x: x + bw / 2 + (werk && !kiezen ? 3 : 0), y: y + 37, 'text-anchor': 'middle', 'font-size': 12, fill: werk && kiezen ? '#fff' : kiezen ? COL.grijs : kl, text: ondertitel }));
       svg.appendChild(g);
     }
   }
@@ -335,7 +383,7 @@
     const klaar = vlg.filter(s => s.afgehandeld).length;
     const foto = S.wandFoto && S.wandFoto.id === (X.wandFotoRec(w) || {}).id ? S.wandFoto : null;
     const hoekPx = foto && lay.foto === foto.id && lay.hoeken ? lay.hoeken.map(p => [p[0] * foto.w, p[1] * foto.h]) : null;
-    c.appendChild(X.kop(X.wandNaam(w), 'wand ' + wandNr + ' van 4' + (werk ? ' · werkzone' : '') + ' · ' + klaar + ' van ' + vlg.length + ' klaar', { terugLabel: 'Terug naar het model' }));
+    c.appendChild(X.kop(X.wandNaam(w), 'wand ' + wandNr + ' van ' + rt.maten_wanden.length + (werk ? ' · werkzone' : '') + ' · ' + klaar + ' van ' + vlg.length + ' klaar', { terugLabel: 'Terug naar het model' }));
     const body = h('div', { class: 'opn-body opn-body-wand' });
 
     // beeld: foto met overlay, of het schematische wandaanzicht
@@ -346,17 +394,19 @@
     const svg = sv('svg', { viewBox: vb.x + ' ' + vb.y + ' ' + vb.w + ' ' + vb.h, class: 'opn-wand-svg', preserveAspectRatio: 'xMidYMid meet', role: 'group', 'aria-label': 'Wand met maatlijnen' });
     if (foto) svg.appendChild(sv('image', { href: foto.url, x: 0, y: 0, width: foto.w, height: foto.h, preserveAspectRatio: 'none', 'pointer-events': 'none' }));
     else svg.appendChild(sv('rect', { x: 0, y: 0, width: BEELD_B, height: vb.h - 120, fill: '#faf8f4', stroke: '#bdb4a2', 'stroke-width': 1.5 * px, 'pointer-events': 'none' }));
-    const kalibreren = !!S.kal, plaatsen = !!S.plaats;
-    if (afb && !kalibreren) tekenOverlay(svg, { afb, model, px, rt, vm, actief: plaatsen ? null : actief, stappen, schema, foto, plaatsen });
+    const kalibreren = !!S.kal, plaatsen = !!S.plaats, knikken = !!S.knik && !!afb;
+    if (afb && !kalibreren && !knikken) tekenOverlay(svg, { afb, model, px, rt, vm, actief: plaatsen ? null : actief, stappen, schema, foto, plaatsen });
     if (foto && !afb && !kalibreren) { /* eerst de hoeken aanwijzen */ }
     if (kalibreren) tekenKalibratie(svg, px, foto);
+    if (knikken) tekenKnik(svg, { afb, px });
     if (plaatsen && afb) svg.appendChild(sv('polygon', { points: hoekPunten(afb).map(q => q[0] + ',' + q[1]).join(' '), fill: 'none', stroke: COL.accent, 'stroke-width': 2 * px, 'stroke-dasharray': (8 * px) + ' ' + (5 * px), 'pointer-events': 'none' }));
     // tikken op het beeld: hoeken aanwijzen of onderdeel plaatsen
     svg.addEventListener('click', ev => svgTik(ev, svg, afb, px, model, vb));
-    body.appendChild(h('div', { class: 'opn-wandvak' + (kalibreren || plaatsen ? ' is-tikken' : '') }, svg));
+    body.appendChild(h('div', { class: 'opn-wandvak' + (kalibreren || plaatsen || knikken ? ' is-tikken' : '') }, svg));
 
     // melding bij tikken, werkbalk
     if (kalibreren) body.appendChild(kalibratieBalk(foto));
+    else if (knikken) body.appendChild(knikBalk());
     else if (plaatsen) body.appendChild(plaatsBalk());
     else {
       if (foto && !afb) body.appendChild(h('div', { class: 'opn-kaart opn-uitleg' }, h('div', { class: 'opn-kaart-titel', text: 'Eerst de vier hoeken van de wand aanwijzen' }), h('p', { text: 'Tik op de foto de hoeken van de wand: links onder, rechts onder, rechts boven, links boven. Daarna staan de maatlijnen op de foto.' }), h('button', { type: 'button', class: 'opn-btn opn-btn-groot opn-btn-primair', text: 'Hoeken aanwijzen', onclick: startKal })));
@@ -364,6 +414,8 @@
         X.fotoKnop('Foto maken', async f => { await X.opslaanFoto(f, { wand: w }); await laadWandFoto(w); X.teken(); }, { klasse: 'opn-btn opn-btn-klein' })));
       body.appendChild(h('div', { class: 'opn-werkbalk' },
         h('button', { type: 'button', class: 'opn-btn opn-btn-klein', onclick: voegToeSheet }, '+ Toevoegen'),
+        foto && afb ? h('button', { type: 'button', class: 'opn-btn opn-btn-klein', onclick: startKnik }, 'Vorm van de wand') : null,
+        h('button', { type: 'button', class: 'opn-btn opn-btn-klein', onclick: hoekSheet }, 'Hoek'),
         foto && afb ? h('button', { type: 'button', class: 'opn-btn opn-btn-klein', onclick: () => startKal(true) }, 'Hoeken aanpassen') : null,
         h('span', { class: 'opn-leg opn-leg-st', text: model.lengteGemeten ? '' : 'wandlengte nog niet gemeten: lijnen zijn een schatting' })));
       // paneel
@@ -372,6 +424,7 @@
     }
     c.appendChild(body);
     if (S.itemSheet) { const id = S.itemSheet; S.itemSheet = null; itemSheet(id); }
+    if (S.hoekSheet) { S.hoekSheet = false; hoekSheet(); }
   };
   const hoekPunten = afb => [[0, 0], [1, 0], [1, 1], [0, 1]].map(a => afb.naarBeeld(a[0], a[1]));
 
@@ -402,6 +455,10 @@
     const hk = hoekPunten(afb);
     g.appendChild(sv('polygon', { points: hk.map(q => q[0] + ',' + q[1]).join(' '), fill: 'none', stroke: COL.accent, 'stroke-width': 1.5 * px, 'stroke-dasharray': (7 * px) + ' ' + (5 * px), opacity: 0.7, 'pointer-events': 'none' }));
     const naarB = (x, y) => afb.naarBeeld(x / model.lengte, y / model.hoogte);
+    // de knikken die bij de vorm van de wand zijn getikt: de stukken naar voren of naar achteren als gekleurde band op de vloerlijn
+    { const we = lijst(X.ruimte().wanden).find(x => x.id === S.wand), fv = we && we.foto_vorm;
+      if (fv) for (let i = 0; i < lijst(fv.tussenstukken).length; i++) { const v = fv.tussenstukken[i]; if (v === 'recht') continue; const u0 = fv.knikken[i].u, u1 = fv.knikken[i + 1].u, q = [afb.naarBeeld(u0, 0), afb.naarBeeld(u1, 0), afb.naarBeeld(u1, 0.06), afb.naarBeeld(u0, 0.06)];
+        g.appendChild(sv('polygon', { points: q.map(a => a.join(',')).join(' '), fill: VORM_KLEUR[v], stroke: v === 'voor' ? COL.blauw : COL.oranje, 'stroke-width': 1.2 * px, 'pointer-events': 'none' })); } }
     // onderdelen (kozijnen, objecten): aantikbaar voor de optionele close-up en extra maten
     for (const f of model.vormen) {
       const st = lijst(rt.stappen).filter(s => s.object === f.id && !s.optioneel), open = st.some(s => !s.afgehandeld), kl = open ? '#555' : COL.donker;
@@ -409,7 +466,7 @@
         const q = [[f.x0, f.y0], [f.x1, f.y0], [f.x1, f.y1], [f.x0, f.y1]].map(a => naarB(a[0], a[1]));
         if (q.some(a => !a)) continue;
         if (f.band) { g.appendChild(sv('polygon', { points: q.map(a => a.join(',')).join(' '), fill: 'rgba(23,100,63,0.14)', stroke: COL.accent, 'stroke-width': 1 * px, 'pointer-events': 'none' })); continue; }
-        g.appendChild(sv('polygon', { points: q.map(a => a.join(',')).join(' '), fill: 'rgba(255,255,255,0.08)', stroke: kl, 'stroke-width': 1.3 * px, 'stroke-dasharray': f.geschat ? (5 * px) + ' ' + (3 * px) : null, style: { cursor: 'pointer' }, 'pointer-events': plaats ? 'none' : null, onclick: () => itemSheet(f.id) }));
+        g.appendChild(sv('polygon', { points: q.map(a => a.join(',')).join(' '), fill: f.uitsprong ? 'rgba(62,92,118,0.16)' : 'rgba(255,255,255,0.08)', stroke: f.uitsprong ? COL.blauw : kl, 'stroke-width': 1.3 * px, 'stroke-dasharray': f.geschat ? (5 * px) + ' ' + (3 * px) : null, style: { cursor: 'pointer' }, 'pointer-events': plaats ? 'none' : null, onclick: () => itemSheet(f.id) }));
         pillen.push([f, q[3][0] + 2 * px, q[3][1] - 15 * px]);
       } else {
         const q = naarB(f.x, f.y); if (!q) continue;
@@ -449,6 +506,78 @@
       sv('rect', { x: X0, y: Y0, width: bw, height: bh, rx: 6 * px, fill: '#fff', stroke: '#111', 'stroke-width': 1.2 * px }),
       sv('text', { x: X0 + bw / 2, y: Y0 + bh * 0.7, 'text-anchor': 'middle', 'font-size': 12 * px, 'font-weight': 700, fill: '#111', text: f.id }));
     g.appendChild(e);
+  }
+
+  // ── De vorm van de wand aanwijzen: knikken op de vloerlijn, per stuk recht, naar voren (uitsprong) of naar achteren (nis) ──
+  // De positie van een knik op de wand volgt uit de vier getikte wandhoeken (homografie). Dat is een schatting uit de foto: de kern slaat het op als verhouding op de wand (foto-voorstel), nooit als maat.
+  const VORM_NAAM = { recht: 'Recht', voor: 'Naar voren', achter: 'Naar achteren' };
+  function startKnik() {
+    const foto = S.wandFoto, lay = X.wandLayout(S.wand), we = lijst(X.ruimte().wanden).find(x => x.id === S.wand);
+    if (!foto || !(lay.foto === foto.id && lay.hoeken)) { X.toast('Wijs eerst de vier hoeken van de wand aan, dan kun je de knikken tikken.'); if (foto) startKal(); return; }
+    const fv = we && we.foto_vorm;
+    S.knik = { punten: fv ? fv.knikken.map(k => ({ x: k.x, y: k.y, u: k.u })) : [], vormen: fv ? fv.tussenstukken.slice() : [] };
+    S.kal = null; S.plaats = null; X.teken();
+  }
+  function knikToevoegen(k) {
+    const oud = S.knik.punten, oudV = S.knik.vormen, punten = oud.concat([k]).sort((a, b) => a.u - b.u);
+    if (punten.some((p, i) => i && p.u - punten[i - 1].u < 0.01)) { X.toast('Die knik ligt te dicht bij een andere.'); return; }
+    const vormen = [];
+    for (let i = 0; i < punten.length - 1; i++) {                          // een stuk dat door een nieuwe knik in tweeën gaat, houdt zijn vorm
+      const m = (punten[i].u + punten[i + 1].u) / 2; let v = 'recht';
+      for (let j = 0; j < oud.length - 1; j++) if (m >= oud[j].u && m <= oud[j + 1].u) v = oudV[j] || 'recht';
+      vormen.push(v);
+    }
+    S.knik = { punten, vormen };
+  }
+  const VORM_KLEUR = { recht: 'rgba(23,100,63,0.10)', voor: 'rgba(62,92,118,0.30)', achter: 'rgba(199,125,10,0.30)' };
+  function tekenKnik(svg, d) {
+    const { afb, px } = d, k = S.knik, g = sv('g', { class: 'opn-knik' }), hk = hoekPunten(afb);
+    g.appendChild(sv('polygon', { points: hk.map(q => q[0] + ',' + q[1]).join(' '), fill: 'none', stroke: COL.accent, 'stroke-width': 1.5 * px, 'stroke-dasharray': (7 * px) + ' ' + (5 * px), opacity: 0.7, 'pointer-events': 'none' }));
+    const l0 = afb.naarBeeld(0, 0), l1 = afb.naarBeeld(1, 0);
+    g.appendChild(sv('line', { x1: l0[0], y1: l0[1], x2: l1[0], y2: l1[1], stroke: COL.accent, 'stroke-width': 3.2 * px, 'stroke-linecap': 'round', 'pointer-events': 'none' }));
+    for (let i = 0; i < k.punten.length - 1; i++) {
+      const u0 = k.punten[i].u, u1 = k.punten[i + 1].u, v = k.vormen[i] || 'recht', q = [afb.naarBeeld(u0, 0), afb.naarBeeld(u1, 0), afb.naarBeeld(u1, 0.45), afb.naarBeeld(u0, 0.45)], m = afb.naarBeeld((u0 + u1) / 2, 0.22);
+      g.appendChild(sv('polygon', { points: q.map(a => a[0] + ',' + a[1]).join(' '), fill: VORM_KLEUR[v], stroke: v === 'voor' ? COL.blauw : v === 'achter' ? COL.oranje : COL.accent, 'stroke-width': 1.2 * px, 'pointer-events': 'none' }));
+      g.appendChild(sv('text', { x: m[0], y: m[1], 'text-anchor': 'middle', 'font-size': 13 * px, 'font-weight': 700, fill: '#111', stroke: '#fff', 'stroke-width': 3 * px, 'paint-order': 'stroke', 'pointer-events': 'none', text: 'stuk ' + (i + 1) + (v === 'recht' ? '' : ': ' + (v === 'voor' ? 'voor' : 'achter')) }));
+    }
+    k.punten.forEach((p, i) => {
+      const a = afb.naarBeeld(p.u, 0), b = afb.naarBeeld(p.u, 1);
+      g.appendChild(sv('line', { x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: COL.rood, 'stroke-width': 1.6 * px, 'stroke-dasharray': (6 * px) + ' ' + (4 * px), 'pointer-events': 'none' }));
+      g.appendChild(sv('circle', { class: 'opn-knik-punt', cx: a[0], cy: a[1], r: 13 * px, fill: 'rgba(196,50,42,0.3)', stroke: COL.rood, 'stroke-width': 2.4 * px, 'pointer-events': 'none' }));
+      g.appendChild(sv('text', { x: a[0], y: a[1] + 4.6 * px, 'text-anchor': 'middle', 'font-size': 13 * px, 'font-weight': 700, fill: '#fff', stroke: '#000', 'stroke-width': 0.5 * px, 'paint-order': 'stroke', 'pointer-events': 'none', text: String(i + 1) }));
+    });
+    svg.appendChild(g);
+  }
+  function knikBalk() {
+    const kn = S.knik, n = kn.punten.length, r = X.ruimte();
+    const kaart = h('div', { class: 'opn-kaart opn-kal-kaart opn-knikbalk' }, h('div', { class: 'opn-kaart-titel', text: n < 2 ? 'Tik de knikken op de vloerlijn (' + n + ' getikt)' : 'Wat is elk stuk tussen de knikken?' }));
+    kaart.appendChild(h('p', { class: 'opn-hint', text: n < 2 ? 'Tik op de vloerlijn waar de wand een knik maakt: het begin en het einde van een uitstekend stuk (schoorsteen, pilaster, koker) of van een nis. Minstens twee knikken, van links naar rechts, in willekeurige volgorde. Een ruwe plek is genoeg.' : 'Elk stuk is recht, tenzij het naar voren uitsteekt (uitsprong) of naar achteren inspringt (nis). Een ruwe verhouding op de wand is genoeg: de maten meet je daarna.' }));
+    for (let i = 0; i < n - 1; i++) {
+      const rij = h('div', { class: 'opn-stukrij' }, h('div', { class: 'opn-label', text: 'Stuk ' + (i + 1) + ' (knik ' + (i + 1) + ' tot ' + (i + 2) + ')' }), h('div', { class: 'opn-chips' }));
+      for (const v of K.TUSSENSTUK_VORMEN) rij.lastChild.appendChild(h('button', { type: 'button', class: 'opn-chip' + (kn.vormen[i] === v ? ' is-aan' : ''), 'aria-pressed': kn.vormen[i] === v ? 'true' : 'false', onclick: () => { kn.vormen[i] = v; X.teken(); } }, VORM_NAAM[v]));
+      kaart.appendChild(rij);
+    }
+    const aantal = kn.vormen.filter(v => v !== 'recht').length;
+    kaart.appendChild(h('div', { class: 'opn-knoppen' },
+      h('button', { type: 'button', class: 'opn-btn opn-btn-groot opn-btn-primair', disabled: n === 1, onclick: klaarKnik }, n === 0 ? 'Geen knikken: de wand is recht' : aantal ? 'Klaar: ' + aantal + (aantal === 1 ? ' uitsprong of nis' : ' uitsprongen en nissen') : 'Klaar: alles recht'),
+      h('div', { class: 'opn-onderrij' },
+        h('button', { type: 'button', class: 'opn-btn opn-btn-klein', disabled: !n, onclick: () => { const p = kn.punten.slice(0, -1); S.knik = { punten: p, vormen: kn.vormen.slice(0, Math.max(0, p.length - 1)) }; X.teken(); } }, 'Laatste knik weg'),
+        h('button', { type: 'button', class: 'opn-btn opn-btn-klein', disabled: !n, onclick: () => { S.knik = { punten: [], vormen: [] }; X.teken(); } }, 'Opnieuw'),
+        h('button', { type: 'button', class: 'opn-btn opn-btn-klein', onclick: () => { S.knik = null; X.teken(); } }, 'Annuleren')),
+      h('p', { class: 'opn-hint', text: 'Zit de uitsprong in een hoek van de kamer? Maak er dan een eigen wand van (volgende foto) met een hoek van 90 of 270 graden.' })));
+    return kaart;
+  }
+  function klaarKnik() {
+    const kn = S.knik, r = X.ruimte(), res = K.zetWandVorm(S.rec.opname, r.id, S.wand, { foto: S.wandFoto ? S.wandFoto.id : null, knikken: kn.punten, tussenstukken: kn.vormen });
+    if (!X.wijzig(res)) return;
+    S.knik = null;
+    const stap = lijst(X.route().stappen).find(s => s.wand === S.wand && s.soort === 'uitsprong' && !s.afgehandeld && !s.optioneel);
+    S.stapId = stap ? stap.id : null; S.wandKlaar = false;
+    X.toast(res.uitsprongen.length ? (res.uitsprongen.length === 1 ? 'Uitsprong' : 'Uitsprongen') + ' ' + res.uitsprongen.join(', ') + ' op de plattegrond gezet. De verhouding komt uit de foto (een schatting); nu de maten.' : 'De vorm van de wand is vastgelegd: recht.');
+    X.teken();
+  }
+  function hoekSheet() {
+    X.blad('Hoek na ' + X.wandNaam(S.wand).toLowerCase(), [X.hoekRij(S.wand, { vernieuw: () => { S.hoekSheet = true; X.teken(); } })]);
   }
 
   // ── Hoeken aanwijzen (kalibratie met vier slepbare punten) ──
@@ -505,6 +634,11 @@
       S.kal.punten.push([Math.max(0, Math.min(foto.w, p[0])), Math.max(0, Math.min(foto.h, p[1]))]);
       if (S.kal.punten.length >= 4) { S.kal.klaar = true; if (!G.hoekenGeldig(S.kal.punten)) X.toast('Controleer de hoeken: ze liggen niet als een vierhoek. Sleep ze waar nodig.'); }
       X.teken(); return;
+    }
+    if (S.knik && afb && !S.kal) {
+      const k = G.knikVanTik(afb, S.wandFoto, svgPunt(svg, ev));
+      if (!k) { X.toast('Tik op de wand zelf, niet in de hoek of ernaast.'); return; }
+      knikToevoegen(k); X.teken(); return;
     }
     if (S.plaats && afb) {
       const p = svgPunt(svg, ev), f = G.beeldNaarFractie(afb, p); if (!f) return;
@@ -568,7 +702,7 @@
     const pts = p.punten, u0 = Math.min.apply(null, pts.map(a => a[0])), u1 = Math.max.apply(null, pts.map(a => a[0])), v0 = Math.min.apply(null, pts.map(a => a[1])), v1 = Math.max.apply(null, pts.map(a => a[1]));
     let res, lijstNaam;
     if (p.type === 'raam' || p.type === 'deur') { res = K.voegOpeningToe(S.rec.opname, r.id, { soort: p.type, wand: w, definitie: p.definitie || undefined }); lijstNaam = 'openingen'; }
-    else { const hoek = (u0 + u1) / 2 < 0.5 ? G.WAND_HOEKEN[w][0] : G.WAND_HOEKEN[w][1]; res = K.voegObjectToe(S.rec.opname, r.id, { type: p.type, wand: w, hoek: p.type === 'radiator' ? undefined : hoek }); lijstNaam = 'objecten'; }
+    else { const kw = G.kamer(r).wanden[w], hoek = (u0 + u1) / 2 < 0.5 ? kw.van : kw.naar; res = K.voegObjectToe(S.rec.opname, r.id, { type: p.type, wand: w, hoek: p.type === 'radiator' ? undefined : hoek }); lijstNaam = 'objecten'; }
     if (!X.wijzig(res)) { X.teken(); return; }
     const lay = X.wandLayout(w, true); lay.vormen[res.id] = { u0, u1, v0, v1 };
     X.zetVeld(lijstNaam, res.id, 'positie_x', Math.round(u0 * L));
@@ -579,7 +713,7 @@
   // ── Een onderdeel aantikken: extra maten, definitie, close-up, weghalen (alles optioneel) ──
   function itemInfo(id) {
     const r = X.ruimte();
-    for (const [l, naam] of [['openingen', 'opening'], ['objecten', 'object'], ['bijzonderheden', 'bijzonderheid']]) { const e = lijst(r[l]).find(x => x && x.id === id); if (e) return { lijstNaam: l, ent: e, soort: naam }; }
+    for (const [l, naam] of [['openingen', 'opening'], ['objecten', 'object'], ['bijzonderheden', 'bijzonderheid'], ['uitsprongen', 'uitsprong']]) { const e = lijst(r[l]).find(x => x && x.id === id); if (e) return { lijstNaam: l, ent: e, soort: naam }; }
     return null;
   }
   function itemSheet(id) {
@@ -600,6 +734,7 @@
     closeups.forEach(async f => { const u = await X.fotoUrl(f.id); if (u) strip.appendChild(h('img', { src: u, alt: 'Close-up ' + id, class: 'opn-thumb' })); });
     const nieuweFoto = async f => { await X.opslaanFoto(f, { wand: S.wand, soort: 'closeup', item: id }); S.itemSheet = id; X.teken(); };
     kids.push(h('div', { class: 'opn-onderrij' }, X.fotoKnop('Close-up maken', nieuweFoto, { klasse: 'opn-btn opn-btn-klein' }), X.fotoKnop('Uit galerij', nieuweFoto, { klasse: 'opn-btn opn-btn-klein', galerij: true })));
+    if (info.lijstNaam === 'uitsprongen') kids.push(h('div', { class: 'opn-onderrij' }, h('button', { type: 'button', class: 'opn-btn opn-btn-klein', text: 'Vorm op de foto aanpassen', onclick: () => { X.sluitBlad(); startKnik(); } })));
     // weghalen: bewaard in het archief van de ruimte
     const bevestig = h('div', { class: 'opn-onderrij' });
     const weg = h('button', { type: 'button', class: 'opn-btn opn-btn-klein opn-gevaar', text: 'Verwijderen van de wand', onclick: () => {

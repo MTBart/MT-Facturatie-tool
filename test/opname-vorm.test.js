@@ -87,6 +87,25 @@ test('sluitfout: boven de 10 mm is de meting inconsistent, eronder sluit de L-vo
   const slecht = K.vorm(R(meet(op, dpad, 3800))); assert.strictEqual(slecht.status, 'inconsistent'); assert.ok(/Diagonaal C/.test(slecht.reden));
   assert.ok(K.voegDiagonaalToe(op, 'R1', 'H1', 'H4').fout, 'dezelfde diagonaal twee keer kan niet');
 });
+test('een inconsistente meting wordt in de plattegrond niet mooi gemaakt: de sluitfout blijft zichtbaar', () => {
+  const p = K.plattegrond(R(lVorm({ W6: 4050 })));
+  assert.strictEqual(p.vorm.status, 'inconsistent'); assert.strictEqual(p.sluitfout.mm, 50);
+  // een kleine afwijking zonder diagonaal bij een rechthoek (4 wanden, geen conflict mogelijk) wordt wel gelijk verdeeld getekend, zonder een maat te veranderen
+  let op = ruimteUitFotos(4); for (const [w, l] of [['W1', 5000], ['W2', 3000], ['W3', 5002], ['W4', 3004]]) op = wandL(op, w, l);
+  const q = K.plattegrond(R(op)); assert.ok(q.sluitfout.mm <= 1); assert.strictEqual(K.waarde(R(op).wanden[2].maten.lengte), 5002); assert.strictEqual(q.wanden.W3.lengte, 5002, 'de gemeten lengte blijft de gemeten lengte');
+});
+test('een schuine hoek zonder bepaling: de plattegrond tekent wel iets (schatting) en meldt geen sluitfout als conflict', () => {
+  let op = ruimteUitFotos(4); for (const [w, l] of [['W1', 4000], ['W2', 3000], ['W3', 4000], ['W4', 3000]]) op = wandL(op, w, l);
+  op = hoek(op, 'W2', 120); const p = K.plattegrond(R(op));
+  assert.strictEqual(p.vorm.status, 'onvoldoende-bepaald'); assert.strictEqual(p.schatting, true); assert.strictEqual(p.contour.length, 4); assert.ok(p.bbox.x1 > p.bbox.x0);
+});
+test('diagonalen: bij vier wanden A (basis) en B (optie); komt er een wand bij, dan verdwijnt een onbemeten A of B, een gemeten blijft als optionele controle', () => {
+  let op = ruimteUitFotos(4, { rond: false }); op = wandL(op, 'W1', 4000);
+  assert.deepStrictEqual(K.vragen(R(op)).filter(v => v.pad.startsWith('diagonalen.')).map(v => [v.pad.split('.')[1], v.bucket]), [['A', 'basis'], ['B', 'optie']]);
+  const leeg = goed(K.voegWandToe(op, 'R1')); assert.deepStrictEqual(K.vragen(R(leeg)).filter(v => v.pad.startsWith('diagonalen.')), [], 'onbemeten A en B vallen weg bij vijf wanden');
+  const gemeten = goed(K.voegWandToe(meet(op, 'diagonalen.A.maten.lengte', 5500), 'R1'));
+  assert.deepStrictEqual(K.vragen(R(gemeten)).filter(v => v.pad.startsWith('diagonalen.')).map(v => [v.pad.split('.')[1], v.bucket, v.staat]), [['A', 'optie', 'gemeten']], 'een gemeten diagonaal gaat nooit stil verloren');
+});
 test('een wand die de hoeken scheef zet: kruisende of verkeerd gedraaide wanden zijn inconsistent', () => {
   let op = ruimteUitFotos(6); op = hoek(op, 'W3', 90);                    // alle hoeken 90: de zes wanden sluiten niet en lopen niet netjes rond
   for (const [w, l] of Object.entries(L_WANDEN)) op = wandL(op, w, l);
