@@ -185,3 +185,7 @@
 .opn-klein-scherm .opn-groot-veld{min-height:52px;font-size:26px}
 .opn-klein-scherm .opn-paneel{padding:8px 12px}
 .opn-klein-scherm .opn-body-wand{padding-top:0}
+.opn-volgende{margin:10px 0 4px;padding:10px 12px;border-radius:10px;background:var(--o-sunken);display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.opn-volgende p{margin:0}
+.opn-driehoek{margin-top:8px;padding:10px;border-radius:10px;background:var(--o-sunken);display:flex;flex-direction:column;gap:8px}
+.opn-driehoek .opn-invoerrij{gap:6px}.opn-driehoek .opn-invoerrij .opn-input{min-width:0;flex:1}

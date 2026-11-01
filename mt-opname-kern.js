@@ -384,7 +384,18 @@
     if (!isRond(r)) return leegVorm(ids.length, 'De fotoronde is nog niet rond: de vorm is een schatting tot je kiest dat de kamer rond is (terug bij de eerste wand).');
     for (const w of ids) { z[w] = lengte(r, 'wanden', w); if (z[w] == null) ontbreekt.push('wandlengte ' + wandKort(w)); }
     // vier wanden zonder inspringende hoek: de bekende vierhoek-logica (vier zijden en één diagonaal); alle andere vormen: een rondgang langs de wanden met de binnenhoeken
-    return ids.length === 4 && ids.every(w => !hoekInfo(r, w).inspringend) ? vormVierhoek(r, ids, z, ontbreekt) : vormVeelhoek(r, ids, z, ontbreekt);
+    const res = ids.length === 4 && ids.every(w => !hoekInfo(r, w).inspringend) ? vormVierhoek(r, ids, z, ontbreekt) : vormVeelhoek(r, ids, z, ontbreekt);
+    res.lengtes_gemeten = !ontbreekt.length; return res;
+  };
+  // De status van de vorm in woorden, in drie gescheiden stappen (getekend / geometrisch bepaald / onafhankelijk gecontroleerd). Eén tekst voor elk scherm, zodat nergens meer wordt beweerd dan er bewezen is.
+  K.vormLabel = function (v) {
+    v = v || {};
+    if (v.status === 'inconsistent') return { kort: 'Meetgegevens inconsistent', pil: 'conflict', bepaling: null };
+    if (v.bepaling === 'gecontroleerd') return { kort: v.afwijkend ? 'Onafhankelijk gecontroleerd, niet rechthoekig' : 'Onafhankelijk gecontroleerd', pil: 'ok', bepaling: 'gecontroleerd' };
+    if (v.bepaling === 'bepaald') return { kort: 'Geometrisch bepaald, nog niet onafhankelijk gecontroleerd', pil: 'later', bepaling: 'bepaald' };
+    const klopt = lijst(v.controles).filter(c => c && c.klopt);
+    if (v.lengtes_gemeten && v.sluitfout) return { kort: 'Lengtes gemeten; model onder hoekaanname' + (klopt.length ? '; controle ' + klopt.map(c => c.diagonaal).join(' en ') + ' klopt' : ''), pil: 'later', bepaling: 'getekend' };
+    return { kort: v.status === 'onvoldoende-bepaald' ? 'Getekend (schatting), nog niet bepaald' : 'Getekend (schatting)', pil: 'later', bepaling: 'getekend' };
   };
   // Vierhoek: v0.3-logica. De hoeken volgen uit de metingen; hoeken die op 90 graden zijn gezet tellen hier niet mee (ze zijn een aanname die de diagonaal toetst).
   function vormVierhoek(r, ids, z, ontbreekt) {
@@ -721,7 +732,7 @@
     const uitzonderingen = uitzonderingenVan(r), kan = redenen.length === 0;
     const tel = c => ({ n: c.n, gemeten: c.gemeten, nvt: c.nvt });
     const scope = { ruimte: r.id, naam: nm, meubeltype: r.meubeltype || null, meubelset_gereed: !!(set && set.gereed), werkzone: lijst(r.werkzone).filter(w => wandIds(r).includes(w)), wanden_alleen_basis: wandIds(r).filter(w => !lijst(r.werkzone).includes(w)),
-      vorm: { status: sc.vorm.status, afwijkend: sc.vorm.afwijkend, schematisch: sc.vorm.schematisch, veelhoek: !!sc.vorm.veelhoek, aantal_wanden: wandIds(r).length, uitsprongen: lijst(r.uitsprongen).filter(u => u && u.id).length }, telling: { basis: tel(t.basis), werkzone: tel(t.werkzone), extra: tel(t.extra) } };
+      vorm: { status: sc.vorm.status, bepaling: sc.vorm.bepaling || null, label: K.vormLabel(sc.vorm).kort, afwijkend: sc.vorm.afwijkend, schematisch: sc.vorm.schematisch, veelhoek: !!sc.vorm.veelhoek, aantal_wanden: wandIds(r).length, uitsprongen: lijst(r.uitsprongen).filter(u => u && u.id).length }, telling: { basis: tel(t.basis), werkzone: tel(t.werkzone), extra: tel(t.extra) } };
     return { kan, redenen, waarschuwingen: K.waarschuwingen(r), scope, uitzonderingen, volledig_gemeten: kan && uitzonderingen.length === 0 };
   };
   K.vrijgeefCheck = function (opname) {
@@ -983,6 +994,34 @@
   });
   // De hoek naar de volgende wand, in graden (binnenhoek): 90 is een gewone hoek, 270 een inspringende hoek, alles ertussen is schuin. Standaard een aanname; een eigen waarde is een foto-voorstel
   // (schatting) tot de hoek gemeten is. De vorige stand blijft in de historie.
+  // Lokale haaksheidscontrole met een driehoek: meet vanaf de hoek a mm langs de ene wand en b mm langs de andere, en daarna de afstand c tussen die twee punten. De hoek volgt uit de cosinusregel.
+  K.hoekUitDriehoek = (a, b, c) => { if (![a, b, c].every(x => getal(x) && x > 0)) return null; const cos = (a * a + b * b - c * c) / (2 * a * b); return cos < -1 || cos > 1 ? null : afr(Math.acos(cos) * 180 / Math.PI); };
+  // Past de gemeten hoek bij 90 (of 270) binnen K.TOLERANTIE.hoek_haaks, dan staat de hoek op 90 (270) en bron gemeten: bevestigd haaks. Anders staat de gemeten hoek er zelf. De drie maten blijven bij de hoek bewaard.
+  // Bij een hoek van 270 (springt naar binnen) meet je over de hoek heen aan de buitenkant; de hoek is dan 360 min de gemeten hoek.
+  K.zetHoekDriehoek = (opname, ruimteId, wandId, a, b, c, tijd) => wijzigRuimte(opname, ruimteId, r => {
+    const e = vind(r.wanden, wandId); if (!e) return { fout: 'Onbekende wand.' };
+    const g = K.hoekUitDriehoek(a, b, c); if (g == null) return { fout: 'Deze drie maten vormen geen driehoek. Meet a en b vanaf de hoek langs de wanden, en c tussen die twee punten.' };
+    const hk = hoekInfo(r, wandId), binnen = hk.graden > 180 ? afr(360 - g) : g, T = K.TOLERANTIE.hoek_haaks, haaks = Math.abs(binnen - 90) <= T || Math.abs(binnen - 270) <= T;
+    const graden = haaks ? (Math.abs(binnen - 270) <= T ? 270 : 90) : binnen, onzekerheid = afr(Math.atan(2 / Math.min(a, b)) * 180 / Math.PI);          // ongeveer 2 mm leesfout op de korte pijl
+    if (!getal(graden) || graden < 20 || graden > 340 || Math.abs(graden - 180) < 1) return { fout: 'Deze hoek is niet bruikbaar (tussen 20 en 340 graden, niet 180).' };
+    const oud = isObj(e.hoek_naar_volgende) ? e.hoek_naar_volgende : null;
+    e.hoek_naar_volgende = { graden, bron: 'gemeten', tijd: tijd || nu(), driehoek: { a, b, c, gemeten_graden: binnen, onzekerheid_graden: onzekerheid } };
+    if (oud) e.hoek_naar_volgende.historie = lijst(oud.historie).concat([{ graden: oud.graden, bron: oud.bron, tijd: oud.tijd || null }]);
+    return { gemeten_graden: binnen, haaks, onzekerheid_graden: onzekerheid };
+  });
+  // Voorstel voor de werkzone: de hoeken aan de uiteinden van elke werkzone-wand die nog niet gemeten of bevestigd zijn, met de wand waarachter de hoek staat in de invoer (hoek_naar_volgende).
+  K.haaksheidsVoorstel = function (ruimte) {
+    const r = ruimte || {}, ids = wandIds(r), n = ids.length, uit = [], gezien = {};
+    ids.forEach((w, i) => {
+      if (!lijst(r.werkzone).includes(w)) return;
+      for (const k of [ids[(i + n - 1) % n], w]) {
+        if (gezien[k]) continue; gezien[k] = true;
+        const hk = hoekInfo(r, k), j = ids.indexOf(k); if (hk.bron === 'gemeten' || hk.schuin) continue;
+        uit.push({ wand: k, hoek: wandHoeken(r, ids[(j + 1) % n])[0], tussen: [k, ids[(j + 1) % n]], graden: hk.graden, inspringend: hk.inspringend, bron: hk.bron });
+      }
+    });
+    return uit;
+  };
   K.zetHoek = (opname, ruimteId, wandId, graden, bron, tijd) => wijzigRuimte(opname, ruimteId, r => {
     const e = vind(r.wanden, wandId); if (!e) return { fout: 'Onbekende wand.' };
     if (!getal(graden) || graden < 20 || graden > 340 || Math.abs(graden - 180) < 1) return { fout: 'Geef een hoek tussen 20 en 340 graden, niet 180 (dan is het geen hoek).' };

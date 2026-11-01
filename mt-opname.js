@@ -294,7 +294,7 @@
   };
   X.planBlok = function (r, opties) {
     const plat = K.plattegrond(r), bij = [];
-    if (plat.n) bij.push(plat.schatting ? 'Gestippeld is een schatting; vast is gemeten.' : 'Alles is gemeten en gecontroleerd.');
+    if (plat.n) bij.push(plat.schatting ? 'Gestippeld is een schatting; vast is gemeten. ' + (plat.vorm.lengtes_gemeten || plat.vorm.bepaling !== 'getekend' ? K.vormLabel(plat.vorm).kort + '.' : '') : K.vormLabel(plat.vorm).kort + '.');
     if (plat.uitsprongen.length) bij.push('Blauw: ' + plat.uitsprongen.map(x => (K.UITSPRONG_SOORTEN[x.soort] || 'Uitsprong').toLowerCase()).filter((v, i, a) => a.indexOf(v) === i).join(' en ') + '.');
     if (opties && opties.opWand && !opties.kies) bij.push('Tik een wandnummer om die wand te openen.');
     return h('div', { class: 'opn-kaart opn-planblok' }, opties && opties.titel ? h('div', { class: 'opn-kaart-titel', text: opties.titel }) : null, h('div', { class: 'opn-plan' }, X.planKaart(r, opties)), bij.length ? h('p', { class: 'opn-hint', text: bij.join(' ') }) : null);
@@ -310,12 +310,14 @@
     const blok = h('div', { class: 'opn-veld opn-hoekrij' }, h('div', { class: 'opn-label', text: kop }));
     const chips = h('div', { class: 'opn-chips' });
     const chip = (tekst, aan, fn) => h('button', { type: 'button', class: 'opn-chip' + (aan ? ' is-aan' : ''), 'aria-pressed': aan ? 'true' : 'false', onclick: fn }, tekst);
-    const haaks90 = Math.abs(hk.graden - 90) < 0.5, haaks270 = Math.abs(hk.graden - 270) < 0.5;
+    const haaks90 = Math.abs(hk.graden - 90) < 0.5, haaks270 = Math.abs(hk.graden - 270) < 0.5, e0 = (lijst(r.wanden).find(x => x.id === wandId) || {}).hoek_naar_volgende;
     chips.appendChild(chip('90°', haaks90, () => zet(90, 'aanname')));
     chips.appendChild(chip('270° (hoek springt naar binnen)', haaks270, () => zet(270, 'aanname')));
     chips.appendChild(chip(hk.schuin ? hk.graden + '° schuin' : 'Schuin', hk.schuin, () => { S.hoekInvoer = S.hoekInvoer === wandId ? null : wandId; ververs(); }));
     blok.appendChild(chips);
-    blok.appendChild(h('p', { class: 'opn-hint', text: hk.schuin ? (hk.bron === 'gemeten' ? 'Gemeten hoek.' : 'Geschatte hoek; meet hem of een diagonaal, dan is de vorm bepaald.') : '90° is een aanname tot een diagonaal de vorm controleert.' }));
+    blok.appendChild(h('p', { class: 'opn-hint', text: hk.schuin ? (hk.bron === 'gemeten' ? 'Gemeten hoek.' : 'Geschatte hoek; meet hem of een diagonaal, dan is de vorm bepaald.') : hk.bron === 'gemeten' ? 'Bevestigd: ' + hk.graden + '° is gemeten' + (e0 && e0.driehoek ? ' (driehoek ' + e0.driehoek.a + ' - ' + e0.driehoek.b + ' - ' + e0.driehoek.c + ' mm)' : ' met een winkelhaak') + '.' : hk.graden + '° is een aanname; bevestig hem met een winkelhaak of een driehoeksmeting.' }));
+    if (!hk.schuin) blok.appendChild(h('div', { class: 'opn-onderrij' }, h('button', { type: 'button', class: 'opn-btn opn-btn-klein', text: 'Haaksheid controleren', onclick: () => { S.driehoek = S.driehoek === wandId ? null : wandId; ververs(); } })));
+    if (S.driehoek === wandId && !hk.schuin) blok.appendChild(driehoekPaneel(wandId, hk, zet, ververs));
     if (S.hoekInvoer === wandId) {
       const inp = h('input', { type: 'text', inputmode: 'decimal', class: 'opn-input', placeholder: 'graden, bijvoorbeeld 135', 'aria-label': 'Hoek in graden', value: hk.schuin ? String(hk.graden) : '' });
       const lees = () => { const g = parseFloat(String(inp.value).replace(',', '.')); if (!(g > 0)) { X.toast('Vul de hoek in graden in.'); return null; } return g; };
@@ -326,6 +328,22 @@
     }
     return blok;
   };
+
+  // Haaksheidscontrole: of met een winkelhaak (klopt, haaks), of met een driehoeksmeting (a en b vanaf de hoek langs de wanden, c ertussen). Het resultaat staat direct bij de hoek.
+  function driehoekPaneel(wandId, hk, zet, ververs) {
+    const veld = (label, ph) => { const i = h('input', { type: 'text', inputmode: 'decimal', class: 'opn-input', placeholder: ph, 'aria-label': label }); return i; };
+    const a = veld('a in mm', '1000'), b = veld('b in mm', '1000'), c = veld('c in mm', 'afstand c');
+    const getal = i => parseFloat(String(i.value).replace(',', '.'));
+    const uitleg = h('p', { class: 'opn-hint', text: hk.inspringend ? 'Deze hoek springt naar binnen: meet over de hoek heen aan de buitenkant. Zet vanaf de hoek a mm langs de ene wand en b mm langs de andere (potlood), meet dan de afstand c tussen de twee punten.' : 'Zet vanaf de hoek a mm langs de ene wand en b mm langs de andere (potlood, bijvoorbeeld 1000 en 1000), meet dan de afstand c tussen de twee punten.' });
+    return h('div', { class: 'opn-driehoek' }, uitleg,
+      h('div', { class: 'opn-onderrij' }, h('button', { type: 'button', class: 'opn-btn opn-btn-klein', text: 'Winkelhaak: klopt, haaks', onclick: () => { S.driehoek = null; zet(hk.inspringend ? 270 : 90, 'gemeten'); } })),
+      h('div', { class: 'opn-invoerrij' }, a, b, c),
+      h('button', { type: 'button', class: 'opn-btn opn-btn-groot', text: 'Bereken de hoek', onclick: () => {
+        const res = K.zetHoekDriehoek(S.rec.opname, X.ruimte().id, wandId, getal(a), getal(b), getal(c));
+        if (!X.wijzig(res)) return; S.driehoek = null;
+        X.toast(res.haaks ? 'Haaks bevestigd: ' + res.gemeten_graden.toString().replace('.', ',') + '° gemeten (marge ongeveer ' + res.onzekerheid_graden.toString().replace('.', ',') + '°).' : 'De hoek is ' + res.gemeten_graden.toString().replace('.', ',') + '°, niet haaks. Dit is nu de gemeten hoek.');
+        ververs(); } }));
+  }
 
   // ── Scherm: fotoronde. Geen vast aantal wanden: vanaf de toegangsdeur met de klok mee, een foto per wand, tot je terug bent bij de eerste wand. ──
   SCHERMEN.fotos = function (c) {
@@ -455,7 +473,7 @@
     // scope en uitzonderingen: wat de vrijgave straks zegt
     const sc = h('div', { class: 'opn-kaart' }, h('div', { class: 'opn-kaart-titel', text: 'Wat de vrijgave zegt' }));
     const s0 = chk.scope[0];
-    if (s0) sc.appendChild(h('p', { text: 'Werkzone: ' + (s0.werkzone.map(w => K.wandNaam(w).toLowerCase()).join(', ') || 'nog niet gekozen') + '. Andere wanden alleen basis (' + (s0.wanden_alleen_basis.map(w => K.wandNaam(w).toLowerCase()).join(', ') || 'geen') + '). Vorm: ' + vormTekst(s0.vorm) + '.' }));
+    if (s0) sc.appendChild(h('p', { text: 'Werkzone: ' + (s0.werkzone.map(w => K.wandNaam(w).toLowerCase()).join(', ') || 'nog niet gekozen') + '. Andere wanden alleen basis (' + (s0.wanden_alleen_basis.map(w => K.wandNaam(w).toLowerCase()).join(', ') || 'geen') + '). Vorm: ' + (s0.vorm.label || '').toLowerCase() + '.' }));
     if (chk.uitzonderingen.length) { sc.appendChild(h('div', { class: 'opn-label', text: 'Uitzonderingen (' + chk.uitzonderingen.length + ')' })); for (const u of chk.uitzonderingen) sc.appendChild(h('p', { class: 'opn-nameten', text: u.tekst || u.omschrijving || JSON.stringify(u) })); }
     else sc.appendChild(h('p', { class: 'opn-hint', text: 'Geen uitzonderingen.' }));
     body.appendChild(sc);
@@ -468,15 +486,30 @@
     c.appendChild(body);
   };
   const hoofdletter = t => t ? t.charAt(0).toUpperCase() + t.slice(1) : t;
-  function vormTekst(v) { return v.schematisch ? (v.veelhoek ? 'schematisch (hoeken aangenomen 90 of 270 graden)' : 'schematisch (nog niet bepaald of niet gecontroleerd)') : v.veelhoek ? 'bepaald en gecontroleerd met een diagonaal' : v.afwijkend ? 'bepaald, niet rechthoekig' : 'bepaald en gecontroleerd'; }
   // De sluitcontrole in woorden: sluit de rondgang langs de wanden, wat is aangenomen en wat is gecontroleerd. Nooit stil haaks.
   function sluitKaart(r) {
     const sc = K.sluitcontrole(r), v = sc.vorm, plat = K.plattegrond(r), kaart = h('div', { class: 'opn-kaart opn-sluitkaart' }, h('div', { class: 'opn-kaart-titel', text: 'Vorm en sluitcontrole' }));
-    const pil = v.status === 'inconsistent' ? ['Meetgegevens inconsistent', 'conflict'] : v.status === 'consistent' ? [v.afwijkend ? 'Gecontroleerd, niet rechthoekig' : 'Gecontroleerd', 'ok'] : v.status === 'onverifieerd' ? ['Schematisch', 'later'] : ['Onvoldoende bepaald', 'later'];
+    const lab = K.vormLabel(v), pil = [lab.kort, lab.pil];
     kaart.appendChild(h('div', { class: 'opn-statusregel' }, h('span', { class: 'opn-pil opn-pil-' + pil[1], text: pil[0] }), v.sluitfout ? h('span', { class: 'opn-rij-sub', text: 'sluitfout ' + v.sluitfout.mm + ' mm' }) : null));
     kaart.appendChild(h('p', { text: v.reden || 'De wanden sluiten op elkaar.' }));
+    if (v.volgende && v.volgende.tekst) kaart.appendChild(volgendeMaat(r, v));
+    const hv = K.haaksheidsVoorstel(r);
+    if (hv.length) kaart.appendChild(h('div', { class: 'opn-volgende' }, h('div', { class: 'opn-label', text: 'Haaksheid van de werkzone controleren' }),
+      h('p', { class: 'opn-hint', text: 'Deze hoeken aan de werkzone zijn nog aangenomen. Een lokale driehoeksmeting (of winkelhaak) bevestigt ze.' }),
+      h('div', { class: 'opn-chips' }, ...hv.map(x => h('button', { type: 'button', class: 'opn-chip', onclick: () => { S.driehoek = x.wand; X.blad('Hoek bij ' + K.hoekTekst(x.hoek), [X.hoekRij(x.wand, { kop: K.wandLabel(x.tussen[0]) + ' naar ' + K.wandLabel(x.tussen[1]).toLowerCase(), vernieuw: () => { X.sluitBlad(); X.teken(); } })]); } }, 'Hoek ' + K.hoekTekst(x.hoek) + ' (' + x.graden + '°, aanname)')))));
     kaart.appendChild(h('p', { class: 'opn-hint', text: 'Hoeken: ' + K.wandIds(r).map((w, i) => { const hk = K.hoekVan(r, w); return (i + 1) + ' naar ' + (i + 2 > K.wandIds(r).length ? 1 : i + 2) + ': ' + hk.graden + '°' + (hk.bron === 'aanname' ? ' (aanname)' : hk.bron === 'gemeten' ? ' (gemeten)' : ' (schatting)'); }).join(' · ') }));
     return kaart;
+  }
+  // De volgende benodigde maat: een diagonaal die je meteen kunt toevoegen en meten, of een controlehoek.
+  function volgendeMaat(r, v) {
+    const vk = v.volgende, blok = h('div', { class: 'opn-volgende' }, h('div', { class: 'opn-label', text: 'Volgende maat' }), h('p', { text: vk.tekst }));
+    if ((vk.soort === 'diagonaal' || vk.soort === 'controle') && vk.van && vk.naar && !K.hoekenAangrenzend(r, vk.van, vk.naar)) {
+      blok.appendChild(h('button', { type: 'button', class: 'opn-btn opn-btn-klein opn-btn-primair', text: 'Meet ' + vk.van + ' - ' + vk.naar, onclick: () => {
+        const bestaand = lijst(r.diagonalen).find(d => d && ((d.van === vk.van && d.naar === vk.naar) || (d.van === vk.naar && d.naar === vk.van)));
+        const res = bestaand ? { opname: S.rec.opname, fout: null, id: bestaand.id } : K.voegDiagonaalToe(S.rec.opname, r.id, vk.van, vk.naar);
+        if (!bestaand && !X.wijzig(res)) return; S.modelStap = 'maat:diagonalen.' + res.id + '.maten.lengte'; X.ga('model'); } }));
+    }
+    return blok;
   }
   function naarReden(rd) {
     if (rd.code === 'foto') { S.fotoWand = rd.wand; X.ga('fotos'); return; }

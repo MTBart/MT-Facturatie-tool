@@ -210,7 +210,8 @@
     body.appendChild(h('div', { class: 'opn-voortgang', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': String(vg.n), 'aria-valuenow': String(vg.klaar) }, h('span', { style: { width: vg.pct + '%' } })));
     const uitleg = [];
     if (kamer.vormStatus === 'inconsistent') uitleg.push('De metingen sluiten niet op elkaar (zie Afronden): de vorm blijft een schatting.');
-    else if (kamer.vormStatus === 'onverifieerd') uitleg.push(ids.length === 4 ? 'De vorm volgt uit vier wanden en een diagonaal. Een tweede diagonaal als controle is optioneel; tot dan blijft de vorm gestippeld.' : 'De wanden sluiten, maar de hoeken zijn aangenomen als 90 of 270 graden. Een diagonaal als controle is optioneel; tot dan blijft de vorm gestippeld.');
+    else if (kamer.vormBepaling === 'bepaald') uitleg.push(kamer.vormLabel + '.' + (kamer.vormVolgende ? ' ' + kamer.vormVolgende.tekst : ''));
+    else if (kamer.vormBepaling === 'getekend' && kamer.vormStatus === 'onverifieerd') uitleg.push(kamer.vormLabel + ': de hoeken zijn aangenomen (90 of 270 graden) en dat bewijst een lengte of één diagonaal niet. ' + (kamer.vormVolgende ? kamer.vormVolgende.tekst : 'Bevestig de hoeken.') + ' Tot dan blijft de vorm gestippeld.');
     else if (kamer.vormGeschat) uitleg.push(ids.length === 4 ? 'Gestippeld is een schatting: de vorm klopt pas als de vier wanden en een diagonaal gemeten zijn.' : 'Gestippeld is een schatting: de vorm wordt vast naarmate je de wanden meet.');
     if (kamer.hoogteGeschat) uitleg.push('De hoogte is nog een schatting: meet het plafond.');
     if (uitleg.length) body.appendChild(h('p', { class: 'opn-schatting', text: uitleg.join(' ') }));

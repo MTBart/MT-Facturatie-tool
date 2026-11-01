@@ -125,4 +125,33 @@ test('vierhoek: één diagonaal bepaalt de vorm (bepaald), de tweede controleert
   op = meet(op, 'diagonalen.A.maten.lengte', hyp(5000, 3000)); v = K.vorm(R(op)); assert.strictEqual(v.bepaling, 'bepaald'); assert.strictEqual(v.schematisch, false); assert.strictEqual(v.volgende.soort, 'controle');
   op = meet(op, 'diagonalen.B.maten.lengte', hyp(5000, 3000)); v = K.vorm(R(op)); assert.strictEqual(v.bepaling, 'gecontroleerd'); assert.strictEqual(v.status, 'consistent');
 });
+test('vormLabel: de tekst volgt de bewezen stap en beweert nergens meer (scherm 33: niet "Alles gemeten en gecontroleerd")', () => {
+  const l = op => K.vormLabel(K.vorm(R(op)));
+  assert.strictEqual(l(zesWanden()).kort, 'Lengtes gemeten; model onder hoekaanname');
+  assert.strictEqual(l(metDiagonaal(zesWanden(), 'H1', 'H3', D['H1-H3'])).kort, 'Lengtes gemeten; model onder hoekaanname; controle C klopt');
+  assert.strictEqual(l(zesWanden({ bron: 'gemeten' })).bepaling, 'bepaald'); assert.ok(/nog niet onafhankelijk gecontroleerd/.test(l(zesWanden({ bron: 'gemeten' })).kort));
+  assert.strictEqual(l(metDiagonaal(zesWanden({ bron: 'gemeten' }), 'H1', 'H3', D['H1-H3'])).kort, 'Onafhankelijk gecontroleerd');
+  assert.strictEqual(l(zesWanden({ laatste: 270 })).pil, 'conflict');
+  for (const op of [zesWanden(), metDiagonaal(zesWanden(), 'H1', 'H3', D['H1-H3'])]) assert.ok(!/Alles/.test(l(op).kort) && !/^Onafhankelijk/.test(l(op).kort));
+  assert.ok(/Getekend/.test(K.vormLabel(K.vorm(R(K.nieuweOpname({ ruimtes: [K.nieuweRuimte({ id: 'R1', wanden: [] })] })))).kort));
+});
+test('haaksheid met een driehoek: hoek uit a, b en c; haaks wordt bevestigd (gemeten), een afwijking wordt een gemeten schuine hoek, en de drie maten blijven bewaard', () => {
+  assert.strictEqual(K.hoekUitDriehoek(1000, 1000, 1414), 89.98); assert.strictEqual(K.hoekUitDriehoek(1000, 1000, 3000), null); assert.strictEqual(K.hoekUitDriehoek(0, 1, 1), null);
+  const op = zesWanden(), res = K.zetHoekDriehoek(op, 'R1', 'W1', 1000, 1000, 1414, T0); assert.strictEqual(res.fout, null); assert.strictEqual(res.haaks, true);
+  assert.deepStrictEqual([K.hoekVan(R(res.opname), 'W1').graden, K.hoekVan(R(res.opname), 'W1').bron], [90, 'gemeten']); assert.strictEqual(R(res.opname).wanden[0].hoek_naar_volgende.driehoek.c, 1414);
+  const scheef = K.zetHoekDriehoek(op, 'R1', 'W1', 1000, 1000, 1500, T0); assert.strictEqual(scheef.haaks, false); assert.ok(Math.abs(K.hoekVan(R(scheef.opname), 'W1').graden - 97.18) < 0.05, K.hoekVan(R(scheef.opname), 'W1').graden);
+  // een inspringende hoek (270) meet je over de hoek heen: 360 min de gemeten hoek
+  const binnen = K.zetHoekDriehoek(op, 'R1', 'W3', 1000, 1000, 1414, T0); assert.deepStrictEqual([K.hoekVan(R(binnen.opname), 'W3').graden, K.hoekVan(R(binnen.opname), 'W3').bron], [270, 'gemeten']);
+  assert.ok(K.zetHoekDriehoek(op, 'R1', 'W1', 1000, 1000, 2500, T0).fout);
+  // alle zes hoeken bevestigd haaks (via de driehoek) + alle lengtes: geometrisch bepaald
+  let alles = op; ['W1', 'W2', 'W3', 'W4', 'W5', 'W6'].forEach(w => { alles = K.zetHoekDriehoek(alles, 'R1', w, 1000, 1000, 1414, T0).opname; });
+  assert.strictEqual(K.vorm(R(alles)).bepaling, 'bepaald');
+});
+test('voorstel voor de werkzone: de hoeken aan de uiteinden van de werkzone-wand die nog aangenomen zijn', () => {
+  let op = goed(K.zetRuimte(zesWanden(), 'R1', { werkzone: ['W2'] }));
+  assert.deepStrictEqual(K.haaksheidsVoorstel(R(op)).map(x => x.wand + ':' + x.hoek), ['W1:H2', 'W2:H3'], 'begin en eind van wand 2');
+  op = K.zetHoekDriehoek(op, 'R1', 'W1', 1000, 1000, 1414, T0).opname;
+  assert.deepStrictEqual(K.haaksheidsVoorstel(R(op)).map(x => x.wand), ['W2'], 'een bevestigde hoek valt weg');
+  op = goed(K.zetRuimte(op, 'R1', { werkzone: ['W1'] })); assert.deepStrictEqual(K.haaksheidsVoorstel(R(op)).map(x => x.wand), ['W6'], 'wand 1: de hoek ervoor (na wand 6); de hoek erna is al bevestigd');
+});
 console.log('\n' + n + ' tests geslaagd');
