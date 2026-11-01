@@ -312,6 +312,7 @@
   const lengte = (r, kind, id) => K.waarde(maatOp(vind(r[kind], id), 'lengte'));
   const wandPad = w => 'wanden.' + w + '.maten.lengte', diagPad = d => 'diagonalen.' + d + '.maten.lengte';
   const afr = x => Math.round(x * 100) / 100;
+  const dec = x => String(x).replace('.', ',');                              // een getal met decimale komma, voor de teksten
   // Vierhoek P0 P1 P2 P3 (met de klok mee) uit de zijden s1=P0P1, s2=P1P2, s3=P2P3, s4=P3P0 en de diagonaal d1=P0P2. Geeft de punten, of null als de driehoeken niet kunnen bestaan.
   function vierhoek(s, d1, tol) {
     const drie = (a, b, c) => Math.max(a, b, c) <= a + b + c - Math.max(a, b, c) + tol;
@@ -396,7 +397,7 @@
   // Wat een gecontroleerde vorm NIET bewijst: de controlemaat controleert de vorm globaal (een extra, onafhankelijke maat), niet elk deel van de ruimte. Dit blijft apart open (ChatGPT-review 046).
   K.OPEN_NA_VORM = 'Nog apart open: lokale haaksheid, obstakels en de montage- en hoogtematen van de werkzone.';
   // De toleranties zijn algoritmische criteria van deze beta (wanneer rekent de app iets als "klopt"), geen fysieke meetnauwkeurigheid en geen productietolerantie.
-  K.CRITERIA_TEKST = 'Criteria van de app (rekenregels, geen meetnauwkeurigheid of productietolerantie): hoekensom ' + K.TOLERANTIE.hoek_som + '° plus de onzekerheid van gemeten hoeken, raakpunt ' + K.TOLERANTIE.raak + ' mm, sluitfout en diagonaal ' + K.TOLERANTIE.sluit + ' mm, ongeveer haaks ' + K.TOLERANTIE.hoek_haaks + '°.';
+  K.CRITERIA_TEKST = 'Criteria van de app (rekenregels, geen meetnauwkeurigheid of productietolerantie): hoekensom ' + K.TOLERANTIE.hoek_som + '° plus de onzekerheid van gemeten hoeken, raakpunt ' + K.TOLERANTIE.raak + ' mm, sluitfout en diagonaal ' + K.TOLERANTIE.sluit + ' mm, ongeveer haaks ' + dec(K.TOLERANTIE.hoek_haaks) + '°.';
   // De restfouten van de vorm in woorden: wat er na de sluiting nog aan verschil over is, zodat groen nooit "perfect" suggereert. Pure functie, voor elk scherm en de export.
   K.restfouten = function (v) {
     v = v || {}; const u = [], teken = x => (x > 0 ? '+' : '') + x, komma = x => String(x).replace('.', ',');
@@ -454,7 +455,7 @@
       if (Math.abs(verschilHoek) <= marge) continue;
       basis.status = 'inconsistent'; basis.bepaling = null; basis.schematisch = true; basis.betrokken = betrokken.concat([hoekPad(wIn)]);
       basis.hoek_conflict = { hoek: hoekIds[k], wand: wIn, pad: hoekPad(wIn), gemeten_graden: hk.graden, berekend_graden: afr(berekend), verschil_graden: afr(verschilHoek), marge_graden: afr(marge), methode: hk.methode };
-      basis.reden = 'Meetgegevens inconsistent: ' + hoekTekst(hoekIds[k]) + ' is ' + hk.graden + ' graden gemeten, maar uit de vier wandlengtes en diagonaal ' + basis.diagonaal_gebruikt + ' volgt ' + afr(berekend) + ' graden (verschil ' + (verschilHoek > 0 ? '+' : '') + afr(verschilHoek) + ' graden, marge ' + afr(marge) + ' graden). Controleer de gemeten hoek, de wandlengtes en de diagonaal. De app past niets aan.';
+      basis.reden = 'Meetgegevens inconsistent: ' + hoekTekst(hoekIds[k]) + ' is ' + dec(hk.graden) + ' graden gemeten, maar uit de vier wandlengtes en diagonaal ' + basis.diagonaal_gebruikt + ' volgt ' + dec(afr(berekend)) + ' graden (verschil ' + (verschilHoek > 0 ? '+' : '') + dec(afr(verschilHoek)) + ' graden, marge ' + dec(afr(marge)) + ' graden). Controleer de gemeten hoek, de wandlengtes en de diagonaal. De app past niets aan.';
       basis.volgende = { soort: 'hoek', wand: wIn, tekst: 'Meet de hoek bij ' + hoekTekst(hoekIds[k]) + ' opnieuw, of controleer de wandlengtes en de diagonaal.' };
       return basis;
     }
