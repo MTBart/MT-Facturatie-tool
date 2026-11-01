@@ -245,7 +245,7 @@ test('uitsprongen die buiten de wand vallen of over elkaar liggen geven een waar
 });
 test('hoek: standaard 90 en een aanname; een eigen waarde is een voorstel; historie blijft; ongeldige hoeken worden geweigerd', () => {
   let op = ruimteUitFotos(4);
-  assert.deepStrictEqual(K.hoekVan(R(op), 'W1'), { graden: 90, bron: 'aanname', haaks: true, inspringend: false, schuin: false });
+  assert.deepStrictEqual(K.hoekVan(R(op), 'W1'), { graden: 90, bron: 'aanname', haaks: true, inspringend: false, schuin: false, onzekerheid: null, methode: null });
   op = hoek(op, 'W1', 270); assert.strictEqual(K.hoekVan(R(op), 'W1').inspringend, true); assert.strictEqual(K.hoekVan(R(op), 'W1').bron, 'aanname');
   op = hoek(op, 'W1', 112.5); assert.deepStrictEqual([K.hoekVan(R(op), 'W1').graden, K.hoekVan(R(op), 'W1').bron], [112.5, 'foto-voorstel']);
   op = hoek(op, 'W1', 112.4, 'gemeten'); assert.strictEqual(K.hoekVan(R(op), 'W1').bron, 'gemeten'); assert.strictEqual(R(op).wanden[0].hoek_naar_volgende.historie.length, 2);

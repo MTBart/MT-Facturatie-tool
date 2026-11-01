@@ -129,19 +129,19 @@ test('vormLabel: de tekst volgt de bewezen stap en beweert nergens meer (scherm 
   const l = op => K.vormLabel(K.vorm(R(op)));
   assert.strictEqual(l(zesWanden()).kort, 'Lengtes gemeten; model onder hoekaanname');
   assert.strictEqual(l(metDiagonaal(zesWanden(), 'H1', 'H3', D['H1-H3'])).kort, 'Lengtes gemeten; model onder hoekaanname; controle C klopt');
-  assert.strictEqual(l(zesWanden({ bron: 'gemeten' })).bepaling, 'bepaald'); assert.ok(/nog niet onafhankelijk gecontroleerd/.test(l(zesWanden({ bron: 'gemeten' })).kort));
-  assert.strictEqual(l(metDiagonaal(zesWanden({ bron: 'gemeten' }), 'H1', 'H3', D['H1-H3'])).kort, 'Onafhankelijk gecontroleerd');
+  assert.strictEqual(l(zesWanden({ bron: 'gemeten' })).bepaling, 'bepaald'); assert.ok(/nog niet met een controlemaat gecontroleerd/.test(l(zesWanden({ bron: 'gemeten' })).kort));
+  assert.strictEqual(l(metDiagonaal(zesWanden({ bron: 'gemeten' }), 'H1', 'H3', D['H1-H3'])).kort, 'Vorm gecontroleerd met controlemaat C');
   assert.strictEqual(l(zesWanden({ laatste: 270 })).pil, 'conflict');
-  for (const op of [zesWanden(), metDiagonaal(zesWanden(), 'H1', 'H3', D['H1-H3'])]) assert.ok(!/Alles/.test(l(op).kort) && !/^Onafhankelijk/.test(l(op).kort));
+  for (const op of [zesWanden(), metDiagonaal(zesWanden(), 'H1', 'H3', D['H1-H3'])]) assert.ok(!/Alles/.test(l(op).kort) && !/^Vorm gecontroleerd/.test(l(op).kort));
   assert.ok(/Getekend/.test(K.vormLabel(K.vorm(R(K.nieuweOpname({ ruimtes: [K.nieuweRuimte({ id: 'R1', wanden: [] })] })))).kort));
 });
 test('haaksheid met een driehoek: hoek uit a, b en c; haaks wordt bevestigd (gemeten), een afwijking wordt een gemeten schuine hoek, en de drie maten blijven bewaard', () => {
   assert.strictEqual(K.hoekUitDriehoek(1000, 1000, 1414), 89.98); assert.strictEqual(K.hoekUitDriehoek(1000, 1000, 3000), null); assert.strictEqual(K.hoekUitDriehoek(0, 1, 1), null);
   const op = zesWanden(), res = K.zetHoekDriehoek(op, 'R1', 'W1', 1000, 1000, 1414, T0); assert.strictEqual(res.fout, null); assert.strictEqual(res.haaks, true);
-  assert.deepStrictEqual([K.hoekVan(R(res.opname), 'W1').graden, K.hoekVan(R(res.opname), 'W1').bron], [90, 'gemeten']); assert.strictEqual(R(res.opname).wanden[0].hoek_naar_volgende.driehoek.c, 1414);
+  assert.deepStrictEqual([K.hoekVan(R(res.opname), 'W1').graden, K.hoekVan(R(res.opname), 'W1').bron], [89.98, 'gemeten'], 'de werkelijk gemeten hoek, niet afgerond naar 90'); assert.strictEqual(R(res.opname).wanden[0].hoek_naar_volgende.driehoek.c, 1414);
   const scheef = K.zetHoekDriehoek(op, 'R1', 'W1', 1000, 1000, 1500, T0); assert.strictEqual(scheef.haaks, false); assert.ok(Math.abs(K.hoekVan(R(scheef.opname), 'W1').graden - 97.18) < 0.05, K.hoekVan(R(scheef.opname), 'W1').graden);
   // een inspringende hoek (270) meet je over de hoek heen: 360 min de gemeten hoek
-  const binnen = K.zetHoekDriehoek(op, 'R1', 'W3', 1000, 1000, 1414, T0); assert.deepStrictEqual([K.hoekVan(R(binnen.opname), 'W3').graden, K.hoekVan(R(binnen.opname), 'W3').bron], [270, 'gemeten']);
+  const binnen = K.zetHoekDriehoek(op, 'R1', 'W3', 1000, 1000, 1414, T0); assert.deepStrictEqual([K.hoekVan(R(binnen.opname), 'W3').graden, K.hoekVan(R(binnen.opname), 'W3').bron], [270.02, 'gemeten']);
   assert.ok(K.zetHoekDriehoek(op, 'R1', 'W1', 1000, 1000, 2500, T0).fout);
   // alle zes hoeken bevestigd haaks (via de driehoek) + alle lengtes: geometrisch bepaald
   let alles = op; ['W1', 'W2', 'W3', 'W4', 'W5', 'W6'].forEach(w => { alles = K.zetHoekDriehoek(alles, 'R1', w, 1000, 1000, 1414, T0).opname; });
@@ -219,5 +219,100 @@ test('de tekst noemt alleen diagonalen die meetellen; een diagonaal door de buit
   const v = K.vorm(R(op)), l = K.vormLabel(v);
   assert.strictEqual(l.kort, 'Lengtes gemeten; model onder hoekaanname; controle C en D klopt', 'E (H3-H5, door de buitenruimte) staat er niet bij');
   assert.ok(/Diagonaal E loopt door de buitenruimte en telt niet mee/.test(v.reden), v.reden);
+});
+// ── Brok 3c: ChatGPT-review 046 ──
+// P1: een gemeten hoek die de uit de maten berekende vorm tegenspreekt wordt nooit stil genegeerd (ChatGPT's repro letterlijk).
+function vierWanden(opties) {
+  opties = opties || {};
+  let op = K.nieuweOpname({ opname_id: 'OPN-TEST-046', project: { code: 'TEST-001' }, aangemaakt: T0, ruimtes: [K.nieuweRuimte({ id: 'R1', naam: 'Testkamer', wanden: [] })] });
+  for (let i = 0; i < 4; i++) op = goed(K.voegWandToe(op, 'R1'));
+  op = goed(K.maakRond(op, 'R1'));
+  [4000, 3000, 4000, 3000].forEach((l, i) => { op = meet(op, 'wanden.W' + (i + 1) + '.maten.lengte', l); });
+  (opties.diagonalen || []).forEach(([id, l]) => { op = meet(op, 'diagonalen.' + id + '.maten.lengte', l); });
+  return op;
+}
+test('046 P1: vier wanden 4000/3000/4000/3000, diagonalen A en B 5000, hoek na wand 1 gemeten 100 graden: conflict met pad, niet gecontroleerd', () => {
+  const basis = vierWanden({ diagonalen: [['A', 5000], ['B', 5000]] });
+  assert.strictEqual(K.vorm(R(basis)).bepaling, 'gecontroleerd', 'zonder de tegenstrijdige hoek is de vorm gecontroleerd');
+  const op = hoek(basis, 'W1', 100, 'gemeten'), v = K.vorm(R(op));
+  assert.strictEqual(v.status, 'inconsistent'); assert.strictEqual(v.bepaling, null); assert.strictEqual(K.vormLabel(v).pil, 'conflict');
+  assert.ok(v.betrokken.includes('wanden.W1.hoek_naar_volgende'), v.betrokken.join(' '));
+  assert.deepStrictEqual([v.hoek_conflict.hoek, v.hoek_conflict.wand, v.hoek_conflict.gemeten_graden, v.hoek_conflict.berekend_graden], ['H2', 'W1', 100, 90]);
+  assert.ok(/hoek 2 is 100 graden gemeten/.test(v.reden) && /volgt 90 graden/.test(v.reden), v.reden);
+  assert.ok(!/gecontroleerd met/.test(K.vormLabel(v).kort));
+});
+test('046 P1: elke gemeten hoek wordt getoetst (eerste en laatste ook), ook met slechts een diagonaal; een aangenomen hoek mag afwijken', () => {
+  for (const diag of [[['A', 5000]], [['B', 5000]], [['A', 5000], ['B', 5000]]]) {
+    const basis = vierWanden({ diagonalen: diag });
+    for (const w of ['W1', 'W2', 'W3', 'W4']) {
+      const v = K.vorm(R(hoek(basis, w, 100, 'gemeten')));
+      assert.strictEqual(v.status, 'inconsistent', w + ' met ' + diag.length + ' diagonaal'); assert.ok(v.betrokken.includes('wanden.' + w + '.hoek_naar_volgende'), w);
+      assert.strictEqual(K.vorm(R(hoek(basis, w, 90, 'gemeten'))).status, diag.length === 2 ? 'consistent' : 'onverifieerd', 'een gemeten hoek die klopt, ' + w);
+    }
+    const aangenomen = K.vorm(R(hoek(basis, 'W1', 100, 'aanname')));
+    assert.notStrictEqual(aangenomen.status, 'inconsistent', 'een aangenomen hoek van 100 graden mag afwijken van de uit echte maten berekende vorm');
+  }
+});
+test('046 P1: de marge is de eigen onzekerheid van de gemeten hoek, niet alleen 1 graad', () => {
+  const basis = vierWanden({ diagonalen: [['A', 5000]] });
+  assert.strictEqual(K.vorm(R(hoek(basis, 'W1', 90.9, 'gemeten'))).status, 'onverifieerd', '0,9 graden valt binnen de 1 graad');
+  assert.strictEqual(K.vorm(R(hoek(basis, 'W1', 91.5, 'gemeten'))).status, 'inconsistent', '1,5 graden is te veel zonder opgegeven onzekerheid');
+  const ruim = goed(K.zetHoek(basis, 'R1', 'W1', 91.5, 'gemeten', T0, { methode: 'invoer', onzekerheid_graden: 1 }));
+  assert.strictEqual(K.vorm(R(ruim)).status, 'onverifieerd', 'met een opgegeven onzekerheid van 1 graad is 1,5 graden nog te rijmen');
+  assert.strictEqual(K.hoekVan(R(ruim), 'W1').onzekerheid, 1);
+});
+test('046 P1: zelfde toets in de N-hoek-route: een tegenstrijdige gemeten hoek geeft een conflict met het pad van de gemeten hoeken, nooit gecontroleerd', () => {
+  const goedeOp = metDiagonaal(zesWanden({ bron: 'gemeten' }), 'H1', 'H3', D['H1-H3']);
+  assert.strictEqual(K.vorm(R(goedeOp)).bepaling, 'gecontroleerd');
+  for (let i = 1; i <= 6; i++) {
+    const v = K.vorm(R(hoek(goedeOp, 'W' + i, i === 3 ? 250 : 100, 'gemeten')));
+    assert.strictEqual(v.status, 'inconsistent', 'W' + i); assert.strictEqual(v.bepaling, null);
+    assert.ok(v.betrokken.includes('wanden.W' + i + '.hoek_naar_volgende'), 'W' + i + ': ' + v.betrokken.join(' '));
+  }
+});
+test('046 P1: de marge van de hoekensom in de N-hoek-route telt de onzekerheid van gemeten hoeken mee', () => {
+  let op = zesWanden({ bron: 'gemeten' });
+  op = goed(K.zetHoek(op, 'R1', 'W1', 91.3, 'gemeten', T0)); assert.strictEqual(K.vorm(R(op)).hoeksom.tolerantie, 1);
+  assert.strictEqual(K.vorm(R(op)).status, 'inconsistent', 'de rondgang sluit niet met 91,3 graden');
+  op = goed(K.zetHoek(op, 'R1', 'W1', 91.3, 'gemeten', T0, { onzekerheid_graden: 0.5 })); assert.strictEqual(K.vorm(R(op)).hoeksom.tolerantie, 1.5);
+});
+// P2: een driehoeksmeting wordt niet weggerond naar 90.
+test('046 P2: a = b = 1000 en c voor 89,6 graden: het hoekrecord is 89,6 (niet 90); methode, a, b, c, ruwe hoek en onzekerheid staan erbij; ongeveer haaks is alleen een classificatie', () => {
+  const c = Math.sqrt(2 * 1000 * 1000 - 2 * 1000 * 1000 * Math.cos(89.6 * Math.PI / 180));
+  assert.strictEqual(K.hoekUitDriehoek(1000, 1000, c), 89.6);
+  const res = K.zetHoekDriehoek(zesWanden(), 'R1', 'W1', 1000, 1000, c, T0); assert.strictEqual(res.fout, null);
+  const rec = R(res.opname).wanden[0].hoek_naar_volgende;
+  assert.strictEqual(rec.graden, 89.6); assert.strictEqual(rec.bron, 'gemeten'); assert.strictEqual(rec.methode, 'driehoek');
+  assert.deepStrictEqual([rec.driehoek.a, rec.driehoek.b, rec.driehoek.c], [1000, 1000, c]); assert.strictEqual(rec.driehoek.ruw_graden, 89.6); assert.strictEqual(rec.driehoek.gemeten_graden, 89.6);
+  assert.ok(rec.onzekerheid_graden > 0 && rec.onzekerheid_graden === rec.driehoek.onzekerheid_graden, 'onzekerheid');
+  assert.strictEqual(res.haaks, true, 'classificatie: ongeveer haaks (binnen 0,5 graad)'); assert.strictEqual(res.gemeten_graden, 89.6);
+  const hk = K.hoekVan(R(res.opname), 'W1'); assert.deepStrictEqual([hk.graden, hk.haaks, hk.methode, hk.onzekerheid], [89.6, true, 'driehoek', rec.onzekerheid_graden]);
+  // de geometrie gebruikt 89,6: 0,4 graden over 6000 mm geeft ongeveer 42 mm, ver boven de sluitmarge van 10 mm. Dat wordt dus een conflict, geen stil rechtgezette hoek.
+  assert.ok(Math.abs(K.vorm(R(zesWandenMetHoek(89.6))).sluitfout.mm - 42) < 6, 'ongeveer 42 mm sluitfout bij 0,4 graden over 6000 mm: ' + K.vorm(R(zesWandenMetHoek(89.6))).sluitfout.mm);
+  // inspringend: 360 min de gemeten hoek, ook niet afgerond naar 270
+  const cb = Math.sqrt(2 * 1000 * 1000 - 2 * 1000 * 1000 * Math.cos(90.4 * Math.PI / 180)), ins = K.zetHoekDriehoek(zesWanden(), 'R1', 'W3', 1000, 1000, cb, T0);
+  assert.strictEqual(R(ins.opname).wanden[2].hoek_naar_volgende.graden, 269.6); assert.strictEqual(ins.haaks, true);
+});
+function zesWandenMetHoek(g) { return goed(K.zetHoek(zesWanden(), 'R1', 'W1', g, 'gemeten', T0)); }
+test('046 P2: een winkelhaak bewaart de methode; zonder opgegeven onzekerheid blijft die leeg (geen schijnnauwkeurigheid)', () => {
+  const op = goed(K.zetHoek(zesWanden(), 'R1', 'W1', 90, 'gemeten', T0, { methode: 'winkelhaak' })), hk = K.hoekVan(R(op), 'W1');
+  assert.deepStrictEqual([hk.graden, hk.bron, hk.methode, hk.onzekerheid], [90, 'gemeten', 'winkelhaak', null]);
+  assert.strictEqual(K.hoekVan(R(goed(K.zetHoek(zesWanden(), 'R1', 'W1', 90, 'aanname', T0))), 'W1').methode, null);
+});
+test('046 teksten: "Vorm gecontroleerd met controlemaat C" noemt de controlemaat en houdt lokale haaksheid, obstakels en montage-/hoogtematen apart open; toleranties zijn rekenregels', () => {
+  const vier = K.vormLabel(K.vorm(R(vierWanden({ diagonalen: [['A', 5000], ['B', 5000]] }))));
+  assert.strictEqual(vier.kort, 'Vorm gecontroleerd met controlemaat B'); assert.strictEqual(vier.pil, 'ok'); assert.ok(/lokale haaksheid, obstakels en de montage- en hoogtematen/.test(vier.open), vier.open);
+  const zes = K.vormLabel(K.vorm(R(metDiagonaal(zesWanden({ bron: 'gemeten' }), 'H1', 'H3', D['H1-H3']))));
+  assert.strictEqual(zes.kort, 'Vorm gecontroleerd met controlemaat C'); assert.strictEqual(zes.open, vier.open);
+  const aangenomen = K.vorm(R(metDiagonaal(metDiagonaal(metDiagonaal(zesWanden(), 'H1', 'H3', D['H1-H3']), 'H1', 'H4', D['H1-H4']), 'H4', 'H6', D['H4-H6'])));
+  if (aangenomen.bepaling === 'bepaald') assert.ok(/controlemaat/.test(K.vormLabel(aangenomen).kort));
+  assert.ok(/geen meetnauwkeurigheid of productietolerantie/.test(K.CRITERIA_TEKST) && /1°/.test(K.CRITERIA_TEKST) && /1 mm/.test(K.CRITERIA_TEKST) && /10 mm/.test(K.CRITERIA_TEKST), K.CRITERIA_TEKST);
+});
+test('046 restfouten: sluitfout, hoekensom, diagonaalverschil en hoekconflict worden getoond, zodat groen niet perfect suggereert', () => {
+  const zes = K.restfouten(K.vorm(R(metDiagonaal(zesWanden({ bron: 'gemeten' }), 'H1', 'H3', D['H1-H3']))));
+  assert.ok(zes.some(x => /^Sluitfout van de rondgang: 0 mm \(criterium 10 mm\)/.test(x)) && zes.some(x => /^Hoekensom: 0° ten opzichte van 720°/.test(x)) && zes.some(x => /^Diagonaal C: .* \(\+?0 mm, criterium 10 mm\)/.test(x)), zes.join(' | '));
+  const conflict = K.restfouten(K.vorm(R(hoek(vierWanden({ diagonalen: [['A', 5000], ['B', 5000]] }), 'W1', 100, 'gemeten'))));
+  assert.ok(conflict.some(x => /^hoek 2: 100° gemeten, 90° berekend/.test(x)), conflict.join(' | '));
+  assert.deepStrictEqual(K.restfouten(null), []);
 });
 console.log('\n' + n + ' tests geslaagd');

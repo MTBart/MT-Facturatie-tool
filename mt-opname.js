@@ -313,7 +313,7 @@
     const r = X.ruimte(), hk = K.hoekVan(r, wandId), volgende = K.wandIds(r)[(K.wandIds(r).indexOf(wandId) + 1) % K.wandIds(r).length], naarEerste = K.wandIds(r).indexOf(wandId) === K.wandIds(r).length - 1;
     const kop = opties.kop || ('Hoek tussen ' + K.wandLabel(wandId).toLowerCase() + ' en ' + (naarEerste ? 'wand 1' : K.wandLabel(volgende).toLowerCase()));
     const ververs = opties.vernieuw || (() => X.teken());
-    const zet = (g, bron) => { if (X.wijzig(K.zetHoek(S.rec.opname, r.id, wandId, g, bron))) ververs(); };
+    const zet = (g, bron, extra) => { if (X.wijzig(K.zetHoek(S.rec.opname, r.id, wandId, g, bron, null, extra))) ververs(); };
     const blok = h('div', { class: 'opn-veld opn-hoekrij' }, h('div', { class: 'opn-label', text: kop }));
     const chips = h('div', { class: 'opn-chips' });
     const chip = (tekst, aan, fn) => h('button', { type: 'button', class: 'opn-chip' + (aan ? ' is-aan' : ''), 'aria-pressed': aan ? 'true' : 'false', onclick: fn }, tekst);
@@ -322,7 +322,7 @@
     chips.appendChild(chip('270° (hoek springt naar binnen)', haaks270, () => zet(270, 'aanname')));
     chips.appendChild(chip(hk.schuin ? hk.graden + '° schuin' : 'Schuin', hk.schuin, () => { S.hoekInvoer = S.hoekInvoer === wandId ? null : wandId; ververs(); }));
     blok.appendChild(chips);
-    blok.appendChild(h('p', { class: 'opn-hint', text: hk.schuin ? (hk.bron === 'gemeten' ? 'Gemeten hoek.' : 'Geschatte hoek; meet hem of een diagonaal, dan is de vorm bepaald.') : hk.bron === 'gemeten' ? 'Bevestigd: ' + hk.graden + '° is gemeten' + (e0 && e0.driehoek ? ' (driehoek ' + e0.driehoek.a + ' - ' + e0.driehoek.b + ' - ' + e0.driehoek.c + ' mm)' : ' met een winkelhaak') + '.' : hk.graden + '° is een aanname; bevestig hem met een winkelhaak of een driehoeksmeting.' }));
+    blok.appendChild(h('p', { class: 'opn-hint', text: hk.schuin ? (hk.bron === 'gemeten' ? 'Gemeten hoek.' : 'Geschatte hoek; meet hem of een diagonaal, dan is de vorm bepaald.') : hk.bron === 'gemeten' ? 'Gemeten: ' + String(hk.graden).replace('.', ',') + '°' + (e0 && e0.driehoek ? ' met een driehoek (' + e0.driehoek.a + ' - ' + e0.driehoek.b + ' - ' + e0.driehoek.c + ' mm; marge ongeveer ' + String(hk.onzekerheid).replace('.', ',') + '°)' : hk.methode === 'winkelhaak' ? ' met een winkelhaak (zonder opgegeven marge)' : ' (ingevoerd, zonder opgegeven marge)') + ', ongeveer ' + (hk.inspringend ? '270' : '90') + '°. Dit controleert alleen hier bij de hoek, niet of de hele wand recht is.' : hk.graden + '° is een aanname; bevestig hem met een winkelhaak of een driehoeksmeting.' }));
     if (!hk.schuin) blok.appendChild(h('div', { class: 'opn-onderrij' }, h('button', { type: 'button', class: 'opn-btn opn-btn-klein', text: 'Haaksheid controleren', onclick: () => { S.driehoek = S.driehoek === wandId ? null : wandId; ververs(); } })));
     if (S.driehoek === wandId && !hk.schuin) blok.appendChild(driehoekPaneel(wandId, hk, zet, opties.klaar || ververs));
     if (S.hoekInvoer === wandId) {
@@ -343,12 +343,12 @@
     const getal = i => parseFloat(String(i.value).replace(',', '.'));
     const uitleg = h('p', { class: 'opn-hint', text: hk.inspringend ? 'Deze hoek springt naar binnen: meet over de hoek heen aan de buitenkant. Zet vanaf de hoek a mm langs de ene wand en b mm langs de andere (potlood), meet dan de afstand c tussen de twee punten.' : 'Zet vanaf de hoek a mm langs de ene wand en b mm langs de andere (potlood, bijvoorbeeld 1000 en 1000), meet dan de afstand c tussen de twee punten.' });
     return h('div', { class: 'opn-driehoek' }, uitleg,
-      h('div', { class: 'opn-onderrij' }, h('button', { type: 'button', class: 'opn-btn opn-btn-klein', text: 'Winkelhaak: klopt, haaks', onclick: () => { S.driehoek = null; zet(hk.inspringend ? 270 : 90, 'gemeten'); } })),
+      h('div', { class: 'opn-onderrij' }, h('button', { type: 'button', class: 'opn-btn opn-btn-klein', text: 'Winkelhaak: klopt, haaks', onclick: () => { S.driehoek = null; zet(hk.inspringend ? 270 : 90, 'gemeten', { methode: 'winkelhaak' }); } })),
       h('div', { class: 'opn-invoerrij' }, a, b, c),
       h('button', { type: 'button', class: 'opn-btn opn-btn-groot', text: 'Bereken de hoek', onclick: () => {
         const res = K.zetHoekDriehoek(S.rec.opname, X.ruimte().id, wandId, getal(a), getal(b), getal(c));
         if (!X.wijzig(res)) return; S.driehoek = null;
-        X.toast(res.haaks ? 'Haaks bevestigd: ' + res.gemeten_graden.toString().replace('.', ',') + '° gemeten (marge ongeveer ' + res.onzekerheid_graden.toString().replace('.', ',') + '°).' : 'De hoek is ' + res.gemeten_graden.toString().replace('.', ',') + '°, niet haaks. Dit is nu de gemeten hoek.');
+        X.toast(res.haaks ? 'Gemeten: ' + res.gemeten_graden.toString().replace('.', ',') + '° (marge ongeveer ' + res.onzekerheid_graden.toString().replace('.', ',') + '°), ongeveer haaks. De gemeten waarde blijft bewaard; ze wordt niet naar 90° afgerond.' : 'De hoek is ' + res.gemeten_graden.toString().replace('.', ',') + '°, niet haaks. Dit is nu de gemeten hoek.');
         klaar(); } }));
   }
 
@@ -508,7 +508,11 @@
     const lab = K.vormLabel(v), pil = [lab.kort, lab.pil];
     kaart.appendChild(h('div', { class: 'opn-statusregel' }, h('span', { class: 'opn-pil opn-pil-' + pil[1], text: pil[0] }), v.sluitfout ? h('span', { class: 'opn-rij-sub', text: 'sluitfout ' + v.sluitfout.mm + ' mm' }) : null));
     kaart.appendChild(h('p', { text: v.reden || 'De wanden sluiten op elkaar.' }));
+    const rest = K.restfouten(v);
+    if (rest.length) kaart.appendChild(h('div', { class: 'opn-hint' }, h('div', { class: 'opn-label', text: 'Restfouten' }), ...rest.map(x => h('div', { text: x }))));
+    if (lab.open) kaart.appendChild(h('p', { class: 'opn-hint', text: lab.open }));
     if (v.volgende && v.volgende.tekst) kaart.appendChild(volgendeMaat(r, v));
+    kaart.appendChild(h('p', { class: 'opn-hint', text: K.CRITERIA_TEKST }));
     const hv = K.haaksheidsVoorstel(r);
     if (hv.length) kaart.appendChild(h('div', { class: 'opn-volgende' }, h('div', { class: 'opn-label', text: 'Haaksheid van de werkzone controleren' }),
       h('p', { class: 'opn-hint', text: 'Deze hoeken aan de werkzone zijn nog aangenomen. Een lokale driehoeksmeting (of winkelhaak) bevestigt ze.' }),
