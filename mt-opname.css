@@ -189,3 +189,7 @@
 .opn-volgende p{margin:0}
 .opn-driehoek{margin-top:8px;padding:10px;border-radius:10px;background:var(--o-sunken);display:flex;flex-direction:column;gap:8px}
 .opn-driehoek .opn-invoerrij{gap:6px}.opn-driehoek .opn-invoerrij .opn-input{min-width:0;flex:1}
+.opn-origineel{width:100%;height:auto;border-radius:8px;display:block}
+.opn-hint-regel{font-weight:600;color:var(--o-ink2)}
+.opn-toestel{margin:8px 0;padding:8px 10px;border-radius:10px;background:#e6edf3;color:#3e5c76;font-size:13px}
+.opn-sluitkaart .opn-statusregel{flex-wrap:wrap;align-items:flex-start}.opn-sluitkaart .opn-pil{white-space:normal;line-height:1.35}

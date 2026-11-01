@@ -525,7 +525,7 @@
     } else {
       basis.status = 'onverifieerd'; basis.bepaling = 'getekend';
       basis.reden = 'Lengtes gemeten; model onder hoekaanname: ' + basis.aangenomen_hoeken.length + ' van de ' + n + ' hoeken zijn aangenomen (90 of 270 graden). De wanden sluiten (sluitfout ' + basis.sluitfout.mm + ' mm)' + (kand.length ? ' en ' + kand.map(namen).join(' en ') + ' klopt, maar dat bewijst niet alle aangenomen hoeken' : '') + '. Voor een bepaalde vorm zijn ' + nodig + ' onafhankelijke diagonalen nodig (nu ' + onafh.length + ') of bevestigde hoeken.';
-      if (kies) basis.volgende = { soort: 'diagonaal', van: hoekIds[kies.i], naar: hoekIds[kies.j], nog: nodig - onafh.length, tekst: 'Meet de diagonaal van ' + stuk(kies) + ' (nog ' + (nodig - onafh.length) + ' onafhankelijke diagonaal nodig), of bevestig de hoeken met een driehoeksmeting.' };
+      if (kies) basis.volgende = { soort: 'diagonaal', van: hoekIds[kies.i], naar: hoekIds[kies.j], nog: nodig - onafh.length, tekst: 'Meet de diagonaal van ' + stuk(kies) + ' (nog ' + (nodig - onafh.length) + (nodig - onafh.length === 1 ? ' onafhankelijke diagonaal' : ' onafhankelijke diagonalen') + ' nodig), of bevestig de hoeken met een driehoeksmeting.' };
     }
     return basis;
   }

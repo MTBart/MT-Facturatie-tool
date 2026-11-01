@@ -209,6 +209,7 @@
     c.appendChild(X.kop(r.naam, vg.klaar + ' van ' + vg.n + ' maten gemeten', { terugLabel: 'Naar de lijst', rechts: h('button', { type: 'button', class: 'opn-kopknop', onclick: () => X.ga('afronden') }, 'Afronden') }));
     const body = h('div', { class: 'opn-body opn-body-model' });
     body.appendChild(h('div', { class: 'opn-voortgang', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': String(vg.n), 'aria-valuenow': String(vg.klaar) }, h('span', { style: { width: vg.pct + '%' } })));
+    body.appendChild(X.toestelBalk());
     const uitleg = [];
     if (kamer.vormStatus === 'inconsistent') uitleg.push('De metingen sluiten niet op elkaar (zie Afronden): de vorm blijft een schatting.');
     else if (kamer.vormBepaling === 'bepaald') uitleg.push(kamer.vormLabel + '.' + (kamer.vormVolgende ? ' ' + kamer.vormVolgende.tekst : ''));
@@ -401,7 +402,7 @@
     if (beeld) svg.appendChild(sv('image', { href: beeld.url, x: 0, y: 0, width: beeld.w, height: beeld.h, preserveAspectRatio: 'none', 'pointer-events': 'none' }));
     else svg.appendChild(sv('rect', { x: 0, y: 0, width: BEELD_B, height: vb.h - 120, fill: '#faf8f4', stroke: '#bdb4a2', 'stroke-width': 1.5 * px, 'pointer-events': 'none' }));
     const kalibreren = !!S.kal, plaatsen = !!S.plaats, knikken = !!S.knik && !!afb;
-    if (afb && !kalibreren && !knikken) tekenOverlay(svg, { afb, model, px, rt, vm, actief: plaatsen ? null : actief, stappen, schema, foto, plaatsen });
+    if (afb && !kalibreren && !knikken) tekenOverlay(svg, { afb, model, px, rt, vm, actief: plaatsen ? null : actief, stappen, schema, foto, plaatsen, vb });
     if (foto && !afb && !kalibreren) { /* eerst de hoeken aanwijzen */ }
     if (kalibreren) tekenKalibratie(svg, px, fotoRec);
     if (knikken) tekenKnik(svg, { afb, px });
@@ -416,7 +417,7 @@
     else if (plaatsen) body.appendChild(plaatsBalk());
     else {
       if (foto && !afb) body.appendChild(h('div', { class: 'opn-kaart opn-uitleg' }, h('div', { class: 'opn-kaart-titel', text: 'Eerst de vier hoeken van de wand aanwijzen' }), h('p', { text: 'Tik op de foto de hoeken van de wand: links onder, rechts onder, rechts boven, links boven. Daarna staan de maatlijnen op de foto.' }), h('button', { type: 'button', class: 'opn-btn opn-btn-groot opn-btn-primair', text: 'Hoeken aanwijzen', onclick: startKal })));
-      if (onbekend) body.appendChild(h('div', { class: 'opn-kaart opn-uitleg' }, h('div', { class: 'opn-kaart-titel', text: 'Een of meer hoeken zijn onbekend' }), h('p', { text: 'Een hoek was buiten beeld of afgedekt. De maatlijnen staan daarom op een schematisch wandaanzicht, niet op de foto. Je kunt de hoeken later alsnog aanwijzen.' }), h('button', { type: 'button', class: 'opn-btn opn-btn-klein', onclick: () => startKal(true) }, 'Hoeken aanpassen')));
+      if (onbekend) body.appendChild(h('div', { class: 'opn-kaart opn-uitleg' }, h('div', { class: 'opn-kaart-titel', text: 'Een of meer hoeken zijn onbekend' }), h('p', { text: 'Een hoek was buiten beeld of afgedekt. De maatlijnen staan daarom op een schematisch wandaanzicht, niet op de foto. Je kunt de hoeken later alsnog aanwijzen.' }), h('div', { class: 'opn-onderrij' }, h('button', { type: 'button', class: 'opn-btn opn-btn-klein', onclick: () => startKal(true) }, 'Hoeken aanpassen'), h('button', { type: 'button', class: 'opn-btn opn-btn-klein', onclick: () => origineelBlad(fotoRec) }, 'Originele foto bekijken'))));
       else if (!foto) body.appendChild(h('div', { class: 'opn-hint-rij' }, h('span', { text: X.wandFotoRec(w) ? 'De foto van deze wand staat in de opname, maar het beeld is op dit toestel niet te laden. Je werkt nu op het schema.' : 'Schematisch wandaanzicht, nog geen foto van deze wand.' }),
         X.fotoKnop('Foto maken', async f => { await X.opslaanFoto(f, { wand: w }); await laadWandFoto(w); X.teken(); }, { klasse: 'opn-btn opn-btn-klein' })));
       body.appendChild(h('div', { class: 'opn-werkbalk' },
@@ -457,7 +458,7 @@
 
   // ── Overlay: de maatlijnen op de foto (of het schema) ──
   function tekenOverlay(svg, d) {
-    const { afb, model, px, rt, vm, actief, stappen, foto } = d, plaats = !!d.plaatsen, g = sv('g', { class: 'opn-overlay' }), pillen = [];
+    const { afb, model, px, rt, vm, actief, stappen, foto, vb } = d, plaats = !!d.plaatsen, g = sv('g', { class: 'opn-overlay' }), pillen = [];
     // omtrek van de wand
     const hk = hoekPunten(afb);
     g.appendChild(sv('polygon', { points: hk.map(q => q[0] + ',' + q[1]).join(' '), fill: 'none', stroke: COL.accent, 'stroke-width': 1.2 * px, 'stroke-dasharray': (7 * px) + ' ' + (5 * px), opacity: 0.45, 'pointer-events': 'none' }));
@@ -496,8 +497,10 @@
       const tekst = act ? (stap ? stap.label.replace(/^[A-Z]+\d* /, '') : l.label) + (v && v.maat && st === 'gemeten' ? ' · ' + X.mm(v.maat.waarde) : '') : '';
       if (tekst) {
         const mx = (b.a[0] + b.b[0]) / 2, my = (b.a[1] + b.b[1]) / 2, fs = (act ? 13 : 11) * px, bw = tekst.length * fs * 0.58 + 10 * px, bh = fs + 8 * px;
-        g.appendChild(sv('rect', { x: mx - bw / 2, y: my - bh / 2, width: bw, height: bh, rx: 4 * px, fill: act ? COL.rood : 'rgba(255,255,255,0.92)', stroke: act ? 'none' : kl, 'stroke-width': 0.8 * px, 'pointer-events': 'none' }));
-        g.appendChild(sv('text', { x: mx, y: my + fs * 0.36, 'text-anchor': 'middle', 'font-size': fs, 'font-weight': act ? 700 : 500, fill: act ? '#fff' : '#111', 'pointer-events': 'none', text: tekst }));
+        // het label blijft binnen het beeld (ook op 390 px): nooit afgesneden aan de rand
+        const lx = Math.max(vb.x + 3 * px, Math.min(vb.x + vb.w - bw - 3 * px, mx - bw / 2)), ly = Math.max(vb.y + 3 * px, Math.min(vb.y + vb.h - bh - 3 * px, my - bh / 2));
+        g.appendChild(sv('rect', { class: 'opn-maatlabel', x: lx, y: ly, width: bw, height: bh, rx: 4 * px, fill: act ? COL.rood : 'rgba(255,255,255,0.92)', stroke: act ? 'none' : kl, 'stroke-width': 0.8 * px, 'pointer-events': 'none' }));
+        g.appendChild(sv('text', { x: lx + bw / 2, y: ly + bh / 2 + fs * 0.36, 'text-anchor': 'middle', 'font-size': fs, 'font-weight': act ? 700 : 500, fill: act ? '#fff' : '#111', 'pointer-events': 'none', text: tekst }));
       }
     }
     for (const a of pillen) itemPil(g, a[0], a[1], a[2], px, plaats, foto);
@@ -505,6 +508,11 @@
     svg.appendChild(g);
   }
 
+  // De originele foto als bewijs: ongewijzigd, op volle breedte, ook als de hoeken onbekend zijn en de maatlijnen op het schema staan.
+  function origineelBlad(fotoRec) {
+    if (!fotoRec || !fotoRec.url) { X.toast('Het beeld is op dit toestel niet te laden.'); return; }
+    X.blad('Originele foto', [h('img', { src: fotoRec.url, alt: 'Originele foto van de wand', class: 'opn-origineel' }), h('p', { class: 'opn-hint', text: 'De foto is niet bewerkt of verkleind. ' + fotoRec.w + ' x ' + fotoRec.h + ' pixels.' }), h('a', { href: fotoRec.url, target: '_blank', rel: 'noopener', class: 'opn-btn opn-btn-licht', text: 'Open in een eigen tabblad' })]);
+  }
   // Het label van een onderdeel (R1, SC1, ...) is een tikdoel (44 px): daar open je de extra maten, de definitie en de close-up. Het blijft binnen de foto.
   function itemPil(g, f, x, y, px, plaats, foto) {
     const bw = Math.max(34, 11 + String(f.id).length * 8) * px, bh = 24 * px, mx = foto ? foto.w : 1100, my = foto ? foto.h : 600;
@@ -632,7 +640,8 @@
     return h('div', { class: 'opn-kaart opn-kal-kaart opn-loep' },
       h('div', { class: 'opn-kaart-titel', text: 'Tik de ' + HOEK_NAMEN[l.i] + 'hoek precies aan' }),
       h('div', { class: 'opn-loepvak' }, svg),
-      h('p', { class: 'opn-hint', text: 'Dit is een uitvergroting (6x) van het groene rondje op de foto. Tik de plek waar de wand de hoek maakt.' }),
+      h('p', { class: 'opn-hint', text: 'Dit is een uitvergroting (6x) van het groene rondje op de foto. Tik het snijpunt van ' + (l.i < 2 ? 'vloer' : 'plafond') + ' en wand.' }),
+      h('p', { class: 'opn-hint opn-hint-regel', text: 'Staat er iets voor, zoals een doos of meubel, of zie je het snijpunt niet? Kies dan Hoek onbekend: niet gokken, en de rand van een doos is niet de vloer.' }),
       h('div', { class: 'opn-knoppen' },
         h('button', { type: 'button', class: 'opn-btn opn-btn-licht', onclick: () => { k.punten[l.i] = null; k.loep = null; if (k.punten.length >= 4) k.klaar = true; X.teken(); } }, 'Hoek onbekend (buiten beeld of afgedekt)'),
         h('button', { type: 'button', class: 'opn-btn opn-btn-licht', onclick: () => { k.loep = null; X.teken(); } }, 'Terug naar de foto')));

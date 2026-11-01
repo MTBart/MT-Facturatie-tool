@@ -5,9 +5,9 @@
 (function (root) {
   'use strict';
   const M = root.MTOpname = root.MTOpname || {};
-  const K = root.MTOpnameKern, G = root.MTOpnameGeo, O = root.MTOpnameOpslag, doc = root.document;
+  const K = root.MTOpnameKern, G = root.MTOpnameGeo, O = root.MTOpnameOpslag, E = root.MTOpnameExport, doc = root.document;
   const X = M.X = M.X || {};                                   // gedeeld met mt-opname-model.js
-  X.K = K; X.G = G; X.O = O;
+  X.K = K; X.G = G; X.O = O; X.E = E;
   const SVGNS = 'http://www.w3.org/2000/svg';
   const COL = X.COL = { rood: '#c4322a', donker: '#1b211e', accent: '#17643f', grijs: '#8a8f89', oranje: '#c77d0a', conflict: '#d4570a', blauw: '#3e5c76' };
   const lijst = x => Array.isArray(x) ? x : [];
@@ -163,6 +163,8 @@
     const t = K.tellers(X.ruimte()), n = t.basis.n + t.werkzone.n + t.extra.n, klaar = t.basis.compleet + t.werkzone.compleet + t.extra.compleet, later = t.basis.later + t.werkzone.later + t.extra.later;
     return { n, klaar, later, open: n - klaar - later, pct: n ? Math.round(klaar / n * 100) : 0 };
   };
+  // Zolang er geen synchronisatie is, staat een opname alleen op dit toestel: dat zeggen we overal waar je 'opgeslagen' ziet, met de reserve (export met foto's).
+  X.toestelBalk = () => h('p', { class: 'opn-toestel', role: 'note', text: 'Alleen op dit toestel opgeslagen: er is nog geen synchronisatie. Maak bij een afgeronde opname een volledige export (met foto\'s) als reserve.' });
   X.statusTekst = rec => {
     const st = K.effectieveStatus(rec.opname);
     const kern = st === 'vrijgegeven' ? K.vrijgaveKern(rec.opname) : null;
@@ -177,6 +179,8 @@
       h('div', { class: 'opn-kaart-titel', text: 'Nieuwe opname in testfase' }),
       h('p', { text: 'Maak een foto per wand, bekijk de kamer als draadmodel en meet wand voor wand met een rode lijn op de foto. De oude Capture en Rapportage blijven gewoon werken.' })));
     body.appendChild(h('button', { type: 'button', class: 'opn-btn opn-btn-groot opn-btn-primair', text: '+ Nieuwe opname', onclick: () => { S.formulier = null; X.ga('start'); } }));
+    body.appendChild(X.toestelBalk());
+    if (E) body.appendChild(h('div', { class: 'opn-btn opn-btn-licht opn-fotoknop' }, h('span', { text: 'Terugzetten uit een export (zip)' }), h('input', { type: 'file', accept: '.zip,application/zip', class: 'opn-file', 'aria-label': 'Terugzetten uit een export', onchange: ev => { const f = ev.target.files && ev.target.files[0]; ev.target.value = ''; if (f) importeer(f); } })));
     if (!S.opnames.length) body.appendChild(h('p', { class: 'opn-leeg', text: 'Nog geen opnames op dit toestel.' }));
     for (const rec of S.opnames) {
       const r = rec.opname && rec.opname.ruimtes && rec.opname.ruimtes[0] || {}, st = K.effectieveStatus(rec.opname), open = (() => { try { return K.tellers(r); } catch (e) { return null; } })();
@@ -320,7 +324,7 @@
     blok.appendChild(chips);
     blok.appendChild(h('p', { class: 'opn-hint', text: hk.schuin ? (hk.bron === 'gemeten' ? 'Gemeten hoek.' : 'Geschatte hoek; meet hem of een diagonaal, dan is de vorm bepaald.') : hk.bron === 'gemeten' ? 'Bevestigd: ' + hk.graden + '° is gemeten' + (e0 && e0.driehoek ? ' (driehoek ' + e0.driehoek.a + ' - ' + e0.driehoek.b + ' - ' + e0.driehoek.c + ' mm)' : ' met een winkelhaak') + '.' : hk.graden + '° is een aanname; bevestig hem met een winkelhaak of een driehoeksmeting.' }));
     if (!hk.schuin) blok.appendChild(h('div', { class: 'opn-onderrij' }, h('button', { type: 'button', class: 'opn-btn opn-btn-klein', text: 'Haaksheid controleren', onclick: () => { S.driehoek = S.driehoek === wandId ? null : wandId; ververs(); } })));
-    if (S.driehoek === wandId && !hk.schuin) blok.appendChild(driehoekPaneel(wandId, hk, zet, ververs));
+    if (S.driehoek === wandId && !hk.schuin) blok.appendChild(driehoekPaneel(wandId, hk, zet, opties.klaar || ververs));
     if (S.hoekInvoer === wandId) {
       const inp = h('input', { type: 'text', inputmode: 'decimal', class: 'opn-input', placeholder: 'graden, bijvoorbeeld 135', 'aria-label': 'Hoek in graden', value: hk.schuin ? String(hk.graden) : '' });
       const lees = () => { const g = parseFloat(String(inp.value).replace(',', '.')); if (!(g > 0)) { X.toast('Vul de hoek in graden in.'); return null; } return g; };
@@ -333,7 +337,7 @@
   };
 
   // Haaksheidscontrole: of met een winkelhaak (klopt, haaks), of met een driehoeksmeting (a en b vanaf de hoek langs de wanden, c ertussen). Het resultaat staat direct bij de hoek.
-  function driehoekPaneel(wandId, hk, zet, ververs) {
+  function driehoekPaneel(wandId, hk, zet, klaar) {
     const veld = (label, ph) => { const i = h('input', { type: 'text', inputmode: 'decimal', class: 'opn-input', placeholder: ph, 'aria-label': label }); return i; };
     const a = veld('a in mm', '1000'), b = veld('b in mm', '1000'), c = veld('c in mm', 'afstand c');
     const getal = i => parseFloat(String(i.value).replace(',', '.'));
@@ -345,7 +349,7 @@
         const res = K.zetHoekDriehoek(S.rec.opname, X.ruimte().id, wandId, getal(a), getal(b), getal(c));
         if (!X.wijzig(res)) return; S.driehoek = null;
         X.toast(res.haaks ? 'Haaks bevestigd: ' + res.gemeten_graden.toString().replace('.', ',') + '° gemeten (marge ongeveer ' + res.onzekerheid_graden.toString().replace('.', ',') + '°).' : 'De hoek is ' + res.gemeten_graden.toString().replace('.', ',') + '°, niet haaks. Dit is nu de gemeten hoek.');
-        ververs(); } }));
+        klaar(); } }));
   }
 
   // ── Scherm: fotoronde. Geen vast aantal wanden: vanaf de toegangsdeur met de klok mee, een foto per wand, tot je terug bent bij de eerste wand. ──
@@ -492,7 +496,9 @@
       h('button', { type: 'button', class: 'opn-btn opn-btn-groot opn-btn-primair', text: 'Opslaan', onclick: opslaan }),
       h('button', { type: 'button', class: 'opn-btn opn-btn-groot', text: 'Vrijgeven voor maatwerk', disabled: !chk.kan, onclick: () => vrijgeven(chk) }),
       !chk.kan ? h('p', { class: 'opn-hint', text: 'Vrijgeven kan pas als alle punten hierboven opgelost zijn. Opslaan kan altijd.' }) : null,
-      h('button', { type: 'button', class: 'opn-btn opn-btn-licht', text: 'JSON-kopie bewaren op dit toestel', onclick: jsonKopie })));
+      X.toestelBalk(),
+      E ? h('button', { type: 'button', class: 'opn-btn opn-btn-groot', text: 'Volledige export (zip met foto\'s)', onclick: exporteer }) : null,
+      h('button', { type: 'button', class: 'opn-btn opn-btn-licht', text: 'Alleen de JSON bewaren (zonder foto\'s)', onclick: jsonKopie })));
     c.appendChild(body);
   };
   const hoofdletter = t => t ? t.charAt(0).toUpperCase() + t.slice(1) : t;
@@ -506,15 +512,19 @@
     const hv = K.haaksheidsVoorstel(r);
     if (hv.length) kaart.appendChild(h('div', { class: 'opn-volgende' }, h('div', { class: 'opn-label', text: 'Haaksheid van de werkzone controleren' }),
       h('p', { class: 'opn-hint', text: 'Deze hoeken aan de werkzone zijn nog aangenomen. Een lokale driehoeksmeting (of winkelhaak) bevestigt ze.' }),
-      h('div', { class: 'opn-chips' }, ...hv.map(x => h('button', { type: 'button', class: 'opn-chip', onclick: () => { S.driehoek = x.wand; X.blad('Hoek bij ' + K.hoekTekst(x.hoek), [X.hoekRij(x.wand, { kop: K.wandLabel(x.tussen[0]) + ' naar ' + K.wandLabel(x.tussen[1]).toLowerCase(), vernieuw: () => { X.sluitBlad(); X.teken(); } })]); } }, 'Hoek ' + K.hoekTekst(x.hoek) + ' (' + x.graden + '°, aanname)')))));
+      h('div', { class: 'opn-chips' }, ...hv.map(x => h('button', { type: 'button', class: 'opn-chip', onclick: () => { S.driehoek = x.wand; openHoekBlad(x); } }, hoofdletter(K.hoekTekst(x.hoek)) + ' (' + x.graden + '°, aanname)')))));
     kaart.appendChild(h('p', { class: 'opn-hint', text: 'Hoeken: ' + K.wandIds(r).map((w, i) => { const hk = K.hoekVan(r, w); return (i + 1) + ' naar ' + (i + 2 > K.wandIds(r).length ? 1 : i + 2) + ': ' + hk.graden + '°' + (hk.bron === 'aanname' ? ' (aanname)' : hk.bron === 'gemeten' ? ' (gemeten)' : ' (schatting)'); }).join(' · ') }));
     return kaart;
+  }
+  // De hoek van een werkzone-wand in een blad: de keuzes en de haaksheidscontrole blijven in het blad staan tot de hoek bevestigd is.
+  function openHoekBlad(x) {
+    X.blad(hoofdletter(K.hoekTekst(x.hoek)), [X.hoekRij(x.wand, { kop: K.wandLabel(x.tussen[0]) + ' naar ' + K.wandLabel(x.tussen[1]).toLowerCase(), vernieuw: () => openHoekBlad(x), klaar: () => { X.sluitBlad(); X.teken(); } })]);
   }
   // De volgende benodigde maat: een diagonaal die je meteen kunt toevoegen en meten, of een controlehoek.
   function volgendeMaat(r, v) {
     const vk = v.volgende, blok = h('div', { class: 'opn-volgende' }, h('div', { class: 'opn-label', text: 'Volgende maat' }), h('p', { text: vk.tekst }));
     if ((vk.soort === 'diagonaal' || vk.soort === 'controle') && vk.van && vk.naar && !K.hoekenAangrenzend(r, vk.van, vk.naar)) {
-      blok.appendChild(h('button', { type: 'button', class: 'opn-btn opn-btn-klein opn-btn-primair', text: 'Meet ' + vk.van + ' - ' + vk.naar, onclick: () => {
+      blok.appendChild(h('button', { type: 'button', class: 'opn-btn opn-btn-klein opn-btn-primair', text: 'Meet ' + K.hoekTekst(vk.van) + ' naar ' + K.hoekTekst(vk.naar), onclick: () => {
         const bestaand = lijst(r.diagonalen).find(d => d && ((d.van === vk.van && d.naar === vk.naar) || (d.van === vk.naar && d.naar === vk.van)));
         const res = bestaand ? { opname: S.rec.opname, fout: null, id: bestaand.id } : K.voegDiagonaalToe(S.rec.opname, r.id, vk.van, vk.naar);
         if (!bestaand && !X.wijzig(res)) return; S.modelStap = 'maat:diagonalen.' + res.id + '.maten.lengte'; X.ga('model'); } }));
@@ -535,7 +545,7 @@
   async function opslaan() {
     const res = K.slaOp(S.rec.opname); if (res.fout) { X.toast(res.fout); return; }
     S.rec.opname = res.opname;
-    try { await X.bewaar(); if (S.opslagFout) return; const s = res.samenvatting; X.toast('Opgeslagen: ' + s.gemeten + ' gemeten, ' + s.open + ' open, ' + s.later + ' op later (' + s.taken + ' nameten).'); X.teken(); }
+    try { await X.bewaar(); if (S.opslagFout) return; const s = res.samenvatting; X.toast('Opgeslagen op dit toestel (nog geen synchronisatie): ' + s.gemeten + ' gemeten, ' + s.open + ' open, ' + s.later + ' op later (' + s.taken + ' nameten).'); X.teken(); }
     catch (e) { X.opslagFoutZet(e); }
   }
   function vrijgeven(chk) {
@@ -553,6 +563,31 @@
           } }),
           h('button', { type: 'button', class: 'opn-btn opn-btn-licht', text: 'Annuleren', onclick: () => blad.remove() }))));
     c.appendChild(blad);
+  }
+  // Volledige export: de opname-JSON en alle foto's uit de opslag (ook de gearchiveerde) in één zip. Pas als de zip is samengesteld volgt de download; niets in de opslag verandert.
+  async function exporteer() {
+    try {
+      X.toast('Export wordt gemaakt...');
+      const rec = S.rec, recs = await O.fotosVan(rec.opname.opname_id), fotos = [];
+      for (const f of recs) fotos.push(Object.assign({}, f, { bytes: new Uint8Array(await f.blob.arrayBuffer()) }));
+      const pak = await E.maakPakket(rec, fotos), z = E.zipDelen(pak.entries), blob = new Blob(z.delen, { type: 'application/zip' }), u = URL.createObjectURL(blob);
+      const a = h('a', { href: u, download: rec.opname.opname_id + '-export-' + nu().slice(0, 10) + '.zip' }); S.el.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 8000);
+      X.toast('Export klaar: ' + pak.manifest.fotos.length + ' foto\'s in een zip van ' + (blob.size / 1048576).toFixed(1).replace('.', ',') + ' MB, in de downloads van dit toestel.' + (pak.ontbrekend.length ? ' Let op: ' + pak.ontbrekend.length + ' foto(\'s) ontbraken in de opslag.' : ''));
+    } catch (e) { X.toast('Export maken mislukt: ' + (e.message || e)); }
+  }
+  // Terugzetten uit een export: eerst alles controleren (zip, sha256 van elke foto), pas daarna schrijven: eerst de foto's, dan de opname. Niets wordt overschreven.
+  async function importeer(file) {
+    try {
+      const pak = await E.leesPakket(new Uint8Array(await file.arrayBuffer()));
+      if (pak.fout) { X.toast('Terugzetten niet gelukt: ' + pak.fout); return; }
+      const bestaand = {}; for (const r of S.opnames) if (r && r.opname) bestaand[r.opname.opname_id] = K.inhoudsHash(r.opname);
+      const plan = E.herstelPlan(pak, bestaand);
+      if (plan.actie === 'staat-al-op-toestel') { X.toast('Deze opname staat al op dit toestel, met dezelfde inhoud. Er is niets veranderd.'); return; }
+      for (const f of plan.fotoRecords) await O.zetFoto({ id: f.id, opnameId: f.opnameId, blob: new Blob([f.bytes], { type: f.type }), naam: f.naam, type: f.type, grootte: f.grootte, breedte: f.breedte, hoogte: f.hoogte, tijd: f.tijd, ruimte: f.ruimte, wand: f.wand, soort: f.soort, item: f.item });
+      await O.schrijf(plan.record);
+      await X.naarLijst();
+      X.toast(plan.kopie ? 'Teruggezet als kopie (de opname stond al op dit toestel met een andere inhoud): ' + plan.opname_id : 'Teruggezet: ' + plan.fotoRecords.length + ' foto\'s en de opname.');
+    } catch (e) { X.toast('Terugzetten mislukt: ' + (e.message || e)); X.opslagFoutZet(e); }
   }
   function jsonKopie() {
     try {
