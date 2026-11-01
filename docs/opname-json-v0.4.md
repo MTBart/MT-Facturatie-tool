@@ -51,15 +51,43 @@ Afgeleid, niet opgeslagen. Geeft de hoekpunten in mm (x naar rechts, y omlaag, e
 
 ### Sluitcontrole met N wanden (`K.vorm`, `K.sluitcontrole`)
 
-- **Vier wanden zonder inspringende hoek**: de vierhoek-logica van v0.3 (vier zijden en één diagonaal, de tweede diagonaal als controle van 10 mm). Dit is de rechthoek en de bolle vierhoek.
-- **Andere vormen** (drie, vijf, zes, ... wanden, of een inspringende hoek): een rondgang langs de wanden met de binnenhoeken. De som van de vectoren is de **sluitfout** (`vorm.sluitfout`, x, y en mm).
-  - Meer dan 10 mm: `inconsistent` ("meetgegevens inconsistent"), een conflict dat het vrijgeven blokkeert.
-  - Binnen 10 mm en geen diagonaal: `onverifieerd`, **schematisch (hoeken aangenomen 90 of 270 graden)**. Nooit stil "haaks": de aanname staat in de uitleg en in de uitzonderingen van de vrijgave.
-  - Met een optionele diagonaal (`K.voegDiagonaalToe`, tussen twee hoek-id's) die binnen 10 mm klopt: `consistent`. Klopt hij niet: `inconsistent`.
-  - Zet een rondgang de ruimte niet netjes met de klok mee, of kruisen wanden elkaar: `inconsistent`.
-- **Schuin**: een hoek die niet 90 of 270 is en niet `gemeten` is, maakt de vorm **onvoldoende bepaald**, ook bij vier wanden zonder diagonaal. Bij vier wanden bepaalt een gemeten diagonaal de hoeken zelf.
+Drie gescheiden uitkomsten in `vorm.bepaling` (brok 3b, ChatGPT-review 043; een lengte bewijst geen richting en één diagonaal bewijst niet alle aangenomen hoeken):
+
+| bepaling | betekenis | `vorm.status` | tekening |
+|---|---|---|---|
+| `getekend` | de wanden sluiten onder aangenomen hoeken (of er is nog te weinig): een schatting | `onvoldoende-bepaald` of `onverifieerd` | gestippeld |
+| `bepaald` | geometrisch bepaald: alle hoeken gemeten/bevestigd (90 of 270 met winkelhaak of driehoek) met alle lengtes, óf N-3 onafhankelijke interne diagonalen (een triangulatie) | `onverifieerd` | vast |
+| `gecontroleerd` | bepaald én een extra controlemaat klopt | `consistent` | vast |
+
+- **Vier wanden zonder inspringende hoek**: vier zijden en één diagonaal leggen de vierhoek vast (`bepaald`); de tweede diagonaal (10 mm) controleert (`gecontroleerd`). Zonder diagonaal `getekend`.
+- **Andere vormen** (drie, vijf, zes, ... wanden, of een inspringende hoek): een rondgang langs de wanden met de binnenhoeken. Getoetst wordt:
+  - **richtingssluiting**: de binnenhoeken tellen op tot (n-2) x 180 graden (`vorm.hoeksom`); anders `inconsistent`. Is een hoek aangenomen, dan staat er: sluit niet bij de aangenomen hoeken, meet een controlehoek; er wordt niet beweerd dat een wandlengte fout is;
+  - **positiesluiting**: de vectorsom (`vorm.sluitfout`) is hoogstens 10 mm;
+  - **topologie**: geen kruising, geen hoekpunt op een andere wand, geen wanden over elkaar (collineair) of teruggevouwen (marge 1 mm);
+  - **gereconstrueerde hoeken** (`vorm.hoeken_gereconstrueerd`) tegen de ingevoerde hoeken.
+- **Diagonalen**: alleen tussen niet-aangrenzende hoeken. Een diagonaal die een wand is (ook uit een import) telt niet (`vorm.genegeerd`, waarschuwing `diagonaal-is-wand`, melding bij `K.lees`); een herhaling van dezelfde twee hoeken telt niet; een diagonaal die door de buitenruimte loopt (concave vorm) wordt wel vergeleken maar bepaalt de vorm niet (`controles[].binnen`, `telt`). `bepaald` vraagt N-3 diagonalen die elkaar niet kruisen.
+- **De volgende maat** (`vorm.volgende`, `{ soort, van, naar, tekst }`): telkens één: een diagonaal binnen de ruimte die de gekozen diagonalen niet kruist, een controlemaat of een controlehoek.
+- **Haaksheid**: `K.hoekUitDriehoek(a, b, c)` en `K.zetHoekDriehoek` (meet a en b vanaf de hoek langs de wanden en c ertussen; haaks binnen 0,5 graad wordt 90 of 270 graden met bron `gemeten`; de drie maten staan bij de hoek in `hoek_naar_volgende.driehoek`). `K.haaksheidsVoorstel` geeft de nog aangenomen hoeken aan de uiteinden van de werkzone-wanden.
+- **Schuin**: een hoek die niet 90 of 270 is en niet `gemeten` is, maakt de vorm **onvoldoende bepaald**. Bij vier wanden bepaalt een gemeten diagonaal de hoeken zelf.
 - Zolang `rond: false` is de vorm altijd `onvoldoende-bepaald`.
-- **Diagonalen A en B** bestaan alleen bij precies vier wanden (A van de eerste naar de derde hoek, B van de tweede naar de vierde). Komt er een wand bij, dan verdwijnt een A of B zonder meting uit de vragen; een gemeten diagonaal blijft als optionele controle staan.
+- **Diagonalen A en B** bestaan alleen bij precies vier wanden. Komt er een wand bij, dan verdwijnt een A of B zonder meting uit de vragen; een gemeten diagonaal blijft als optionele controle staan. Een leeg restant van A of B wordt bij `K.voegDiagonaalToe` vervangen.
+- `K.vormLabel(vorm)` geeft de tekst voor elk scherm, bijvoorbeeld "Lengtes gemeten; model onder hoekaanname; controle C klopt".
+
+### Bronnen van een uitsprong of nis (brok 3b)
+
+Drie gescheiden bronnen per maat (`K.WAARDE_BRONNEN`, `uitsprongWaarden`, `plattegrond().uitsprongen[].bron`): `gemeten` wint altijd; `foto-interpretatie` (breedte en positie uit de verhouding op de wand maal de gemeten wandlengte; parallax-gevoelig, want de voorkant van een uitsprong ligt buiten het wandvlak van de homografie); `bronstandaard` (diepte 300 mm). Alleen gemeten telt als maat. Een nieuwe kalibratie van de wandhoeken verandert alleen de foto-interpretatie.
+
+### Foto's (brok 3b)
+
+`foto.soort`: ontbreekt (hoofdfoto van een wand), `closeup` (bij een onderdeel, `wand: null`) of `extra` (nog een foto van hetzelfde vlak; hoort bij een wand die al een hoofdfoto heeft en maakt nooit een wand: `K.wandFoto`, `K.extraFotos`).
+
+### Vrijgave en kern (brok 3b)
+
+`vrijgave.kern` bewaart de kernversie waarmee is vrijgegeven. Een vrijgave uit v0.3 (zonder dat veld) blijft geldig, maar `K.vrijgaveKern` meldt dan "Gevalideerd met oude kern (v0.3)".
+
+### Export en terugzetten (brok 3b, `mt-opname-export.js`)
+
+Een zip met `opname.json` (schema `mt-opname-export`, formaat 1: de opname, layout, instellingen, per foto `id`, `pad`, `sha256`, afmetingen en of hij nog in de opname staat), `fotos/...` (alle foto's, ook de gearchiveerde en losse beelden) en `LEESMIJ.txt`. Terugzetten controleert de zip en elke sha256 voordat er iets wordt geschreven. Bestaat de `opname_id` al met een andere inhoud, dan komt de opname als kopie (`<id>-hersteld-...`, met `_hersteld_van`); met dezelfde inhoud gebeurt er niets.
 
 ### Onwaarschijnlijk, onmogelijk en bevestigd
 

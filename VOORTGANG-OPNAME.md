@@ -149,3 +149,30 @@ Bart (1-11): "als je kamer een vorm heeft of een uitstekend stukje wand oid dan 
 - Het toetsenbord: de laag volgt `visualViewport` (hoogte en offset), zodat het zichtbare gebied klopt, het invoerveld in beeld scrolt en de werkbalk bij weinig hoogte verdwijnt.
 
 **Niet getest:** een echt Android-toetsenbord (alleen een korte viewport en `visualViewport`); iOS.
+
+
+## Brok 3b: P1-fixes uit de review van ChatGPT (GESPREK 043, 1-11-2026, Sonnet)
+
+Alles op branch `opname`, niet gepusht. Elk punt heeft tests; ze staan in `test/opname-sluiting.test.js`, `test/opname-export.test.js` en `test/opname-opslag.test.js` (naast de bestaande).
+
+1. **Laatste hoek genegeerd** (P1). `vormVeelhoek` toetst nu ook de richtingssluiting: de binnenhoeken tellen op tot (n-2) x 180, de gereconstrueerde hoeken komen terug tegen de invoer, en `wandBotsing` ziet naast kruisingen ook een hoekpunt op een andere wand, wanden over elkaar en terugvouwen. De repro van ChatGPT (zes wanden, laatste hoek 90 / 270 / 135) staat letterlijk als regressietest: 90 mag, 270 en 135 zijn `inconsistent`. Onder aangenomen hoeken staat er "sluit niet bij de aangenomen hoeken, meet een controlehoek", niet dat een wandmeting fout is.
+2. **Een wand is geen diagonaal** (P1). `voegDiagonaalToe` weigert aangrenzende hoeken (ook H6-H1); uit een import of `K.lees` telt zo'n diagonaal niet (`genegeerd`, waarschuwing `diagonaal-is-wand`, melding). Een leeg restant van A of B bij zes wanden wordt vervangen in plaats van "bestaat al".
+3. **Drie statussen** in `vorm.bepaling`: getekend / geometrisch bepaald / onafhankelijk gecontroleerd. Bepaald vraagt bevestigde hoeken plus alle lengtes, of N-3 onafhankelijke diagonalen die elkaar niet kruisen en binnen de ruimte liggen (geen blinde waaier door buitenruimte; herhalingen tellen niet); gecontroleerd een extra controlemaat. Eén diagonaal is niet meer globaal groen: "Lengtes gemeten; model onder hoekaanname; controle C klopt". `vorm.volgende` is telkens de volgende benodigde maat (knop "Meet hoek 1 naar hoek 5"). Haaksheid van de werkzone: lokale driehoeksmeting of winkelhaak per hoek (`K.zetHoekDriehoek`), met een voorstel voor de hoeken van de werkzone. Het model tekent vast zodra de vorm bepaald is.
+4. **Uitsprong** met drie gescheiden bronnen: bronstandaard (diepte 300), foto-interpretatie (breedte, positie; parallax), gemeten. Gemeten blijft staan als de kalibratie wijzigt (test).
+5. **Extra foto's** van hetzelfde vlak: soort `extra`, hoort bij een wand met hoofdfoto, maakt nooit een wand ("Extra foto van wand N (geen nieuwe wand)").
+6. **Historische v0.3-vrijgave** blijft geldig en toont "Gevalideerd met oude kern (v0.3)" (`K.vrijgaveKern`, `vrijgave.kern` bij nieuwe vrijgaven).
+7. **UI**: loepinstructie ("snijpunt vloer/wand; staat er iets voor: Hoek onbekend, niet gokken"), het rode label op het schema blijft binnen het beeld (390 px), de originele foto is bereikbaar als bewijs, "Alleen op dit toestel opgeslagen: nog geen synchronisatie" in lijst, model, afronden en de toast; de toast na Opslaan komt na `tx.oncomplete` (nagebootste IndexedDB als test; een afbreking of quotafout is een fout).
+8. **Volledige export en terugzetten** (`mt-opname-export.js`): zip met de opname-JSON en alle foto's (ook gearchiveerde en losse), sha256 per foto; terugzetten controleert alles voor het schrijft en zet een bestaande opname met andere inhoud als kopie terug. In de browser getest met een tweede, leeg toestel.
+9. **Reviewpakket** `OPNAME-APP\BOUW\brok3b-<commit>\` (zie REVIEW.md daar): beelden gemaakt op de bevroren commit, voorbeeld-JSON's en een node-script, een zelfstandig interactiepakket.
+
+**Bewust niet gedaan**
+- Geen echte Android-proef (camera, toetsenbord, terugknop, offline, heropenen, quotafout): dat moet Bart doen. De vroegere "R3-a" heet nu viewport-simulatie.
+- Geen upload of synchronisatie, geen SharePoint, geen VW-export met meetstatus (die komen vóór DISTO).
+- Geen compressie in de export-zip (foto's zijn al gecomprimeerd); een export van een opname met veel grote foto's kan veel geheugen vragen op een oude telefoon.
+- Schuine hoeken blijven alleen bepaald via de diagonaal bij vier wanden of via een gemeten hoek.
+- Geen Codex-ronde (die volgt als bundelronde aan het eind).
+
+**Keuzes ter bevestiging door Bart**
+1. Een hoek telt als "bevestigd" (bron `gemeten`) als je hem met een winkelhaak of een driehoeksmeting hebt gecontroleerd; zonder die controle blijft 90 graden een aanname, ook als alle lengtes sluiten.
+2. Tolerantie voor de hoekensom 1 graad en voor raakpunten 1 mm; sluitfout blijft 10 mm (voorlopige projecttolerantie).
+3. De vorm heet pas "onafhankelijk gecontroleerd" met één extra maat bovenop wat nodig is om hem te bepalen.
