@@ -39,13 +39,15 @@
     s = s.replace(',', '.');
     if (!/^\d+(\.\d+)?$/.test(s)) return { fout: 'Dit is geen getal. Vul de maat in millimeters in, bijvoorbeeld 5760.' };
     const v = parseFloat(s);
-    if (v < 10) return { fout: 'Dit lijkt geen millimeters. Vul bijvoorbeeld 5760 in voor 5,76 m.' };
+    if (!(v > 0)) return { fout: 'Een maat is groter dan 0 mm.' };          // geen vaste ondergrens: een voeg of plintdikte kan klein zijn; onwaarschijnlijke maten vraagt de kern vóór het vrijgeven te bevestigen
     if (v > 99999) return { fout: 'Deze maat is te groot voor een ruimte (maximaal 99999 mm).' };
     return { v };
   };
   X.leesMm = leesMm;
   function bewaarMaat(stap, invoer) {
     if (!X.wijzig(K.zetMaat(S.rec.opname, X.ruimte().id, stap.pad, invoer))) return false;
+    const w = K.waarschuwingen(X.ruimte()).find(x => x.code === 'onwaarschijnlijk' && x.pad === stap.pad && !x.bevestigd);
+    if (w) X.toast(w.tekst + ' Bevestig het bij Afronden of meet opnieuw.');
     return true;
   }
 

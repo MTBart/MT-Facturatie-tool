@@ -281,6 +281,7 @@ function volledigeLVorm() {
   for (const v of K.vragen(R(op))) {
     if (v.staat === 'gemeten' || v.bucket === 'optie') continue;
     if (v.eenheid === 'keuze') op = goed(K.zetMaat(op, 'R1', v.pad, { staat: 'gemeten', keuze: v.keuzes[0], bron: 'hand' }, T0));
+    else if (/^wanden\.(W\d)\.maten\.lengte_(onder|boven)$/.test(v.pad)) op = meet(op, v.pad, L_WANDEN[v.pad.split('.')[1]], 'hand');
     else op = meet(op, v.pad, v.pad.includes('plafond') ? 2500 : v.pad.includes('uitsprongen') ? 600 : 900, 'hand');
   }
   let r = R(op); for (const [c] of K.RONDJE_CATEGORIEEN) r = K.zetRondje(r, 'W6', c, 'aanwezig', T0).ruimte;
@@ -337,5 +338,35 @@ test('het voorbeeld uit docs/opname-json-v0.4.md bestaat, is leesbaar en klopt m
   assert.deepStrictEqual(g.meldingen, []); assert.deepStrictEqual(g.opname, voorbeeld, 'lezen verandert het voorbeeld niet');
   const r = g.opname.ruimtes[0], p = K.plattegrond(r); assert.strictEqual(r.rond, true); assert.ok(K.wandIds(r).length >= 5); assert.ok(r.uitsprongen.length >= 1);
   assert.ok(p.contour.length > K.wandIds(r).length, 'de uitsprong staat in de contour'); assert.ok(K.vragen(r).some(v => v.pad.startsWith('uitsprongen.')));
+});
+test('onwaarschijnlijke maar mogelijke maten moeten voor het vrijgeven bevestigd worden; een kleine maat is gewoon een maat', () => {
+  let op = volledigeLVorm(); assert.strictEqual(K.vrijgeefCheck(op).kan, true);
+  // een plintdikte of voeg van 6 mm is geen fout: geen minimum meer
+  op = goed(K.voegObjectToe(op, 'R1', { type: 'plint', wand: 'W1' })); op = meet(op, 'objecten.PL1.maten.dikte', 6, 'hand'); op = meet(op, 'objecten.PL1.maten.hoogte', 80, 'hand'); op = goed(K.zetMaat(op, 'R1', 'objecten.PL1.maten.keuze', { staat: 'gemeten', keuze: 'blijft', bron: 'hand' }, T0));
+  assert.strictEqual(K.vrijgeefCheck(op).kan, true, JSON.stringify(K.vrijgeefCheck(op).redenen));
+  // een plafond van 1000 mm kan, maar moet bevestigd worden
+  op = meet(op, 'plafondpunten.P1.maten.hoogte', 1000, 'hand');
+  const c = K.vrijgeefCheck(op); assert.strictEqual(c.kan, false); assert.deepStrictEqual(c.redenen.map(x => x.code), ['onwaarschijnlijk']); assert.strictEqual(c.redenen[0].pad, 'plafondpunten.P1.maten.hoogte');
+  assert.ok(K.bevestigOnwaarschijnlijk(op, 'R1', 'wanden.W1.maten.lengte').fout, 'alleen wat onwaarschijnlijk is, kan bevestigd worden');
+  const b = goed(K.bevestigOnwaarschijnlijk(op, 'R1', 'plafondpunten.P1.maten.hoogte', T0)); assert.strictEqual(K.vrijgeefCheck(b).kan, true); assert.strictEqual(R(b).bevestigingen['plafondpunten.P1.maten.hoogte'].waarde, 1000);
+  assert.ok(K.waarschuwingen(R(b)).some(x => x.code === 'onwaarschijnlijk' && x.bevestigd), 'de waarschuwing blijft staan, als bevestigd');
+  // een andere waarde: de bevestiging geldt niet meer
+  assert.strictEqual(K.vrijgeefCheck(meet(b, 'plafondpunten.P1.maten.hoogte', 1100, 'hand')).kan, false);
+  // een bevestigde maat is een inhoudelijke wijziging: een eerdere vrijgave vervalt
+  const v = goed(K.vrijgeven(b, 'test', T0)); assert.strictEqual(K.effectieveStatus(goed(K.bevestigOnwaarschijnlijk(meet(op, 'wanden.W1.maten.lengte', 20000), 'R1', 'wanden.W1.maten.lengte'))), 'concept');
+  assert.strictEqual(K.effectieveStatus(v), 'vrijgegeven');
+});
+test('een grote verschil in wandlengte tussen onder, midden en boven is onwaarschijnlijk (bevestigen); een kleine is informatie', () => {
+  let op = volledigeLVorm();
+  op = meet(op, 'wanden.W6.maten.lengte_boven', 4040, 'hand'); let w = K.waarschuwingen(R(op)); assert.ok(w.some(x => x.code === 'wand-scheef')); assert.ok(!w.some(x => x.code === 'onwaarschijnlijk'));
+  op = meet(op, 'wanden.W6.maten.lengte_boven', 6000, 'hand'); w = K.waarschuwingen(R(op)); const x = w.find(y => y.code === 'onwaarschijnlijk' && y.pad === 'wanden.W6.scheef'); assert.ok(x && x.waarde === 2000 && !x.bevestigd);
+  assert.strictEqual(K.vrijgeefCheck(op).kan, false); op = goed(K.bevestigOnwaarschijnlijk(op, 'R1', 'wanden.W6.scheef')); assert.strictEqual(K.vrijgeefCheck(op).kan, true);
+});
+test('geometrisch onmogelijke combinaties blokkeren: een opening of uitsprong buiten de wand', () => {
+  let op = volledigeLVorm(); assert.strictEqual(K.vrijgeefCheck(op).kan, true);
+  op = goed(K.voegOpeningToe(op, 'R1', { soort: 'raam', wand: 'W2', definitie: 'muursparing' })); op = meet(op, 'openingen.R1.maten.breedte', 1500, 'hand'); op = meet(op, 'openingen.R1.maten.positie', 900, 'hand');   // W2 is 2000 mm: 900 + 1500 past niet
+  assert.ok(K.waarschuwingen(R(op)).some(x => x.code === 'opening-buiten-wand')); assert.ok(K.vrijgeefCheck(op).redenen.some(x => x.code === 'onmogelijk'));
+  op = meet(op, 'openingen.R1.maten.positie', 400, 'hand'); assert.ok(!K.vrijgeefCheck(op).redenen.some(x => x.code === 'onmogelijk'));
+  const buiten = meet(op, 'uitsprongen.U1.maten.positie', 5900, 'hand'); assert.ok(K.vrijgeefCheck(buiten).redenen.some(x => x.code === 'onmogelijk' && x.pad === 'uitsprongen.U1'));
 });
 console.log('\n' + n + ' tests geslaagd' + (process.exitCode ? ' (met fouten)' : ''));

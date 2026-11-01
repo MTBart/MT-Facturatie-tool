@@ -29,7 +29,7 @@
   K.BIJZONDERHEDEN = { stootplint: 'Hogere stootplint', balk: 'Ingestucte balk of verlaging', koof: 'Koof', nis: 'Nis', 'uit-het-lood': 'Uit het lood', 'leiding-in-zicht': 'Leiding in zicht', kabelgoot: 'Kabelgoot', anders: 'Anders' };
   // Toleranties. diagonaal: de gemeten controlediagonaal tegen de diagonaal die uit 4 zijden + 1 diagonaal volgt (mm). tegenover en hoek_graden: pas boven deze waarden is de ruimte
   // 'afwijkend van vorm' (informatie, geen fout). Er wordt geen rechthoek verondersteld.
-  K.TOLERANTIE = { diagonaal: 10, tegenover: 5, hoek_graden: 0.3, wand_scheef: 5, sluit: 10, hoek_haaks: 0.5 };      // sluit: sluitfout van een veelhoek (mm); hoek_haaks: zo dicht bij 90 of 270 graden telt als haaks
+  K.TOLERANTIE = { diagonaal: 10, tegenover: 5, hoek_graden: 0.3, wand_scheef: 5, wand_scheef_onwaarschijnlijk: 100, sluit: 10, hoek_haaks: 0.5 };      // sluit: sluitfout van een veelhoek (mm); hoek_haaks: zo dicht bij 90 of 270 graden telt als haaks
   K.PLAFOND_UIT_HOEK = 300;                                              // mm: het plafond links en rechts langs een werkzone-wand wordt zo ver uit de hoek gemeten (regie, 1-11)
   K.RONDJE_LATER_BLOKKEERT = true;                                       // een categorie van het rondje op "later" is een open taak en blokkeert het vrijgeven (Bart, 1-11)
   K.WANDBEVESTIGING = ['bekeken', 'afgedekt', 'niet-beoordeeld'];          // buiten de werkzone: "gehele wand bekeken, geen relevante obstakels" of bewust afgedekt / niet beoordeeld
@@ -528,6 +528,8 @@
   };
 
   // ── Waarschuwingen (niet blokkerend) ──
+  // Onwaarschijnlijke maar mogelijke maten (geen vaste ondergrens meer) moeten voor het vrijgeven expliciet bevestigd zijn: r.bevestigingen[pad] = { waarde, tijd }. Verandert de waarde, dan vervalt de bevestiging.
+  const isBevestigd = (r, pad, waarde) => isObj(r.bevestigingen) && isObj(r.bevestigingen[pad]) && r.bevestigingen[pad].waarde === waarde;
   K.waarschuwingen = function (ruimte) {
     const r = ruimte || {}, w = [], slots = slotsVan(r);
     for (const s of slots) {
@@ -536,14 +538,15 @@
       if (m.staat === 'gemeten' && staatVan(m, s.keuzes) !== 'gemeten') w.push({ code: 'meting-ongeldig', pad: s.pad, tekst: s.kort + ': staat op gemeten, maar er is geen geldige waarde of de bron is geen DISTO of hand. Telt als nog meten.' });
       if (m.staat === 'gemeten' && s.pad.startsWith('openingen.') && (s.sleutel === 'breedte' || s.sleutel === 'hoogte') && !K.DEFINITIES[s.ent.definitie] && !lijst(r.werkzone).includes(s.ent.wand)) w.push({ code: 'definitie-ontbreekt', pad: s.pad, tekst: s.kort + ': kies de definitie (muursparing, dagmaat of kozijn buiten), anders is de maat dubbelzinnig.' });
       const v = K.waarde(m);
-      if (v != null && s.sleutel.indexOf('lengte') === 0 && s.pad.startsWith('wanden.') && (v < 300 || v > 15000)) w.push({ code: 'onwaarschijnlijk', pad: s.pad, tekst: s.kort + ': ' + v + ' mm ligt buiten 300 tot 15000 mm. Tikfout?' });
-      if (v != null && (s.pad.startsWith('plafondpunten.') || s.sleutel.indexOf('plafond_') === 0) && (v < 2000 || v > 5000)) w.push({ code: 'onwaarschijnlijk', pad: s.pad, tekst: s.kort + ': ' + v + ' mm ligt buiten 2000 tot 5000 mm. Tikfout?' });
+      if (v != null && s.sleutel.indexOf('lengte') === 0 && s.pad.startsWith('wanden.') && (v < 300 || v > 15000)) w.push({ code: 'onwaarschijnlijk', pad: s.pad, waarde: v, bevestigd: isBevestigd(r, s.pad, v), tekst: s.kort + ': ' + v + ' mm ligt buiten 300 tot 15000 mm. Tikfout?' });
+      if (v != null && (s.pad.startsWith('plafondpunten.') || s.sleutel.indexOf('plafond_') === 0) && (v < 2000 || v > 5000)) w.push({ code: 'onwaarschijnlijk', pad: s.pad, waarde: v, bevestigd: isBevestigd(r, s.pad, v), tekst: s.kort + ': ' + v + ' mm ligt buiten 2000 tot 5000 mm. Tikfout?' });
     }
     // een werkzone-wand waarvan de lengte onderaan, op 1000 mm en bovenaan meer dan 5 mm verschilt, staat niet te lood of is scheef: informatie voor het meubel, geen blokkade
     for (const wd of wandIds(r)) if (lijst(r.werkzone).includes(wd)) {
       const hoogtes = [['onder', 'lengte_onder'], ['1000 mm', 'lengte'], ['boven', 'lengte_boven']].map(([n, k]) => [n, K.waarde(maatOp(vind(r.wanden, wd), k))]).filter(x => x[1] != null);
       if (hoogtes.length < 2) continue;
       const waarden = hoogtes.map(x => x[1]), verschil = Math.max.apply(null, waarden) - Math.min.apply(null, waarden);
+      if (verschil > K.TOLERANTIE.wand_scheef_onwaarschijnlijk) w.push({ code: 'onwaarschijnlijk', pad: 'wanden.' + wd + '.scheef', wand: wd, waarde: verschil, bevestigd: isBevestigd(r, 'wanden.' + wd + '.scheef', verschil), tekst: wandMetWoord(wd) + ': de lengte verschilt ' + verschil + ' mm tussen onder, midden en boven. Dat is mogelijk, maar groot. Klopt dit?' });
       if (verschil > K.TOLERANTIE.wand_scheef) w.push({ code: 'wand-scheef', pad: 'wanden.' + wd, wand: wd, verschil_mm: verschil, tekst: wandMetWoord(wd) + ' niet te lood of scheef: de lengte verschilt ' + verschil + ' mm tussen ' + hoogtes.map(x => x[0] + ' ' + x[1] + ' mm').join(', ') + '. Informatie voor het meubel, geen blokkade.' });
     }
     // uitsprongen en nissen: binnen de wand en niet over elkaar (met de bekende waarden: gemeten, anders het voorstel uit de foto)
@@ -555,6 +558,12 @@
         if (p0 < -5 || p1 > L + 5) w.push({ code: 'uitsprong-buiten-wand', pad: 'uitsprongen.' + x.u.id, wand: wd, tekst: K.UITSPRONG_SOORTEN[x.u.soort] + ' ' + x.u.id + ' (' + Math.round(p0) + ' tot ' + Math.round(p1) + ' mm) valt buiten de ' + wandTekst(wd) + ' van ' + L + ' mm. Controleer positie, breedte en wandlengte.' });
         if (i && p0 < l[i - 1].v.positie.mm + l[i - 1].v.breedte.mm - 5) w.push({ code: 'uitsprong-overlap', pad: 'uitsprongen.' + x.u.id, wand: wd, tekst: K.UITSPRONG_SOORTEN[x.u.soort] + ' ' + x.u.id + ' en ' + l[i - 1].u.id + ' liggen over elkaar op de ' + wandTekst(wd) + '. Controleer positie en breedte.' });
       });
+    }
+    // een opening die buiten de wand valt kan niet: geometrisch onmogelijk en dus een blokkade voor het vrijgeven
+    for (const o of lijst(r.openingen)) {
+      if (!o || !o.id) continue;
+      const L = K.waarde(maatOp(vind(r.wanden, o.wand), 'lengte')), bw = K.waarde(maatOp(o, 'breedte')), po = K.waarde(maatOp(o, 'positie'));
+      if (L != null && bw != null && po != null && (po + bw > L + 5)) w.push({ code: 'opening-buiten-wand', pad: 'openingen.' + o.id, wand: o.wand, tekst: openingNaam(o) + ' (' + po + ' tot ' + (po + bw) + ' mm) valt buiten de ' + wandTekst(o.wand) + ' van ' + L + ' mm. Dat kan niet: controleer positie, breedte en wandlengte.' });
     }
     // rondje zegt "afwezig" terwijl er in die wand en categorie wel iets is vastgelegd
     for (const x of K.rondje(r).regels) if (x.waarde === 'afwezig') {
@@ -593,6 +602,10 @@
     const r = ruimte || {}, redenen = [], t = K.tellers(r), nm = r.naam || r.id || 'Ruimte', rd = K.rondje(r), sc = K.sluitcontrole(r), set = K.MEUBELSETS[r.meubeltype];
     if (!set || !set.gereed) redenen.push({ code: 'meubelset', tekst: nm + ': voor ' + (r.meubeltype || 'dit meubeltype') + ' bestaat nog geen eigen vragenset (alleen kast is gevalideerd), dus vrijgeven kan nog niet.' });
     for (const o of lijst(r.openingen)) if (o && o.id && lijst(r.werkzone).includes(o.wand) && !K.DEFINITIES[o.definitie]) redenen.push({ code: 'definitie', pad: 'openingen.' + o.id, tekst: nm + ': kies de definitie van ' + openingNaam(o) + ' (muursparing, dagmaat of kozijn buiten). In de werkzone is een maat zonder definitie dubbelzinnig.' });
+    for (const x of K.waarschuwingen(r)) {
+      if (x.code === 'onwaarschijnlijk' && !x.bevestigd) redenen.push({ code: 'onwaarschijnlijk', pad: x.pad, tekst: nm + ': ' + x.tekst + ' Bevestig dat het klopt, of meet opnieuw.' });
+      if (x.code === 'uitsprong-buiten-wand' || x.code === 'uitsprong-overlap' || x.code === 'opening-buiten-wand') redenen.push({ code: 'onmogelijk', pad: x.pad, tekst: nm + ': ' + x.tekst });
+    }
     if (wandIds(r).length < 3) redenen.push({ code: 'wanden', tekst: nm + ': een ruimte heeft minstens drie wanden. Maak de fotoronde af.' });
     else if (!isRond(r)) redenen.push({ code: 'ronde', tekst: nm + ': de fotoronde is nog niet rond. Kies "kamer rond" als je terug bent bij de eerste wand.' });
     if (!lijst(r.werkzone).filter(w => wandIds(r).includes(w)).length) redenen.push({ code: 'werkzone', tekst: nm + ': kies waar het meubel komt (werkzone).' });
@@ -1077,6 +1090,11 @@
     return { opname: o, alleenLezen: false, origineel: null, meldingen: meld };
   };
 
+  // Bevestigt een onwaarschijnlijke maar mogelijke maat (bijvoorbeeld een plafond van 1000 mm): pas dan kan de opname vrij. De bevestiging geldt voor precies deze waarde.
+  K.bevestigOnwaarschijnlijk = (opname, ruimteId, pad, tijd) => wijzigRuimte(opname, ruimteId, r => {
+    const x = K.waarschuwingen(r).find(w => w.code === 'onwaarschijnlijk' && w.pad === pad); if (!x) return { fout: 'Deze maat is niet onwaarschijnlijk (meer): niets te bevestigen.' };
+    r.bevestigingen = isObj(r.bevestigingen) ? r.bevestigingen : {}; r.bevestigingen[pad] = { waarde: x.waarde, tijd: tijd || nu() };
+  });
   K.uitsprongWaarden = (ruimte, u, lref) => uitsprongWaarden(ruimte || {}, u || {}, lref == null ? null : lref);
   K.wandHoeken = wandHoeken;
   K.hoekTekst = hoekTekst;

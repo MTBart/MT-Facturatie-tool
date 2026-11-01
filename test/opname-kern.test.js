@@ -38,6 +38,7 @@ function allesGemeten(op) {
   op = metWanden(op);
   for (const v of K.vragen(R(op))) {
     if (v.pad.startsWith('wanden.') && v.pad.endsWith('.lengte')) continue;
+    if (/^wanden\.[NOZW]\.maten\.lengte_(onder|boven)$/.test(v.pad)) { op = meet(op, v.pad, { N: N_J, O: O_J, Z: Z_J, W: W_J }[v.pad.split('.')[1]], 'hand'); continue; }          // dezelfde wandlengte op elke hoogte: geen onwaarschijnlijk verschil
     if (v.pad.startsWith('diagonalen.')) op = meet(op, v.pad, v.pad.includes('.A.') ? A_J : B_J);
     else if (v.eenheid === 'keuze') op = zet(op, v.pad, { staat: 'gemeten', keuze: v.keuzes[0], bron: 'hand' });
     else op = meet(op, v.pad, v.pad.includes('plafond') ? 2450 : 1000 + (v.pad.length % 7) * 10, 'hand');

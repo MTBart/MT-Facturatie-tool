@@ -438,8 +438,12 @@
     if (chk.kan) reden.appendChild(h('p', { class: 'opn-hint', text: 'Basis, werkzone en extra zijn compleet, het rondje is gedaan en er is een foto van elke werkzone-wand.' }));
     body.appendChild(reden);
     if (chk.waarschuwingen.length) {
-      const w = h('div', { class: 'opn-kaart' }, h('div', { class: 'opn-kaart-titel', text: 'Let op (blokkeert niet)' }));
-      for (const x of chk.waarschuwingen) w.appendChild(h('p', { class: 'opn-waarschuwing', text: x.tekst }));
+      const w = h('div', { class: 'opn-kaart' }, h('div', { class: 'opn-kaart-titel', text: 'Let op' }));
+      for (const x of chk.waarschuwingen) {
+        if (x.code === 'onwaarschijnlijk' && !x.bevestigd) w.appendChild(h('div', { class: 'opn-waarschuwing opn-bevestig' }, h('p', { text: x.tekst + ' Blokkeert het vrijgeven tot je het bevestigt.' }),
+          h('div', { class: 'opn-onderrij' }, h('button', { type: 'button', class: 'opn-btn opn-btn-klein opn-btn-primair', text: 'Klopt, bevestigen', onclick: () => { if (X.wijzig(K.bevestigOnwaarschijnlijk(S.rec.opname, r.id, x.pad))) X.teken(); } }), h('button', { type: 'button', class: 'opn-btn opn-btn-klein', text: 'Opnieuw meten', onclick: () => naarReden({ code: 'onwaarschijnlijk', pad: x.pad }) }))));
+        else w.appendChild(h('p', { class: 'opn-waarschuwing', text: x.tekst + (x.code === 'onwaarschijnlijk' ? ' (bevestigd)' : '') }));
+      }
       body.appendChild(w);
     }
     // Nameten: de lijst die later taken wordt (in deze beta alleen een lijst, geen taken)
@@ -482,6 +486,7 @@
     if (rd.code === 'definitie') { const id = (rd.pad || '').split('.')[1], op = lijst(X.ruimte().openingen).find(x => x.id === id); if (op) { X.openWand(op.wand, null, id); return; } }
     if (rd.code === 'open' || rd.code === 'later') { const rt = X.route(), st = lijst(rt.stappen).find(s => !s.optioneel && (rd.code === 'later' ? s.staat === 'later' : !s.afgehandeld) && s.type !== 'rondje'); if (st) { X.naarStap(st); return; } }
     if (rd.code === 'conflict') { X.ga('model'); return; }
+    if ((rd.code === 'onwaarschijnlijk' || rd.code === 'onmogelijk') && rd.pad) { const id = (rd.pad || '').split('.')[1], st = lijst(X.route().stappen).find(s => s.pad === rd.pad) || lijst(X.route().stappen).find(s => s.object === id || s.wand === id); if (st) { X.naarStap(st); return; } X.ga('model'); return; }
     X.toast('Dit los je bij het model of de start op.');
   }
   async function opslaan() {

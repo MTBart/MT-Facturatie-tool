@@ -24,9 +24,9 @@ test('maat lezen: hele millimeters, komma en duizendtalpunt', () => {
   assert.strictEqual(X.leesMm('80').v, 80);
 });
 test('maat lezen: leeg, geen getal, meters en onmogelijk grote maten worden geweigerd met een uitleg', () => {
-  for (const t of ['', '   ', 'abc', '12x', '-5']) assert.ok(X.leesMm(t).fout, JSON.stringify(t));
-  assert.ok(/millimeters/.test(X.leesMm('5,76').fout), 'een maat in meters wordt niet stilletjes gelezen als 6 mm');
-  assert.ok(X.leesMm('2').fout); assert.ok(X.leesMm('100000').fout);
+  for (const t of ['', '   ', 'abc', '12x', '-5', '0']) assert.ok(X.leesMm(t).fout, JSON.stringify(t));
+  assert.strictEqual(X.leesMm('5,76').v, 5.76, 'geen vaste ondergrens: een voeg of plintdikte kan klein zijn, de kern vraagt onwaarschijnlijke maten te bevestigen');
+  assert.strictEqual(X.leesMm('2').v, 2); assert.ok(X.leesMm('100000').fout);
   assert.strictEqual(X.leesMm('100000').v, undefined);
 });
 test('millimeters tonen met een komma', () => { assert.strictEqual(X.mm(2447), '2447'); assert.strictEqual(X.mm(1234.5), '1234,5'); assert.strictEqual(X.mm(null), ''); });
