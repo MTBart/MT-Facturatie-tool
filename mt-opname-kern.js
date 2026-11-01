@@ -21,7 +21,8 @@
   K.BIJZONDERHEDEN = { stootplint: 'Hogere stootplint', balk: 'Ingestucte balk of verlaging', koof: 'Koof', nis: 'Nis', 'uit-het-lood': 'Uit het lood', 'leiding-in-zicht': 'Leiding in zicht', kabelgoot: 'Kabelgoot', anders: 'Anders' };
   // Toleranties. diagonaal: de gemeten controlediagonaal tegen de diagonaal die uit 4 zijden + 1 diagonaal volgt (mm). tegenover en hoek_graden: pas boven deze waarden is de ruimte
   // 'afwijkend van vorm' (informatie, geen fout). Er wordt geen rechthoek verondersteld.
-  K.TOLERANTIE = { diagonaal: 10, tegenover: 5, hoek_graden: 0.3 };
+  K.TOLERANTIE = { diagonaal: 10, tegenover: 5, hoek_graden: 0.3, wand_scheef: 5 };
+  K.PLAFOND_UIT_HOEK = 300;                                              // mm: het plafond links en rechts langs een werkzone-wand wordt zo ver uit de hoek gemeten (regie, 1-11)
   K.RONDJE_LATER_BLOKKEERT = true;                                       // een categorie van het rondje op "later" is een open taak en blokkeert het vrijgeven (Bart, 1-11)
   K.WANDBEVESTIGING = ['bekeken', 'afgedekt', 'niet-beoordeeld'];          // buiten de werkzone: "gehele wand bekeken, geen relevante obstakels" of bewust afgedekt / niet beoordeeld
   K.ROUTE_VOLGORDES = ['fotos-dan-rondloop', 'rondloop', 'per-soort'];
@@ -139,7 +140,7 @@
         for (const [sl, k, waar] of [['lengte_onder', 'onder', 'net boven de plint'], ['lengte_boven', 'boven', 'net onder het plafond']]) slot('wanden.' + w + '.maten.' + sl, we, sl, 'werkzone', { soort: 'wandlengte', wand: w, kort: 'Wandlengte ' + WAND_NAAM[w] + ' ' + k,
           vraag: 'Hoe lang is de ' + wandTekst(w) + ' ' + waar + ', van hoek tot hoek?', uitleg: 'Dezelfde meting als de wandlengte op 1000 mm, nu ' + waar + '. Een kast raakt de wand over de hele hoogte.', kritiek: true });
         for (const pl of ['links', 'midden', 'rechts']) slot('wanden.' + w + '.maten.plafond_' + pl, we, 'plafond_' + pl, 'werkzone', { soort: 'wandplafond', wand: w, kort: 'Plafondhoogte ' + WAND_NAAM[w] + ' ' + pl,
-          vraag: 'Hoe hoog is het plafond ' + pl + ' op de ' + wandTekst(w) + ' (kijkend naar de wand)?', uitleg: 'Afgewerkte vloer tot afgewerkt plafond, ' + (pl === 'midden' ? 'in het midden van de wand.' : 'een stukje uit de ' + (pl === 'links' ? 'linker' : 'rechter') + 'hoek.'), kritiek: true });
+          vraag: 'Hoe hoog is het plafond ' + (pl === 'midden' ? 'in het midden van' : K.PLAFOND_UIT_HOEK + ' mm uit de ' + (pl === 'links' ? 'linker' : 'rechter') + 'hoek op') + ' de ' + wandTekst(w) + ' (kijkend naar de wand)?', uitleg: 'Afgewerkte vloer tot afgewerkt plafond, ' + (pl === 'midden' ? 'in het midden van de wand.' : 'op ' + K.PLAFOND_UIT_HOEK + ' mm van de ' + (pl === 'links' ? 'linker' : 'rechter') + 'hoek, gemeten langs de wand.'), kritiek: true });
       }
       if (!inZone(w)) slot('wanden.' + w + '.maten.bevestiging', we, 'bevestiging', 'basis', { soort: 'wandbevestiging', wand: w, eenheid: 'keuze', keuzes: ['bekeken'], nvtKeuzes: ['afgedekt', 'niet-beoordeeld'], kort: 'Wand ' + WAND_NAAM[w] + ' bekeken',
         vraag: 'Is de ' + wandTekst(w) + ' helemaal bekeken, zonder relevante obstakels?', uitleg: 'Kies "bekeken" als de hele wand in beeld was en er niets zit dat het meubel raakt. Is de wand afgedekt of niet beoordeeld, kies dat dan: het komt zo in het rapport.' });
@@ -318,6 +319,13 @@
       if (v != null && s.sleutel.indexOf('lengte') === 0 && s.pad.startsWith('wanden.') && (v < 300 || v > 15000)) w.push({ code: 'onwaarschijnlijk', pad: s.pad, tekst: s.kort + ': ' + v + ' mm ligt buiten 300 tot 15000 mm. Tikfout?' });
       if (v != null && (s.pad.startsWith('plafondpunten.') || s.sleutel.indexOf('plafond_') === 0) && (v < 2000 || v > 5000)) w.push({ code: 'onwaarschijnlijk', pad: s.pad, tekst: s.kort + ': ' + v + ' mm ligt buiten 2000 tot 5000 mm. Tikfout?' });
     }
+    // een werkzone-wand waarvan de lengte onderaan, op 1000 mm en bovenaan meer dan 5 mm verschilt, staat niet te lood of is scheef: informatie voor het meubel, geen blokkade
+    for (const wd of K.WANDEN) if (lijst(r.werkzone).includes(wd)) {
+      const hoogtes = [['onder', 'lengte_onder'], ['1000 mm', 'lengte'], ['boven', 'lengte_boven']].map(([n, k]) => [n, K.waarde(maatOp(vind(r.wanden, wd), k))]).filter(x => x[1] != null);
+      if (hoogtes.length < 2) continue;
+      const waarden = hoogtes.map(x => x[1]), verschil = Math.max.apply(null, waarden) - Math.min.apply(null, waarden);
+      if (verschil > K.TOLERANTIE.wand_scheef) w.push({ code: 'wand-scheef', pad: 'wanden.' + wd, wand: wd, verschil_mm: verschil, tekst: 'Wand ' + WAND_NAAM[wd] + ' niet te lood of scheef: de lengte verschilt ' + verschil + ' mm tussen ' + hoogtes.map(x => x[0] + ' ' + x[1] + ' mm').join(', ') + '. Informatie voor het meubel, geen blokkade.' });
+    }
     // rondje zegt "afwezig" terwijl er in die wand en categorie wel iets is vastgelegd
     for (const x of K.rondje(r).regels) if (x.waarde === 'afwezig') {
       const iets = (cat => cat === 'kozijn' ? lijst(r.openingen).filter(o => o && o.wand === x.wand).length + lijst(r.objecten).filter(o => o && o.wand === x.wand && K.OBJECTTYPES[o.type] && K.OBJECTTYPES[o.type].cat === 'kozijn').length
@@ -402,7 +410,7 @@
 
   // ── Vrijgave gekoppeld aan de inhoud (ChatGPT-review 035, punt E) ──
   // Een vrijgave geldt voor precies één inhoud: de hash van wat inhoudelijk telt (maten, staten, bronnen, notities, meubeltype, werkzone, alle punten en bijzonderheden, rondje).
-  // Tijdstippen, historie, grijze voorstellen, foto's, status en de vrijgave zelf tellen niet mee. Elke inhoudelijke wijziging maakt de vrijgave dus ongeldig, ook als een app vergeet de status terug te zetten.
+  // Tijdstippen, historie, grijze voorstellen, de beelden zelf, status en de vrijgave zelf tellen niet mee; de foto-verwijzingen van de werkzone-wanden wel (werkzoneFotos). Elke inhoudelijke wijziging maakt de vrijgave dus ongeldig, ook als een app vergeet de status terug te zetten.
   const VOLATIEL = { tijd: 1, historie: 1, voorstel: 1, bijgewerkt: 1, aangemaakt: 1, status: 1, vrijgave: 1, fotos: 1, rondje_historie: 1 };
   function canon(x) {
     if (Array.isArray(x)) return '[' + x.map(canon).join(',') + ']';
@@ -415,7 +423,14 @@
     h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909); h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
     return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16).padStart(14, '0');
   }
-  K.inhoudsHash = opname => hash53(canon(opname));
+  // Foto's tellen niet mee, behalve de verwijzingen van de werkzone-wanden: een foto daarvan is verplicht voor het vrijgeven, dus verwijderen of vervangen maakt de vrijgave ongeldig.
+  // Alleen de verwijzing (ruimte, wand, bestandsnaam) gaat de hash in, nooit het beeld of een tijdstip.
+  function werkzoneFotos(opname) {
+    const l = [];
+    for (const r of lijst(opname && opname.ruimtes)) for (const w of K.WANDEN) if (lijst(r && r.werkzone).includes(w)) for (const f of K.fotosVan(opname, r.id, w)) l.push([r.id, w, f.bestand || f.id || ''].join('|'));
+    return l.sort();
+  }
+  K.inhoudsHash = opname => hash53(canon(opname) + '#fotos:' + JSON.stringify(werkzoneFotos(opname)));
   K.isVrijgaveGeldig = opname => !!opname && opname.status === 'vrijgegeven' && isObj(opname.vrijgave) && opname.vrijgave.hash === K.inhoudsHash(opname);
   // De status zoals hij nu geldt: een vrijgave waarvan de inhoud veranderd is, heet "vrijgave-vervallen".
   K.effectieveStatus = opname => !opname ? null : opname.status === 'vrijgegeven' ? (K.isVrijgaveGeldig(opname) ? 'vrijgegeven' : 'vrijgave-vervallen') : (opname.status || 'concept');

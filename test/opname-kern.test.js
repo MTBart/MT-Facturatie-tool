@@ -403,13 +403,42 @@ test('elke inhoudelijke wijziging maakt een eerdere vrijgave ongeldig', () => {
   assert.strictEqual(K.slaOp(gevallen.maat, T0).opname.status, 'opgeslagen', 'opslaan na een wijziging maakt er "opgeslagen" van');
   assert.strictEqual(K.inhoudsHash(v), K.inhoudsHash(kopie(v)));
 });
-test('geen inhoudelijke wijziging: tijd, historie, grijs voorstel en foto\'s veranderen de hash niet', () => {
+test('geen inhoudelijke wijziging: tijd, historie, grijs voorstel en foto\'s buiten de werkzone veranderen de hash niet', () => {
   const v = K.vrijgeven(klaar(), 'Bart', T0).opname;
   const zelfde = K.zetMaat(v, 'R1', 'wanden.N.maten.lengte', { staat: 'gemeten', waarde: N_J, bron: 'disto' }, '2026-12-24T10:00:00.000Z').opname;
   assert.strictEqual(R(zelfde).wanden[0].maten.lengte.historie.length, 1, 'er is wel een historie bijgekomen'); assert.strictEqual(K.isVrijgaveGeldig(zelfde), true);
   const voorstel = K.zetVoorstel(v, 'R1', 'openingen.R1.maten.hoogte', { schatting_mm: 1100 }, T0).opname; assert.strictEqual(K.isVrijgaveGeldig(voorstel), true);
-  const foto = K.voegFotoToe(v, { bestand: 'oost-01.jpg', ruimte: 'R1', wand: 'O' }).opname; assert.strictEqual(K.isVrijgaveGeldig(foto), true);
+  const foto = K.voegFotoToe(v, { bestand: 'noord-01.jpg', ruimte: 'R1', wand: 'N' }).opname; assert.strictEqual(K.isVrijgaveGeldig(foto), true, 'een foto van een wand buiten de werkzone raakt de hash niet');
+  const overzicht = K.voegFotoToe(v, { bestand: 'overzicht.jpg', ruimte: 'R1' }).opname; assert.strictEqual(K.isVrijgaveGeldig(overzicht), true);
   assert.strictEqual(K.isVrijgaveGeldig(joe()), false); assert.strictEqual(K.isVrijgaveGeldig(null), false); assert.strictEqual(K.effectieveStatus(joe()), 'concept');
+});
+
+test('foto-verwijzingen van werkzone-wanden zitten in de hash: verwijderen, vervangen of toevoegen maakt de vrijgave ongeldig', () => {
+  const v = K.vrijgeven(klaar(), 'Bart', T0).opname; assert.strictEqual(K.isVrijgaveGeldig(v), true); assert.strictEqual(v.fotos.length, 1);
+  const weg = kopie(v); weg.fotos = []; assert.strictEqual(K.isVrijgaveGeldig(weg), false, 'foto verwijderd'); assert.strictEqual(K.effectieveStatus(weg), 'vrijgave-vervallen');
+  const ander = kopie(v); ander.fotos[0].bestand = 'oost-02.jpg'; assert.strictEqual(K.isVrijgaveGeldig(ander), false, 'foto vervangen');
+  const extra = K.voegFotoToe(v, { bestand: 'oost-02.jpg', ruimte: 'R1', wand: 'O' }).opname; assert.strictEqual(K.isVrijgaveGeldig(extra), false, 'tweede foto van de werkzone-wand');
+  const tijd = kopie(v); tijd.fotos[0].tijd = '2027-01-01T00:00:00.000Z'; tijd.fotos[0].exif = { breedte: 4000 }; assert.strictEqual(K.isVrijgaveGeldig(tijd), true, 'tijd en extra gegevens van de foto tellen niet mee');
+  const buiten = kopie(v); buiten.fotos.unshift({ id: 'FX', bestand: 'a.jpg', ruimte: 'R1', wand: 'N' }); assert.strictEqual(K.isVrijgaveGeldig(buiten), true, 'foto buiten de werkzone');
+});
+test('plafond links en rechts: 300 mm uit de hoek staat in vraag en uitleg; het midden niet', () => {
+  const v = K.vragen(R(joe())), get = p => v.find(x => x.pad === p);
+  assert.strictEqual(K.PLAFOND_UIT_HOEK, 300);
+  assert.ok(/300 mm uit de linkerhoek/.test(get('wanden.O.maten.plafond_links').vraag) && /300 mm van de linkerhoek/.test(get('wanden.O.maten.plafond_links').uitleg));
+  assert.ok(/300 mm uit de rechterhoek/.test(get('wanden.O.maten.plafond_rechts').vraag) && /300 mm van de rechterhoek/.test(get('wanden.O.maten.plafond_rechts').uitleg));
+  assert.ok(!/300/.test(get('wanden.O.maten.plafond_midden').vraag + get('wanden.O.maten.plafond_midden').uitleg) && /in het midden/.test(get('wanden.O.maten.plafond_midden').vraag));
+});
+test('wand niet te lood: drie wandlengtes meer dan 5 mm uit elkaar geeft een melding, geen blokkade', () => {
+  const scheef = w => w.filter(x => x.code === 'wand-scheef');
+  let op = meet(meet(meet(joe(), 'wanden.O.maten.lengte', 2900), 'wanden.O.maten.lengte_onder', 2900), 'wanden.O.maten.lengte_boven', 2905);
+  assert.strictEqual(scheef(K.waarschuwingen(R(op))).length, 0, '5 mm verschil is nog goed');
+  op = meet(op, 'wanden.O.maten.lengte_onder', 2890); const m = scheef(K.waarschuwingen(R(op)));
+  assert.strictEqual(m.length, 1); assert.strictEqual(m[0].wand, 'O'); assert.strictEqual(m[0].verschil_mm, 15); assert.ok(/niet te lood of scheef/.test(m[0].tekst) && /onder 2890 mm/.test(m[0].tekst));
+  assert.strictEqual(scheef(K.waarschuwingen(R(meet(joe(), 'wanden.O.maten.lengte', 2900)))).length, 0, 'met één hoogte valt er niets te vergelijken');
+  assert.strictEqual(scheef(K.waarschuwingen(R(meet(meet(joe(), 'wanden.O.maten.lengte', 2900), 'wanden.O.maten.lengte_boven', 2880)))).length, 1, 'ook met twee van de drie');
+  const buiten = kopie(R(meet(joe(), 'wanden.N.maten.lengte', 5700))); buiten.wanden.find(x => x.id === 'N').maten.lengte_onder = { staat: 'gemeten', waarde: 5600, bron: 'hand', tijd: T0 }; assert.strictEqual(scheef(K.waarschuwingen(buiten)).length, 0, 'alleen werkzone-wanden');
+  const k = klaar(), scheefK = meet(k, 'wanden.O.maten.lengte_onder', O_J - 20);
+  assert.strictEqual(K.vrijgeefCheck(scheefK).kan, K.vrijgeefCheck(k).kan, 'de melding blokkeert het vrijgeven niet'); assert.ok(K.vrijgeefCheck(scheefK).waarschuwingen.some(w => w.code === 'wand-scheef'));
 });
 
 // ── Takenlijst ──
@@ -561,7 +590,7 @@ test('route: de bijzonderheden-stap en het rondje delen hun antwoord (afwijkinge
 
 // ── Veilig lezen en migreren ──
 test('lezen: een v0.3-opname komt ongewijzigd terug, ook na tweemaal lezen', () => {
-  let op = K.vrijgeven(klaar(), 'Bart', T0).opname; op = K.voegFotoToe(op, { bestand: 'oost-01.jpg', ruimte: 'R1', wand: 'O' }).opname;
+  let op = K.vrijgeven(klaar(), 'Bart', T0).opname; op = K.voegFotoToe(op, { bestand: 'noord-01.jpg', ruimte: 'R1', wand: 'N' }).opname;
   const a = K.lees(op); assert.deepStrictEqual(a.opname, op); assert.deepStrictEqual(a.meldingen, []); assert.strictEqual(a.alleenLezen, false);
   assert.deepStrictEqual(K.lees(a.opname).opname, op); assert.deepStrictEqual(K.lees(JSON.parse(JSON.stringify(op))).opname, op, 'ook via JSON'); assert.strictEqual(K.isVrijgaveGeldig(a.opname), true, 'lezen verandert de inhoud niet, dus de vrijgave blijft geldig');
 });

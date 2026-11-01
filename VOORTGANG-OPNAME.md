@@ -50,3 +50,16 @@ Basis: 4 wandlengtes + plafond + diagonaal A (6) + breedte en positie van 4 open
 - Moeten de drie wandlengtes onderling vergeleken worden (een kast tegen een wand die onderaan 15 mm korter is)? Nu alleen vastgelegd, geen controle.
 - Mag een vrijgegeven opname weer open, en wie? De kern kent nu alleen `status` en de hash.
 - Moet de bereikbaarheid van een radiator buiten de werkzone ook gevraagd worden? Nu alleen "gezien".
+
+## Regie (Claude Opus, 1-11-2026) — mee naar de volgende brok
+- **Foto in de inhoudshash:** een werkzone-foto blokkeert vrijgave, dus het verwijderen van zo'n foto moet een vrijgave ook ongeldig maken. Neem de foto-verwijzingen van werkzone-wanden mee in de hash (niet de beelden zelf).
+- **Plafond links/rechts:** vaste afstand van 300 mm uit de hoek, in de vraagtekst.
+- **Drie wandlengtes:** onderling vergelijken. Een verschil groter dan 5 mm geeft een melding "wand niet te lood/scheef" (informatie, geen blokkade).
+
+## Brok 2: schermen in de telefoon-app (1-11-2026)
+
+**Gedaan: de drie kern-aanpassingen van de regie (eigen commit)**
+- Foto-verwijzingen (ruimte, wand, bestandsnaam) van de werkzone-wanden zitten nu in `inhoudsHash`; foto-verwijzingen van andere wanden, tijden en beelden niet. Een foto verwijderen of vervangen maakt een vrijgave ongeldig.
+- Plafond links en rechts: `K.PLAFOND_UIT_HOEK = 300`, staat in vraag en uitleg.
+- Drie wandlengtes vergelijken: meer dan 5 mm verschil (`K.TOLERANTIE.wand_scheef`) geeft waarschuwing `wand-scheef` ("wand niet te lood of scheef"), geen blokkade.
+- Tests: 66 groen (drie nieuwe; twee bestaande aangepast omdat een foto bij een werkzone-wand nu in de hash zit).
