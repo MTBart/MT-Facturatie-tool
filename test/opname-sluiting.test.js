@@ -214,4 +214,10 @@ test('historische v0.3-vrijgave blijft geldig maar staat als "gevalideerd met ou
   const k2 = K.vrijgaveKern(opnieuw.opname); assert.deepStrictEqual([k2.versie, k2.oud, k2.tekst], [K.VERSIE, false, 'Gevalideerd met kern v' + K.VERSIE]); assert.strictEqual(opnieuw.opname.vrijgave.kern, K.VERSIE);
   assert.strictEqual(K.vrijgaveKern(K.nieuweOpname({ ruimtes: [K.nieuweRuimte({ id: 'R1' })] })), null, 'zonder vrijgave geen kernlabel');
 });
+test('de tekst noemt alleen diagonalen die meetellen; een diagonaal door de buitenruimte of een herhaling staat er apart bij', () => {
+  let op = zesWanden(); for (const k of ['H1-H3', 'H1-H4', 'H3-H5']) { const [a, b] = k.split('-'); op = metDiagonaal(op, a, b, k === 'H3-H5' ? hyp(3000, 2000) : D[k]); }
+  const v = K.vorm(R(op)), l = K.vormLabel(v);
+  assert.strictEqual(l.kort, 'Lengtes gemeten; model onder hoekaanname; controle C en D klopt', 'E (H3-H5, door de buitenruimte) staat er niet bij');
+  assert.ok(/Diagonaal E loopt door de buitenruimte en telt niet mee/.test(v.reden), v.reden);
+});
 console.log('\n' + n + ' tests geslaagd');

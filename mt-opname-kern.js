@@ -396,7 +396,7 @@
     if (v.status === 'inconsistent') return { kort: 'Meetgegevens inconsistent', pil: 'conflict', bepaling: null };
     if (v.bepaling === 'gecontroleerd') return { kort: v.afwijkend ? 'Onafhankelijk gecontroleerd, niet rechthoekig' : 'Onafhankelijk gecontroleerd', pil: 'ok', bepaling: 'gecontroleerd' };
     if (v.bepaling === 'bepaald') return { kort: 'Geometrisch bepaald, nog niet onafhankelijk gecontroleerd', pil: 'later', bepaling: 'bepaald' };
-    const klopt = lijst(v.controles).filter(c => c && c.klopt);
+    const klopt = lijst(v.controles).filter(c => c && c.klopt && c.telt !== false);
     if (v.lengtes_gemeten && v.sluitfout) return { kort: 'Lengtes gemeten; model onder hoekaanname' + (klopt.length ? '; controle ' + klopt.map(c => c.diagonaal).join(' en ') + ' klopt' : ''), pil: 'later', bepaling: 'getekend' };
     return { kort: v.status === 'onvoldoende-bepaald' ? 'Getekend (schatting), nog niet bepaald' : 'Getekend (schatting)', pil: 'later', bepaling: 'getekend' };
   };
@@ -511,6 +511,7 @@
     const kand = checks.filter(c => c.telt), nodig = Math.max(0, n - 3), onafh = maxNietKruisend(pts, kand, T.raak), alleGemeten = !aangenomen;
     const bepaald = alleGemeten || onafh.length >= nodig, extra = bepaald && kand.length > (alleGemeten ? 0 : nodig);
     const namen = c => 'diagonaal ' + c.diagonaal + (c.verschil_mm ? ' (' + (c.verschil_mm > 0 ? '+' : '') + c.verschil_mm + ' mm)' : ' (0 mm)');
+    const nietTellend = checks.filter(c => !c.telt), nietTekst = nietTellend.length ? ' ' + nietTellend.map(c => 'Diagonaal ' + c.diagonaal + (c.herhaling ? ' herhaalt een eerdere diagonaal' : ' loopt door de buitenruimte') + ' en telt niet mee.').join(' ') : '';
     basis.diagonaal_gebruikt = onafh.length ? onafh.map(k => kand[k].diagonaal).join(' ') : null;
     // de volgende benodigde maat: de langste diagonaal binnen de ruimte die nog niet gemeten is en de gekozen diagonalen niet kruist (bepaald nog niet: voor de vorm; wel bepaald: als controle)
     const gemeten = {}; checks.forEach(c => { gemeten[Math.min(c.i, c.j) + '-' + Math.max(c.i, c.j)] = true; });
@@ -524,7 +525,7 @@
       if (kies) basis.volgende = { soort: 'controle', van: hoekIds[kies.i], naar: hoekIds[kies.j], tekst: 'Meet als controle de diagonaal van ' + stuk(kies) + '.' };
     } else {
       basis.status = 'onverifieerd'; basis.bepaling = 'getekend';
-      basis.reden = 'Lengtes gemeten; model onder hoekaanname: ' + basis.aangenomen_hoeken.length + ' van de ' + n + ' hoeken zijn aangenomen (90 of 270 graden). De wanden sluiten (sluitfout ' + basis.sluitfout.mm + ' mm)' + (kand.length ? ' en ' + kand.map(namen).join(' en ') + ' klopt, maar dat bewijst niet alle aangenomen hoeken' : '') + '. Voor een bepaalde vorm zijn ' + nodig + ' onafhankelijke diagonalen nodig (nu ' + onafh.length + ') of bevestigde hoeken.';
+      basis.reden = 'Lengtes gemeten; model onder hoekaanname: ' + basis.aangenomen_hoeken.length + ' van de ' + n + ' hoeken zijn aangenomen (90 of 270 graden). De wanden sluiten (sluitfout ' + basis.sluitfout.mm + ' mm)' + (kand.length ? ' en ' + kand.map(namen).join(' en ') + ' klopt, maar dat bewijst niet alle aangenomen hoeken' : '') + '.' + nietTekst + ' Voor een bepaalde vorm zijn ' + nodig + ' onafhankelijke diagonalen nodig (nu ' + onafh.length + ') of bevestigde hoeken.';
       if (kies) basis.volgende = { soort: 'diagonaal', van: hoekIds[kies.i], naar: hoekIds[kies.j], nog: nodig - onafh.length, tekst: 'Meet de diagonaal van ' + stuk(kies) + ' (nog ' + (nodig - onafh.length) + (nodig - onafh.length === 1 ? ' onafhankelijke diagonaal' : ' onafhankelijke diagonalen') + ' nodig), of bevestig de hoeken met een driehoeksmeting.' };
     }
     return basis;
