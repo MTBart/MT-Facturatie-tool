@@ -527,6 +527,77 @@
     return { opname: o, fout: null };
   };
   K.fotosVan = (opname, ruimteId, wand) => lijst(opname && opname.fotos).filter(f => f && f.ruimte === ruimteId && (wand == null || f.wand === wand));
+  // Een foto weghalen: de verwijzing verhuist naar opname.fotos_verwijderd (append-only), zodat er niets stil verdwijnt. Het beeld zelf beheert de opslag van de app.
+  K.verwijderFoto = function (opname, fotoId, tijd) {
+    if (!vind(opname && opname.fotos, fotoId)) return { opname: null, fout: 'Onbekende foto.' };
+    const o = kloon(opname), f = vind(o.fotos, fotoId);
+    o.fotos = o.fotos.filter(x => x !== f); o.fotos_verwijderd = lijst(o.fotos_verwijderd).concat([Object.assign({}, f, { verwijderd_op: tijd || nu() })]);
+    o.bijgewerkt = tijd || nu();
+    return { opname: o, fout: null };
+  };
+
+  // ── Wat er op een wand zit: openingen, objecten en bijzonderheden toevoegen, wijzigen en weghalen ──
+  // De route vraagt alleen naar wat bestaat; de opnemer legt per wand vast wat er zit (deur, raam, stopcontact, radiator, plint, ...). Een id is voorvoegsel + volgnummer en is
+  // uniek binnen de ruimte. Weghalen archiveert het hele item in ruimte.verwijderd (append-only): maten die al genomen zijn gaan nooit stil verloren.
+  const ID_VOORVOEGSEL = { deur: 'D', raam: 'R', stopcontact: 'SC', schakelaar: 'SW', leiding: 'LT', radiator: 'RAD', vensterbank: 'VB', plint: 'PL', overig: 'OV', bijzonderheid: 'B' };
+  const volgId = (r, voor) => { const gebruikt = {}; for (const l of [r.openingen, r.objecten, r.bijzonderheden]) for (const e of lijst(l)) if (e && e.id) gebruikt[e.id] = true; let n = 1; while (gebruikt[voor + n]) n++; return voor + n; };
+  function wijzigRuimte(opname, ruimteId, fn) {
+    const o = kloon(opname), r = zoekRuimte(o, ruimteId); if (!r) return { opname: null, fout: 'Onbekende ruimte.' };
+    zorgEntiteiten(r); const res = fn(r, o); if (res && res.fout) return { opname: null, fout: res.fout };
+    o.bijgewerkt = nu(); return Object.assign({ opname: o, fout: null }, res || {});
+  }
+  K.zetRuimte = (opname, ruimteId, wijz) => wijzigRuimte(opname, ruimteId, r => {
+    wijz = wijz || {};
+    if (wijz.naam != null) { if (!String(wijz.naam).trim()) return { fout: 'Geef de ruimte een naam.' }; r.naam = String(wijz.naam).trim(); }
+    if (wijz.meubeltype != null) { if (!K.MEUBELTYPES.includes(wijz.meubeltype)) return { fout: 'Onbekend meubeltype.' }; r.meubeltype = wijz.meubeltype; }
+    if (wijz.werkzone != null) { if (!Array.isArray(wijz.werkzone) || wijz.werkzone.some(w => !K.WANDEN.includes(w))) return { fout: 'Onbekende wand in de werkzone.' }; r.werkzone = K.WANDEN.filter(w => wijz.werkzone.includes(w)); }
+    if (wijz.toegangsdeur !== undefined) { if (wijz.toegangsdeur === null) delete r.toegangsdeur; else if (!vind(r.openingen, wijz.toegangsdeur)) return { fout: 'Onbekende deur.' }; else r.toegangsdeur = wijz.toegangsdeur; }
+  });
+  K.voegOpeningToe = (opname, ruimteId, nieuw) => wijzigRuimte(opname, ruimteId, r => {
+    nieuw = nieuw || {};
+    if (nieuw.soort !== 'deur' && nieuw.soort !== 'raam') return { fout: 'Een opening is een deur of een raam.' };
+    if (!K.WANDEN.includes(nieuw.wand)) return { fout: 'Kies de wand waar de opening zit.' };
+    if (nieuw.definitie && !K.DEFINITIES[nieuw.definitie]) return { fout: 'Onbekende definitie.' };
+    const id = volgId(r, ID_VOORVOEGSEL[nieuw.soort]), e = { id, soort: nieuw.soort, wand: nieuw.wand, maten: {} };
+    if (nieuw.definitie) e.definitie = nieuw.definitie;
+    if (nieuw.naam) e.naam = String(nieuw.naam);
+    r.openingen = lijst(r.openingen).concat([e]); return { id };
+  });
+  K.voegObjectToe = (opname, ruimteId, nieuw) => wijzigRuimte(opname, ruimteId, r => {
+    nieuw = nieuw || {};
+    if (!K.OBJECTTYPES[nieuw.type]) return { fout: 'Onbekend soort object.' };
+    if (!K.WANDEN.includes(nieuw.wand)) return { fout: 'Kies de wand waar het object zit.' };
+    if (nieuw.hoek && !HOEK_NAAM[nieuw.hoek]) return { fout: 'Onbekende hoek.' };
+    if (nieuw.opening && !vind(r.openingen, nieuw.opening)) return { fout: 'Onbekende opening.' };
+    const id = volgId(r, ID_VOORVOEGSEL[nieuw.type]), e = { id, type: nieuw.type, wand: nieuw.wand, maten: {} };
+    if (nieuw.hoek) e.hoek = nieuw.hoek;
+    if (nieuw.opening) e.opening = nieuw.opening;
+    if (nieuw.naam) e.naam = String(nieuw.naam);
+    if (!lijst(r.werkzone).includes(nieuw.wand)) e.eigen = true;               // buiten de werkzone zelf toegevoegd: het wordt gevraagd (extra), het is geen "gezien"
+    r.objecten = lijst(r.objecten).concat([e]); return { id };
+  });
+  K.voegBijzonderheidToe = (opname, ruimteId, nieuw) => wijzigRuimte(opname, ruimteId, r => {
+    nieuw = nieuw || {};
+    if (!K.BIJZONDERHEDEN[nieuw.soort]) return { fout: 'Onbekende bijzonderheid.' };
+    if (!K.WANDEN.includes(nieuw.wand)) return { fout: 'Kies de wand.' };
+    const id = volgId(r, ID_VOORVOEGSEL.bijzonderheid), e = { id, soort: nieuw.soort, wand: nieuw.wand, maten: nieuw.bemeten ? { maat: K.nieuweMaat() } : {} };
+    if (nieuw.notitie) e.notitie = String(nieuw.notitie);
+    r.bijzonderheden = lijst(r.bijzonderheden).concat([e]); return { id };
+  });
+  K.zetDefinitie = (opname, ruimteId, openingId, definitie) => wijzigRuimte(opname, ruimteId, r => {
+    const e = vind(r.openingen, openingId); if (!e) return { fout: 'Onbekende opening.' };
+    if (!K.DEFINITIES[definitie]) return { fout: 'Kies muursparing, dagmaat of kozijn buiten.' };
+    e.definitie = definitie;
+  });
+  // lijstNaam: openingen, objecten of bijzonderheden. Het item (met al zijn maten) gaat naar ruimte.verwijderd; was het de toegangsdeur, dan vervalt die keuze.
+  K.verwijderItem = (opname, ruimteId, lijstNaam, id, tijd) => wijzigRuimte(opname, ruimteId, r => {
+    if (!['openingen', 'objecten', 'bijzonderheden'].includes(lijstNaam)) return { fout: 'Onbekende lijst.' };
+    const e = vind(r[lijstNaam], id); if (!e) return { fout: 'Onbekend item.' };
+    r[lijstNaam] = lijst(r[lijstNaam]).filter(x => x !== e);
+    r.verwijderd = lijst(r.verwijderd).concat([{ lijst: lijstNaam, item: e, tijd: tijd || nu() }]);
+    if (lijstNaam === 'openingen' && r.toegangsdeur === id) delete r.toegangsdeur;
+    for (const ob of lijst(r.objecten)) if (ob && ob.opening === id) delete ob.opening;                   // een vensterbank die bij dit raam hoorde, vraagt dan zijn eigen hoogte
+  });
 
   // ── De route: de vragen punt voor punt in een logische volgorde ──
   // Geen totaaloverzicht, maar een geordende lijst stappen (met nr en "stap x van y"). Standaardvolgorde 'fotos-dan-rondloop' (Bart, 1-11):

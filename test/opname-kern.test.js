@@ -441,6 +441,54 @@ test('wand niet te lood: drie wandlengtes meer dan 5 mm uit elkaar geeft een mel
   assert.strictEqual(K.vrijgeefCheck(scheefK).kan, K.vrijgeefCheck(k).kan, 'de melding blokkeert het vrijgeven niet'); assert.ok(K.vrijgeefCheck(scheefK).waarschuwingen.some(w => w.code === 'wand-scheef'));
 });
 
+// ── Wat er op een wand zit (brok 2: de app legt openingen, objecten en bijzonderheden vast) ──
+const leeg = zone => K.nieuweOpname({ opname_id: 'OPN-TEST-002', aangemaakt: T0, ruimtes: [K.nieuweRuimte({ id: 'R1', naam: 'Testruimte', werkzone: zone || ['O'] })] });
+test('ruimtegegevens zetten: naam, meubeltype, werkzone (in wandvolgorde) en toegangsdeur; fouten worden geweigerd', () => {
+  let op = leeg(); const r1 = K.zetRuimte(op, 'R1', { naam: '  Woonkamer ', werkzone: ['Z', 'O'], meubeltype: 'keuken' }); assert.strictEqual(r1.fout, null);
+  assert.strictEqual(R(r1.opname).naam, 'Woonkamer'); assert.deepStrictEqual(R(r1.opname).werkzone, ['O', 'Z']); assert.strictEqual(R(r1.opname).meubeltype, 'keuken'); assert.strictEqual(R(op).naam, 'Testruimte', 'de invoer blijft ongewijzigd');
+  for (const slecht of [{ naam: '  ' }, { meubeltype: 'tuinhuis' }, { werkzone: ['X'] }, { werkzone: 'O' }, { toegangsdeur: 'D9' }]) assert.ok(K.zetRuimte(op, 'R1', slecht).fout, JSON.stringify(slecht));
+  assert.ok(K.zetRuimte(op, 'R9', {}).fout);
+  const d = K.voegOpeningToe(op, 'R1', { soort: 'deur', wand: 'Z' }); const met = K.zetRuimte(d.opname, 'R1', { toegangsdeur: d.id }).opname; assert.strictEqual(R(met).toegangsdeur, 'D1');
+  assert.strictEqual(K.zetRuimte(met, 'R1', { toegangsdeur: null }).opname.ruimtes[0].toegangsdeur, undefined);
+});
+test('openingen toevoegen: deur D1, D2 en raam R1; id uniek, definitie optioneel, de route vraagt er direct naar', () => {
+  let op = leeg(); const a = K.voegOpeningToe(op, 'R1', { soort: 'deur', wand: 'Z' }), b = K.voegOpeningToe(a.opname, 'R1', { soort: 'raam', wand: 'O', definitie: 'dagmaat' }), c = K.voegOpeningToe(b.opname, 'R1', { soort: 'deur', wand: 'N' });
+  assert.deepStrictEqual([a.id, b.id, c.id], ['D1', 'R1', 'D2']); assert.strictEqual(R(c.opname).openingen.find(o => o.id === 'R1').definitie, 'dagmaat'); assert.strictEqual(R(c.opname).openingen.find(o => o.id === 'D1').definitie, undefined);
+  assert.ok(K.vragen(R(c.opname)).some(v => v.pad === 'openingen.R1.maten.breedte' && v.bucket === 'basis'));
+  assert.ok(K.route(R(c.opname)).stappen.some(x => x.id === 'maat:openingen.D2.maten.positie'));
+  for (const slecht of [{ soort: 'poort', wand: 'N' }, { soort: 'raam', wand: 'X' }, { soort: 'raam', wand: 'N', definitie: 'iets' }]) assert.ok(K.voegOpeningToe(op, 'R1', slecht).fout, JSON.stringify(slecht));
+  assert.strictEqual(K.zetDefinitie(c.opname, 'R1', 'D1', 'muursparing').opname.ruimtes[0].openingen[0].definitie, 'muursparing'); assert.ok(K.zetDefinitie(c.opname, 'R1', 'D1', 'x').fout); assert.ok(K.zetDefinitie(c.opname, 'R1', 'D9', 'dagmaat').fout);
+});
+test('objecten toevoegen: in de werkzone volledig gevraagd; erbuiten alleen omdat de opnemer het zelf toevoegde (extra)', () => {
+  let op = leeg(['O']); const sc = K.voegObjectToe(op, 'R1', { type: 'stopcontact', wand: 'O', hoek: 'ZO' }), buiten = K.voegObjectToe(sc.opname, 'R1', { type: 'radiator', wand: 'N' });
+  assert.strictEqual(sc.id, 'SC1'); assert.strictEqual(buiten.id, 'RAD1');
+  const vr = K.vragen(R(buiten.opname)); assert.strictEqual(vr.find(v => v.pad === 'objecten.SC1.maten.hoogte').bucket, 'werkzone'); assert.strictEqual(vr.find(v => v.pad === 'objecten.RAD1.maten.breedte').bucket, 'extra');
+  assert.strictEqual(R(buiten.opname).objecten[1].eigen, true); assert.strictEqual(R(buiten.opname).objecten[0].eigen, undefined);
+  assert.ok(/zuidoosthoek/.test(vr.find(v => v.pad === 'objecten.SC1.maten.afstand').vraag));
+  for (const slecht of [{ type: 'tafel', wand: 'O' }, { type: 'plint', wand: 'X' }, { type: 'plint', wand: 'O', hoek: 'XX' }, { type: 'vensterbank', wand: 'O', opening: 'R9' }]) assert.ok(K.voegObjectToe(op, 'R1', slecht).fout, JSON.stringify(slecht));
+  const raam = K.voegOpeningToe(op, 'R1', { soort: 'raam', wand: 'O' }), vb = K.voegObjectToe(raam.opname, 'R1', { type: 'vensterbank', wand: 'O', opening: raam.id }); assert.ok(!K.vragen(R(vb.opname)).some(v => v.pad === 'objecten.VB1.maten.hoogte'), 'bij een raam is de hoogte de borstwering');
+});
+test('bijzonderheid toevoegen: genoemd zonder maat komt in de uitzonderingen, met "bemeten" krijgt hij een maatvraag', () => {
+  let op = leeg(); const a = K.voegBijzonderheidToe(op, 'R1', { soort: 'koof', wand: 'O', notitie: 'koof boven de radiator' }), b = K.voegBijzonderheidToe(a.opname, 'R1', { soort: 'nis', wand: 'O', bemeten: true });
+  assert.deepStrictEqual([a.id, b.id], ['B1', 'B2']); assert.ok(K.vrijgeefCheckRuimte(R(b.opname)).uitzonderingen.some(u => u.soort === 'bijzonderheid' && u.pad === 'bijzonderheden.B1'));
+  assert.ok(K.vragen(R(b.opname)).some(v => v.pad === 'bijzonderheden.B2.maten.maat' && v.bucket === 'extra')); assert.ok(!K.vragen(R(b.opname)).some(v => v.pad === 'bijzonderheden.B1.maten.maat'));
+  assert.ok(K.voegBijzonderheidToe(op, 'R1', { soort: 'spook', wand: 'O' }).fout); assert.ok(K.voegBijzonderheidToe(op, 'R1', { soort: 'koof', wand: 'Q' }).fout);
+});
+test('weghalen archiveert het hele item met zijn maten; de toegangsdeur en de opening van een vensterbank vervallen netjes', () => {
+  let op = leeg(); const d = K.voegOpeningToe(op, 'R1', { soort: 'deur', wand: 'Z' }); op = K.zetRuimte(d.opname, 'R1', { toegangsdeur: 'D1' }).opname;
+  op = zet(op, 'openingen.D1.maten.breedte', { staat: 'gemeten', waarde: 830 }); const raam = K.voegOpeningToe(op, 'R1', { soort: 'raam', wand: 'O' }); op = K.voegObjectToe(raam.opname, 'R1', { type: 'vensterbank', wand: 'O', opening: 'R1' }).opname;
+  const weg = K.verwijderItem(op, 'R1', 'openingen', 'D1', T0); assert.strictEqual(weg.fout, null); const r = R(weg.opname);
+  assert.ok(!r.openingen.some(o => o.id === 'D1')); assert.strictEqual(r.toegangsdeur, undefined); assert.strictEqual(r.verwijderd.length, 1); assert.strictEqual(r.verwijderd[0].item.maten.breedte.waarde, 830, 'de gemeten maat blijft bewaard'); assert.strictEqual(r.verwijderd[0].tijd, T0);
+  const weg2 = K.verwijderItem(weg.opname, 'R1', 'openingen', 'R1', T0).opname; assert.strictEqual(R(weg2).objecten[0].opening, undefined); assert.strictEqual(R(weg2).verwijderd.length, 2);
+  assert.ok(K.verwijderItem(op, 'R1', 'openingen', 'D9').fout); assert.ok(K.verwijderItem(op, 'R1', 'meubels', 'D1').fout);
+  assert.strictEqual(K.lees(weg2).meldingen.length, 0, 'lezen laat het archief ongemoeid'); assert.deepStrictEqual(K.lees(weg2).opname.ruimtes[0].verwijderd, R(weg2).verwijderd);
+});
+test('foto weghalen: de verwijzing gaat naar fotos_verwijderd, een werkzone-foto weghalen blokkeert het vrijgeven weer', () => {
+  const op = klaar(); assert.strictEqual(K.vrijgeefCheck(op).kan, true); const f = op.fotos[0];
+  const weg = K.verwijderFoto(op, f.id, T0); assert.strictEqual(weg.fout, null); assert.strictEqual(weg.opname.fotos.length, 0); assert.strictEqual(weg.opname.fotos_verwijderd[0].bestand, f.bestand); assert.strictEqual(weg.opname.fotos_verwijderd[0].verwijderd_op, T0);
+  assert.ok(redenCodes(K.vrijgeefCheck(weg.opname)).includes('foto')); assert.ok(K.verwijderFoto(op, 'F99').fout); assert.strictEqual(op.fotos.length, 1, 'de invoer blijft ongewijzigd');
+});
+
 // ── Takenlijst ──
 test('takenlijst: elk later-punt wordt "Nameten: ..." met een stabiele sleutel; ook het rondje op later', () => {
   let op = joe(); op = zet(op, 'openingen.R1.maten.hoogte', { staat: 'later', notitie: 'Ladder nodig, meubels in de weg' }); op = zet(op, 'wanden.Z.maten.lengte', { staat: 'later' });

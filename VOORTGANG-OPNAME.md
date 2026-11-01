@@ -63,3 +63,4 @@ Basis: 4 wandlengtes + plafond + diagonaal A (6) + breedte en positie van 4 open
 - Plafond links en rechts: `K.PLAFOND_UIT_HOEK = 300`, staat in vraag en uitleg.
 - Drie wandlengtes vergelijken: meer dan 5 mm verschil (`K.TOLERANTIE.wand_scheef`) geeft waarschuwing `wand-scheef` ("wand niet te lood of scheef"), geen blokkade.
 - Tests: 66 groen (drie nieuwe; twee bestaande aangepast omdat een foto bij een werkzone-wand nu in de hash zit).
+- Kern-uitbreiding voor de schermen: `K.zetRuimte`, `K.voegOpeningToe`, `K.voegObjectToe`, `K.voegBijzonderheidToe`, `K.zetDefinitie`, `K.verwijderItem` (archief in `ruimte.verwijderd`) en `K.verwijderFoto` (archief in `opname.fotos_verwijderd`). De route vraagt alleen naar wat bestaat, dus de app moet per wand kunnen vastleggen wat er zit. 72 tests groen.
