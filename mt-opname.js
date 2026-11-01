@@ -80,7 +80,7 @@
     if (!r[wand]) { if (!maak) return {}; r[wand] = { vormen: {} }; }
     r[wand].vormen = r[wand].vormen || {}; return r[wand];
   };
-  X.wandFotoRec = wand => { const l = K.fotosVan(S.rec.opname, X.ruimte().id, wand).filter(f => f.soort !== 'closeup'); return l.length ? l[l.length - 1] : null; };
+  X.wandFotoRec = wand => K.wandFoto(S.rec.opname, X.ruimte().id, wand);
   const slug = t => String(t || 'ruimte').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'ruimte';
   const ext = f => { const m = /\.([a-z0-9]{2,5})$/i.exec(f.name || ''); if (m) return m[1].toLowerCase(); return (f.type || '').indexOf('png') >= 0 ? 'png' : (f.type || '').indexOf('webp') >= 0 ? 'webp' : 'jpg'; };
   X.wandNaam = w => K.wandLabel(w);
@@ -99,12 +99,13 @@
     opties = opties || {};
     const o = S.rec.opname, r = X.ruimte(), wand = opties.wand || null, soort = opties.soort || 'wand';
     const bestaand = new Set(lijst(o.fotos).concat(lijst(o.fotos_verwijderd)).map(f => f && f.bestand));
-    const basis = slug(r.naam) + '-' + (soort === 'closeup' ? 'close-' + slug(opties.item) : (wand ? slug(K.wandNaam(wand)) : 'overzicht'));
+    const basis = slug(r.naam) + '-' + (soort === 'closeup' ? 'close-' + slug(opties.item) : (wand ? slug(K.wandNaam(wand)) + (soort === 'extra' ? '-extra' : '') : 'overzicht'));
     let n = 1, naam; do { naam = basis + '-' + String(n).padStart(2, '0') + '.' + ext(file); n++; } while (bestaand.has(naam));
     const dim = await afmetingen(file), id = 'F' + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
     await O.zetFoto({ id: o.opname_id + ':' + id, opnameId: o.opname_id, blob: file, naam: file.name || naam, type: file.type || 'image/jpeg', grootte: file.size, breedte: dim.w, hoogte: dim.h, tijd: nu(), ruimte: r.id, wand, soort, item: opties.item || null });
     const verw = { id, bestand: naam, ruimte: r.id, wand: soort === 'closeup' ? null : wand, tijd: nu(), breedte: dim.w, hoogte: dim.h, origineel: file.name || null, grootte: file.size };
     if (soort === 'closeup') { verw.soort = 'closeup'; verw.item = opties.item; verw.op_wand = wand; }
+    if (soort === 'extra') verw.soort = 'extra';
     const res = K.voegFotoToe(o, verw);
     if (!X.wijzig(res)) throw new Error(res.fout || 'verwijzing niet gelukt');
     return id;
@@ -296,6 +297,7 @@
     const plat = K.plattegrond(r), bij = [];
     if (plat.n) bij.push(plat.schatting ? 'Gestippeld is een schatting; vast is gemeten. ' + (plat.vorm.lengtes_gemeten || plat.vorm.bepaling !== 'getekend' ? K.vormLabel(plat.vorm).kort + '.' : '') : K.vormLabel(plat.vorm).kort + '.');
     if (plat.uitsprongen.length) bij.push('Blauw: ' + plat.uitsprongen.map(x => (K.UITSPRONG_SOORTEN[x.soort] || 'Uitsprong').toLowerCase()).filter((v, i, a) => a.indexOf(v) === i).join(' en ') + '.');
+    if (plat.uitsprongen.some(x => x.bron && (x.bron.diepte !== 'gemeten' || x.bron.breedte !== 'gemeten' || x.bron.positie !== 'gemeten'))) bij.push('Gestippeld bij een uitsprong: foto-interpretatie (breedte, positie) of bronstandaard (diepte 300 mm) tot je het meet.');
     if (opties && opties.opWand && !opties.kies) bij.push('Tik een wandnummer om die wand te openen.');
     return h('div', { class: 'opn-kaart opn-planblok' }, opties && opties.titel ? h('div', { class: 'opn-kaart-titel', text: opties.titel }) : null, h('div', { class: 'opn-plan' }, X.planKaart(r, opties)), bij.length ? h('p', { class: 'opn-hint', text: bij.join(' ') }) : null);
   };
@@ -383,6 +385,12 @@
     };
     body.appendChild(X.fotoKnop(rec ? 'Opnieuw fotograferen' : 'Foto maken', vervang, { klasse: 'opn-btn opn-btn-groot ' + (rec ? 'opn-btn-licht' : 'opn-btn-primair') }));
     body.appendChild(X.fotoKnop('Of kies een foto uit de galerij', vervang, { galerij: true, klasse: 'opn-btn opn-btn-licht' }));
+    // nog een foto van hetzelfde vlak: een extra foto bij deze wand, nooit een nieuwe wand
+    const extraBij = nieuw ? (wanden.length && X.wandFotoRec(wanden[wanden.length - 1]) ? wanden[wanden.length - 1] : null) : (rec ? huidig : null);
+    if (extraBij) {
+      if (nieuw) body.appendChild(h('p', { class: 'opn-hint', text: 'De foto hierboven wordt een nieuwe wand. Is het nog dezelfde wand als wand ' + (wanden.indexOf(extraBij) + 1) + '? Kies dan hieronder: dat wordt een extra foto, geen nieuwe wand.' }));
+      body.appendChild(X.fotoKnop('Extra foto van wand ' + (wanden.indexOf(extraBij) + 1) + ' (geen nieuwe wand)', async f => { await X.opslaanFoto(f, { wand: extraBij, soort: 'extra' }); S.fotoWand = nieuw ? 'nieuw' : extraBij; X.toast('Extra foto bij wand ' + (wanden.indexOf(extraBij) + 1) + ' bewaard.'); X.teken(); }, { klasse: 'opn-btn opn-btn-licht' }));
+    }
     // de hoek met de vorige wand
     if (!rond && nr >= 2) body.appendChild(X.hoekRij(wanden[nr - 2], { kop: nieuw && wanden.length >= 3 ? 'Hoek na wand ' + (nr - 1) + ' (naar wand ' + nr + ', of terug naar wand 1)' : 'Hoek tussen wand ' + (nr - 1) + ' en wand ' + nr }));
     body.appendChild(X.planBlok(r, { titel: 'Plattegrond (groeit met elke foto)', opWand: w => { S.fotoWand = w; X.teken(); } }));
@@ -392,7 +400,7 @@
       for (const w of wanden) {
         const fr = X.wandFotoRec(w);
         rij.appendChild(h('button', { type: 'button', class: 'opn-wandtegel' + (w === huidig ? ' is-actief' : '') + (fr ? ' is-klaar' : ''), onclick: () => { S.fotoWand = w; X.teken(); } },
-          h('span', { class: 'opn-wandtegel-naam', text: K.wandNaam(w) }), h('span', { class: 'opn-wandtegel-staat', text: fr ? 'foto ✓' : 'nog niet' })));
+          h('span', { class: 'opn-wandtegel-naam', text: K.wandNaam(w) }), h('span', { class: 'opn-wandtegel-staat', text: fr ? 'foto ✓' + (K.extraFotos(S.rec.opname, r.id, w).length ? ' +' + K.extraFotos(S.rec.opname, r.id, w).length : '') : 'nog niet' })));
       }
       if (!rond) rij.appendChild(h('button', { type: 'button', class: 'opn-wandtegel opn-wandtegel-plus' + (nieuw ? ' is-actief' : ''), 'aria-label': 'Volgende wand', onclick: () => { S.fotoWand = 'nieuw'; X.teken(); } }, h('span', { class: 'opn-wandtegel-naam', text: '+' }), h('span', { class: 'opn-wandtegel-staat', text: 'volgende' })));
       body.appendChild(rij);

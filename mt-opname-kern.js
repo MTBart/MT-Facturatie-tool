@@ -21,6 +21,9 @@
   K.HOEK_BRONNEN = ['aanname', 'foto-voorstel', 'gemeten'];               // de hoek naar de volgende wand: standaard een aanname (90 graden), nooit stil "haaks"
   K.UITSPRONG_SOORTEN = { voor: 'Uitsprong', achter: 'Nis' };            // naar voren (schoorsteen, pilaster, koker) of naar achteren (nis, inham)
   K.TUSSENSTUK_VORMEN = ['recht', 'voor', 'achter'];
+  // Drie gescheiden bronnen voor een maat van een uitsprong of nis (ChatGPT-review 043): wat gemeten is wint altijd, een verhouding uit de foto is een interpretatie (parallax: de voorkant van een
+  // uitsprong ligt buiten het wandvlak van de homografie) en de diepte van 300 mm is een bronstandaard, geen foto-uitkomst. Alleen gemeten telt als maat.
+  K.WAARDE_BRONNEN = { gemeten: 'Gemeten', 'foto-interpretatie': 'Foto-interpretatie', bronstandaard: 'Bronstandaard' };
   K.UITSPRONG_DIEPTE_STANDAARD = 300;                                    // mm: grove standaardschatting zolang er niets gemeten is; altijd een foto-voorstel, nooit een meting
   K.STATEN = ['gemeten', 'nvt', 'later', 'open'];
   K.BRONNEN = ['disto', 'hand', 'foto-voorstel'];                        // een meting (staat gemeten) is disto of hand; foto-voorstel hoort alleen in het grijze voorstel
@@ -176,14 +179,14 @@
     const kies = (sleutel, uitFoto) => {
       const gem = K.waarde(maatOp(u, sleutel));
       if (gem != null) return { mm: gem, gemeten: true, bron: 'gemeten' };
-      if (uitFoto != null && L != null) return { mm: Math.round(uitFoto(L)), gemeten: false, bron: 'voorstel', voorstel: { schatting_mm: Math.round(uitFoto(L)), bron: 'foto-voorstel', tijd: u.tijd || null, afgeleid: 'verhouding op de gemeten wandlengte' } };
-      if (uitFoto != null && Lref != null) return { mm: Math.round(uitFoto(Lref)), gemeten: false, bron: 'schatting' };
+      if (uitFoto != null && L != null) return { mm: Math.round(uitFoto(L)), gemeten: false, bron: 'foto-interpretatie', voorstel: { schatting_mm: Math.round(uitFoto(L)), bron: 'foto-interpretatie', tijd: u.tijd || null, afgeleid: 'verhouding op de gemeten wandlengte' } };
+      if (uitFoto != null && Lref != null) return { mm: Math.round(uitFoto(Lref)), gemeten: false, bron: 'foto-interpretatie' };
       return null;
     };
     uit.positie = v ? kies('positie', l => v.van * l) : kies('positie', null);
     uit.breedte = v ? kies('breedte', l => (v.tot - v.van) * l) : kies('breedte', null);
     const dg = K.waarde(maatOp(u, 'diepte'));
-    uit.diepte = dg != null ? { mm: dg, gemeten: true, bron: 'gemeten' } : { mm: K.UITSPRONG_DIEPTE_STANDAARD, gemeten: false, bron: 'standaard', voorstel: { schatting_mm: K.UITSPRONG_DIEPTE_STANDAARD, bron: 'foto-voorstel', tijd: u.tijd || null, afgeleid: 'standaardschatting' } };
+    uit.diepte = dg != null ? { mm: dg, gemeten: true, bron: 'gemeten' } : { mm: K.UITSPRONG_DIEPTE_STANDAARD, gemeten: false, bron: 'bronstandaard', voorstel: { schatting_mm: K.UITSPRONG_DIEPTE_STANDAARD, bron: 'bronstandaard', tijd: u.tijd || null, afgeleid: 'standaardschatting' } };
     const hg = K.waarde(maatOp(u, 'hoogte'));
     uit.hoogte = hg != null ? { mm: hg, gemeten: true, bron: 'gemeten' } : null;
     return uit;
@@ -601,7 +604,7 @@
         const geschatU = { positie: !v.positie.gemeten, breedte: !v.breedte.gemeten, diepte: !v.diepte.gemeten };
         seg('wand', null, op(cursor), A, we.geschat);
         seg('zij', u.id, A, A2, geschatU.diepte); seg('front', u.id, A2, B2, geschatU.positie || geschatU.breedte); seg('zij', u.id, B2, B, geschatU.diepte);
-        uit.uitsprongen.push({ id: u.id, wand: w, soort: v.soort, positie: p0, breedte: p1 - p0, diepte: v.diepte.mm, hoogte: v.hoogte ? v.hoogte.mm : null, geschat: geschatU, punten: [A, A2, B2, B] });
+        uit.uitsprongen.push({ id: u.id, wand: w, soort: v.soort, positie: p0, breedte: p1 - p0, diepte: v.diepte.mm, hoogte: v.hoogte ? v.hoogte.mm : null, geschat: geschatU, bron: { positie: v.positie.bron, breedte: v.breedte.bron, diepte: v.diepte.bron }, punten: [A, A2, B2, B] });
         cursor = p1;
       }
       seg('wand', null, op(cursor), we.b, we.geschat);
@@ -744,7 +747,7 @@
       for (const x of c.waarschuwingen) waarschuwingen.push(Object.assign({ ruimte: r.id }, x));
       scope.push(c.scope); for (const x of c.uitzonderingen) uitzonderingen.push(x);
       // een foto van elke werkzone-wand is verplicht (maat + foto); van de andere wanden is een ontbrekende foto een waarschuwing
-      for (const w of wandIds(r)) if (!K.fotosVan(opname, r.id, w).length) {
+      for (const w of wandIds(r)) if (!K.wandFoto(opname, r.id, w)) {
         if (lijst(r.werkzone).includes(w)) redenen.push({ ruimte: r.id, code: 'foto', wand: w, tekst: (r.naam || r.id) + ': maak eerst een foto van de ' + wandTekst(w) + ' (werkzone).' });
         else waarschuwingen.push({ ruimte: r.id, code: 'foto-ontbreekt', wand: w, tekst: (r.naam || r.id) + ': nog geen foto van de ' + wandTekst(w) + '.' });
       }
@@ -880,11 +883,15 @@
     if (foto.wand != null && !wandIds(zoekRuimte(opname, foto.ruimte)).includes(foto.wand)) return { opname: null, fout: 'Onbekende wand.' };
     const o = kloon(opname); o.fotos = lijst(o.fotos);
     if (o.fotos.some(f => f && f.bestand === foto.bestand && f.ruimte === foto.ruimte)) return { opname: null, fout: 'Dit bestand staat al bij deze ruimte.' };
+    if (foto.soort === 'extra' && !K.wandFoto(opname, foto.ruimte, foto.wand)) return { opname: null, fout: 'Een extra foto hoort bij een wand die al een foto heeft.' };          // meer foto's van hetzelfde vlak maken nooit een nieuwe wand
     let n = o.fotos.length + 1; while (vind(o.fotos, 'F' + n)) n++;
     o.fotos.push(Object.assign({}, foto, { id: foto.id || 'F' + n, wand: foto.wand == null ? null : foto.wand, tijd: foto.tijd || nu() }));
     return { opname: o, fout: null };
   };
   K.fotosVan = (opname, ruimteId, wand) => lijst(opname && opname.fotos).filter(f => f && f.ruimte === ruimteId && (wand == null || f.wand === wand));
+  // De hoofdfoto van een wand (de laatste foto die geen close-up of extra foto is) en de extra foto's van hetzelfde vlak. Een extra foto maakt nooit een wand.
+  K.wandFoto = (opname, ruimteId, wand) => { const l = wand == null ? [] : K.fotosVan(opname, ruimteId, wand).filter(f => f.soort !== 'closeup' && f.soort !== 'extra'); return l.length ? l[l.length - 1] : null; };
+  K.extraFotos = (opname, ruimteId, wand) => wand == null ? [] : K.fotosVan(opname, ruimteId, wand).filter(f => f.soort === 'extra');
   // Een foto weghalen: de verwijzing verhuist naar opname.fotos_verwijderd (append-only), zodat er niets stil verdwijnt. Het beeld zelf beheert de opslag van de app.
   K.verwijderFoto = function (opname, fotoId, tijd) {
     if (!vind(opname && opname.fotos, fotoId)) return { opname: null, fout: 'Onbekende foto.' };

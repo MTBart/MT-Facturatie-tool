@@ -154,4 +154,52 @@ test('voorstel voor de werkzone: de hoeken aan de uiteinden van de werkzone-wand
   assert.deepStrictEqual(K.haaksheidsVoorstel(R(op)).map(x => x.wand), ['W2'], 'een bevestigde hoek valt weg');
   op = goed(K.zetRuimte(op, 'R1', { werkzone: ['W1'] })); assert.deepStrictEqual(K.haaksheidsVoorstel(R(op)).map(x => x.wand), ['W6'], 'wand 1: de hoek ervoor (na wand 6); de hoek erna is al bevestigd');
 });
+test('uitsprong: drie gescheiden bronnen (bronstandaard / foto-interpretatie / gemeten); gemeten winnen en blijven als de kalibratie later wijzigt', () => {
+  let op = ruimteVier();
+  op = goed(K.zetWandVorm(op, 'R1', 'W2', { foto: 'F1', knikken: [{ x: 0.3, y: 0.9, u: 0.3 }, { x: 0.5, y: 0.9, u: 0.5 }], tussenstukken: ['voor'] }, T0));
+  op = meet(op, 'wanden.W2.maten.lengte', 5000);
+  let v = K.uitsprongWaarden(R(op), R(op).uitsprongen[0]);
+  assert.deepStrictEqual([v.breedte.bron, v.positie.bron, v.diepte.bron], ['foto-interpretatie', 'foto-interpretatie', 'bronstandaard']);
+  assert.deepStrictEqual([v.breedte.mm, v.positie.mm, v.diepte.mm], [1000, 1500, 300]);
+  assert.strictEqual(v.breedte.voorstel.bron, 'foto-interpretatie'); assert.strictEqual(v.diepte.voorstel.bron, 'bronstandaard'); assert.notStrictEqual(v.diepte.voorstel.bron, 'foto-voorstel');
+  assert.deepStrictEqual(Object.keys(K.WAARDE_BRONNEN), ['gemeten', 'foto-interpretatie', 'bronstandaard']);
+  assert.ok(K.vragen(R(op)).filter(x => x.object === 'U1').every(x => x.staat === 'open'), 'geen van de drie is een meting');
+  // gemeten breedte, positie en diepte winnen
+  for (const [k, w] of [['breedte', 940], ['positie', 1480], ['diepte', 420]]) op = meet(op, 'uitsprongen.U1.maten.' + k, w);
+  v = K.uitsprongWaarden(R(op), R(op).uitsprongen[0]); assert.deepStrictEqual([v.breedte.bron, v.positie.bron, v.diepte.bron], ['gemeten', 'gemeten', 'gemeten']); assert.deepStrictEqual([v.breedte.mm, v.positie.mm, v.diepte.mm], [940, 1480, 420]);
+  // de kalibratie (de vier wandhoeken op de foto) verandert: de knikken krijgen een andere plek op de wand; de gemeten maten blijven staan en blijven leidend
+  op = goed(K.zetWandVorm(op, 'R1', 'W2', { foto: 'F1', knikken: [{ x: 0.35, y: 0.9, u: 0.36 }, { x: 0.62, y: 0.9, u: 0.61 }], tussenstukken: ['voor'] }, T0));
+  assert.deepStrictEqual(R(op).uitsprongen[0].verhouding, { van: 0.36, tot: 0.61, bron: 'foto-voorstel' }, 'de foto-interpretatie is bijgewerkt');
+  v = K.uitsprongWaarden(R(op), R(op).uitsprongen[0]); assert.deepStrictEqual([v.breedte.mm, v.positie.mm, v.diepte.mm], [940, 1480, 420]); assert.deepStrictEqual([v.breedte.bron, v.positie.bron, v.diepte.bron], ['gemeten', 'gemeten', 'gemeten']);
+  const p = K.plattegrond(R(op)).uitsprongen[0]; assert.deepStrictEqual([p.breedte, p.positie, p.diepte], [940, 1480, 420]); assert.deepStrictEqual(p.geschat, { positie: false, breedte: false, diepte: false }); assert.deepStrictEqual(p.bron, { positie: 'gemeten', breedte: 'gemeten', diepte: 'gemeten' });
+  // alleen de diepte nog niet gemeten: die blijft als enige bronstandaard
+  const half = meet(meet(ruimteVierMetUitsprong(), 'uitsprongen.U1.maten.breedte', 900), 'uitsprongen.U1.maten.positie', 1200), ph = K.plattegrond(R(half)).uitsprongen[0];
+  assert.deepStrictEqual(ph.bron, { positie: 'gemeten', breedte: 'gemeten', diepte: 'bronstandaard' });
+});
+function ruimteVier() {
+  let op = K.nieuweOpname({ opname_id: 'U', aangemaakt: T0, ruimtes: [K.nieuweRuimte({ id: 'R1', naam: 'U', wanden: [] })] });
+  for (let i = 0; i < 4; i++) op = goed(K.voegWandToe(op, 'R1')); return goed(K.maakRond(op, 'R1'));
+}
+function ruimteVierMetUitsprong() {
+  let op = ruimteVier(); op = goed(K.zetWandVorm(op, 'R1', 'W2', { foto: 'F1', knikken: [{ x: 0.3, y: 0.9, u: 0.3 }, { x: 0.5, y: 0.9, u: 0.5 }], tussenstukken: ['voor'] }, T0));
+  return meet(op, 'wanden.W2.maten.lengte', 5000);
+}
+test('meerdere foto\'s van hetzelfde vlak geven geen extra wand: een extra foto hoort bij een bestaande wand', () => {
+  let op = ruimteVier();
+  const foto = (id, wand, extra) => ({ id, bestand: id + '.jpg', ruimte: 'R1', wand, tijd: T0, ...(extra ? { soort: 'extra' } : {}) });
+  op = goed(K.voegFotoToe(op, foto('F1', 'W1')));
+  const aantal = K.wandIds(R(op)).length;
+  assert.ok(K.voegFotoToe(op, foto('F2', 'W1', true)).opname, 'een extra foto bij een wand met foto kan');
+  op = goed(K.voegFotoToe(op, foto('F2', 'W1', true))); op = goed(K.voegFotoToe(op, foto('F3', 'W1', true)));
+  assert.strictEqual(K.wandIds(R(op)).length, aantal, 'het aantal wanden verandert niet');
+  assert.strictEqual(K.wandFoto(op, 'R1', 'W1').id, 'F1', 'de hoofdfoto blijft de hoofdfoto'); assert.deepStrictEqual(K.extraFotos(op, 'R1', 'W1').map(f => f.id), ['F2', 'F3']);
+  assert.ok(K.voegFotoToe(op, foto('F4', 'W2', true)).fout && /al een foto/.test(K.voegFotoToe(op, foto('F4', 'W2', true)).fout), 'een extra foto zonder hoofdfoto kan niet');
+  // een extra foto telt niet als de foto van een andere wand: W2 blijft zonder foto en blokkeert (waarschuwing of reden) zoals voorheen
+  assert.strictEqual(K.wandFoto(op, 'R1', 'W2'), null);
+  // de hoofdfoto vervangen laat de extra foto's staan
+  const nieuweHoofd = goed(K.voegFotoToe(goed(K.verwijderFoto(op, 'F1')), foto('F5', 'W1'))); assert.strictEqual(K.wandFoto(nieuweHoofd, 'R1', 'W1').id, 'F5'); assert.strictEqual(K.extraFotos(nieuweHoofd, 'R1', 'W1').length, 2);
+  // de laatste wand weghalen neemt ook de extra foto's mee naar het archief
+  let met = goed(K.voegFotoToe(ruimteVier(), foto('G1', 'W4'))); met = goed(K.voegFotoToe(met, foto('G2', 'W4', true))); const weg = goed(K.verwijderLaatsteWand(goed(K.openRond(met, 'R1')), 'R1'));
+  assert.strictEqual(K.fotosVan(weg, 'R1', 'W4').length, 0); assert.strictEqual(weg.fotos_verwijderd.length, 2);
+});
 console.log('\n' + n + ' tests geslaagd');

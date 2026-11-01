@@ -139,11 +139,11 @@ test('uitsprong uit knikken: een stuk naar voren wordt een uitsprong met een ver
   assert.ok(v.every(x => x.bucket === 'basis' && x.staat === 'open'));
   // zonder gemeten wandlengte: geen voorstel in mm voor breedte en positie, wel de standaardschatting voor de diepte
   assert.strictEqual(v.find(x => x.pad.endsWith('.breedte')).voorstel, null); assert.strictEqual(v.find(x => x.pad.endsWith('.positie')).voorstel, null);
-  const d = v.find(x => x.pad.endsWith('.diepte')).voorstel; assert.strictEqual(d.schatting_mm, 300); assert.strictEqual(d.bron, 'foto-voorstel'); assert.strictEqual(d.afgeleid, 'standaardschatting');
+  const d = v.find(x => x.pad.endsWith('.diepte')).voorstel; assert.strictEqual(d.schatting_mm, 300); assert.strictEqual(d.bron, 'bronstandaard'); assert.strictEqual(d.afgeleid, 'standaardschatting');
   // met een gemeten wandlengte volgt het voorstel de verhouding
   op = wandL(op, 'W2', 5000); const w = K.vragen(R(op)).filter(x => x.object === 'U1');
   assert.strictEqual(w.find(x => x.pad.endsWith('.positie')).voorstel.schatting_mm, 1500); assert.strictEqual(w.find(x => x.pad.endsWith('.breedte')).voorstel.schatting_mm, 1000);
-  assert.ok(w.every(x => x.staat === 'open' && x.voorstel.bron === 'foto-voorstel'), 'een voorstel is geen meting');
+  assert.ok(w.every(x => x.staat === 'open' && x.voorstel.bron === (x.pad.endsWith('.diepte') ? 'bronstandaard' : 'foto-interpretatie')), 'een voorstel is geen meting');
   assert.strictEqual(K.vrijgeefCheck(op).redenen.some(x => x.code === 'open' && x.bucket === 'basis'), true);
 });
 test('uitsprong in de werkzone vraagt ook de hoogte; erbuiten alleen breedte, positie en diepte', () => {

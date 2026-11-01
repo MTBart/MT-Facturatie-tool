@@ -91,7 +91,8 @@
     }
     // millimeters
     const huidig = maat && maat.staat === 'gemeten' && maat.waarde != null ? X.mm(maat.waarde) : '';
-    if (vr && vr.voorstel && vr.voorstel.schatting_mm) p.appendChild(h('p', { class: 'opn-voorstel', text: 'Schatting uit de foto: ' + X.mm(vr.voorstel.schatting_mm) + ' mm' + (vr.voorstel.onzekerheid_mm ? ' (± ' + X.mm(vr.voorstel.onzekerheid_mm) + ')' : '') + '. Dit is geen meting.' }));
+    if (vr && vr.voorstel && vr.voorstel.schatting_mm) { const vs = vr.voorstel, mmTxt = X.mm(vs.schatting_mm) + ' mm' + (vs.onzekerheid_mm ? ' (± ' + X.mm(vs.onzekerheid_mm) + ')' : '');
+      p.appendChild(h('p', { class: 'opn-voorstel', text: (vs.bron === 'bronstandaard' ? 'Bronstandaard: ' + mmTxt + '. Een algemene startwaarde, niet uit de foto.' : vs.bron === 'foto-interpretatie' ? 'Foto-interpretatie: ongeveer ' + mmTxt + '. De voorkant van een uitsprong staat voor het wandvlak, dus de verhouding op de foto kan afwijken.' : 'Schatting uit de foto: ' + mmTxt + '.') + ' Dit is geen meting.' })); }
     const inp = h('input', { type: 'text', inputmode: 'decimal', class: 'opn-groot-veld', placeholder: '', autocomplete: 'off', enterkeyhint: 'next', 'aria-label': stap.label + ' in millimeter', value: huidig });
     const doe = () => {
       const l = leesMm(inp.value); if (l.fout) { meld(l.fout); inp.focus(); return; }
