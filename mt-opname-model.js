@@ -641,7 +641,7 @@
       h('div', { class: 'opn-kaart-titel', text: 'Tik de ' + HOEK_NAMEN[l.i] + 'hoek precies aan' }),
       h('div', { class: 'opn-loepvak' }, svg),
       h('p', { class: 'opn-hint', text: 'Dit is een uitvergroting (6x) van het groene rondje op de foto. Tik het snijpunt van ' + (l.i < 2 ? 'vloer' : 'plafond') + ' en wand.' }),
-      h('p', { class: 'opn-hint opn-hint-regel', text: 'Staat er iets voor, zoals een doos of meubel, of zie je het snijpunt niet? Kies dan Hoek onbekend: niet gokken, en de rand van een doos is niet de vloer.' }),
+      h('p', { class: 'opn-hint opn-hint-regel', text: l.i < 2 ? 'Staat er iets voor, zoals een doos of meubel, of zie je het snijpunt niet? Kies dan Hoek onbekend: niet gokken, en de rand van een doos is niet de vloer.' : 'Zie je het snijpunt niet, of zit er iets voor? Kies dan Hoek onbekend: niet gokken.' }),
       h('div', { class: 'opn-knoppen' },
         h('button', { type: 'button', class: 'opn-btn opn-btn-licht', onclick: () => { k.punten[l.i] = null; k.loep = null; if (k.punten.length >= 4) k.klaar = true; X.teken(); } }, 'Hoek onbekend (buiten beeld of afgedekt)'),
         h('button', { type: 'button', class: 'opn-btn opn-btn-licht', onclick: () => { k.loep = null; X.teken(); } }, 'Terug naar de foto')));
