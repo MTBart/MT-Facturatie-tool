@@ -16,7 +16,7 @@ function nepIDB() {
           const tx = { error: null, put: [], commit() { this.put.forEach(f => f()); this.oncomplete && this.oncomplete(); }, abort(fout) { this.error = fout || null; this.onabort && this.onabort(); } };
           tx.objectStore = () => ({
             put(rec) { const r = { result: rec.id }; tx.put.push(() => duurzaam[store].set(rec.id, JSON.parse(JSON.stringify(rec)))); return r; },
-            get(id) { return { get result() { return duurzaam[store].get(id); } }; },
+            get(id) { const r = { get result() { return duurzaam[store].get(id); } }; setTimeout(() => r.onsuccess && r.onsuccess({ target: r }), 0); return r; },   // opslaan leest eerst (compare-and-set) en beslist pas in onsuccess
             getAll() { return { get result() { return Array.from(duurzaam[store].values()); } }; },
             index() { return { getAll: () => ({ get result() { return Array.from(duurzaam[store].values()); } }) }; } });
           transacties.push(tx); return tx;

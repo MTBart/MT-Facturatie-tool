@@ -34,20 +34,32 @@
 
   // ── Staat van de module ──
   const S = X.S = { host: null, el: null, scherm: 'lijst', rec: null, ruimteId: null, wand: null, stapId: null, modelStap: null, urls: {}, opslagFout: null, keten: Promise.resolve(), cam: { yaw: -28, pitch: 30 },
-    kal: null, plaats: null, wandKlaar: false, wandFoto: null, melding: null, opnames: [], formulier: null };
+    kal: null, plaats: null, wandKlaar: false, wandFoto: null, melding: null, opnames: [], formulier: null, conflict: false, onbewaard: false };
 
   // ── Opslaan: elke wijziging gaat meteen naar IndexedDB; een fout blijft zichtbaar tot een opslag weer lukt ──
+  // Elk record heeft een revisienummer (rev): opslaan is compare-and-set in de opslag. De keten is serieel, dus de rev waarop een schrijfactie rust is die van de vorige geslaagde actie (rec.rev).
+  // Is de opname intussen in een ander tabblad of venster gewijzigd, dan weigert de opslag (code 'conflict'), blijft alles op het scherm staan en komt er een duidelijke melding; vervolgacties botsen
+  // dan ook (niets wordt stilletjes overschreven) tot de gebruiker bewust herlaadt of een JSON-kopie van zijn eigen versie bewaart.
   X.bewaar = function () {
     if (!S.rec) return Promise.resolve();
-    const snap = kloon(S.rec);
-    S.keten = S.keten.then(() => O.schrijf(snap)).then(() => { S.opslagFout = null; X.foutBalk(); }, e => { S.opslagFout = e.message || String(e); X.foutBalk(); });
+    const rec = S.rec, snap = kloon(rec);
+    S.keten = S.keten.then(() => { snap.rev = rec.rev || 0; return O.schrijf(snap); }).then(k => { rec.rev = k.rev; if (S.rec === rec) { S.opslagFout = null; S.conflict = false; S.onbewaard = false; } X.foutBalk(); },
+      e => { if (S.rec === rec) { S.opslagFout = e.message || String(e); S.conflict = !!(e && e.code === 'conflict'); S.onbewaard = true; } X.foutBalk(); });
     return S.keten;
   };
+  // Voor de host (mobiel.html): wacht tot alle lopende schrijfacties klaar zijn; true als er niets onbewaard op het scherm staat (dan mag de laag zonder verlies dicht).
+  M.bewaarAlles = async function () { try { await S.keten; } catch (e) { /* de keten vangt zijn eigen fouten */ } return !S.onbewaard; };
   X.foutBalk = function () {
     const b = S.el && S.el.querySelector('.opn-fout'); if (!b) return;
     X.leeg(b);
     if (!S.opslagFout) { b.hidden = true; return; }
     b.hidden = false;
+    if (S.conflict) {
+      b.appendChild(h('span', { text: S.opslagFout }));
+      b.appendChild(h('button', { type: 'button', class: 'opn-fout-knop', text: 'Bewaar mijn versie als JSON', onclick: () => jsonKopie() }));
+      b.appendChild(h('button', { type: 'button', class: 'opn-fout-knop', text: 'Herlaad (mijn laatste invoer vervalt)', onclick: () => { const id = S.rec && S.rec.id; if (id) X.openOpname(id); else X.naarLijst(); } }));
+      return;
+    }
     b.appendChild(h('span', { text: 'Opslaan mislukt, de laatste wijziging staat alleen op het scherm. ' + S.opslagFout }));
     b.appendChild(h('button', { type: 'button', class: 'opn-fout-knop', text: 'Opnieuw proberen', onclick: () => X.bewaar() }));
   };
@@ -148,7 +160,7 @@
   };
   X.naarLijst = async function () {
     try { S.opnames = await O.lijst(); S.opslagFout = null; } catch (e) { S.opnames = []; S.opslagFout = e.message; }
-    S.rec = null; X.ga('lijst'); X.foutBalk();
+    S.rec = null; S.conflict = false; S.onbewaard = false; X.ga('lijst'); X.foutBalk();
   };
   X.kop = function (titel, sub, opties) {
     opties = opties || {};
@@ -168,7 +180,8 @@
   X.statusTekst = rec => {
     const st = K.effectieveStatus(rec.opname);
     const kern = st === 'vrijgegeven' ? K.vrijgaveKern(rec.opname) : null;
-    return st === 'vrijgegeven' ? (kern && kern.oud ? 'Vrijgegeven, oude kern v' + kern.versie : 'Vrijgegeven') : st === 'vrijgave-vervallen' ? 'Vrijgave vervallen' : st === 'opgeslagen' ? 'Opgeslagen' : 'Concept';
+    const kopieZonderVrijgave = rec.opname && rec.opname._hersteld_van && rec.opname._hersteld_van.vrijgave_vervallen;
+    return st === 'vrijgegeven' ? (kern && kern.oud ? 'Vrijgegeven, oude kern v' + kern.versie : 'Vrijgegeven') : st === 'vrijgave-vervallen' ? 'Vrijgave vervallen' : st === 'opgeslagen' ? (kopieZonderVrijgave ? 'Opgeslagen (vrijgave vervallen bij kopie)' : 'Opgeslagen') : 'Concept';
   };
 
   // ── Scherm: lijst ──
@@ -198,7 +211,7 @@
       const rec = await O.lees(id); if (!rec) { X.toast('Deze opname is niet te vinden.'); return; }
       const g = K.lees(rec.opname); if (g.alleenLezen) { X.toast('Deze opname komt uit een nieuwere versie: alleen lezen is nog niet gebouwd.'); return; }
       rec.opname = g.opname; rec.layout = rec.layout || {}; rec.instellingen = rec.instellingen || {};
-      S.rec = rec; S.ruimteId = rec.opname.ruimtes[0].id; S.urls = {};
+      S.rec = rec; S.ruimteId = rec.opname.ruimtes[0].id; S.urls = {}; S.conflict = false; S.onbewaard = false; S.opslagFout = null; X.foutBalk();
       const heeftFoto = lijst(rec.opname.fotos).some(f => f && f.soort !== 'closeup'), ronde = K.isRond(rec.opname.ruimtes[0]) && K.wandIds(rec.opname.ruimtes[0]).length >= 3;
       X.ga(heeftFoto && ronde ? 'model' : 'fotos', { wandKlaar: false, kal: null, plaats: null, modelStap: null, knik: null, fotoWand: null, werkzoneKiezen: false });
     } catch (e) { X.toast('Openen mislukt: ' + e.message); X.opslagFoutZet(e); }
@@ -249,7 +262,7 @@
       const op = K.nieuweOpname({ opname_id: id, project: { code: F.project.nr || F.project.code, naam: F.project.naam }, ruimtes: [K.nieuweRuimte({ id: 'R1', naam: F.naam.trim(), meubeltype: F.meubeltype, wanden: [] })] });
       S.rec = { id, opname: op, layout: {}, instellingen: {}, schema: 'mt-opname-app', versie: 1 };
       S.ruimteId = 'R1'; S.urls = {}; S.formulier = null; S.stapId = null; S.wandKlaar = false; S.fotoWand = null; S.werkzoneKiezen = false;
-      await O.schrijf(S.rec); S.opslagFout = null;
+      S.rec.rev = (await O.schrijf(S.rec, { nieuw: true })).rev; S.opslagFout = null; S.conflict = false; S.onbewaard = false;
       O.beveilig().catch(() => {});
       X.ga('fotos');
     } catch (e) { X.opslagFoutZet(e); X.toast('Opname starten mislukt: ' + (e.message || e)); }
@@ -585,13 +598,18 @@
     try {
       const pak = await E.leesPakket(new Uint8Array(await file.arrayBuffer()));
       if (pak.fout) { X.toast('Terugzetten niet gelukt: ' + pak.fout); return; }
-      const bestaand = {}; for (const r of S.opnames) if (r && r.opname) bestaand[r.opname.opname_id] = K.inhoudsHash(r.opname);
-      const plan = E.herstelPlan(pak, bestaand);
+      // Of de id al bestaat en met welke inhoud wordt BINNEN de schrijftransactie bepaald (O.importeer), niet op de lijst van het scherm: een ander tabblad kan intussen iets veranderd hebben.
+      // Foto's en opname gaan in één transactie: lukt iets niet, dan is er niets geschreven.
+      const plan = await O.importeer(pak.manifest.opname_id, huidig => {
+        let hash = null; if (huidig && huidig.opname) { try { hash = K.inhoudsHash(huidig.opname); } catch (e) { hash = null; } }
+        const p = E.herstelPlan(pak, huidig ? { [pak.manifest.opname_id]: hash } : {});
+        p.fotoRecords = lijst(p.fotoRecords).map(f => ({ id: f.id, opnameId: f.opnameId, blob: new Blob([f.bytes], { type: f.type }), naam: f.naam, type: f.type, grootte: f.grootte, breedte: f.breedte, hoogte: f.hoogte, tijd: f.tijd, ruimte: f.ruimte, wand: f.wand, soort: f.soort, item: f.item }));
+        return p;
+      });
       if (plan.actie === 'staat-al-op-toestel') { X.toast('Deze opname staat al op dit toestel, met dezelfde inhoud. Er is niets veranderd.'); return; }
-      for (const f of plan.fotoRecords) await O.zetFoto({ id: f.id, opnameId: f.opnameId, blob: new Blob([f.bytes], { type: f.type }), naam: f.naam, type: f.type, grootte: f.grootte, breedte: f.breedte, hoogte: f.hoogte, tijd: f.tijd, ruimte: f.ruimte, wand: f.wand, soort: f.soort, item: f.item });
-      await O.schrijf(plan.record);
       await X.naarLijst();
-      X.toast(plan.kopie ? 'Teruggezet als kopie (de opname stond al op dit toestel met een andere inhoud): ' + plan.opname_id : 'Teruggezet: ' + plan.fotoRecords.length + ' foto\'s en de opname.');
+      const vervallen = plan.kopie && plan.record.opname._hersteld_van && plan.record.opname._hersteld_van.vrijgave_vervallen;
+      X.toast(plan.kopie ? 'Teruggezet als kopie (de opname stond al op dit toestel met een andere inhoud): ' + plan.opname_id + (vervallen ? '. De vrijgave is vervallen (kopie), geef opnieuw vrij als de opname klopt.' : '') : 'Teruggezet: ' + plan.fotoRecords.length + " foto's en de opname.");
     } catch (e) { X.toast('Terugzetten mislukt: ' + (e.message || e)); X.opslagFoutZet(e); }
   }
   function jsonKopie() {

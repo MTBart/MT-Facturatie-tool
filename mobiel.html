@@ -7260,6 +7260,23 @@ function opnameLaagInit() {
     if (intern) { try { history.pushState({ opnameLaag: 1 }, ""); } catch (e) { histActief = false; } return; }
     histActief = false; dicht();
   });
+  // Het recht en de schakelaar gelden niet alleen bij het openen: wordt de beheer-rol ingetrokken (mt-rol-event na een nieuwe /me) of de schakelaar uitgezet (ander tabblad), dan sluit een
+  // geopende laag zich. Niet zomaar: eerst wachten tot alles wat al ingevoerd is is weggeschreven (MTOpname.bewaarAlles). Staat er nog iets onbewaards op het scherm, dan blijft de laag open
+  // (met zijn foutbalk) en volgt een melding; niets wordt weggegooid.
+  let bewaakt = false;
+  async function bewaakToegang() {
+    if (laag.hidden || bewaakt || (opnameBetaMag() && opnameBetaAan())) return;
+    bewaakt = true;
+    try {
+      let veilig = true;
+      try { veilig = !(window.MTOpname && MTOpname.bewaarAlles) || await MTOpname.bewaarAlles(); } catch (e) { veilig = false; }
+      if (laag.hidden || (opnameBetaMag() && opnameBetaAan())) return;                           // intussen al dicht, of het recht is terug
+      if (veilig) { sluit(); showToast("De opname (beta) is voor jou uitgezet. Wat je al had ingevoerd is opgeslagen."); }
+      else showToast("De opname (beta) is voor jou uitgezet, maar niet alles is opgeslagen. De laag blijft open; los eerst de opslagmelding op.");
+    } finally { bewaakt = false; }
+  }
+  window.addEventListener("mt-rol", () => bewaakToegang());
+  window.addEventListener("storage", ev => (!ev || ev.key === null || ev.key === "mt_opname_beta") ? bewaakToegang() : undefined);
   window.opnameLaagOpen = open; window.opnameLaagSluit = sluit;
 }
 opnameLaagInit();

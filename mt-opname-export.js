@@ -102,6 +102,14 @@
     let manifest; try { manifest = JSON.parse(dec.decode(mf.data)); } catch (e) { return { fout: 'opname.json is geen geldige JSON.', manifest: null, fotos: [], meldingen: [] }; }
     if (!manifest || manifest.schema !== E.FORMAAT) return { fout: 'Dit is geen export van de opname-module.', manifest: null, fotos: [], meldingen: [] };
     if (manifest.formaat > E.FORMAAT_VERSIE) return { fout: 'Deze export komt uit een nieuwere versie van de app (formaat ' + manifest.formaat + ').', manifest, fotos: [], meldingen: [] };
+    // De opname in de export moet kloppen met wat het manifest zegt: een opname-object, dezelfde id en een inhoudshash die opnieuw berekend gelijk is. Een export waarvan de JSON is aangepast
+    // of beschadigd is (zip-CRC en foto-sha256 vangen dat niet af voor opname.json zelf) wordt geweigerd, zodat er geen verkeerde opname of vrijgave op het toestel komt.
+    const o = manifest.opname;
+    if (!o || typeof o !== 'object' || Array.isArray(o)) return { fout: 'De export is onbruikbaar: de opname zelf ontbreekt in opname.json. Er is niets teruggezet.', manifest, fotos: [], meldingen: [] };
+    if (typeof manifest.opname_id !== 'string' || !manifest.opname_id || manifest.opname_id !== o.opname_id) return { fout: 'De export is niet in orde: het opname-nummer in de kop (' + manifest.opname_id + ') wijkt af van dat van de opname (' + o.opname_id + '). Er is niets teruggezet.', manifest, fotos: [], meldingen: [] };
+    if (!K) return { fout: 'De inhoud van de export kan hier niet gecontroleerd worden. Er is niets teruggezet.', manifest, fotos: [], meldingen: [] };
+    let hash; try { hash = K.inhoudsHash(o); } catch (e) { hash = null; }
+    if (!manifest.inhoudshash || hash !== manifest.inhoudshash) return { fout: 'De export is beschadigd of aangepast: de inhoud van de opname klopt niet met de controlecode in de kop. Er is niets teruggezet.', manifest, fotos: [], meldingen: [] };
     const meldingen = [], fotos = [];
     for (const meta of lijst(manifest.fotos)) {
       const it = items.find(x => x.naam === meta.pad);
@@ -120,7 +128,16 @@
     if (ander && bestaand[id] === m.inhoudshash) return { actie: 'staat-al-op-toestel', opname_id: id, kopie: false };
     const nieuweId = ander ? id + '-hersteld-' + (nu || Date.now()).toString(36) : id;
     const opname = JSON.parse(JSON.stringify(m.opname)); opname.opname_id = nieuweId;
-    if (ander) opname._hersteld_van = { opname_id: id, export_gemaakt: m.gemaakt };
+    if (ander) {
+      opname._hersteld_van = { opname_id: id, export_gemaakt: m.gemaakt };
+      // De vrijgave hoort bij de inhoud mét de oorspronkelijke id (de id telt mee in de inhoudshash). Een kopie heeft een nieuwe id, dus de vrijgave zou onverklaard "vervallen" lijken.
+      // Eenvoudigste eerlijke variant: de kopie wordt expliciet "opgeslagen", de oude vrijgave wordt weggehaald en staat met reden en de gegevens ervan in _hersteld_van.vrijgave_vervallen.
+      if (opname.status === 'vrijgegeven' || opname.vrijgave) {
+        const v = opname.vrijgave && typeof opname.vrijgave === 'object' ? opname.vrijgave : {};
+        opname._hersteld_van.vrijgave_vervallen = { reden: 'vrijgave vervallen: geïmporteerd als kopie van ' + id, tijd: new Date(nu || Date.now()).toISOString(), oude_vrijgave: { tijd: v.tijd || null, door: v.door || null, hash: v.hash || null, kern: v.kern || null } };
+        opname.status = 'opgeslagen'; delete opname.vrijgave;
+      }
+    }
     const fotoRecords = pakket.fotos.map(f => ({ id: nieuweId + ':' + f.meta.id, opnameId: nieuweId, bytes: f.bytes, naam: f.meta.naam, type: f.meta.type || 'image/jpeg', grootte: f.meta.grootte, breedte: f.meta.breedte, hoogte: f.meta.hoogte, tijd: f.meta.tijd, ruimte: f.meta.ruimte, wand: f.meta.wand, soort: f.meta.soort, item: f.meta.item }));
     return { actie: ander ? 'kopie' : 'terugzetten', opname_id: nieuweId, kopie: !!ander, record: { id: nieuweId, opname, layout: JSON.parse(JSON.stringify(m.layout || {})), instellingen: JSON.parse(JSON.stringify(m.instellingen || {})) }, fotoRecords };
   };

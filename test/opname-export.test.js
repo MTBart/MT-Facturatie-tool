@@ -78,5 +78,35 @@ const fotoRecs = op => [['F1', 1500], ['F2', 2200], ['F3', 800], ['F4', 600], ['
     const op = opnameMetFotos(), pak = await E.maakPakket(rec(op), fotoRecs(op).filter(f => !f.id.endsWith(':F2')));
     assert.deepStrictEqual(pak.ontbrekend, ['testkamer-f2.jpg']); const terug = await E.leesPakket(E.zipBytes(pak.entries)); assert.ok(terug.meldingen.some(m => /testkamer-f2\.jpg/.test(m)));
   });
+  // ── brok 3e (Codex-review) ──
+  await test('4: een vrijgegeven opname die als kopie terugkomt verliest de vrijgave expliciet en zichtbaar: status opgeslagen, reden en oude vrijgave vastgelegd, niet onverklaard "vrijgave-vervallen"', async () => {
+    const fs = require('fs'), path = require('path'), op = K.lees(JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'opname-v03-vrijgegeven.json'), 'utf8'))).opname;
+    assert.strictEqual(K.effectieveStatus(op), 'vrijgegeven');
+    const pak = await E.leesPakket(E.zipBytes((await E.maakPakket({ id: op.opname_id, opname: op, layout: {}, instellingen: {} }, [])).entries));
+    const kopie = E.herstelPlan(pak, { [op.opname_id]: 'andere-hash' }, 1234), o = kopie.record.opname;
+    assert.strictEqual(kopie.actie, 'kopie'); assert.strictEqual(o.status, 'opgeslagen'); assert.strictEqual(o.vrijgave, undefined, 'de vrijgave is weg');
+    assert.strictEqual(K.effectieveStatus(o), 'opgeslagen', 'niet "vrijgave-vervallen"');
+    const v = o._hersteld_van.vrijgave_vervallen; assert.ok(v && v.reden.indexOf('geïmporteerd als kopie van ' + op.opname_id) >= 0, v && v.reden);
+    assert.strictEqual(v.oude_vrijgave.hash, op.vrijgave.hash); assert.strictEqual(v.oude_vrijgave.door, op.vrijgave.door); assert.strictEqual(v.oude_vrijgave.tijd, op.vrijgave.tijd);
+    assert.strictEqual(op.status, 'vrijgegeven', 'de bron is niet aangepast'); assert.ok(op.vrijgave, 'de bron houdt zijn vrijgave');
+    const gewoon = E.herstelPlan(pak, {}, 1); assert.strictEqual(K.effectieveStatus(gewoon.record.opname), 'vrijgegeven', 'terugzetten onder de eigen id houdt de vrijgave');
+    const concept = opnameMetFotos(), pak2 = await E.leesPakket(E.zipBytes((await E.maakPakket(rec(concept), [])).entries)), k2 = E.herstelPlan(pak2, { 'OPN-TEST-EXP': 'x' }, 5);
+    assert.strictEqual(k2.record.opname._hersteld_van.vrijgave_vervallen, undefined, 'zonder vrijgave valt er niets te vermelden');
+  });
+  await test('5: de import eist een opname-object, een gelijk opname-nummer en een kloppende inhoudshash; anders geweigerd met een duidelijke melding en niets teruggezet', async () => {
+    const op = opnameMetFotos(), pak = await E.maakPakket(rec(op), fotoRecs(op), { tijd: T0 });
+    const opnieuw = fn => { const m = JSON.parse(JSON.stringify(pak.manifest)); fn(m); return E.leesPakket(E.zipBytes(pak.entries.map(e => e.naam === 'opname.json' ? { naam: e.naam, data: new TextEncoder().encode(JSON.stringify(m)) } : e))); };   // zip-CRC en foto-sha256 kloppen wel
+    assert.strictEqual((await opnieuw(() => {})).fout, null, 'ongewijzigd is in orde');
+    let r = await opnieuw(m => { delete m.opname; }); assert.ok(r.fout && /opname zelf ontbreekt/.test(r.fout), r.fout); assert.strictEqual(r.fotos.length, 0);
+    r = await opnieuw(m => { m.opname = 'tekst'; }); assert.ok(r.fout && /opname zelf ontbreekt/.test(r.fout), r.fout);
+    r = await opnieuw(m => { m.opname = []; }); assert.ok(r.fout && /opname zelf ontbreekt/.test(r.fout), r.fout);
+    r = await opnieuw(m => { m.opname_id = 'OPN-IETS-ANDERS'; }); assert.ok(r.fout && /opname-nummer/.test(r.fout) && /OPN-IETS-ANDERS/.test(r.fout) && /OPN-TEST-EXP/.test(r.fout), r.fout);
+    r = await opnieuw(m => { m.opname.opname_id = 'OPN-GEHEEL-ANDER'; }); assert.ok(r.fout && /opname-nummer/.test(r.fout), r.fout);
+    r = await opnieuw(m => { m.opname.ruimtes[0].wanden.find(w => w.id === 'W1').maten.lengte.waarde = 9999; }); assert.ok(r.fout && /beschadigd of aangepast/.test(r.fout), r.fout); assert.strictEqual(r.fotos.length, 0);
+    r = await opnieuw(m => { m.inhoudshash = '00000000000000'; }); assert.ok(r.fout && /beschadigd of aangepast/.test(r.fout), r.fout);
+    r = await opnieuw(m => { delete m.inhoudshash; }); assert.ok(r.fout && /beschadigd of aangepast/.test(r.fout), r.fout);
+    r = await opnieuw(m => { m.inhoudshash = null; }); assert.ok(r.fout && /beschadigd of aangepast/.test(r.fout), r.fout);
+    r = await opnieuw(m => { m.opname.status = 'opgeslagen'; m.opname.bijgewerkt = 'andere tijd'; }); assert.strictEqual(r.fout, null, 'velden die niet in de inhoudshash tellen (status, tijdstippen) mogen anders zijn');
+  });
   console.log('\n' + n + ' tests geslaagd');
 })();
