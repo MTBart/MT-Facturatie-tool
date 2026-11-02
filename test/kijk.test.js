@@ -83,7 +83,7 @@ const maakWin = (opt = {}) => {
     win.fetchMetAuth = async u => { gevraagd.push(u); const s = decodeURIComponent(u.split('/spiegel/')[1]);
       if (s === 'mt_projecten') return { ok: true, status: 200, json: async () => ({ ts: 1700000000000, data: [{ code: 'P1' }] }) };
       if (s === 'mt_planning') return { ok: false, status: 404, json: async () => ({}) };
-      if (s === 'mt_klant_codes') return { ok: true, status: 200, json: async () => ({ ts: 1, data: 'tekst' }) };
+      if (s === 'mt_vrijedagen') return { ok: true, status: 200, json: async () => ({ ts: 1, data: 'tekst' }) };
       return { ok: false, status: 500, json: async () => ({}) }; };
     let gelezen = 0; const sp = { read: async () => { gelezen++; return 'sharepoint'; }, prefetch: async () => { gelezen++; return new Map(); }, write: async () => { gelezen++; return true; }, maakAan: async () => 'aangemaakt', _driveBase: async () => ({ base: 'x', token: 'y' }), schedule: () => { gelezen++; }, _resolveConflict: async () => true };
     K.koppelSP(sp, { worker: W }); assert.ok(!sp._kijk, 'nog niet actief');
@@ -91,10 +91,10 @@ const maakWin = (opt = {}) => {
     assert.strictEqual(JSON.stringify(await sp.read('mt_projecten.json')), '[{"code":"P1"}]');
     await assert.rejects(sp.read('mt_planning.json'), /Spiegel: nog-geen-gegevens/);
     await assert.rejects(sp.read('mt_voorraad.json'), /niet-beschikbaar/); await assert.rejects(sp.read('mt_mail_links.json'), /niet-beschikbaar/); await assert.rejects(sp.read('mt_adminconfig.json'), /niet-beschikbaar/);
-    await assert.rejects(sp.read('mt_klant_codes.json'), /onleesbaar/);
-    const map = await sp.prefetch(['mt_projecten.json', 'mt_planning.json', 'mt_voorraad.json', 'mt_klant_codes.json']);
+    await assert.rejects(sp.read('mt_vrijedagen.json'), /onleesbaar/);
+    const map = await sp.prefetch(['mt_projecten.json', 'mt_planning.json', 'mt_voorraad.json', 'mt_vrijedagen.json']);
     assert.strictEqual(JSON.stringify(map.get('mt_projecten.json')), '{"ok":true,"status":200,"data":[{"code":"P1"}]}');
-    for (const f of ['mt_planning.json', 'mt_voorraad.json', 'mt_klant_codes.json']) assert.strictEqual(map.get(f).ok, false, f);
+    for (const f of ['mt_planning.json', 'mt_voorraad.json', 'mt_vrijedagen.json']) assert.strictEqual(map.get(f).ok, false, f);
     assert.strictEqual(await sp.write('a.json', {}), false); assert.strictEqual(await sp.maakAan('a.json', {}), false); assert.strictEqual(await sp._resolveConflict('a.json', {}), false);
     await assert.rejects(sp._driveBase(), /alleen-inkijken/); sp.schedule('x');
     assert.strictEqual(gelezen, 0, 'de oorspronkelijke SharePoint-functies zijn nooit aangeroepen');

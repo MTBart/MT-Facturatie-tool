@@ -15,9 +15,9 @@
   'use strict';
   const doc = root.document;
   // Zelfde lijst als SPIEGEL_STORES in worker.js (alleen laag 1).
-  const STORES = ['mt_projecten', 'mt_planning', 'mt_planblokken', 'mt_planinrichting', 'mt_project_taken_v2', 'mt_project_afhank', 'mt_project_controle', 'mt_project_sjablonen',
-    'mt_klant_codes', 'klanten-registry-vol', 'mt_verlof', 'mt_vrijedagen', 'mt_opleveringen', 'mt_attentie', 'mt_calc_offertes', 'mt_calc_defaults', 'mt_offerte_keuze',
-    'mt_toeslag_lak', 'mt_toeslag_spuit', 'mt_uurtarieven', 'mt_verbeterpunten', 'mt_feedback'];
+  // Zelfde 13 stores als SPIEGEL_STORES in worker.js (de worker projecteert: geen contactgegevens, notities, e-mailadressen).
+  const STORES = ['mt_projecten', 'mt_planning', 'mt_planblokken', 'mt_planinrichting', 'mt_project_taken_v2', 'mt_project_afhank', 'mt_vrijedagen',
+    'mt_calc_offertes', 'mt_calc_defaults', 'mt_offerte_keuze', 'mt_uurtarieven', 'mt_verbeterpunten', 'mt_feedback'];
   const KERN = ['mt_projecten', 'mt_planning', 'mt_project_taken_v2'];                // zonder deze is er "nog geen gegevens"
   const VERBORGEN_TABS = ['dashboard', 'inbox', 'attentie', 'oplevering', 'voorraad', 'bestelling', 'klanten', 'instellingen', 'admin'];
   const GRAPH_HOST = /(^|\.)(graph\.microsoft\.com|sharepoint\.com|sharepoint-df\.com|onedrive\.live\.com|1drv\.ms|office\.com|office365\.com|outlook\.com)$/i;
@@ -169,7 +169,7 @@
     let el = doc.getElementById('mt-kijk-banner');
     if (!el) { el = doc.createElement('div'); el.id = 'mt-kijk-banner'; el.setAttribute('role', 'status'); if (doc.body) doc.body.insertBefore(el, doc.body.firstChild); else return; }
     const s = K.stand();
-    el.textContent = 'Meekijken · alleen inkijken · ' + (s.geenKern ? 'nog geen gegevens (het team vult ze bij het eerstvolgende gebruik)' : 'stand van ' + tijdTekst(s.oudste));
+    el.textContent = 'Meekijken · alleen inkijken · ' + (s.geenKern ? 'nog geen gegevens (het team vult ze bij het eerstvolgende gebruik)' : 'stand van ' + tijdTekst(s.oudste)) + ' · contactgegevens en notities zijn verborgen';
     el.title = Object.entries(K.standen).map(([n, t]) => n + ': ' + tijdTekst(t)).join('\n');
   };
   K.melding = function (tekst) {

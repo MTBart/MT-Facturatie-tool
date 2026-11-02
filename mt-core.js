@@ -206,10 +206,13 @@
     const toast = typeof config.toast === 'function' ? config.toast : function () {};
     const syncStatus = typeof config.onSyncStatus === 'function' ? config.onSyncStatus : function () {};
     const trackLastSync = !!config.trackLastSync;
-    // naGeslaagd(bestandsnaam, jsonTekst, etag): optionele hook, alleen NA een geslaagde PUT naar SharePoint (write, maakAan, 412-merge).
+    // naGeslaagd(bestandsnaam, jsonTekst, etag, gewijzigd): optionele hook, alleen NA een geslaagde PUT naar SharePoint (write, maakAan, 412-merge).
+    // `gewijzigd` = lastModifiedDateTime uit het SharePoint-antwoord (de versie van de stand; niet de klok van deze pc), of null.
     // Gebruikt voor de alleen-lezen spiegel (mt-spiegel.js). Faalt of ontbreekt de hook, dan verandert er niets aan het opslaan.
     const naGeslaagd = typeof config.naGeslaagd === 'function' ? config.naGeslaagd : null;
-    function meld(filename, tekst, etag) { if (!naGeslaagd) return; try { naGeslaagd(filename, typeof tekst === 'string' ? tekst : JSON.stringify(tekst), etag || null); } catch (e) { } }
+    function meld(filename, tekst, etag, gewijzigd) { if (!naGeslaagd) return; try { naGeslaagd(filename, typeof tekst === 'string' ? tekst : JSON.stringify(tekst), etag || null, gewijzigd || null); } catch (e) { } }
+    // lastModifiedDateTime uit het antwoord op een PUT (het driveItem); null als het ontbreekt of niet te lezen is.
+    async function gewijzigdUit(r) { try { const j = await r.json(); return (j && j.lastModifiedDateTime) || null; } catch (e) { return null; } }
 
     const SP = {
       SITE: 'mortisetenon.sharepoint.com:/sites/MortiseTenon',
@@ -226,6 +229,7 @@
       _ontbreekt: {},
 
       lastSync: null,              // {ts, ok, key, error} — alleen gevuld als trackLastSync
+      _gewijzigd: {},              // filename -> lastModifiedDateTime (ISO) van de laatst bekende SharePoint-versie (listing of PUT-antwoord)
 
       // Graph weigert twee colon-paths in één URL; daarom eerst de site naar id
       // resolven en dáármee /sites/{id}/drive/... bouwen.
@@ -259,6 +263,23 @@
         return await r.json();
       },
 
+      // Leest een bestand MET zijn SharePoint-versie, zonder de etags/versies van de app aan te raken (voor de spiegel): eerst de metadata
+      // (eTag + lastModifiedDateTime), dan de inhoud — zo is de inhoud nooit ouder dan de versie waarmee hij gelabeld wordt (hooguit nieuwer;
+      // dan loopt de spiegel één versie achter en wordt hij bij de volgende vergelijking van de ETags gewoon bijgewerkt).
+      // → { data, etag, gewijzigd } of null als het bestand niet bestaat; elke andere fout gooit.
+      async leesMeta(filename) {
+        const { base, token } = await this._driveBase();
+        const h = { 'Authorization': `Bearer ${token}` }, url = `${base}/root:/${this.FOLDER}/${filename}`;
+        const mr = await fetch(`${url}?$select=eTag,lastModifiedDateTime`, { headers: h });
+        if (mr.status === 404) return null;
+        if (!mr.ok) throw new Error(`SP meta ${filename}: HTTP ${mr.status}`);
+        const meta = await mr.json();
+        const r = await fetch(`${url}:/content`, { headers: h });
+        if (r.status === 404) return null;
+        if (!r.ok) throw new Error(`SP read ${filename}: HTTP ${r.status}`);
+        return { data: await r.json(), etag: (meta && meta.eTag) || r.headers.get('ETag') || null, gewijzigd: (meta && meta.lastModifiedDateTime) || null };
+      },
+
       async write(filename, data, conflictMerge) {
         try {
           const { base, token } = await this._driveBase();
@@ -274,7 +295,7 @@
           // S1: 412 = SP-versie nieuwer dan onze ETag → re-read, mergen, herschrijven.
           // (ook bij aanmaken: 412 = iemand was ons voor)
           if (r.status === 412 && (useEtag || maakAan)) return await this._resolveConflict(filename, data, conflictMerge);
-          if (r.ok) { const et = r.headers.get('ETag'); if (et) this._etags[filename] = et; delete this._ontbreekt[filename]; meld(filename, body, this._etags[filename]); }
+          if (r.ok) { const et = r.headers.get('ETag'); if (et) this._etags[filename] = et; delete this._ontbreekt[filename]; const mod = await gewijzigdUit(r); if (mod) this._gewijzigd[filename] = mod; meld(filename, body, this._etags[filename], mod); }
           if (trackLastSync) this.lastSync = { ts: Date.now(), ok: r.ok, key: filename, error: r.ok ? null : `HTTP ${r.status}` };
           if (!r.ok) console.warn('SP write faalde:', filename, 'HTTP', r.status);
           syncStatus();
@@ -296,7 +317,7 @@
           const r = await fetch(`${base}/root:/${this.FOLDER}/${filename}:/content?@microsoft.graph.conflictBehavior=fail`,
             { method: 'PUT', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'If-None-Match': '*' }, body: typeof data === 'string' ? data : JSON.stringify(data) });
           if (r.status === 412 || r.status === 409) return 'bestaat';
-          if (r.ok) { const et = r.headers.get('ETag'); if (et) this._etags[filename] = et; delete this._ontbreekt[filename]; meld(filename, data, this._etags[filename]); if (trackLastSync) this.lastSync = { ts: Date.now(), ok: true, key: filename, error: null }; syncStatus(); return 'aangemaakt'; }
+          if (r.ok) { const et = r.headers.get('ETag'); if (et) this._etags[filename] = et; delete this._ontbreekt[filename]; const mod = await gewijzigdUit(r); if (mod) this._gewijzigd[filename] = mod; meld(filename, data, this._etags[filename], mod); if (trackLastSync) this.lastSync = { ts: Date.now(), ok: true, key: filename, error: null }; syncStatus(); return 'aangemaakt'; }
           console.warn('SP aanmaken faalde:', filename, 'HTTP', r.status);
           return false;
         } catch (e) { console.warn('SP aanmaken fout:', filename, e.message); return false; }
@@ -346,7 +367,8 @@
         if (r.ok) {
           const et = r.headers.get('ETag'); if (et) this._etags[filename] = et;
           delete this._ontbreekt[filename];
-          meld(filename, merged, this._etags[filename]);   // de samengevoegde stand is wat nu in SharePoint staat
+          const mod = await gewijzigdUit(r); if (mod) this._gewijzigd[filename] = mod;
+          meld(filename, merged, this._etags[filename], mod);   // de samengevoegde stand is wat nu in SharePoint staat
           if (trackLastSync) this.lastSync = { ts: Date.now(), ok: true, key: filename, error: null };
         } else {
           console.warn('SP 412-merge herschrijf faalde:', filename, 'HTTP', r.status);
@@ -375,7 +397,7 @@
       async prefetch(filenames) {
         const { base, token } = await this._driveBase();
         const listUrl = `${base}/root:/${this.FOLDER}:/children`
-          + `?$select=name,eTag,@microsoft.graph.downloadUrl&$top=999`;
+          + `?$select=name,eTag,lastModifiedDateTime,@microsoft.graph.downloadUrl&$top=999`;
         const lr = await fetch(listUrl, { headers: { 'Authorization': `Bearer ${token}` } });
         if (!lr.ok) throw new Error(`SP prefetch listing: HTTP ${lr.status}`);
         const kinderen = (await lr.json()).value || [];
@@ -392,6 +414,7 @@
           }
           // S1: eTag uit de listing bewaren zodat write() 'm als If-Match meestuurt.
           if (meta.eTag) this._etags[filename] = meta.eTag; else delete this._etags[filename];
+          if (meta.lastModifiedDateTime) this._gewijzigd[filename] = meta.lastModifiedDateTime; else delete this._gewijzigd[filename];
           delete this._ontbreekt[filename];
           const dl = meta['@microsoft.graph.downloadUrl'];
           if (!dl) {                         // geen downloadUrl (bv. lege map-item) → val terug op losse read

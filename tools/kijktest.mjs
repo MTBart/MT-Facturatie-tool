@@ -34,14 +34,16 @@ const ME = { oid: 'aaaaaaaa-0000-4000-8000-000000000001', email: 'coach_example.
 const TS = Date.now() - 3600e3;
 const SPIEGEL = {
   mt_projecten: [{ code: 'P-0001', naam: 'Voorbeeldproject', klant: 'Voorbeeld BV', status: 'actief', project_id: 'p_voorbeeld01', _gewijzigd: new Date(TS).toISOString() }],
-  mt_planning: {}, mt_project_taken_v2: {}, mt_planblokken: [], mt_verlof: [], mt_vrijedagen: [], mt_klant_codes: {}, mt_offerte_keuze: {}, mt_calc_offertes: [], mt_calc_defaults: {},
+  mt_planning: {}, mt_project_taken_v2: {}, mt_planblokken: [], mt_vrijedagen: [], mt_offerte_keuze: {}, mt_calc_offertes: [], mt_calc_defaults: {},
 };
 const verzoeken = [];   // alles wat de pagina doet, zoals het de (nagebootste) worker of het netwerk bereikt
 function antwoord(u, m) {
   const pad = u.pathname, target = u.searchParams.get('target');
   const json = (o, s = 200) => ({ s, b: JSON.stringify(o) });
   if (m === 'OPTIONS') return { s: 204, b: '' };
+  if (pad.startsWith('/spiegel/') && m === 'POST') return json({ ok: true });
   if (pad === '/me') return json(ME_ACTIEF);
+  if (pad === '/spiegel/_index' && ME_ACTIEF.rol !== 'meekijker') return json({ stores: {} });   // een teamlid ziet een lege spiegel: alles moet gevuld worden
   if (pad === '/spiegel/_index') return json({ stores: Object.fromEntries(Object.keys(SPIEGEL).map(k => [k, { ts: TS, etag: 'e', bytes: 10 }])) });
   if (pad.startsWith('/spiegel/')) { const s = decodeURIComponent(pad.slice(9)); return SPIEGEL[s] ? json({ store: s, ts: TS, etag: 'e', data: SPIEGEL[s] }) : json({ error: 'geen-spiegel' }, 404); }
   if (pad === '/klanten') return json({ klanten: [], rev: 0 });
@@ -61,14 +63,14 @@ function antwoord(u, m) {
   if (pad === '/beheer/log') return json({ modus: 'log', dagen: 7, totaal: 0, geweigerd: 0, perDag: [], top: [] });
   if (pad === '/beheer/audit') return json({ audit: [] });
   if (pad === '/beheer/kijklog') return json({ oid: 'x', bewaartermijn_dagen: 180, afgekapt: false, verzoeken: 3, dagen: [{ dag: '2026-11-02', items: [{ ts: Date.now() - 6e4, bron: 'server', soort: 'verzoeken', label: '<b>Financiën</b>', n: 3, geweigerd: 1 }, { ts: Date.now(), bron: 'tab', soort: 'open', label: 'projecten', duur_ms: 61000 }] }] });
-  if (pad === '/track' || pad === '/track/heartbeat') return json({ ok: true });
+  if (pad === '/track' || pad === '/track/heartbeat' || pad.startsWith('/spiegel/') && m === 'POST') return json({ ok: true });
   if (pad === '/' && target) return json([]);
   return json({ error: 'onbekend' }, 404);
 }
 
 // ── Chrome en CDP ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 let ME_ACTIEF = ME;   // per scenario instelbaar (de controle met een gewoon teamlid gebruikt een andere rol)
-async function scenario(naam, pad, { wacht = 14000, controle, me = ME, gebruiker = 'coach_example.org#EXT#@example.net' }) {
+async function scenario(naam, pad, { wacht = 14000, controle, me = ME, gebruiker = 'coach_example.org#EXT#@example.net', graph = null }) {
   ME_ACTIEF = me;
   const port = 9300 + Math.floor(Math.random() * 400), PROF = `mt-kijk-prof-${Date.now()}-${process.pid}-${Math.floor(Math.random() * 1e4)}`;
   const ch = spawn(CHROME, ['--headless=new', '--disable-gpu', `--remote-debugging-port=${port}`, `--user-data-dir=${process.env.TEMP}/${PROF}`, 'about:blank'], { stdio: 'ignore' });
@@ -93,8 +95,13 @@ async function scenario(naam, pad, { wacht = 14000, controle, me = ME, gebruiker
       if (m.method === 'Fetch.requestPaused') {
         const r = m.params.request, u = new URL(r.url);
         if (u.origin === ORIGIN) { send('Fetch.continueRequest', { requestId: m.params.requestId }); return; }
-        netwerk.push({ methode: r.method, host: u.hostname, pad: u.pathname, target: u.searchParams.get('target'), heeftBody: !!r.postData });
-        if (u.origin === WORKER) { const a = antwoord(u, r.method); send('Fetch.fulfillRequest', { requestId: m.params.requestId, responseCode: a.s, responseHeaders: CORS, body: Buffer.from(a.b).toString('base64') }); }
+        netwerk.push({ methode: r.method, host: u.hostname, pad: u.pathname, search: u.search, target: u.searchParams.get('target'), heeftBody: !!r.postData, body: r.postData || null, auth: (r.headers && (r.headers.Authorization || r.headers.authorization)) || null });
+        if (graph && (u.hostname === 'graph.microsoft.com' || u.hostname === 'dl.example')) {   // nagebootst SharePoint voor het teamlid-scenario
+          const a = r.method === 'OPTIONS' ? { s: 204, b: '' } : (graph(u, r.method) || { s: 404, b: {} });
+          const GCORS = [{ name: 'Access-Control-Allow-Origin', value: '*' }, { name: 'Access-Control-Allow-Methods', value: 'GET,PUT,POST,PATCH,DELETE,OPTIONS' }, { name: 'Access-Control-Allow-Headers', value: 'authorization,content-type,if-match,if-none-match,x-auth-token' }, { name: 'Access-Control-Expose-Headers', value: 'ETag' }, { name: 'Content-Type', value: 'application/json' }];
+          send('Fetch.fulfillRequest', { requestId: m.params.requestId, responseCode: a.s, responseHeaders: [...GCORS, ...(a.etag ? [{ name: 'ETag', value: a.etag }] : [])], body: Buffer.from(a.b === '' ? '' : JSON.stringify(a.b)).toString('base64') });
+        }
+        else if (u.origin === WORKER) { const a = antwoord(u, r.method); send('Fetch.fulfillRequest', { requestId: m.params.requestId, responseCode: a.s, responseHeaders: CORS, body: Buffer.from(a.b).toString('base64') }); }
         else send('Fetch.fulfillRequest', { requestId: m.params.requestId, responseCode: u.hostname.includes('microsoft') || u.hostname.includes('sharepoint') ? 401 : 200, responseHeaders: CORS.slice(0, 1), body: '' });
       }
     };
@@ -186,6 +193,36 @@ toets('mobiel: geen uitzonderingen', mob.exc.length === 0, mob.exc.join(' | '));
 const team = await scenario('v2 teamlid (controle)', 'v2.html', { wacht: 9000, me: { ...ME, rol: 'kantoor', rolNaam: 'Kantoor', modus: 'log', altijdAfdwingen: undefined, extern: undefined, rechten: { ...RECHTEN, projecten: 'wijzigen', moneybird: 'concepten', uren: 'team' } }, gebruiker: 'collega@mortiseandtenon.nl', controle: async ({ ev }) => ({ kijk: await ev('!!(window.MTKijk && MTKijk.aan)') }) });
 toets('controle: een teamlid blijft buiten de kijkmodus en vraagt wél Graph-scopes (het harnas ziet dat)', team.staat.kijk === false && team.acq.some(a => a.scopes.some(sc => /graph\.microsoft\.com/.test(sc))), JSON.stringify({ kijk: team.staat.kijk, acq: team.acq.slice(0, 3) }));
 
+// Integratietest van de zendkant met een teamlid (kantoor): het bijvulpad leest echt uit (nagebootst) SharePoint met een geldige URL en bearer-token,
+// de versie komt uit SharePoint (lastModifiedDateTime), en een geslaagde save levert een spiegelzending op met de versie uit het PUT-antwoord.
+const V_PROJ = '2026-11-01T08:00:00Z', V_PLAN = '2026-11-01T09:00:00Z', V_BLOK = '2026-11-01T10:00:00Z', V_SAVE = '2026-11-02T09:30:00Z';
+const LIJST = { 'mt_projecten.json': ['"L-proj"', V_PROJ, [{ code: 'P-1', naam: 'Voorbeeldproject' }]], 'mt_planning.json': ['"L-plan"', V_PLAN, {}] };
+const graafTeam = (u, m) => {
+  const p = u.pathname;
+  if (p === '/v1.0/sites/mortisetenon.sharepoint.com:/sites/MortiseTenon') return { s: 200, b: { id: 'SITE1' } };
+  if (p === '/v1.0/sites/SITE1/drive/root:/MT-Bedrijfstool:/children') return { s: 200, b: { value: Object.entries(LIJST).map(([n, [e, t]]) => ({ name: n, eTag: e, lastModifiedDateTime: t, '@microsoft.graph.downloadUrl': `https://dl.example/${n}` })) } };
+  if (u.hostname === 'dl.example') { const n = p.slice(1); return LIJST[n] ? { s: 200, b: LIJST[n][2] } : { s: 404, b: {} }; }
+  if (p === '/v1.0/sites/SITE1/drive/root:/MT-Bedrijfstool/mt_planblokken.json' && u.searchParams.get('$select')) return { s: 200, b: { eTag: '"M1"', lastModifiedDateTime: V_BLOK } };
+  if (p === '/v1.0/sites/SITE1/drive/root:/MT-Bedrijfstool/mt_planblokken.json:/content') return { s: 200, b: [{ id: 'b1', persoon: 'arjan' }], etag: '"M1"' };
+  if (m === 'PUT' && /:\/content$/.test(p)) return { s: 200, b: { lastModifiedDateTime: V_SAVE }, etag: '"W1"' };
+  return { s: 404, b: {} };
+};
+const teamSp = await scenario('v2 teamlid spiegel', 'v2.html', { wacht: 16000, graph: graafTeam, me: { ...ME, rol: 'kantoor', rolNaam: 'Kantoor', modus: 'log', altijdAfdwingen: undefined, extern: undefined, rechten: { ...RECHTEN, projecten: 'wijzigen', offertes: 'wijzigen', moneybird: 'concepten', uren: 'team', beheer: null } }, gebruiker: 'collega@mortiseandtenon.nl',
+  controle: async ({ ev }) => {
+    const s = {};
+    s.save = await ev("_SP.write('mt_planning.json',{ 'P-1': { fases: [] } }).then(r=>String(r))");
+    await ev('MTSpiegelInst.flushAlles().then(()=>1)');
+    return s;
+  } });
+const zend = teamSp.netwerk.filter(n => n.methode === 'POST' && /^\/spiegel\//.test(n.pad)).map(n => ({ store: n.pad.slice(9), body: JSON.parse(n.body) }));
+const lijstVerz = teamSp.netwerk.filter(n => n.host === 'graph.microsoft.com' && n.methode !== 'OPTIONS');
+toets('teamlid: elke zending draagt een SharePoint-versie (listing, metadata of PUT-antwoord), nooit de klok van de pc; gesynchroniseerde stores zijn gezonden', zend.length >= 3 && zend.every(z => [V_PROJ, V_PLAN, V_BLOK, V_SAVE].map(v => Date.parse(v)).includes(z.body.ts)) && zend.some(z => z.store === 'mt_projecten') && zend.some(z => z.store === 'mt_planning'), JSON.stringify(zend.map(z => [z.store, new Date(z.body.ts).toISOString(), z.body.etag])));
+toets('teamlid: het bijvulpad buiten de listing leest echt (geldige Graph-URL, bearer-token) en zendt met etag + versie van die lees', zend.some(z => z.store === 'mt_planblokken' && z.body.etag === '"M1"' && z.body.ts === Date.parse(V_BLOK) && z.body.data[0].id === 'b1')
+  && lijstVerz.some(n => n.pad === '/v1.0/sites/SITE1/drive/root:/MT-Bedrijfstool/mt_planblokken.json:/content' && /^Bearer \S+/.test(n.auth || ''))
+  && lijstVerz.some(n => n.pad === '/v1.0/sites/SITE1/drive/root:/MT-Bedrijfstool/mt_planblokken.json' && /select=eTag,lastModifiedDateTime/.test(decodeURIComponent(n.search))), JSON.stringify({ zend: zend.map(z => z.store), graph: lijstVerz.map(n => n.pad + n.search.slice(0, 30)).filter(x => /planblokken/.test(x)) }));
+toets('teamlid: geen kapotte padstukken of lege tokens in de Graph-verzoeken', !lijstVerz.some(n => /root:\/\/|\/\/:\/content|:\/content\//.test(n.pad)) && lijstVerz.every(n => /^Bearer \S+/.test(n.auth || '')), JSON.stringify(lijstVerz.filter(n => !/^Bearer \S+/.test(n.auth || '') || /root:\/\//.test(n.pad)).map(n => n.pad)));
+toets('teamlid: een geslaagde SharePoint-save geeft een zending met de versie uit het PUT-antwoord', teamSp.staat.save === 'true' && zend.some(z => z.store === 'mt_planning' && z.body.ts === Date.parse(V_SAVE) && z.body.etag === '"W1"' && z.body.data['P-1']), JSON.stringify([teamSp.staat.save, zend.filter(z => z.store === 'mt_planning').map(z => [z.body.ts, z.body.etag])]));
+toets('teamlid: alleen stores uit de lijst van 13 worden gezonden', zend.every(z => ['mt_projecten', 'mt_planning', 'mt_planblokken', 'mt_planinrichting', 'mt_project_taken_v2', 'mt_project_afhank', 'mt_vrijedagen', 'mt_calc_offertes', 'mt_calc_defaults', 'mt_offerte_keuze', 'mt_uurtarieven', 'mt_verbeterpunten', 'mt_feedback'].includes(z.store)), JSON.stringify(zend.map(z => z.store)));
 // De eigenaar ziet in Beheer de meekijker met einddatum, de uitnodiging, de aanvraag met vlag en het kijkoverzicht; niets uit de gegevens wordt als HTML uitgevoerd.
 const eig = await scenario('v2 eigenaar beheer', 'v2.html', { wacht: 9000, me: { ...ME, rol: 'eigenaar', rolNaam: 'Eigenaar', modus: 'log', altijdAfdwingen: undefined, extern: undefined, toegangTot: undefined, rechten: { ...RECHTEN, projecten: 'wijzigen', beheer: 'alles', geld: 'wijzigen', moneybird: 'concepten', uren: 'alles' } }, gebruiker: 'baas@mortiseandtenon.nl',
   controle: async ({ ev }) => {

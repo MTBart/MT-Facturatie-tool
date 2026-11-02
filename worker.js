@@ -748,6 +748,13 @@ const waitUntil = (ctx, p) => { try { if (ctx && ctx.waitUntil) ctx.waitUntil(p)
 
 // De uitnodiging waar een aanvraag bij hoort: moet nog bestaan, hetzelfde id hebben (elke uitnodiging krijgt een eigen id), niet verlopen zijn
 // en de meekijker-rol dragen. Anders null (de aanvraag is dan ongeldig).
+// Verwijdert de uitnodiging van deze aanvraag, maar alleen als invite:<mail> nog dezelfde uitnodiging is (id): vlak voor het verwijderen opnieuw gelezen,
+// zodat een intussen aangemaakte nieuwere uitnodiging voor hetzelfde adres blijft staan (twee eigenaren tegelijk is zeldzaam; dit volstaat).
+async function inviteOpruimen(env, a) {
+  if (!a || !a.uitgenodigdAls || !a.inviteEmail || !a.inviteId) return;
+  const key = 'invite:' + String(a.inviteEmail).toLowerCase(), nu = await kvJson(env, key);
+  if (nu && nu.id === a.inviteId) { try { await env.MT_ROLLEN.delete(key); } catch {} }
+}
 async function inviteBijAanvraag(env, a) {
   if (!a || !a.uitgenodigdAls || !a.inviteEmail || !a.inviteId) return null;
   const inv = await kvJson(env, 'invite:' + String(a.inviteEmail).toLowerCase());
@@ -4968,7 +4975,7 @@ async function handleBeheer(pathname, request, env, ik, json) {
     const a = await kvJson(env, 'aanvraag:' + oid); if (!a) return json({ error: 'niet-gevonden' }, 404);
     if (b.weigeren) {
       await env.MT_ROLLEN.delete('aanvraag:' + oid);
-      if (await inviteBijAanvraag(env, a)) { try { await env.MT_ROLLEN.delete('invite:' + String(a.inviteEmail).toLowerCase()); } catch {} }   // anders zet de volgende login hem opnieuw in Aanvragen (alleen de eigen uitnodiging, niet een nieuwere)
+      await inviteOpruimen(env, a);   // anders zet de volgende login hem opnieuw in Aanvragen (alleen de eigen uitnodiging, niet een nieuwere)
       await audit(env, { ...door, actie: 'aanvraag-geweigerd', doel: oid, doelNaam: a.naam });
       return json({ ok: true });
     }
@@ -4988,7 +4995,7 @@ async function handleBeheer(pathname, request, env, ik, json) {
     if (tt.waarde) rec.toegangTot = tt.waarde;
     await schrijfGebruiker(env, rec);
     await env.MT_ROLLEN.delete('aanvraag:' + oid);
-    if (a.uitgenodigdAls && a.inviteEmail) { try { await env.MT_ROLLEN.delete('invite:' + String(a.inviteEmail).toLowerCase()); } catch {} }
+    await inviteOpruimen(env, a);
     await audit(env, { ...door, actie: 'aanvraag-toegekend', doel: oid, doelNaam: a.naam, nieuw: rol + (tt.waarde ? ' tot ' + datumTekst(tt.waarde) : '') });
     return json({ ok: true, gebruiker: rec });
   }
@@ -6152,66 +6159,176 @@ const CORS_HERKOMST = ['https://mtbart.github.io', 'https://tool.mortiseandtenon
 // ══ SPIEGEL (alleen-lezen kopie van SharePoint-bestanden voor de meekijker) ═══════════════════════════════════════════════════
 // De worker heeft GEEN Graph-toegang. Na een geslaagde SharePoint-save stuurt een teamclient met schrijfrecht een kopie van dat bestand:
 // POST /spiegel/<store> {data, etag, ts}. De meekijker (en teamrollen met leesrecht) leest GET /spiegel/<store> en /spiegel/_index.
-// De kopie wordt nooit teruggeschreven naar SharePoint en overschrijft nooit een bestaande store: dit is een aparte KV-sleutel.
-// Opslag: KV MT_ROLLEN `spiegel:<store>` = {ts, etag, bron (oid-hash), bytes, data}, met {ts, etag, bytes, bron} als KV-metadata (voor /_index
-// zonder de data te lezen). Alleen laag 1 (hieronder); een onbekende naam = 404. Rechten gelden in élke ROLLEN_MODUS.
-//   lees:    de matrixkolom (projecten | offertes | geld | verbeterpunten) moet truthy zijn
-//   schrijf: projecten/offertes/geld = 'wijzigen'; verbeterpunten = 'maken' | 'beheren' | 'alles'; een meekijker nooit
+// SharePoint blijft de bron; de spiegel is een AFGELEIDE, GEPROJECTEERDE kopie. Er wordt nooit iets teruggeschreven naar SharePoint.
+//  - Opslag: KV MT_ROLLEN `spiegel:<store>` = {ts, etag, bron (oid-hash), bytes, data}, met {ts, etag, bytes, bron} als KV-metadata.
+//  - Versie `ts` = het SharePoint-moment van de stand (lastModifiedDateTime in ms), niet de klok van de client. Alleen strikt nieuwer dan het
+//    bewaarde wordt aangenomen (anders 409); maximaal 10 minuten boven de servertijd. KV heeft geen compare-and-set: twee gelijktijdige
+//    zendingen kunnen elkaar kruisen, maar dan staat er een echte SharePoint-versie; de volgende save of het bijvullen (ETag-vergelijking) herstelt dat.
+//  - Rest-risico (bewust geaccepteerd): een teamlid met schrijfrecht kan een foute kopie sturen. Gevolg beperkt tot de kijkkopie; SharePoint blijft heel.
+//  - Privacy: de PROJECTIE gebeurt hier, bij het schrijven (allowlist per store, zie SPIEGEL_STORES): contactpersonen, e-mail, telefoon, adres,
+//    IBAN, vrije notities/opmerkingen, interne stempels en e-mailadressen van gebruikers komen nooit in KV. Strings worden daarbovenop geschoond.
+//  - Autorisatie: expliciete tabel store x rol (lees/schrijf), niet per matrixkolom. Een meekijker schrijft nooit. Per oid max 120 zendingen/uur.
+const ROLLEN_PROJ_LEES = ['eigenaar', 'beheerder', 'kantoor', 'werkplaats', 'lezen', 'meekijker'];
+const ROLLEN_OFFERTE_LEES = ['eigenaar', 'beheerder', 'kantoor', 'lezen', 'meekijker'];
+const ROLLEN_SCHRIJF_KANTOOR = ['eigenaar', 'beheerder', 'kantoor'];
+// ── projectie-bouwstenen ──
+const SP_T = { t: 'p' };                                              // primitief (tekst, getal, waar/onwaar, null)
+const SP_FLEX = { t: 'flex' };                                        // primitief, lijst van primitieven of kaart van primitieven (geen diepere nesting)
+const SP_TOMB = { t: 'tomb' };                                        // tombstone ({tijd, door}) wordt true: wie het deed hoort er niet in
+const SP_NAAM_UIT_MAIL = { t: 'naamuitmail' };                        // e-mailadres wordt een voornaam
+const spL = n => ({ t: 'l', n }), spK = (n, sleutelRe) => ({ t: 'k', n, re: sleutelRe }), spO = (velden, na) => ({ t: 'o', velden, na });
+const SP_SLEUTEL_RE = /^(?!__)[^\x00-\x1f]{1,120}$/;
+const SP_MAX_ITEMS = 50000, SP_MAX_TEKST = 4000;
+const SP_MAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g;
+const SP_IBAN_RE = /\b[A-Za-z]{2}\d{2}[ ]?(?:[A-Za-z0-9]{4}[ ]?){2,7}[A-Za-z0-9]{1,4}\b/g;
+const SP_TEL_RE = /(?:(?:\+|00)\d{2}[\s.\-]?|\b0)\(?0?\)?[1-9][\s.\-]?(?:\d[\s.\-]?){7,9}\d\b/g;
+// Schoont een tekst: e-mailadressen, IBAN's en telefoonnummers worden vervangen (vangnet bovenop de allowlist).
+function spScrub(s) {
+  let t = String(s); if (t.length > SP_MAX_TEKST) t = t.slice(0, SP_MAX_TEKST);
+  return t.replace(SP_MAIL_RE, '[e-mail]').replace(SP_IBAN_RE, m => (/\d/.test(m) && /[A-Za-z]{2}\d{2}/.test(m) ? '[iban]' : m)).replace(SP_TEL_RE, '[tel]');
+}
+function spVoornaam(mail) {
+  const lokaal = String(mail || '').split('@')[0].split(/[._\-+]/)[0]; return lokaal ? lokaal.charAt(0).toUpperCase() + lokaal.slice(1, 30) : '';
+}
+function spSchoon(node, w, diep) {
+  if (diep > 8 || w === undefined) return undefined;
+  switch (node.t) {
+    case 'p': return w === null || typeof w === 'number' || typeof w === 'boolean' ? w : typeof w === 'string' ? spScrub(w) : undefined;
+    case 'tomb': return w ? true : undefined;
+    case 'naamuitmail': return typeof w === 'string' && w ? (w.includes('@') ? spVoornaam(w) : spScrub(w)) : undefined;
+    case 'flex': {
+      if (w === null || ['number', 'boolean', 'string'].includes(typeof w)) return spSchoon(SP_T, w, diep);
+      if (Array.isArray(w)) return w.slice(0, 500).map(x => spSchoon(SP_T, x, diep + 1)).filter(x => x !== undefined);
+      if (typeof w === 'object') { const uit = {}; for (const [k, v] of Object.entries(w).slice(0, 500)) if (SP_SLEUTEL_RE.test(k)) { const x = spSchoon(SP_T, v, diep + 1); if (x !== undefined) uit[k] = x; } return uit; }
+      return undefined;
+    }
+    case 'l': return Array.isArray(w) ? w.slice(0, SP_MAX_ITEMS).map(x => spSchoon(node.n, x, diep + 1)).filter(x => x !== undefined && x !== null) : undefined;
+    case 'k': {
+      if (!w || typeof w !== 'object' || Array.isArray(w)) return undefined;
+      const uit = {}; for (const [k, v] of Object.entries(w).slice(0, SP_MAX_ITEMS)) { if (!(node.re || SP_SLEUTEL_RE).test(k)) continue; const x = spSchoon(node.n, v, diep + 1); if (x !== undefined) uit[k] = x; }
+      return uit;
+    }
+    case 'o': {
+      if (!w || typeof w !== 'object' || Array.isArray(w)) return undefined;
+      const uit = {};
+      for (const [k, sub] of Object.entries(node.velden)) { if (!(k in w)) continue; const x = spSchoon(sub, w[k], diep + 1); if (x !== undefined) uit[k] = x; }   // alleen wat de allowlist noemt
+      return node.na ? node.na(uit, w) : uit;
+    }
+  }
+  return undefined;
+}
+// ── de stores: bouwstenen per bestand ──
+const SP_STEMPEL = { _gewijzigd: SP_T, _vervallen: SP_TOMB, _weg: SP_TOMB };                       // wel: wijzigmoment en verwijdermarkering; niet: _vs, _veldconflict, _door, _eerder, _bron
+const SP_PROJECT = spO({
+  code: SP_T, naam: SP_T, project_id: SP_T, soort: SP_T, werkcode: SP_T, projectnummer: SP_T, legacy_codes: SP_FLEX, klant: SP_T, loc: SP_T, status: SP_T, fase: SP_T,
+  volgende_actie: SP_T, kans_pct: SP_T, waarde_excl: SP_T, verwachte_beslisdatum: SP_T, verlies: SP_T, geparkeerd_tot: SP_T, gewonnen_op: SP_T, bron: SP_T, tg_project_id: SP_T,
+  created: SP_T, omschrijving: SP_T, _hernoemd_naar: SP_T,
+  offertes: spL(spO({ id: SP_T, nummer: SP_T, nr: SP_T, key: SP_T, titel: SP_T, naam: SP_T, status: SP_T, bedrag: SP_T, datum: SP_T, bron: SP_T })),
+  gegevens: spO({ projectleider: SP_T, projectonderdeel: SP_T, leverdatum: SP_T }),   // niet: aanhef, voornaam, achternaam, straat, postcode, plaats
+  ...SP_STEMPEL,
+});
+const SP_FASE = spO({ id: SP_T, k: SP_T, naam: SP_T, label: SP_T, duur: SP_T, start: SP_T, eind: SP_T, gepind: SP_T, pin: SP_T, gap: SP_T, kleur: SP_T, status: SP_T, afhankelijk_van: SP_FLEX, fase_id: SP_T });
+const SP_PLAN = spO({ fases: spL(SP_FASE), anker: spO({ type: SP_T, datum: SP_T }), titel: SP_T, project_id: SP_T, code: SP_T, start: SP_T, eind: SP_T, oplever: SP_T, ...SP_STEMPEL });
+const SP_TAAK = spO({
+  id: SP_T, project_id: SP_T, naam: SP_T, omschrijving: SP_T, duur_uur: SP_T, activiteit: SP_T, status: SP_T, toegewezen: SP_T, prioriteit: SP_T, afhankelijk_van: SP_FLEX, tg_task_id: SP_T,
+  start: SP_T, eind: SP_T, duur_dagen: SP_T, soort: SP_T, fase: SP_T, sleutel: SP_T, klaar_op: SP_T, wacht_reden: SP_T, fase_id: SP_T, poort: SP_T, poort_eigenaar: SP_T, beperking: SP_T, beperking_datum: SP_T,
+  checklist: spL(spO({ id: SP_T, tekst: SP_T, punt: SP_T, klaar: SP_T, gedaan: SP_T })), aangemaakt: SP_T, ts: SP_T, bron: SP_T, ...SP_STEMPEL,   // niet: poort_bewijs (link), tg_sync, tg_pending, voorstel (wie/rol)
+});
+const SP_BLOK = spO({ id: SP_T, persoon: SP_T, project_code: SP_T, taak: SP_T, taak_id: SP_T, datum: SP_T, start: SP_T, duurMin: SP_T, status: SP_T, ts: SP_T, ...SP_STEMPEL });   // niet: notitie, voorstel, agenda_*
+const SP_INRICHT = spO({ id: SP_T, type: SP_T, k: SP_T, label: SP_T, volgorde: SP_T, station: SP_T, soort: SP_T, uursoort: SP_T, namen: SP_FLEX, woorden: SP_FLEX, uren: SP_FLEX, stations: SP_FLEX, activiteiten: SP_FLEX, sleutels: SP_FLEX, vrij: SP_FLEX, soorten: SP_FLEX, voorkeur: SP_FLEX, ...SP_STEMPEL });
+const SP_AFH = spO({ id: SP_T, van_taak: SP_T, naar_taak: SP_T, type: SP_T, lag_dagen: SP_T, status: SP_T, lag_soort: SP_T, van_project: SP_T, ...SP_STEMPEL });
+const SP_OFFERTE_REGEL = spO({ id: SP_T, omschrijving: SP_T, artikel: SP_T, aantal: SP_T, inkoop_stuk: SP_T, marge: SP_T, uren: SP_T, uurtarief: SP_T, begroot: SP_T, leverancier: SP_T, eenheid: SP_T });
+const SP_OFFERTE_META = spO({ status: SP_T, bron: SP_T, leverdatum: SP_T, offertedatum: SP_T, factuurbedrag: SP_T });
+const SP_OFFERTE = spO({
+  titel: SP_T, project_code: SP_T, meta: SP_OFFERTE_META, materiaal: spL(SP_OFFERTE_REGEL), uren: spL(SP_OFFERTE_REGEL),
+  nacalc: spO({ gestart: SP_T, meta: SP_OFFERTE_META, materiaal: spL(SP_OFFERTE_REGEL), uren: spL(SP_OFFERTE_REGEL) }), ...SP_STEMPEL,   // niet: opmerkingen, contact, toggl-koppeling
+});
+const SP_VERBETER_HIST = spO({ tijd: SP_T, fase: SP_T, notitie: SP_T, door: SP_NAAM_UIT_MAIL });
+const SP_VERBETERPUNT = spO({
+  id: SP_T, titel: SP_T, betreft: SP_T, omschrijving: SP_T, tekst: SP_T, type: SP_T, urgentie: SP_T, prioriteit: SP_T, fase: SP_T, status: SP_T, aangemaakt_op: SP_T, ts: SP_T, datum: SP_T,
+  indiener_naam: SP_T, indiener: SP_NAAM_UIT_MAIL, user: SP_NAAM_UIT_MAIL, historie: spL(SP_VERBETER_HIST),
+  reacties: spL(spO({ tijd: SP_T, tekst: SP_T, door: SP_NAAM_UIT_MAIL, naam: SP_T })), _gewijzigd: SP_T,                   // niet: e-mailadressen, oid's, bijlagen/screenshot-URL's, user-agent, logs, tokens
+}, (uit, bron) => {
+  const naam = uit.indiener_naam || uit.indiener || uit.user || ''; if (naam) { uit.indiener_naam = naam; uit.indiener = naam; } delete uit.user; return uit;      // indiener alleen als (voor)naam
+});
+// root: 'array' | 'object' | 'items' | 'kaart'; ontwerp van de rollen: expliciet per store (lees/schrijf), niet per matrixkolom.
 const SPIEGEL_STORES = {
-  mt_projecten: 'projecten', mt_planning: 'projecten', mt_planblokken: 'projecten', mt_planinrichting: 'projecten', mt_project_taken_v2: 'projecten',
-  mt_project_afhank: 'projecten', mt_project_controle: 'projecten', mt_project_sjablonen: 'projecten', mt_klant_codes: 'projecten', 'klanten-registry-vol': 'projecten',
-  mt_verlof: 'projecten', mt_vrijedagen: 'projecten', mt_opleveringen: 'projecten', mt_attentie: 'projecten',
-  mt_calc_offertes: 'offertes', mt_calc_defaults: 'offertes', mt_offerte_keuze: 'offertes', mt_toeslag_lak: 'offertes', mt_toeslag_spuit: 'offertes',
-  mt_uurtarieven: 'geld',
-  mt_verbeterpunten: 'verbeterpunten', mt_feedback: 'verbeterpunten',
+  mt_projecten:        { root: 'array',  node: spL(SP_PROJECT),           lees: ROLLEN_PROJ_LEES,    schrijf: ROLLEN_SCHRIJF_KANTOOR },
+  mt_planning:         { root: 'object', node: spK(SP_PLAN),              lees: ROLLEN_PROJ_LEES,    schrijf: ROLLEN_SCHRIJF_KANTOOR },
+  mt_planblokken:      { root: 'array',  node: spL(SP_BLOK),              lees: ROLLEN_PROJ_LEES,    schrijf: ROLLEN_SCHRIJF_KANTOOR },
+  mt_planinrichting:   { root: 'array',  node: spL(SP_INRICHT),           lees: ROLLEN_PROJ_LEES,    schrijf: ROLLEN_SCHRIJF_KANTOOR },
+  mt_project_taken_v2: { root: 'object', node: spK(spL(SP_TAAK)),        lees: ROLLEN_PROJ_LEES,    schrijf: ROLLEN_SCHRIJF_KANTOOR },
+  mt_project_afhank:   { root: 'object', node: spK(spL(SP_AFH)),         lees: ROLLEN_PROJ_LEES,    schrijf: ROLLEN_SCHRIJF_KANTOOR },
+  mt_vrijedagen:       { root: 'array',  node: spL(spO({ id: SP_T, datum: SP_T, van: SP_T, tot: SP_T, naam: SP_T, omschrijving: SP_T, soort: SP_T, optioneel: SP_T, label: SP_T, ...SP_STEMPEL })), lees: ROLLEN_PROJ_LEES, schrijf: ROLLEN_SCHRIJF_KANTOOR },
+  mt_calc_offertes:    { root: 'object', node: spO({ offertes: spK(SP_OFFERTE), ts: SP_T, _gewijzigd: SP_T }), lees: ROLLEN_OFFERTE_LEES, schrijf: ROLLEN_SCHRIJF_KANTOOR },
+  mt_calc_defaults:    { root: 'object', node: spO({ materiaal_marge: SP_T, marge_ondergrens: SP_T, uren: spL(spO({ omschrijving: SP_T, uurtarief: SP_T, marge: SP_T })), _gewijzigd: SP_T }), lees: ROLLEN_OFFERTE_LEES, schrijf: ROLLEN_SCHRIJF_KANTOOR },
+  mt_offerte_keuze:    { root: 'object', node: spK(spO({ gekozen: SP_T, afgewezen: SP_FLEX, _gewijzigd: SP_T, _weg: SP_TOMB })), lees: ROLLEN_OFFERTE_LEES, schrijf: ROLLEN_SCHRIJF_KANTOOR },
+  mt_uurtarieven:      { root: 'object', node: spK(SP_T, /^(?!__)(?!_vs$)(?!_veldconflict$)(?!_gewijzigd$)[^\x00-\x1f]{1,60}$/), lees: ['eigenaar', 'administratie', 'meekijker'], schrijf: ['eigenaar'] },   // tarief per naam (+ _std); geen stempels
+  mt_verbeterpunten:   { root: 'items',  node: spL(SP_VERBETERPUNT),     lees: ROLLEN_PROJ_LEES,    schrijf: ['eigenaar', 'beheerder', 'kantoor', 'werkplaats'] },
+  mt_feedback:         { root: 'items',  node: spL(SP_VERBETERPUNT),      lees: ROLLEN_PROJ_LEES,    schrijf: ['eigenaar', 'beheerder', 'kantoor', 'werkplaats'] },
 };
-const SPIEGEL_MAX_BYTES = 8 * 1024 * 1024, SPIEGEL_TS_VOORUIT_MS = 10 * 60 * 1000, SPIEGEL_STORE_RE = /^[a-z0-9_-]{1,60}$/;
-function spiegelMagLezen(R, store) { const k = SPIEGEL_STORES[store]; return !!(R && k && R[k]); }
-function spiegelMagSchrijven(rol, R, store) {
-  const k = SPIEGEL_STORES[store]; if (!R || !k || ALTIJD_AFDWINGEN.has(rol)) return false;   // een meekijker schrijft nooit, wat zijn matrix ook zegt
-  return k === 'verbeterpunten' ? ['maken', 'beheren', 'alles'].includes(R[k]) : R[k] === 'wijzigen';
+// Bewust NIET gespiegeld: klanten-registry-vol (private contactregistry), mt_verlof (persoonlijk), mt_klant_codes, mt_project_controle, mt_project_sjablonen,
+// mt_opleveringen, mt_attentie (hun tabs zijn voor de coach dicht), mt_toeslag_lak/spuit (losse getallen). Voorraad, bestellijst, mail, contacten, beheer: laag 2 / nooit.
+const SPIEGEL_MAX_BYTES = 8 * 1024 * 1024, SPIEGEL_TS_VOORUIT_MS = 10 * 60 * 1000, SPIEGEL_STORE_RE = /^[a-z0-9_-]{1,60}$/, SPIEGEL_RATE_PER_UUR = 120;
+function spiegelMagLezen(rol, store) { const s = SPIEGEL_STORES[store]; return !!(rol && s && s.lees.includes(rol)); }
+function spiegelMagSchrijven(rol, store) { const s = SPIEGEL_STORES[store]; return !!(rol && s && !ALTIJD_AFDWINGEN.has(rol) && s.schrijf.includes(rol)); }
+const spBytes = t => new TextEncoder().encode(t).length;
+// Projecteert de ruwe SharePoint-inhoud van `store` tot wat de kijkkopie mag bevatten → {data} of {fout}.
+function projecteerSpiegel(store, ruw) {
+  const s = SPIEGEL_STORES[store]; if (!s) return { fout: 'onbekende-store' };
+  if (s.root === 'items') {
+    const lijst = Array.isArray(ruw) ? ruw : (ruw && typeof ruw === 'object' && Array.isArray(ruw.items) ? ruw.items : null);
+    if (!lijst) return { fout: 'vorm' }; return { data: { items: spSchoon(s.node, lijst, 0) || [] } };
+  }
+  if (s.root === 'array' ? !Array.isArray(ruw) : (!ruw || typeof ruw !== 'object' || Array.isArray(ruw))) return { fout: 'vorm' };
+  const data = spSchoon(s.node, ruw, 0); return data === undefined ? { fout: 'vorm' } : { data };
 }
 async function handleSpiegel(p, request, env, ik, json) {
-  const R = ik.rol ? RECHTEN[ik.rol] : null, m = request.method.toUpperCase();
-  if (!R) return json({ error: 'geen-toegang', reden: ik.reden || 'geen-rol' }, 403);
+  const rol = ik.rol || null, m = request.method.toUpperCase();
+  if (!rol || !RECHTEN[rol]) return json({ error: 'geen-toegang', reden: ik.reden || 'geen-rol' }, 403);
   if (!env.MT_ROLLEN) return json({ error: 'geen-opslag' }, 503);
   const naam = p.replace(/^\/spiegel\/?/, '');
   if (naam === '_index' && m === 'GET') {
     const stores = {}; let cursor;
     do {
       const r = await env.MT_ROLLEN.list({ prefix: 'spiegel:', cursor, limit: 1000 });
-      for (const k of r.keys) { const s = k.name.slice('spiegel:'.length); if (spiegelMagLezen(R, s) && k.metadata) stores[s] = { ts: k.metadata.ts, etag: k.metadata.etag || null, bytes: k.metadata.bytes || null }; }
+      for (const k of r.keys) { const s = k.name.slice('spiegel:'.length); if (spiegelMagLezen(rol, s) && k.metadata) stores[s] = { ts: k.metadata.ts, etag: k.metadata.etag || null, bytes: k.metadata.bytes || null }; }
       cursor = r.list_complete ? null : r.cursor;
     } while (cursor);
     return json({ stores });
   }
   if (!SPIEGEL_STORE_RE.test(naam) || !SPIEGEL_STORES[naam]) return json({ error: 'onbekende-store' }, 404);
   if (m === 'GET') {
-    if (!spiegelMagLezen(R, naam)) return json({ error: 'geen-toegang', reden: SPIEGEL_STORES[naam] }, 403);
+    if (!spiegelMagLezen(rol, naam)) return json({ error: 'geen-toegang', reden: 'spiegel-lezen' }, 403);
     const rec = await kvJson(env, 'spiegel:' + naam);
     if (!rec || typeof rec !== 'object' || !('data' in rec)) return json({ error: 'geen-spiegel', store: naam }, 404);   // nog niet gevuld (of onleesbaar): de client toont "nog geen gegevens"
     return json({ store: naam, ts: rec.ts, etag: rec.etag || null, bron: rec.bron || null, data: rec.data });
   }
   if (m !== 'POST') return json({ error: 'methode' }, 405);
-  if (!spiegelMagSchrijven(ik.rol, R, naam)) return json({ error: 'geen-toegang', reden: 'spiegel-schrijven' }, 403);
+  if (!spiegelMagSchrijven(rol, naam)) return json({ error: 'geen-toegang', reden: 'spiegel-schrijven' }, 403);
+  // Rate-limit per gebruiker: hooguit SPIEGEL_RATE_PER_UUR zendingen per uur (KV-teller; een race telt hooguit een paar te weinig).
+  const blok = Math.floor(Date.now() / 3600e3), rkey = `spiegelrate:${ik.oid}:${blok}`, geteld = (Number(await kvJson(env, rkey)) || 0) + 1;
+  if (geteld > SPIEGEL_RATE_PER_UUR) return json({ error: 'te-vaak', max_per_uur: SPIEGEL_RATE_PER_UUR }, 429);
+  try { await kvZet(env, rkey, geteld, { expirationTtl: 2 * 3600 }); } catch {}
   const cl = Number(request.headers && request.headers.get ? request.headers.get('content-length') : NaN);
-  if (Number.isFinite(cl) && cl > SPIEGEL_MAX_BYTES + 1024) return json({ error: 'te-groot', max: SPIEGEL_MAX_BYTES }, 413);
+  if (Number.isFinite(cl) && cl > SPIEGEL_MAX_BYTES + 4096) return json({ error: 'te-groot', max: SPIEGEL_MAX_BYTES }, 413);
   const tekst = await request.text();
-  if (tekst.length > SPIEGEL_MAX_BYTES + 1024) return json({ error: 'te-groot', max: SPIEGEL_MAX_BYTES }, 413);
+  if (spBytes(tekst) > SPIEGEL_MAX_BYTES + 4096) return json({ error: 'te-groot', max: SPIEGEL_MAX_BYTES }, 413);        // UTF-8-bytes, niet tekens
   let b; try { b = JSON.parse(tekst); } catch { return json({ error: 'ongeldige-json' }, 400); }
   if (!b || typeof b !== 'object' || Array.isArray(b) || Object.keys(b).some(k => !['data', 'etag', 'ts'].includes(k))) return json({ error: 'ongeldig', uitleg: 'object met data, etag, ts' }, 400);
   if (!b.data || typeof b.data !== 'object') return json({ error: 'ongeldig', uitleg: 'data: object of lijst' }, 400);   // geen null, tekst of getal: een kapotte upload bederft de kopie niet
-  if (!Number.isInteger(b.ts) || b.ts <= 0 || b.ts > Date.now() + SPIEGEL_TS_VOORUIT_MS) return json({ error: 'ongeldige-ts' }, 400);   // niet ver in de toekomst: dat zou latere kopieën blokkeren
+  if (!Number.isInteger(b.ts) || b.ts <= 0 || b.ts > Date.now() + SPIEGEL_TS_VOORUIT_MS) return json({ error: 'ongeldige-ts' }, 400);   // ts = SharePoint-wijzigmoment; niet ver in de toekomst
   if (b.etag != null && (typeof b.etag !== 'string' || b.etag.length > 200)) return json({ error: 'ongeldige-etag' }, 400);
-  const data = JSON.stringify(b.data); if (data.length > SPIEGEL_MAX_BYTES) return json({ error: 'te-groot', max: SPIEGEL_MAX_BYTES }, 413);
+  if (spBytes(JSON.stringify(b.data)) > SPIEGEL_MAX_BYTES) return json({ error: 'te-groot', max: SPIEGEL_MAX_BYTES }, 413);
   const huidig = await kvJson(env, 'spiegel:' + naam);
   if (huidig && Number.isInteger(huidig.ts)) {
-    if (b.ts <= huidig.ts) return json({ error: 'verouderd', ts: huidig.ts }, 409);   // een nieuwere kopie ging voor: nooit terug in de tijd
+    if (b.ts <= huidig.ts) return json({ error: 'verouderd', ts: huidig.ts }, 409);   // een nieuwere SharePoint-versie ging voor: nooit terug in de tijd
     if (b.etag && huidig.etag === b.etag) return json({ ok: true, ongewijzigd: true, ts: huidig.ts });   // zelfde SharePoint-versie: geen KV-schrijfactie
   }
-  const bron = await oidHash(ik.oid), meta = { ts: b.ts, etag: b.etag || null, bytes: data.length, bron };
-  await env.MT_ROLLEN.put('spiegel:' + naam, JSON.stringify({ ...meta, data: b.data }), { metadata: meta });
-  return json({ ok: true, ts: b.ts, bytes: data.length });
+  const pr = projecteerSpiegel(naam, b.data); if (pr.fout) return json({ error: 'vorm', store: naam }, 400);   // een andere vorm dan deze store heeft: niet bewaren
+  const opgeslagen = JSON.stringify(pr.data), bron = await oidHash(ik.oid), meta = { ts: b.ts, etag: b.etag || null, bytes: spBytes(opgeslagen), bron };
+  await env.MT_ROLLEN.put('spiegel:' + naam, JSON.stringify({ ...meta, data: pr.data }), { metadata: meta });
+  return json({ ok: true, ts: b.ts, bytes: meta.bytes });
 }
 
 // ══ KIJKLOG (meekijker) ══════════════════════════════════════════════════════
