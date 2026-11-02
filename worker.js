@@ -647,6 +647,7 @@ const ROL_NAAM = { eigenaar: 'Eigenaar', beheerder: 'Beheerder', kantoor: 'Kanto
 //   schrijf-uitzonderingen (vraag stellen, afvinken) en voor Moneybird zonder contacten en bijlage-downloads.
 const ALTIJD_AFDWINGEN = new Set(['meekijker']);
 const TOEGANG_MAX_DAGEN = 400;
+const KIJK_CLIENT_MIN = 1;   // minimale X-MT-Kijk-versie van een meekijker-client (mt-kijk.js VERSIE); hoger zetten sluit oudere clients buiten
 // De matrix (ontwerp F1 + besluiten Bart 7-10). Ook naar de front-end via /me (alleen UI-gemak; de worker beslist).
 //   taken: 'status-nieuw' = taakstatus wijzigen + nieuwe taak/opdracht aanmaken (niet hernoemen/verwijderen/toewijzen)
 //   bestellijst/opmerkingen: lopen via SharePoint → alleen UI (niet afdwingbaar in de worker)
@@ -871,9 +872,7 @@ const MB_CONCEPT = [
 ];
 // Wat een meekijker (moneybird 'kijken') mag lezen: facturen/offertes/rapporten/grootboek, niet de contacten.
 const MB_KIJKEN_RE = /^(documents\/(purchase|sales)_invoices(\/\d+)?|sales_invoices(\/\d+)?|estimates(\/\d+)?|ledger_accounts|reports\/profit_loss)$/;   // rapporten per contact (creditors, debtors, *_aging, expenses_by_contact) bewust niet
-// Moneybird-antwoord voor een meekijker: per contact alleen id + bedrijfsnaam (of voor-/achternaam bij een particulier); alle andere
-// contactvelden (adres, mail, telefoon, bank, kvk/btw, notities, eigen velden) weg, en ook bijlagen, notities, events, betalingen en publieke links.
-const MB_DOC_WEG = new Set(['attachments', 'notes', 'events', 'payments', 'contact_person', 'contact_person_id', 'custom_fields', 'payment_url', 'public_view_code', 'public_view_code_expires_at', 'url', 'original_estimate_id', 'workflow_id']);
+
 // Toggl-gebruikerslijst voor een meekijker: alleen id's en namen (Track: array; Focus: array of {data:[…]}). Onleesbaar → leeg.
 const NAMEN_BLIJFT = new Set(['id', 'uid', 'user_id', 'user_account_id', 'name', 'fullname', 'full_name']);
 function kijkerNamen(tekst) {
@@ -881,21 +880,20 @@ function kijkerNamen(tekst) {
   const mager = l => Array.isArray(l) ? l.map(u => Object.fromEntries(Object.entries(u && typeof u === 'object' ? u : {}).filter(([k]) => NAMEN_BLIJFT.has(k)))) : [];
   return JSON.stringify(Array.isArray(j) ? mager(j) : (j && typeof j === 'object' ? { data: mager(j.data || j.users) } : []));
 }
-function mbContactMager(c) {
-  if (!c || typeof c !== 'object') return c;
-  const uit = { id: c.id };
-  if (c.company_name) uit.company_name = c.company_name; else { if (c.firstname) uit.firstname = c.firstname; if (c.lastname) uit.lastname = c.lastname; }
-  return uit;
+// Moneybird-antwoord voor een meekijker = STRIKTE recursieve allowlist per documenttype (specs bij de spiegel-bouwstenen: MB_NODES). Alleen
+// genoemde velden komen door, ook in details[], tax_totals[] en contact; geen vrije velden, notities, bijlagen, events, betalingen of
+// publieke links; strings worden geschoond (e-mail, IBAN, telefoon). Soort: 'doc' (facturen/offertes), 'grootboek', 'rapport' (winst/verlies).
+function mbSoort(pad) {
+  const p = mbRest(pad) || '';
+  if (/^(documents\/(purchase|sales)_invoices|sales_invoices|estimates)(\/\d+)?$/.test(p)) return 'doc';
+  if (p === 'ledger_accounts') return 'grootboek';
+  if (p === 'reports/profit_loss') return 'rapport';
+  return null;
 }
-function mbMagerDoc(d) {
-  if (Array.isArray(d)) return d.map(mbMagerDoc);
-  if (!d || typeof d !== 'object') return d;
-  const uit = {};
-  for (const [k, v] of Object.entries(d)) {
-    if (MB_DOC_WEG.has(k)) continue;
-    uit[k] = k === 'contact' ? mbContactMager(v) : v;
-  }
-  return uit;
+function mbMagerDoc(d, soort) {
+  const node = MB_NODES[soort || 'doc']; if (!node) return null;
+  const uit = Array.isArray(d) ? spSchoon(spL(node), d, 0) : spSchoon(node, d, 0);
+  return uit === undefined ? null : uit;
 }
 function mbRest(pad) {
   const m = /^(\d+)\/([^?#]*)$/.exec(String(pad || '').split(/[?#]/)[0]);
@@ -6176,6 +6174,8 @@ const SP_T = { t: 'p' };                                              // primiti
 const SP_FLEX = { t: 'flex' };                                        // primitief, lijst van primitieven of kaart van primitieven (geen diepere nesting)
 const SP_TOMB = { t: 'tomb' };                                        // tombstone ({tijd, door}) wordt true: wie het deed hoort er niet in
 const SP_NAAM_UIT_MAIL = { t: 'naamuitmail' };                        // e-mailadres wordt een voornaam
+const SP_GETAL = { t: 'getal' };                                      // getal, of een tekst die een getal is (wordt een getal); anders weg
+const SP_DEEP = { t: 'deep' };                                        // diepe kopie (rapporten zonder contacten): kaarten, lijsten en primitieven, strings geschoond
 const spL = n => ({ t: 'l', n }), spK = (n, sleutelRe) => ({ t: 'k', n, re: sleutelRe }), spO = (velden, na) => ({ t: 'o', velden, na });
 const SP_SLEUTEL_RE = /^(?!__)[^\x00-\x1f]{1,120}$/;
 const SP_MAX_ITEMS = 50000, SP_MAX_TEKST = 4000;
@@ -6196,6 +6196,14 @@ function spSchoon(node, w, diep) {
     case 'p': return w === null || typeof w === 'number' || typeof w === 'boolean' ? w : typeof w === 'string' ? spScrub(w) : undefined;
     case 'tomb': return w ? true : undefined;
     case 'naamuitmail': return typeof w === 'string' && w ? (w.includes('@') ? spVoornaam(w) : spScrub(w)) : undefined;
+    case 'getal': { const n = typeof w === 'number' ? w : (typeof w === 'string' && w.trim() !== '' ? Number(w.replace(',', '.')) : NaN); return Number.isFinite(n) && Math.abs(n) < 1e9 ? n : undefined; }
+    case 'deep': {
+      if (w === null || typeof w === 'number' || typeof w === 'boolean') return w;
+      if (typeof w === 'string') return spScrub(w);
+      if (Array.isArray(w)) return w.slice(0, 5000).map(x => spSchoon(SP_DEEP, x, diep + 1)).filter(x => x !== undefined);
+      if (typeof w === 'object') { const uit = {}; for (const [k, v] of Object.entries(w).slice(0, 1000)) { if (!SP_SLEUTEL_RE.test(k) || /^(contacts?|contact_person|custom_fields|notes?|attachments?|events|payments)$/i.test(k)) continue; const x = spSchoon(SP_DEEP, v, diep + 1); if (x !== undefined) uit[k] = x; } return uit; }
+      return undefined;
+    }
     case 'flex': {
       if (w === null || ['number', 'boolean', 'string'].includes(typeof w)) return spSchoon(SP_T, w, diep);
       if (Array.isArray(w)) return w.slice(0, 500).map(x => spSchoon(SP_T, x, diep + 1)).filter(x => x !== undefined);
@@ -6217,6 +6225,19 @@ function spSchoon(node, w, diep) {
   }
   return undefined;
 }
+// ── Moneybird (meekijker): strikte allowlists per documenttype; alleen genoemde velden, ook genest ──
+const MB_CONTACT = spO({ id: SP_T, company_name: SP_T, firstname: SP_T, lastname: SP_T }, (uit) => { if (uit.company_name) { delete uit.firstname; delete uit.lastname; } return uit; });   // bedrijfsnaam, of voor-/achternaam van een particulier
+const MB_DETAIL = spO({ id: SP_T, description: SP_T, price: SP_T, amount: SP_T, period: SP_T, row_order: SP_T, tax_rate_id: SP_T, ledger_account_id: SP_T, project_id: SP_T, product_id: SP_T,
+  total_price_excl_tax_with_discount: SP_T, total_price_excl_tax_with_discount_base: SP_T });
+const MB_DOC = spO({
+  id: SP_T, administration_id: SP_T, contact: MB_CONTACT, contact_id: SP_T, invoice_id: SP_T, estimate_id: SP_T, original_estimate_id: SP_T, entry_number: SP_T, reference: SP_T, state: SP_T,
+  date: SP_T, due_date: SP_T, created_at: SP_T, updated_at: SP_T, sent_at: SP_T, paid_at: SP_T, currency: SP_T, exchange_rate: SP_T, discount: SP_T, origin: SP_T, revenue_invoice: SP_T,
+  prices_are_incl_tax: SP_T, total_price_excl_tax: SP_T, total_price_incl_tax: SP_T, total_price_excl_tax_base: SP_T, total_price_incl_tax_base: SP_T,
+  total_paid: SP_T, total_paid_base: SP_T, total_unpaid: SP_T, total_unpaid_base: SP_T, version: SP_T,
+  tax_totals: spL(spO({ tax_rate_id: SP_T, taxable_amount: SP_T, taxable_amount_base: SP_T, tax_amount: SP_T, tax_amount_base: SP_T })), details: spL(MB_DETAIL),
+});   // niet: notes, custom_fields, attachments, events, payments, contact_person(_id), betaal-/publieke links, workflow/stijl, url, en alles wat hier niet staat
+const MB_GROOTBOEK = spO({ id: SP_T, name: SP_T, account_type: SP_T, account_id: SP_T, parent_id: SP_T, allowed_document_types: SP_FLEX, created_at: SP_T, updated_at: SP_T });
+const MB_NODES = { doc: MB_DOC, grootboek: MB_GROOTBOEK, rapport: SP_DEEP };
 // ── de stores: bouwstenen per bestand ──
 const SP_STEMPEL = { _gewijzigd: SP_T, _vervallen: SP_TOMB, _weg: SP_TOMB };                       // wel: wijzigmoment en verwijdermarkering; niet: _vs, _veldconflict, _door, _eerder, _bron
 const SP_PROJECT = spO({
@@ -6263,12 +6284,15 @@ const SPIEGEL_STORES = {
   mt_calc_offertes:    { root: 'object', node: spO({ offertes: spK(SP_OFFERTE), ts: SP_T, _gewijzigd: SP_T }), lees: ROLLEN_OFFERTE_LEES, schrijf: ROLLEN_SCHRIJF_KANTOOR },
   mt_calc_defaults:    { root: 'object', node: spO({ materiaal_marge: SP_T, marge_ondergrens: SP_T, uren: spL(spO({ omschrijving: SP_T, uurtarief: SP_T, marge: SP_T })), _gewijzigd: SP_T }), lees: ROLLEN_OFFERTE_LEES, schrijf: ROLLEN_SCHRIJF_KANTOOR },
   mt_offerte_keuze:    { root: 'object', node: spK(spO({ gekozen: SP_T, afgewezen: SP_FLEX, _gewijzigd: SP_T, _weg: SP_TOMB })), lees: ROLLEN_OFFERTE_LEES, schrijf: ROLLEN_SCHRIJF_KANTOOR },
+  // losse getallen in SharePoint (bv. 50): in de spiegel verpakt als {waarde: n}; de client pakt ze weer uit. Ontbreekt de waarde, dan toont de kijkmodus "toeslag onbekend".
+  mt_toeslag_lak:      { root: 'object', node: spO({ waarde: SP_GETAL }), vereist: ['waarde'], lees: ROLLEN_OFFERTE_LEES, schrijf: ROLLEN_SCHRIJF_KANTOOR },
+  mt_toeslag_spuit:    { root: 'object', node: spO({ waarde: SP_GETAL }), vereist: ['waarde'], lees: ROLLEN_OFFERTE_LEES, schrijf: ROLLEN_SCHRIJF_KANTOOR },
   mt_uurtarieven:      { root: 'object', node: spK(SP_T, /^(?!__)(?!_vs$)(?!_veldconflict$)(?!_gewijzigd$)[^\x00-\x1f]{1,60}$/), lees: ['eigenaar', 'administratie', 'meekijker'], schrijf: ['eigenaar'] },   // tarief per naam (+ _std); geen stempels
   mt_verbeterpunten:   { root: 'items',  node: spL(SP_VERBETERPUNT),     lees: ROLLEN_PROJ_LEES,    schrijf: ['eigenaar', 'beheerder', 'kantoor', 'werkplaats'] },
   mt_feedback:         { root: 'items',  node: spL(SP_VERBETERPUNT),      lees: ROLLEN_PROJ_LEES,    schrijf: ['eigenaar', 'beheerder', 'kantoor', 'werkplaats'] },
 };
 // Bewust NIET gespiegeld: klanten-registry-vol (private contactregistry), mt_verlof (persoonlijk), mt_klant_codes, mt_project_controle, mt_project_sjablonen,
-// mt_opleveringen, mt_attentie (hun tabs zijn voor de coach dicht), mt_toeslag_lak/spuit (losse getallen). Voorraad, bestellijst, mail, contacten, beheer: laag 2 / nooit.
+// mt_opleveringen, mt_attentie (hun tabs zijn voor de coach dicht). Voorraad, bestellijst, mail, contacten, beheer: laag 2 / nooit.
 const SPIEGEL_MAX_BYTES = 8 * 1024 * 1024, SPIEGEL_TS_VOORUIT_MS = 10 * 60 * 1000, SPIEGEL_STORE_RE = /^[a-z0-9_-]{1,60}$/, SPIEGEL_RATE_PER_UUR = 120;
 function spiegelMagLezen(rol, store) { const s = SPIEGEL_STORES[store]; return !!(rol && s && s.lees.includes(rol)); }
 function spiegelMagSchrijven(rol, store) { const s = SPIEGEL_STORES[store]; return !!(rol && s && !ALTIJD_AFDWINGEN.has(rol) && s.schrijf.includes(rol)); }
@@ -6281,7 +6305,9 @@ function projecteerSpiegel(store, ruw) {
     if (!lijst) return { fout: 'vorm' }; return { data: { items: spSchoon(s.node, lijst, 0) || [] } };
   }
   if (s.root === 'array' ? !Array.isArray(ruw) : (!ruw || typeof ruw !== 'object' || Array.isArray(ruw))) return { fout: 'vorm' };
-  const data = spSchoon(s.node, ruw, 0); return data === undefined ? { fout: 'vorm' } : { data };
+  const data = spSchoon(s.node, ruw, 0);
+  if (data === undefined || (s.vereist && !s.vereist.every(k => k in data))) return { fout: 'vorm' };
+  return { data };
 }
 async function handleSpiegel(p, request, env, ik, json) {
   const rol = ik.rol || null, m = request.method.toUpperCase();
@@ -6437,7 +6463,7 @@ const werkerHandler = {
       'Access-Control-Allow-Origin': herkomst,
       'Vary': 'Origin',
       'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PATCH, DELETE',
-      'Access-Control-Allow-Headers': 'Content-Type, X-Auth-Token, X-MT-Bevestiging, X-MT-Actie',
+      'Access-Control-Allow-Headers': 'Content-Type, X-Auth-Token, X-MT-Bevestiging, X-MT-Actie, X-MT-Kijk',
       'Access-Control-Expose-Headers': 'X-MT-Herhaald, Retry-After',
     } : { 'Vary': 'Origin' };
 
@@ -6473,6 +6499,11 @@ const werkerHandler = {
       if (!ik.rol && !ik.vast && externToken(msPayload) && url.pathname !== '/me' && url.pathname !== '/toegang')
         return json({ error: 'geen-toegang', reden: ik.reden || 'geen-rol' }, 403);
 
+      // Meekijker: alleen de nieuwe client (stuurt X-MT-Kijk: <versie>). Een oude, gecachte client zonder kijkmodus-bescherming krijgt niets.
+      if (ik.rol === 'meekijker' || (!ik.rol && ik.rec && ik.rec.role === 'meekijker')) {
+        const kv = parseInt(request.headers.get('X-MT-Kijk') || '', 10);
+        if (!(kv >= KIJK_CLIENT_MIN)) return json({ error: 'client-te-oud', uitleg: 'Herlaad de pagina (Ctrl+F5).' }, 403);
+      }
       // Eigen rol + rechten (front-end: tabs/knoppen verbergen — UI-gemak, geen beveiliging).
       if (url.pathname === '/me') return json(meAntwoord(env, ik, msPayload));
       // Toegang aanvragen (onbekende/gedeactiveerde gebruiker) → lijst in Beheer.
@@ -6646,7 +6677,9 @@ const werkerHandler = {
         const text = await response.text();
         if (ik.rol === 'meekijker') {   // geen contactgegevens, bijlagen, notities of publieke links naar een externe
           let j; try { j = JSON.parse(text); } catch { return json({ error: 'moneybird-antwoord-onleesbaar' }, 502); }
-          return new Response(JSON.stringify(response.ok ? mbMagerDoc(j) : { error: 'moneybird-fout' }), { status: response.status, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+          const soort = mbSoort(mbPath), mager = response.ok && soort ? mbMagerDoc(j, soort) : null;
+          if (response.ok && mager === null) return json({ error: 'moneybird-antwoord-niet-toegestaan' }, 502);   // onbekend soort of onleesbare vorm: nooit ruw doorgeven
+          return new Response(JSON.stringify(response.ok ? mager : { error: 'moneybird-fout' }), { status: response.status, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
         return new Response(text, { status: response.status, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
 

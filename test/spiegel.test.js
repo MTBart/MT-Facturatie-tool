@@ -50,15 +50,15 @@ const maakInst = (opt = {}) => {
     t.inst.zend('mt_planning.json', '{}', null, MS(V1)); await t.k.vooruit(4000); assert.strictEqual(t.posts().pop().body.ts, MS(V1), 'ook milliseconden');
   });
 
-  await test('zend: alleen met schrijfrecht, alleen de 13 stores, nooit als meekijker of zonder rol', async () => {
+  await test('zend: alleen met schrijfrecht, alleen de 15 stores, nooit als meekijker of zonder rol', async () => {
     const t = maakInst({ rechten: { projecten: 'lezen', offertes: 'wijzigen', geld: null, verbeterpunten: 'lezen' } });
     assert.strictEqual(t.inst.zend('mt_projecten.json', '{}', null, V1), false, 'projecten alleen lezen');
     assert.strictEqual(t.inst.zend('mt_uurtarieven.json', '{}', null, V1), false, 'geen geld-recht');
     assert.strictEqual(t.inst.zend('mt_feedback.json', '[]', null, V1), false, 'verbeterpunten alleen lezen');
     assert.strictEqual(t.inst.zend('mt_calc_offertes.json', '{}', null, V1), true);
-    for (const f of ['mt_mail_links.json', 'mt_contacten.json', 'mt_adminconfig.json', 'mt_voorraad.json', 'onbekend.json', 'klanten-registry-vol.json', 'mt_verlof.json', 'mt_klant_codes.json', 'mt_project_controle.json', 'mt_project_sjablonen.json', 'mt_opleveringen.json', 'mt_attentie.json', 'mt_toeslag_lak.json'])
+    for (const f of ['mt_mail_links.json', 'mt_contacten.json', 'mt_adminconfig.json', 'mt_voorraad.json', 'onbekend.json', 'klanten-registry-vol.json', 'mt_verlof.json', 'mt_klant_codes.json', 'mt_project_controle.json', 'mt_project_sjablonen.json', 'mt_opleveringen.json', 'mt_attentie.json', 'mt_toeslag_extra.json'])
       assert.strictEqual(t.inst.zend(f, '{}', null, V1), false, f);
-    assert.strictEqual(Object.keys(t.inst.STORES).length, 13);
+    assert.strictEqual(Object.keys(t.inst.STORES).length, 15);
     t.zet({ aan: false });                                                              // meekijker of rol nog onbekend
     assert.strictEqual(t.inst.zend('mt_calc_offertes.json', '{}', null, V1), false);
     await t.k.vooruit(10000); const p = t.posts(); assert.ok(p.length <= 1);
@@ -119,6 +119,16 @@ const maakInst = (opt = {}) => {
     const f = maakInst({ index: { stores: {} } }); await f.inst.naHydrate(new Map(), {}, async () => { throw new Error('HTTP 500'); }, {}); assert.ok(f.fouten.some(s => /lezen$/.test(s)));
   });
 
+  await test('losse getallen (toeslag lak/spuit): verpakt als {waarde} bij het zenden, ook "50" als tekst; zonder schrijfrecht niet', async () => {
+    const t = maakInst();
+    assert.strictEqual(t.inst.zend('mt_toeslag_lak.json', '50', '"e"', V1), true); assert.strictEqual(t.inst.zend('mt_toeslag_spuit.json', '"80"', '"f"', V1), true);
+    await t.k.vooruit(8000); const p = t.posts();
+    assert.deepStrictEqual(p.find(x => x.store === 'mt_toeslag_lak').body.data, { waarde: 50 }); assert.deepStrictEqual(p.find(x => x.store === 'mt_toeslag_spuit').body.data, { waarde: '80' });
+    const pref = new Map([['mt_toeslag_lak.json', { ok: true, status: 200, data: 62 }]]); const h = maakInst({ index: { stores: {} } });
+    await h.inst.naHydrate(pref, { 'mt_toeslag_lak.json': '"t"' }, null, { 'mt_toeslag_lak.json': V2 }); await h.k.vooruit(8000);
+    assert.deepStrictEqual(h.posts().find(x => x.store === 'mt_toeslag_lak').body.data, { waarde: 62 }, 'ook via het bijvullen');
+    const z = maakInst({ rechten: { projecten: 'wijzigen', offertes: 'lezen', geld: null, verbeterpunten: 'alles' } }); assert.strictEqual(z.inst.zend('mt_toeslag_lak.json', '50', null, V1), false);
+  });
   await test('onthoudHydrate wacht op de rol en voert dan eenmalig uit', async () => {
     const t = maakInst({ aan: false, index: { stores: {} } });
     const pref = new Map([['mt_projecten.json', { ok: true, status: 200, data: { P: 1 } }]]);

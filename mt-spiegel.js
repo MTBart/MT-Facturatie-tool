@@ -17,15 +17,18 @@
  * ========================================================================== */
 (function (root) {
   'use strict';
-  // Dezelfde 13 stores als SPIEGEL_STORES in worker.js. De worker projecteert zelf (allowlist) en bepaalt per rol wie mag schrijven; hier alleen wat
+  // Dezelfde 15 stores als SPIEGEL_STORES in worker.js. De worker projecteert zelf (allowlist) en bepaalt per rol wie mag schrijven; hier alleen wat
   // de client mag proberen: matrixkolom + niveau waarmee de eigen rol in /me staat (de worker controleert opnieuw met zijn store x rol-tabel).
   const STORES = {
     mt_projecten: 'projecten', mt_planning: 'projecten', mt_planblokken: 'projecten', mt_planinrichting: 'projecten', mt_project_taken_v2: 'projecten',
     mt_project_afhank: 'projecten', mt_vrijedagen: 'projecten',
-    mt_calc_offertes: 'offertes', mt_calc_defaults: 'offertes', mt_offerte_keuze: 'offertes',
+    mt_calc_offertes: 'offertes', mt_calc_defaults: 'offertes', mt_offerte_keuze: 'offertes', mt_toeslag_lak: 'offertes', mt_toeslag_spuit: 'offertes',
     mt_uurtarieven: 'geld',
     mt_verbeterpunten: 'verbeterpunten', mt_feedback: 'verbeterpunten',
   };
+  // Los getal in SharePoint (bv. 50 of "50"): de worker verwacht {waarde: getal}; de kijkclient pakt het weer uit.
+  const LOS_GETAL = ['mt_toeslag_lak', 'mt_toeslag_spuit'];
+  const geldigeData = (store, d) => d !== null && d !== undefined && (typeof d === 'object' || (LOS_GETAL.includes(store) && (typeof d === 'number' || typeof d === 'string')));
   // ISO-tekst of milliseconden -> ms (geheel getal) of 0.
   const msVan = v => { const n = typeof v === 'number' ? v : Date.parse(v || ''); return Number.isFinite(n) && n > 0 ? Math.round(n) : 0; };
   const INTERVAL_MS = 5 * 60 * 1000, EERSTE_WACHT_MS = 3000, HYDRATE_MIN_MS = 30 * 60 * 1000, VERS_MS = 24 * 3600 * 1000, KEEPALIVE_MAX = 60000;
@@ -60,6 +63,7 @@
       if (!magSchrijven(store)) { s.pending = null; stats.overgeslagen++; return; }
       s.pending = null; s.laatst = nu();
       let data; try { data = JSON.parse(p.tekst); } catch (e) { stats.mislukt++; logFout(store, 'tekst'); return; }
+      if (LOS_GETAL.includes(store) && (typeof data === 'number' || typeof data === 'string')) data = { waarde: data };
       if (!data || typeof data !== 'object') { stats.mislukt++; logFout(store, 'vorm'); return; }
       let h; try { h = await deps.auth(); } catch (e) { h = null; }
       const terug = () => { if (!s.pending) { s.pending = p; plan(store); } };   // later opnieuw proberen (niet als er al een nieuwere wacht)
@@ -107,13 +111,13 @@
       for (const store of Object.keys(STORES)) {
         if (!magSchrijven(store)) continue;
         const bestand = store + '.json', idx = index[store], pf = pref && pref.get ? pref.get(bestand) : null;
-        if (pf && pf.ok && pf.status === 200 && pf.data && typeof pf.data === 'object') {
+        if (pf && pf.ok && pf.status === 200 && geldigeData(store, pf.data)) {
           const et = etags && etags[bestand] || null;
           if (!idx || !idx.etag || !et || idx.etag !== et) { if (zend(bestand, JSON.stringify(pf.data), et, gewijzigd && gewijzigd[bestand])) res.gezonden.push(store); }
         } else if (!pf && typeof lees === 'function' && (!idx || !idx.ts || gelezen - idx.ts > VERS_MS)) {   // niet in de listing: los lezen, hooguit eens per dag
           try {
             const d = await lees(bestand);   // {data, etag, gewijzigd} of null; zonder bijwerken van de SharePoint-etags van de app
-            if (d && d.data && typeof d.data === 'object' && (!idx || !idx.etag || idx.etag !== d.etag) && zend(bestand, JSON.stringify(d.data), d.etag || null, d.gewijzigd)) res.gezonden.push(store);
+            if (d && geldigeData(store, d.data) && (!idx || !idx.etag || idx.etag !== d.etag) && zend(bestand, JSON.stringify(d.data), d.etag || null, d.gewijzigd)) res.gezonden.push(store);
           } catch (e) { logFout(store, 'lezen'); }
         }
       }

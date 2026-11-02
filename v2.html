@@ -2,6 +2,8 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
+<!-- Kijkmodus (rol meekijker): ALS EERSTE script, vóór alles wat localStorage aanraakt. Een gast in de MSAL-cache start hier al in streng/lege-opslag-modus (zie mt-kijk.js). -->
+<script src="mt-kijk.js?v=2026-11-02b" data-kijk="v2"></script>
 <!-- Stijlkeuze (restyling fase 1, v2.18): de NIEUWE stijl is de standaard. Zet html[data-stijl="nieuw"] VOOR het eerste tekenen, tenzij dit toestel zelf voor de oude stijl koos:
      localStorage "mt-stijl-keuze" ('oud' of 'nieuw'; per toestel; een nieuwe sleutel, de proefwaarde "mt-stijl" uit de testperiode telt niet mee), of via ?stijl=oud / ?stijl=nieuw
      (wordt onthouden). De stijlregels staan in mt-stijl-nieuw.css onder dat attribuut; met de oude stijl blijft de tool zoals voorheen. Lettertypen laden alleen in de nieuwe stijl. -->
@@ -37,7 +39,6 @@
      ?v= = cachebuster (bump bij elke wijziging), zelfde patroon als calc-engine.js. -->
 <script src="mt-core.js?v=2026-10-13a"></script>
 <script src="mt-spiegel.js?v=2026-11-02a"></script>
-<script src="mt-kijk.js?v=2026-11-02a"></script>
 <script src="mt-project.js?v=2026-10-15b"></script>
 <script src="mt-lead.js?v=2026-10-13b"></script>
 <script src="mt-vw.js?v=2026-10-13b"></script>
@@ -2850,12 +2851,16 @@ function ruimTestProjectenOp(){
 // ═══ HELPERS ═══
 function getMbToken(){return '';} // token zit nu veilig in Cloudflare Worker
 function getAdmin(){return localStorage.getItem('mt_mb_admin')||ADMIN_DEFAULT;}
+// Toeslag per m2. Kijkmodus (meekijker): ontbreekt de waarde in de kopie, dan null = "toeslag onbekend" — nooit stil terugvallen op de standaard 80/50.
 function getToeslag(naam){
-  const lower=(naam||'').toLowerCase();
-  if(lower.includes('spuit')) return parseFloat(localStorage.getItem('mt_toeslag_spuit')||'80');
-  if(lower.includes('lak')||lower.includes('gelakt')||lower.includes('fineer')) return parseFloat(localStorage.getItem('mt_toeslag_lak')||'50');
+  const lower=(naam||'').toLowerCase(), kijk=!!(window.MTKijk&&MTKijk.aan);
+  const lees=(k,std)=>{ const v=localStorage.getItem(k); if(kijk){ const x=v==null||v===''?NaN:parseFloat(v); return Number.isFinite(x)?x:null; } return parseFloat(v||std); };
+  if(lower.includes('spuit')) return lees('mt_toeslag_spuit','80');
+  if(lower.includes('lak')||lower.includes('gelakt')||lower.includes('fineer')) return lees('mt_toeslag_lak','50');
   return 0;
 }
+// Regel "toeslag" bij een CSV-aanvulling of "toeslag onbekend" (kijkmodus zonder waarde); alles geëscapet.
+function toeslagRegel(toeslag,m2){ return toeslag==null?'<br><span style="color:var(--text-dim)">toeslag onbekend</span>':`<br><span style="color:var(--green);font-weight:600">${esc(fmt(toeslag*m2))} toeslag</span>`; }
 function isLakMateriaal(naam){const l=(naam||'').toLowerCase();return l.includes('lak')||l.includes('gelakt')||l.includes('spuit')||l.includes('fineer');}
 function isVoorraadLeverancier(naam){const l=naam.toLowerCase();return VOORRAAD_LEVERANCIERS.some(v=>l.includes(v));}
 // Persisteert ALLEEN de cockpit-eigen projecten. Read-only meegelezen app-projecten
@@ -11679,7 +11684,7 @@ function verwerNCR(files, projectCode){
               const toeslag=getToeslag(r.materiaal);
               const m2PerPlaat=(r.breedte*r.hoogte)/1e6;
               const totaalM2=m2PerPlaat*r.aantalPlaten;
-              const toeslagBedrag=isLak?toeslag*totaalM2:0;
+              const toeslagBedrag=isLak&&toeslag!=null?toeslag*totaalM2:0;
               const safeMatId='ncr_'+r.materiaal.replace(/[^a-zA-Z0-9]/g,'_')+'_'+safeId;
               const vInfo=getVoorraadStatusVoorNcr(r.materiaal);
               const lev=getLeverancierVoorNcr(r.materiaal)||'';
@@ -11701,7 +11706,7 @@ function verwerNCR(files, projectCode){
                 <td style="text-align:right;font-family:var(--mono);font-weight:600" id="${esc(safeMatId)}_totaal">${esc(r.aantalPlaten)}</td>
                 <td style="font-size:11px">
                   ${csvMatch?`<span style="color:var(--text-dim)">${csvMatch.m2.toFixed(3)} m²</span>`:''}
-                  ${isLak&&csvMatch?`<br><span style="color:var(--green);font-weight:600">${fmt(toeslag*csvMatch.m2)} toeslag</span>`:''}
+                  ${isLak&&csvMatch?veiligeHtml(toeslagRegel(toeslag,csvMatch.m2)):''}
                   ${isLak&&!csvMatch?`<span style="color:var(--text-faint)">CSV laden voor m²</span>`:''}
                   ${!isLak&&!csvMatch?'<span style="color:var(--text-faint)">—</span>':''}
                 </td>
@@ -11982,6 +11987,7 @@ function verwerKostenCSV(file, projectCode){
         🪵 <strong>Plaatmaterialen</strong> — zie NCR import hierboven voor exacte plaataantallen.
         ${items.filter(i=>isLakMateriaal(i.artikel)||isLakMateriaal(i.omschrijving)).map(i=>{
           const toeslag=getToeslag(i.artikel)||getToeslag(i.omschrijving);
+          if(toeslag==null) return`<div style="margin-top:4px">✦ <strong>${esc(i.omschrijving)}</strong> — lak/spuit toeslag: toeslag onbekend</div>`;   // kijkmodus zonder waarde in de kopie: geen bedrag verzinnen
           const bedrag=toeslag*i.hoeveelheid;
           return`<div style="margin-top:4px">✦ <strong>${esc(i.omschrijving)}</strong> — lak/spuit toeslag: ${i.hoeveelheid.toFixed(2)} m² × €${esc(toeslag)}/m² = <strong>${fmt(bedrag)}</strong></div>`;
         }).join('')}
@@ -18303,6 +18309,7 @@ async function initMsal() {
   // Wis stale interactievlaggen van vorige sessies
   Object.keys(sessionStorage).filter(k => k.includes('interaction')).forEach(k => sessionStorage.removeItem(k));
   try {
+    try { if (window.MTKijk) MTKijk.msalBegin(); } catch(e) {}   // kijkmodus: MSAL pakt de ECHTE opslag voor zijn tokencache (daarna weer de lege opslag)
     window._msal = new msal.PublicClientApplication({
       auth: {
         clientId: 'a091db96-24ed-4b64-8b9d-7c55bc86cfdb',
@@ -18314,6 +18321,7 @@ async function initMsal() {
       },
       cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: false }
     });
+    try { if (window.MTKijk) MTKijk.msalEinde(); } catch(e) {}
     await window._msal.initialize();
     const accounts = window._msal.getAllAccounts();
     if (accounts.length > 0) {
@@ -19225,6 +19233,13 @@ function activiteitOpen(force){
     if(CALC.loaded) return;
     if(CALC.hydrating) return CALC.hydrating;
     CALC.hydrating=(async()=>{
+      if(window.MTKijk&&MTKijk.aan){   // kijkmodus: alleen uit de spiegel; geen lokale opslag, geen SharePoint, geen calculatie-sync (die staat uit)
+        const [so,sd]=await Promise.all([MTKijk.leesSpiegel('mt_calc_offertes'),MTKijk.leesSpiegel('mt_calc_defaults')]);
+        CALC.defaults=sd?mergeDefaults(sd):{materiaal_marge:null,marge_ondergrens:null,uren:[]};   // geen standaardwaarden verzinnen: onbekend blijft onbekend
+        CALC.offertes=(so&&so.offertes&&typeof so.offertes==='object')?so.offertes:{};
+        if(!so) calcStatus('Nog geen calculaties in de kopie: het team vult ze bij het eerstvolgende gebruik.','fout');
+        CALC.loaded=true; return;
+      }
       const ld=lsLoad(LS.def,null), lo=lsLoad(LS.off,null);
       if(ld) CALC.defaults=mergeDefaults(ld);
       if(lo&&lo.offertes) CALC.offertes=lo.offertes;

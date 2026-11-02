@@ -212,7 +212,7 @@ const { pathToFileURL } = require('url');
   const pending = [];
   const ctx = { waitUntil: p => { pending.push(p.catch(() => {})); } };
   const roepFetch = async (env, token, pad, init) => {
-    const req = new Request('https://worker.test' + pad, { ...(init || {}), headers: { 'X-Auth-Token': token, 'Content-Type': 'application/json', ...((init && init.headers) || {}) } });
+    const req = new Request('https://worker.test' + pad, { ...(init || {}), headers: { 'X-Auth-Token': token, 'Content-Type': 'application/json', 'X-MT-Kijk': '1', ...((init && init.headers) || {}) } });
     const r = await W.default.fetch(req, env, ctx); const t = await r.text(); await Promise.all(pending.splice(0)); let b; try { b = JSON.parse(t); } catch { b = t; }
     return { status: r.status, body: b };
   };
@@ -570,6 +570,7 @@ const { pathToFileURL } = require('url');
     mt_calc_offertes: { offertes: { 'P-1': { titel: 'Keuken', project_code: 'P-1', meta: { status: 'Verstuurd', factuurbedrag: '12000', klantcontact: GEHEIM.mail, opmerking: GEHEIM.notitie }, materiaal: [{ id: 'm1', omschrijving: 'Eiken', aantal: 2, inkoop_stuk: 100, marge: 1.5, contact: GEHEIM.mail }], uren: [{ id: 'u1', omschrijving: 'Productie', uren: 10, uurtarief: 55, marge: 2 }], opmerkingen: GEHEIM.notitie, _door: GEHEIM.stempelDoor, _gewijzigd: 1700000000001 } } },
     mt_calc_defaults: { materiaal_marge: 1.5, marge_ondergrens: 0.15, uren: [{ omschrijving: 'Calculatie', uurtarief: 55, marge: 2, notitie: GEHEIM.notitie }] },
     mt_offerte_keuze: { 'P-1': { gekozen: 'OFF-1', afgewezen: ['OFF-2'], _gewijzigd: 1700000000002, _door: GEHEIM.stempelDoor, _eerder: [{ door: GEHEIM.stempelDoor }] } },
+    mt_toeslag_lak: { waarde: '50', opmerking: GEHEIM.notitie }, mt_toeslag_spuit: { waarde: 80 },
     mt_uurtarieven: { arjan: 55, bart: 60, _std: 55, _vs: { arjan: { door: GEHEIM.stempelDoor } }, _veldconflict: {}, _gewijzigd: 1700000000003 },
     mt_verbeterpunten: [{ id: 'vp1', titel: 'Sneller zoeken', omschrijving: 'Het zoeken duurt lang', betreft: 'Zoeken', fase: 'goedgekeurd', status: 'opgepakt', urgentie: 'hoog', aangemaakt_op: '2026-10-01', indiener: 'mathijs.voorbeeld@mortiseandtenon.nl', indiener_naam: '', screenshot: 'https://sharepoint.example/s.png', user_agent: 'Mozilla/5.0', oid: GEHEIM.oidX, token: 'tok', bijlagen: ['x'], historie: [{ tijd: '2026-10-02', fase: 'goedgekeurd', notitie: 'Mooi idee', door: 'bart@mortiseandtenon.nl' }], reacties: [{ tijd: '2026-10-03', tekst: 'Eens', door: 'arjan@mortiseandtenon.nl' }] }],
     mt_feedback: { items: [{ id: 'fb1', tekst: 'Knop te klein', type: 'idee', user: 'henriette@mortiseandtenon.nl', ts: '2026-10-05', ua: 'Android', fase: 'te-beoordelen' }] },
@@ -582,11 +583,11 @@ const { pathToFileURL } = require('url');
     const verwacht = (store) => {
       const proj = ['mt_projecten', 'mt_planning', 'mt_planblokken', 'mt_planinrichting', 'mt_project_taken_v2', 'mt_project_afhank', 'mt_vrijedagen'];
       if (proj.includes(store)) return { lees: ['eigenaar', 'beheerder', 'kantoor', 'werkplaats', 'lezen', 'meekijker'], schrijf: ['eigenaar', 'beheerder', 'kantoor'] };
-      if (['mt_calc_offertes', 'mt_calc_defaults', 'mt_offerte_keuze'].includes(store)) return { lees: ['eigenaar', 'beheerder', 'kantoor', 'lezen', 'meekijker'], schrijf: ['eigenaar', 'beheerder', 'kantoor'] };
+      if (['mt_calc_offertes', 'mt_calc_defaults', 'mt_offerte_keuze', 'mt_toeslag_lak', 'mt_toeslag_spuit'].includes(store)) return { lees: ['eigenaar', 'beheerder', 'kantoor', 'lezen', 'meekijker'], schrijf: ['eigenaar', 'beheerder', 'kantoor'] };
       if (store === 'mt_uurtarieven') return { lees: ['eigenaar', 'administratie', 'meekijker'], schrijf: ['eigenaar'] };
       return { lees: ['eigenaar', 'beheerder', 'kantoor', 'werkplaats', 'lezen', 'meekijker'], schrijf: ['eigenaar', 'beheerder', 'kantoor', 'werkplaats'] };   // verbeterpunten, feedback
     };
-    assert.strictEqual(Object.keys(SPIEGEL_STORES).length, 13);
+    assert.strictEqual(Object.keys(SPIEGEL_STORES).length, 15);
     for (const store of Object.keys(SPIEGEL_STORES)) {
       const v = verwacht(store);
       for (const rol of ALLE) {
@@ -604,7 +605,7 @@ const { pathToFileURL } = require('url');
     assert.strictEqual((await sp({ MT_ROLLEN: kv() }, null, '/spiegel/mt_projecten', 'GET')).status, 403);
     // niet gespiegeld: contactregistry, verlof, klantcodes, controle, sjablonen, opleveringen, attentie, toeslagen, voorraad, mail, beheer
     const env = { MT_ROLLEN: kv() };
-    for (const store of ['klanten-registry-vol', 'mt_verlof', 'mt_klant_codes', 'mt_project_controle', 'mt_project_sjablonen', 'mt_opleveringen', 'mt_attentie', 'mt_toeslag_lak', 'mt_toeslag_spuit', 'mt_mail_links', 'mt_mail_oppak', 'mt_contacten', 'mt_adminconfig', 'mt_auditlog', 'mt_notificaties', 'mt_voorraad', 'mt_bestellijst_v2', 'mt_todo_sync', '..%2Fx', 'a/b', ''])
+    for (const store of ['klanten-registry-vol', 'mt_verlof', 'mt_klant_codes', 'mt_project_controle', 'mt_project_sjablonen', 'mt_opleveringen', 'mt_attentie', 'mt_mail_links', 'mt_mail_oppak', 'mt_contacten', 'mt_adminconfig', 'mt_auditlog', 'mt_notificaties', 'mt_voorraad', 'mt_bestellijst_v2', 'mt_todo_sync', '..%2Fx', 'a/b', ''])
       for (const m of ['GET', 'POST']) assert.strictEqual((await sp(env, 'eigenaar', `/spiegel/${store}`, m, { ts: Date.now(), data: {} })).status, 404, `${m} ${store}`);
     assert.strictEqual((await sp(env, 'eigenaar', '/spiegel/mt_projecten', 'DELETE')).status, 405);
     assert.strictEqual((await sp({}, 'eigenaar', '/spiegel/mt_projecten', 'GET')).status, 503);
@@ -631,6 +632,7 @@ const { pathToFileURL } = require('url');
     assert.deepStrictEqual(opgeslagen(env, 'mt_project_afhank'), { 'P-1': [{ id: 'a1', van_taak: 't1', naar_taak: 't2', type: 'FS', lag_dagen: 0 }] });
     const of = opgeslagen(env, 'mt_calc_offertes').offertes['P-1']; assert.strictEqual(of.materiaal[0].inkoop_stuk, 100); assert.strictEqual(of.uren[0].uurtarief, 55); assert.strictEqual(of.meta.factuurbedrag, '12000'); assert.ok(!('klantcontact' in of.meta));
     assert.deepStrictEqual(opgeslagen(env, 'mt_uurtarieven'), { arjan: 55, bart: 60, _std: 55 }, 'tarieven + namen, geen stempels');
+    assert.deepStrictEqual(opgeslagen(env, 'mt_toeslag_lak'), { waarde: 50 }, 'losse getallen: verpakt als {waarde}, tekst wordt getal'); assert.deepStrictEqual(opgeslagen(env, 'mt_toeslag_spuit'), { waarde: 80 });
     assert.deepStrictEqual(opgeslagen(env, 'mt_offerte_keuze'), { 'P-1': { gekozen: 'OFF-1', afgewezen: ['OFF-2'], _gewijzigd: 1700000000002 } });
     // verbeterpunten en feedback: titel, tekst, status, urgentie, datum, indiener als voornaam, historie en reacties als tekst; geen adressen of technische context
     const vb = opgeslagen(env, 'mt_verbeterpunten').items[0]; assert.strictEqual(vb.titel, 'Sneller zoeken'); assert.strictEqual(vb.urgentie, 'hoog'); assert.strictEqual(vb.indiener_naam, 'Mathijs'); assert.strictEqual(vb.indiener, 'Mathijs');
@@ -654,6 +656,8 @@ const { pathToFileURL } = require('url');
     assert.strictEqual((await sp(env, 'kantoor', '/spiegel/mt_verbeterpunten', 'POST', ruw('mt_verbeterpunten', { data: { geen: 'items' } }))).status, 400);
     assert.strictEqual((await sp(env, 'kantoor', '/spiegel/mt_verbeterpunten', 'POST', ruw('mt_verbeterpunten', { data: { items: [] } }))).status, 200, '{items:[…]} mag');
     assert.ok(!env.MT_ROLLEN.m.has('spiegel:mt_projecten') && !env.MT_ROLLEN.m.has('spiegel:mt_planning'), 'niets bewaard bij een verkeerde vorm');
+    for (const slecht of [{}, { waarde: 'abc' }, { waarde: null }, { waarde: '' }, { waarde: {} }, { waarde: Infinity }, { anders: 5 }]) assert.strictEqual((await sp(env, 'kantoor', '/spiegel/mt_toeslag_lak', 'POST', { ts: Date.now() - 100, etag: 'x', data: slecht })).status, 400, 'toeslag ' + JSON.stringify(slecht));
+    assert.strictEqual((await sp(env, 'kantoor', '/spiegel/mt_toeslag_lak', 'POST', { ts: Date.now() - 100, etag: 'x', data: { waarde: '62,5' } })).status, 200); assert.deepStrictEqual(opgeslagen(env, 'mt_toeslag_lak'), { waarde: 62.5 }, 'komma als decimaalteken');
     // versie
     let r = await sp(env, 'kantoor', '/spiegel/mt_planning', 'POST', { ts: nu, etag: '"a"', data: { 'P-1': { fases: [], titel: 'v1' } } }); assert.strictEqual(r.status, 200);
     const meta = () => env.MT_ROLLEN.m.get('spiegel:mt_planning').meta;
@@ -748,6 +752,66 @@ const { pathToFileURL } = require('url');
       assert.ok(basisKv.m.has(sleutel), `${actie}: de uitnodiging voor het adres staat er nog`);
       assert.strictEqual(basisKv.m.has('aanvraag:' + oid), false, `${actie}: de aanvraag zelf is wel weg`);
     }
+  });
+
+  // ── Brok 6: X-MT-Kijk, Moneybird-allowlist ─────────────────────────────────────────────────────────────────────────────────────────
+  await test('X-MT-Kijk: een meekijker-verzoek zonder (of met te lage) kijk-versie krijgt 403 client-te-oud op elke route; het team en verzoeken mét de header niet', async () => {
+    const env = envMet({}), oid = OID_K(60); await zetMeekijker(env, oid);
+    const tok = await maakToken({ oid, preferred_username: 'coach@example.org' });
+    for (const pad of ['/me', '/spiegel/mt_projecten', '/spiegel/_index', '/geld/tijdlijn', '/klanten', '/?target=toggl_focus&path=tasks', '/track/heartbeat']) {
+      for (const h of [{ 'X-MT-Kijk': '' }, { 'X-MT-Kijk': '0' }, { 'X-MT-Kijk': 'x' }]) {
+        const r = await roepFetch(env, tok, pad, { headers: h }); assert.strictEqual(r.status, 403, pad + ' ' + JSON.stringify(h)); assert.strictEqual(r.body.error, 'client-te-oud');
+      }
+    }
+    assert.strictEqual((await roepFetch(env, tok, '/me')).status, 200, 'met de header (hier standaard 1) mag het wel');
+    assert.strictEqual((await roepFetch(env, tok, '/me', { headers: { 'X-MT-Kijk': '7' } })).status, 200, 'hogere versie ook');
+    // een verlopen meekijker zonder header: ook client-te-oud (dezelfde poort, vóór /me)
+    const o2 = OID_K(61); await zetMeekijker(env, o2, { toegangTot: Date.now() - 1000 }); const t2 = await maakToken({ oid: o2, preferred_username: 'coach@example.org' });
+    assert.strictEqual((await roepFetch(env, t2, '/me', { headers: { 'X-MT-Kijk': '' } })).body.error, 'client-te-oud');
+    assert.strictEqual((await roepFetch(env, t2, '/me')).body.reden, 'verlopen');
+    // het team heeft de header niet nodig
+    const ok = OID_K(62); await env.MT_ROLLEN.put('user:' + ok, JSON.stringify({ oid: ok, role: 'kantoor', active: true, lastSeen: Date.now() }));
+    const tk = await maakToken({ oid: ok, preferred_username: 'kantoor@mortiseandtenon.nl' });
+    assert.strictEqual((await roepFetch(env, tk, '/me', { headers: { 'X-MT-Kijk': '' } })).body.rol, 'kantoor');
+    // CORS: de header wordt toegestaan
+    const pre = await W.default.fetch(new Request('https://worker.test/me', { method: 'OPTIONS', headers: { Origin: 'https://tool.mortiseandtenon.nl' } }), env, ctx);
+    assert.ok(/X-MT-Kijk/.test(pre.headers.get('Access-Control-Allow-Headers') || ''));
+    // de eigenaar kan er geen eigen client mee omzeilen: rol bepaalt, niet de header
+    assert.strictEqual(RECHTEN.meekijker.ai, null);
+  });
+
+  await test('Moneybird voor de meekijker: strikte recursieve allowlist per documenttype; IBAN/e-mail/telefoon in een genest of onbekend veld komen er nooit door', async () => {
+    const env = envMet({}), oid = OID_K(63); await zetMeekijker(env, oid);
+    const tok = await maakToken({ oid, preferred_username: 'coach@example.org' });
+    const mail = 'verborgen.persoon@example.com', iban = ['NL', '91', 'ABNA', '0417', '164300'].join(''), tel = ['06', '12', '34', '56', '78'].join(' ');
+    const contact = { id: '9', company_name: 'Klant BV', firstname: 'Piet', lastname: 'Jansen', sepa_iban: iban, email: mail, phone: tel, address1: 'Straat 1', custom_fields: [{ id: 1, value: iban }], notes: [{ note: 'geheim' }], extra: { diep: { iban } } };
+    const regel = { id: '1', description: `Keuken, zie ${mail}`, price: '100.0', amount: '2', tax_rate_id: '5', ledger_account_id: '6', project_id: '7', row_order: 1, notitie: `bel ${tel}`, custom_fields: [{ v: iban }], extra: { iban, mail }, total_price_excl_tax_with_discount: '200.0' };
+    const doc = { id: '1', contact, contact_id: '9', invoice_id: '2026-1', reference: `P-1 - ${mail}`, state: 'open', date: '2026-10-01', total_price_excl_tax: '200.0', total_price_incl_tax: '242.0', currency: 'EUR',
+      details: [regel], tax_totals: [{ tax_rate_id: '5', taxable_amount: '200.0', tax_amount: '42.0', interne_notitie: iban }], notes: [{ note: mail }], attachments: [{ filename: 'f.pdf' }], events: [{ action: 'x' }], payments: [{ price: '1' }], payment_url: 'https://pay.example.com/x', public_view_code: 'abc', url: 'https://moneybird.com/x', workflow_id: '3', document_style_id: '4', custom_fields: [{ v: iban }], vrij_veld: iban, contact_person: { email: mail }, extra: { x: { iban, mail } } };
+    for (const [pad, verwacht] of [['documents/purchase_invoices', 'doc'], ['documents/purchase_invoices/1', 'doc'], ['documents/sales_invoices', 'doc'], ['sales_invoices', 'doc'], ['sales_invoices/12', 'doc'], ['estimates', 'doc'], ['estimates/3', 'doc']]) {
+      mbAntwoord = pad.includes('/') && /\d$/.test(pad) ? doc : [doc, doc];
+      const r = await roepFetch(env, tok, '/?target=moneybird&path=' + encodeURIComponent(MB_ADMIN + '/' + pad)); assert.strictEqual(r.status, 200, pad + JSON.stringify(r.body));
+      const lijst = Array.isArray(r.body) ? r.body : [r.body], tekst = JSON.stringify(r.body);
+      for (const g of [mail, iban, tel, 'Straat 1', 'geheim', 'f.pdf', 'pay.example', 'abc"', 'moneybird.com/x', 'verborgen.persoon']) assert.ok(!tekst.includes(g), `${pad}: lekt ${g}`);
+      for (const k of ['notes', 'attachments', 'events', 'payments', 'payment_url', 'public_view_code', 'url', 'workflow_id', 'document_style_id', 'custom_fields', 'vrij_veld', 'contact_person', 'extra']) assert.ok(!lijst.some(d => k in d), `${pad}: ${k}`);
+      const d = lijst[0]; assert.deepStrictEqual(d.contact, { id: '9', company_name: 'Klant BV' }); assert.strictEqual(d.total_price_incl_tax, '242.0'); assert.strictEqual(d.state, 'open');
+      assert.strictEqual(d.reference, 'P-1 - [e-mail]', 'vrije tekst in een toegestaan veld wordt geschoond');
+      assert.deepStrictEqual(d.details, [{ id: '1', description: 'Keuken, zie [e-mail]', price: '100.0', amount: '2', tax_rate_id: '5', ledger_account_id: '6', project_id: '7', row_order: 1, total_price_excl_tax_with_discount: '200.0' }]);
+      assert.deepStrictEqual(d.tax_totals, [{ tax_rate_id: '5', taxable_amount: '200.0', tax_amount: '42.0' }]);
+    }
+    // particulier: voor-/achternaam
+    mbAntwoord = [{ id: '1', contact: { id: '3', firstname: 'Anna', lastname: 'Bakker', email: mail } }];
+    let r = await roepFetch(env, tok, '/?target=moneybird&path=' + encodeURIComponent(MB_ADMIN + '/sales_invoices')); assert.deepStrictEqual(r.body[0].contact, { id: '3', firstname: 'Anna', lastname: 'Bakker' });
+    // grootboek en winst/verlies: ook geschoond (geen contacten, notities)
+    mbAntwoord = [{ id: '1', name: 'Omzet', account_type: 'revenue', account_id: '8000', allowed_document_types: ['sales_invoice'], created_at: 'x', bankrekening: iban, notitie: mail }];
+    r = await roepFetch(env, tok, '/?target=moneybird&path=' + encodeURIComponent(MB_ADMIN + '/ledger_accounts')); assert.deepStrictEqual(r.body, [{ id: '1', name: 'Omzet', account_type: 'revenue', account_id: '8000', allowed_document_types: ['sales_invoice'], created_at: 'x' }]);
+    mbAntwoord = { period: '2026', revenue: [{ ledger_account_id: '1', name: `Omzet ${mail}`, total: 1000 }], contacts: [{ email: mail }], notes: [{ n: iban }] };
+    r = await roepFetch(env, tok, '/?target=moneybird&path=' + encodeURIComponent(MB_ADMIN + '/reports/profit_loss'));
+    assert.strictEqual(r.status, 200); assert.ok(!JSON.stringify(r.body).includes(mail) && !JSON.stringify(r.body).includes(iban)); assert.strictEqual(r.body.revenue[0].total, 1000); assert.ok(!('contacts' in r.body) && !('notes' in r.body));
+    // onbekend soort of ongeldige vorm: nooit ruw doorgeven
+    assert.strictEqual(mbMagerDoc({ a: 1 }, 'onbekend'), null);
+    mbAntwoord = 'geen object'; r = await roepFetch(env, tok, '/?target=moneybird&path=' + encodeURIComponent(MB_ADMIN + '/sales_invoices')); assert.strictEqual(r.status, 502, 'een vorm buiten het schema wordt nooit ruw doorgegeven');
+    mbAntwoord = null;
   });
 
   await test('/me: extern-vlag voor een gast, niet voor een eigen medewerker', () => {

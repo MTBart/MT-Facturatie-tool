@@ -34,7 +34,9 @@ const ME = { oid: 'aaaaaaaa-0000-4000-8000-000000000001', email: 'coach_example.
 const TS = Date.now() - 3600e3;
 const SPIEGEL = {
   mt_projecten: [{ code: 'P-0001', naam: 'Voorbeeldproject', klant: 'Voorbeeld BV', status: 'actief', project_id: 'p_voorbeeld01', _gewijzigd: new Date(TS).toISOString() }],
-  mt_planning: {}, mt_project_taken_v2: {}, mt_planblokken: [], mt_vrijedagen: [], mt_offerte_keuze: {}, mt_calc_offertes: [], mt_calc_defaults: {},
+  mt_planning: {}, mt_project_taken_v2: {}, mt_planblokken: [], mt_vrijedagen: [], mt_offerte_keuze: {},
+  mt_calc_offertes: { offertes: { 'P-0001': { titel: 'Spiegeloffer', project_code: 'P-0001', meta: { status: 'Verstuurd' }, materiaal: [], uren: [] } } }, mt_calc_defaults: { materiaal_marge: 1.5, marge_ondergrens: 0.15, uren: [{ omschrijving: 'Productie', uurtarief: 61, marge: 2 }] },
+  mt_toeslag_lak: { waarde: 62 },   // mt_toeslag_spuit ontbreekt bewust: de kijkmodus mag dan nooit op de standaard terugvallen
 };
 const verzoeken = [];   // alles wat de pagina doet, zoals het de (nagebootste) worker of het netwerk bereikt
 function antwoord(u, m) {
@@ -70,7 +72,7 @@ function antwoord(u, m) {
 
 // ── Chrome en CDP ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 let ME_ACTIEF = ME;   // per scenario instelbaar (de controle met een gewoon teamlid gebruikt een andere rol)
-async function scenario(naam, pad, { wacht = 14000, controle, me = ME, gebruiker = 'coach_example.org#EXT#@example.net', graph = null }) {
+async function scenario(naam, pad, { wacht = 14000, controle, me = ME, gebruiker = 'coach_example.org#EXT#@example.net', graph = null, plant = false, vertraagMe = 0, halverwege = null }) {
   ME_ACTIEF = me;
   const port = 9300 + Math.floor(Math.random() * 400), PROF = `mt-kijk-prof-${Date.now()}-${process.pid}-${Math.floor(Math.random() * 1e4)}`;
   const ch = spawn(CHROME, ['--headless=new', '--disable-gpu', `--remote-debugging-port=${port}`, `--user-data-dir=${process.env.TEMP}/${PROF}`, 'about:blank'], { stdio: 'ignore' });
@@ -101,7 +103,7 @@ async function scenario(naam, pad, { wacht = 14000, controle, me = ME, gebruiker
           const GCORS = [{ name: 'Access-Control-Allow-Origin', value: '*' }, { name: 'Access-Control-Allow-Methods', value: 'GET,PUT,POST,PATCH,DELETE,OPTIONS' }, { name: 'Access-Control-Allow-Headers', value: 'authorization,content-type,if-match,if-none-match,x-auth-token' }, { name: 'Access-Control-Expose-Headers', value: 'ETag' }, { name: 'Content-Type', value: 'application/json' }];
           send('Fetch.fulfillRequest', { requestId: m.params.requestId, responseCode: a.s, responseHeaders: [...GCORS, ...(a.etag ? [{ name: 'ETag', value: a.etag }] : [])], body: Buffer.from(a.b === '' ? '' : JSON.stringify(a.b)).toString('base64') });
         }
-        else if (u.origin === WORKER) { const a = antwoord(u, r.method); send('Fetch.fulfillRequest', { requestId: m.params.requestId, responseCode: a.s, responseHeaders: CORS, body: Buffer.from(a.b).toString('base64') }); }
+        else if (u.origin === WORKER) { const a = antwoord(u, r.method); if (vertraagMe && u.pathname === '/me' && r.method === 'GET') await sleep(vertraagMe); send('Fetch.fulfillRequest', { requestId: m.params.requestId, responseCode: a.s, responseHeaders: CORS, body: Buffer.from(a.b).toString('base64') }); }
         else send('Fetch.fulfillRequest', { requestId: m.params.requestId, responseCode: u.hostname.includes('microsoft') || u.hostname.includes('sharepoint') ? 401 : 200, responseHeaders: CORS.slice(0, 1), body: '' });
       }
     };
@@ -111,6 +113,17 @@ async function scenario(naam, pad, { wacht = 14000, controle, me = ME, gebruiker
     await send('Page.addScriptToEvaluateOnNewDocument', { source: `
       (function(){
         window.__acq = [];
+        try {
+          if (window.top === window) {
+            if (${plant}) {
+              localStorage.setItem('mt_projecten', JSON.stringify([{ code: 'LOKAAL-1', naam: 'LOKAAL GEPLANT' }])); localStorage.setItem('mt_planning', '{"LOKAAL-1":{}}'); localStorage.setItem('mt_uurtarieven', '{"x":9}');
+              localStorage.setItem('mt_toeslag_spuit', '"77"'); localStorage.setItem('mt-stijl-keuze', 'oud');
+              localStorage.setItem('mt_calc_offertes', JSON.stringify({ versie: 2, offertes: { 'LOKAAL-OFF': { titel: 'LOKAAL OFFERTE', meta: {}, materiaal: [], uren: [] } } }));
+            }
+            if (${/#EXT#/i.test(gebruiker)}) localStorage.setItem('oid.tid-login.microsoftonline.com-tenant', JSON.stringify({ username: '${gebruiker}', name: 'Coach' }));
+            window.__geplant = JSON.stringify(Object.keys(localStorage).sort().map(k => [k, localStorage.getItem(k)]));
+          }
+        } catch (e) { }
         const b64u = o => btoa(JSON.stringify(o)).replace(/=+$/,'').replace(/\\+/g,'-').replace(/\\//g,'_');
         const acct = { username: '${gebruiker}', name: 'Coach Voorbeeld', homeAccountId: 'h', localAccountId: 'l', environment: 'login.microsoftonline.com', tenantId: 't' };
         const idt = () => 'e30.' + b64u({ exp: Math.floor(Date.now()/1000) + 3600, oid: '${ME.oid}', preferred_username: acct.username }) + '.sig';
@@ -119,11 +132,13 @@ async function scenario(naam, pad, { wacht = 14000, controle, me = ME, gebruiker
         Object.defineProperty(window, 'msal', { configurable: true, get(){ return FAKE; }, set(){} });
       })();` });
     await send('Page.navigate', { url: `${ORIGIN}/${pad}` });
+    let tussen = null;
+    if (halverwege) { await sleep(900); tussen = await halverwege({ ev: async expressie => { const r = await send('Runtime.evaluate', { expression: expressie, awaitPromise: true, returnByValue: true }); return r.result?.exceptionDetails ? { fout: r.result.exceptionDetails.text } : r.result?.result?.value; } }); }
     await sleep(wacht);
     const ev = async expressie => { const r = await send('Runtime.evaluate', { expression: expressie, awaitPromise: true, returnByValue: true }); return r.result?.exceptionDetails ? { fout: r.result.exceptionDetails.exception?.description || r.result.exceptionDetails.text } : r.result?.result?.value; };
     const staat = await controle({ ev, sleep });
     const acq = await ev('JSON.stringify(window.__acq)');
-    return { naam, exc, consoleFout, netwerk, acq: JSON.parse(acq || '[]'), staat };
+    return { naam, exc, consoleFout, netwerk, acq: JSON.parse(acq || '[]'), staat, tussen };
   } finally { await opruimen(); }
 }
 
@@ -132,7 +147,14 @@ const mislukt = []; const toets = (naam, ok, detail) => { console.log((ok ? 'ok 
 const GRAPH = /(^|\.)(graph\.microsoft\.com|sharepoint\.com|onedrive\.live\.com|office\.com|office365\.com|outlook\.com)$/i;
 
 const v2 = await scenario('v2 meekijker', 'v2.html', {
-  wacht: 15000,
+  wacht: 15000, plant: true, vertraagMe: 1800,
+  // Terwijl /me nog onderweg is (vertraagd): neutraal laadscherm, app verborgen, niets van de worker bereikbaar behalve /me, lege opslag.
+  halverwege: async ({ ev }) => ({
+    laden: await ev("document.documentElement.getAttribute('data-kijk-laden')"), overlay: await ev("!!document.getElementById('mt-kijk-laden')"),
+    appZichtbaar: await ev("(()=>{const a=document.getElementById('app-wrap'); return !!a && getComputedStyle(a).visibility!=='hidden';})()"),
+    streng: await ev(`MTKijk.modus`), klanten: await ev(`fetch('${WORKER}/klanten').then(r=>r.status)`), moneybird: await ev(`fetch('${WORKER}?target=moneybird&path=1/sales_invoices').then(r=>r.status)`),
+    opslagLeeg: await ev("localStorage.length===0 && localStorage.getItem('mt_projecten')===null"),
+  }),
   controle: async ({ ev }) => {
     const s = {};
     s.kijk = await ev('!!(window.MTKijk && MTKijk.aan)');
@@ -153,6 +175,18 @@ const v2 = await scenario('v2 meekijker', 'v2.html', {
     s.leesOk = await ev(`fetch('${WORKER}/spiegel/mt_projecten').then(r=>r.status)`);
     s.geblokkeerd = await ev('JSON.stringify(MTKijk.geblokkeerd.map(x=>x.methode+" "+x.reden))');
     s.projectData = await ev("localStorage.getItem('mt_projecten')||''");
+    // lokale opslag: geplante data blijft onzichtbaar en onaangeroerd
+    s.zichtLokaal = await ev("(document.body.innerText + ' ' + [...Object.keys(localStorage)].map(k => localStorage.getItem(k)).join(' ')).includes('LOKAAL')");
+    s.uurtarieven = await ev("String(localStorage.getItem('mt_uurtarieven'))");
+    s.echteOpslagOnveranderd = await ev("(()=>{const f=document.createElement('iframe'); document.body.appendChild(f); const l=f.contentWindow.localStorage; const nu=JSON.stringify(Object.keys(l).sort().map(k=>[k,l.getItem(k)])); f.remove(); return nu===window.__geplant;})()");
+    s.opslagIsGeheugen = await ev("localStorage !== undefined && !('mt_zelf_gezet' in localStorage) && (localStorage.setItem('mt_zelf_gezet','1'), localStorage.getItem('mt_zelf_gezet')==='1')");
+    s.echtNaSchrijven = await ev("(()=>{const f=document.createElement('iframe'); document.body.appendChild(f); const l=f.contentWindow.localStorage; const x=l.getItem('mt_zelf_gezet'); f.remove(); return x;})()");
+    s.indexedDB = await ev('String(window.indexedDB)');
+    // toeslag: lak uit de spiegel, spuit ontbreekt -> onbekend (niet 80, niet de geplante 77)
+    s.toeslagLak = await ev("String(getToeslag('gelakt eiken'))"); s.toeslagSpuit = await ev("String(getToeslag('gespoten spuit'))"); s.toeslagTekst = await ev("toeslagRegel(null, 2).includes('toeslag onbekend') && !toeslagRegel(null,2).includes('80') && !toeslagRegel(null,2).includes('77')");
+    // calculatie: alleen uit de spiegel, geen lokale geplante offerte, oude sync uit
+    s.calc = await ev("calcZorgGeladen().then(()=>JSON.stringify({offertes:Object.keys(CALC.offertes), titel:(CALC.offertes['P-0001']||{}).titel, marge:CALC.defaults.materiaal_marge, uren:CALC.defaults.uren.length}))");
+    s.calcSync = await ev("window._calcSync ? _calcSync.schrijf().then(r=>JSON.stringify({ok:r.ok,dicht:!!r.dicht})) : 'geen sync'");
     return s;
   },
 });
@@ -161,6 +195,12 @@ toets('v2: geen uitzonderingen in de pagina', v2.exc.length === 0, v2.exc.join('
 toets('v2: kijkmodus actief + banner', v2.staat.kijk === true && /Meekijken/.test(v2.staat.banner), JSON.stringify([v2.staat.kijk, v2.staat.banner]));
 toets('v2: banner toont de stand van de spiegel', /stand van/.test(v2.staat.banner), v2.staat.banner);
 toets('v2: gegevens komen uit de spiegel (projecten lokaal gevuld)', /Voorbeeldproject/.test(v2.staat.projectData), v2.staat.projectData.slice(0, 80));
+toets('v2: tijdens het wachten op /me: neutraal laadscherm, app verborgen, streng, geen worker-verzoek behalve /me, lege opslag', v2.tussen && v2.tussen.laden === '1' && v2.tussen.overlay === true && v2.tussen.appZichtbaar === false && v2.tussen.streng === 'streng' && v2.tussen.klanten === 403 && v2.tussen.moneybird === 403 && v2.tussen.opslagLeeg === true, JSON.stringify(v2.tussen));
+{ const w = v2.netwerk.filter(n => n.host.endsWith('workers.dev') && n.methode !== 'OPTIONS'), meIdx = w.findIndex(n => n.pad === '/me');
+  toets('v2: het eerste (en enige) worker-verzoek vóór de bevestiging is GET /me', meIdx === 0 && w.slice(0, 1).every(n => n.methode === 'GET'), JSON.stringify(w.slice(0, 3).map(n => n.methode + ' ' + n.pad))); }
+toets('v2: bestaande lokale opslag is onzichtbaar voor de meekijker en blijft onaangeroerd (ook zonder dat iets gewist is)', v2.staat.zichtLokaal === false && v2.staat.uurtarieven === 'null' && v2.staat.echteOpslagOnveranderd === true && v2.staat.echtNaSchrijven === null && v2.staat.indexedDB === 'undefined', JSON.stringify([v2.staat.zichtLokaal, v2.staat.uurtarieven, v2.staat.echteOpslagOnveranderd, v2.staat.echtNaSchrijven, v2.staat.indexedDB]));
+toets('v2: toeslag lak uit de spiegel (62); spuit ontbreekt = onbekend (geen stille standaard 80, geen lokale 77)', v2.staat.toeslagLak === '62' && v2.staat.toeslagSpuit === 'null' && v2.staat.toeslagTekst === true, JSON.stringify([v2.staat.toeslagLak, v2.staat.toeslagSpuit, v2.staat.toeslagTekst]));
+toets('v2: calculatie leest alleen uit de spiegel (geen lokale offerte), de oude sync staat uit', /"offertes":\["P-0001"\]/.test(v2.staat.calc) && /Spiegeloffer/.test(v2.staat.calc) && /"marge":1.5/.test(v2.staat.calc) && /"dicht":true/.test(v2.staat.calcSync) && /"ok":false/.test(v2.staat.calcSync), v2.staat.calc + ' ' + v2.staat.calcSync);
 toets('v2: geen enkel Graph/SharePoint/Office-verzoek op het netwerk', !v2.netwerk.some(n => GRAPH.test(n.host)), JSON.stringify(v2.netwerk.filter(n => GRAPH.test(n.host))));
 toets('v2: geen MSAL-popup of -redirect', !v2.acq.some(a => a.soort === 'popup' || a.soort === 'redirect'), JSON.stringify(v2.acq));
 toets('v2: geen token met Graph-scopes gevraagd', v2.acq.every(a => a.scopes.every(sc => ['openid', 'profile', 'email'].includes(sc))), JSON.stringify(v2.acq));
@@ -193,6 +233,15 @@ toets('mobiel: geen uitzonderingen', mob.exc.length === 0, mob.exc.join(' | '));
 const team = await scenario('v2 teamlid (controle)', 'v2.html', { wacht: 9000, me: { ...ME, rol: 'kantoor', rolNaam: 'Kantoor', modus: 'log', altijdAfdwingen: undefined, extern: undefined, rechten: { ...RECHTEN, projecten: 'wijzigen', moneybird: 'concepten', uren: 'team' } }, gebruiker: 'collega@mortiseandtenon.nl', controle: async ({ ev }) => ({ kijk: await ev('!!(window.MTKijk && MTKijk.aan)') }) });
 toets('controle: een teamlid blijft buiten de kijkmodus en vraagt wél Graph-scopes (het harnas ziet dat)', team.staat.kijk === false && team.acq.some(a => a.scopes.some(sc => /graph\.microsoft\.com/.test(sc))), JSON.stringify({ kijk: team.staat.kijk, acq: team.acq.slice(0, 3) }));
 
+// Een gast die GEEN bevestigde meekijker is (hier: rol "lezen", of een /me zonder rol): alles blijft dicht, neutraal scherm met melding, alleen /me op het netwerk.
+for (const [titel, meX, tekstRe] of [['rol lezen', { ...ME, rol: 'lezen', rolNaam: 'Alleen lezen', altijdAfdwingen: undefined, modus: 'log', rechten: { ...RECHTEN, projecten: 'lezen' } }, /geen toegang/], ['verlopen', { oid: ME.oid, rol: null, rolNaam: null, actief: false, reden: 'verlopen', modus: 'log', rechten: null, extern: true }, /verlopen/]]) {
+  const geen = await scenario('v2 gast ' + titel, 'v2.html', { wacht: 8000, plant: true, me: meX,
+    controle: async ({ ev }) => ({ overlay: await ev("(document.getElementById('mt-kijk-laden')||{}).textContent||''"), appZichtbaar: await ev("(()=>{const a=document.getElementById('app-wrap'); return !!a && getComputedStyle(a).visibility!=='hidden';})()"), modus: await ev('MTKijk.modus'), aan: await ev('MTKijk.aan'),
+      moneybird: await ev(`fetch('${WORKER}?target=moneybird&path=1/sales_invoices').then(r=>r.status)`), spiegel: await ev(`fetch('${WORKER}/spiegel/mt_projecten').then(r=>r.status)`), lokaal: await ev("document.body.innerText.includes('LOKAAL')") }) });
+  const w = geen.netwerk.filter(n => n.host.endsWith('workers.dev') && n.methode !== 'OPTIONS');
+  toets(`v2: gast zonder bevestigde meekijker-rol (${titel}): alles dicht, melding, app verborgen, alleen /me op het netwerk, geen Graph`, tekstRe.test(geen.staat.overlay) && geen.staat.appZichtbaar === false && geen.staat.modus === 'streng' && geen.staat.aan === false && geen.staat.moneybird === 403 && geen.staat.spiegel === 403 && geen.staat.lokaal === false
+    && w.length >= 1 && w.every(n => n.pad === '/me' && n.methode === 'GET') && !geen.netwerk.some(n => GRAPH.test(n.host)) && !geen.acq.some(a => a.soort === 'popup'), JSON.stringify({ staat: geen.staat, w: w.map(n => n.methode + ' ' + n.pad), exc: geen.exc, con: geen.consoleFout.slice(0, 4) }));
+}
 // Integratietest van de zendkant met een teamlid (kantoor): het bijvulpad leest echt uit (nagebootst) SharePoint met een geldige URL en bearer-token,
 // de versie komt uit SharePoint (lastModifiedDateTime), en een geslaagde save levert een spiegelzending op met de versie uit het PUT-antwoord.
 const V_PROJ = '2026-11-01T08:00:00Z', V_PLAN = '2026-11-01T09:00:00Z', V_BLOK = '2026-11-01T10:00:00Z', V_SAVE = '2026-11-02T09:30:00Z';
