@@ -5039,6 +5039,7 @@ async function handleBeheer(pathname, request, env, ik, json) {
     return json({ modus: rollenModus(env), proxyModus: proxyModus(env), dagen, totaal: tot.totaal, geweigerd: tot.geweigerd, perDag, top, proxyAfwijkingen: tot.proxyTotaal, proxyTop,
       cspTotaal: csp.totaal, cspAfgewezen: csp.afgewezen, cspBeschikbaar, cspTop: Object.entries(csp.sleutels).sort((a, b) => b[1] - a[1]).slice(0, 25).map(([k, n]) => { const [directive, host] = k.split('|'); return { directive, host, n }; }) });
   }
+  if (p === '/beheer/kijklog' && m === 'GET') return await beheerKijklog(request, env, ik, json);
   return json({ error: 'unknown-beheer-route' }, 404);
 }
 
@@ -6127,11 +6128,93 @@ async function handlePush(p, request, env, ik, json, R) {
 
 // CORS: het oude adres (GitHub Pages) én het nieuwe (Cloudflare Pages + eigen domein), exact — geen '*', en niets voor een onbekende herkomst.
 const CORS_HERKOMST = ['https://mtbart.github.io', 'https://tool.mortiseandtenon.nl', 'https://mt-tool.pages.dev'];
-export default {
+// ══ KIJKLOG (meekijker) ══════════════════════════════════════════════════════
+// Server-side, niet te vervalsen: elk geauthenticeerd verzoek van een meekijker (ook geweigerde pogingen, ook van een verlopen account)
+// wordt vastgelegd in D1 `kijklog` (migratie 0002): tijd, oid, tokenadres, methode, route (alleen pad), target, actie (resourcetype,
+// zonder ids/zoektermen/bedragen) en HTTP-status. Geen bodies, geen queryparameters, geen antwoorden. Heartbeat en /track (de eigen
+// events van de client) tellen niet mee. Bewaartermijn 180 dagen (cron + af en toe bij schrijven). Voor het eigen team wordt niets gelogd.
+const KIJKLOG_DAGEN = 180;
+async function kijkLog(env, k) {
+  if (!env.TRACK_DB || !k || !k.oid) return;
+  if (k.route === '/track' || k.route === '/track/heartbeat') return;
+  try {
+    await env.TRACK_DB.prepare('INSERT INTO kijklog (ts, oid, user, methode, route, target, actie, status, ua) VALUES (?,?,?,?,?,?,?,?,?)')
+      .bind(Date.now(), String(k.oid), clip(k.user, 120), clip(k.methode, 8), clip(k.route, 120), clip(k.target, 40),
+        k.target ? clip(actieNaam(k.target, k.methode, k.pad), 80) : null, Number(k.status) || null, clip(k.ua, 160)).run();
+    if (Math.random() < 1 / 200) await kijkOpruimen(env);
+  } catch {}
+}
+async function kijkOpruimen(env) {
+  if (!env.TRACK_DB) return;
+  try { await env.TRACK_DB.prepare('DELETE FROM kijklog WHERE ts < ?').bind(Date.now() - KIJKLOG_DAGEN * DAG_S * 1000).run(); } catch {}
+}
+const dagAmsterdam = ts => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Amsterdam', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ts));
+// Leesbaar onderdeel van de tool bij een serverregel (alleen uit pad/target/actie, geen inhoud).
+function kijkLabel(r) {
+  const route = String(r.route || ''), target = String(r.target || ''), actie = String(r.actie || '');
+  if (route.startsWith('/geld/')) return 'Financiën / Forecast';
+  if (route.startsWith('/spiegel/')) return 'Gegevens: ' + route.slice('/spiegel/'.length).slice(0, 40);
+  if (target === 'toggl_reports' || /reports/.test(actie)) return 'Uren (rapporten)';
+  if (target === 'toggl_focus' || target === 'toggl' || target === 'toggl_admin_projects') return 'Projecten / planning (Toggl)';
+  if (target.startsWith('moneybird')) return 'Moneybird';
+  if (target === 'claude') return 'AI (geweigerd)';
+  if (route === '/klanten') return 'Klanten';
+  if (route.startsWith('/signalen')) return 'Signalen';
+  if (route === '/zoek/moneybird') return 'Zoeken (Moneybird)';
+  if (route === '/me' || route === '/instellingen' || route.startsWith('/teller/')) return 'Inloggen / instellingen';
+  return 'Overig: ' + (route || '/') + (target ? ' ' + target : '');
+}
+// Voegt serverregels (gegroepeerd per dag en onderdeel) en clientgebeurtenissen (tab/project/klant, met duur) samen tot een tijdlijn per dag.
+function bouwTijdlijn(serverRijen, clientRijen) {
+  const items = [], groepen = new Map();
+  for (const r of serverRijen || []) {
+    const label = kijkLabel(r), sl = dagAmsterdam(r.ts) + '|' + label, g = groepen.get(sl);
+    const mis = Number(r.status) >= 400 ? 1 : 0;
+    if (g) { g.n++; g.geweigerd += mis; g.tot = Math.max(g.tot, r.ts); g.ts = Math.min(g.ts, r.ts); }
+    else { const it = { ts: r.ts, tot: r.ts, bron: 'server', soort: 'verzoeken', label, n: 1, geweigerd: mis }; groepen.set(sl, it); items.push(it); }
+  }
+  const bronVan = a => /^tab_/.test(a) ? 'tab' : /^project_/.test(a) ? 'project' : /^klant_/.test(a) ? 'klant' : null;
+  const opens = [], dwells = [];
+  for (const e of clientRijen || []) {
+    const bron = bronVan(String(e.action || '')); if (!bron) continue;
+    const label = String(e.detail || '').slice(0, 80);
+    if (/_open$/.test(e.action)) { const it = { ts: e.ts, bron, soort: 'open', label }; opens.push(it); items.push(it); }
+    else if (/_dwell$/.test(e.action) && Number(e.ms) > 0) dwells.push({ bron, label, eind: e.ts, ms: Number(e.ms) });
+  }
+  for (const d of dwells) {
+    const open = opens.find(o => o.bron === d.bron && o.label === d.label && o.duur_ms == null && Math.abs((d.eind - d.ms) - o.ts) <= 5000);
+    if (open) open.duur_ms = d.ms; else items.push({ ts: d.eind - d.ms, bron: d.bron, soort: 'open', label: d.label, duur_ms: d.ms });
+  }
+  items.sort((a, b) => a.ts - b.ts);
+  const dagen = new Map();
+  for (const it of items) { const d = dagAmsterdam(it.ts); if (!dagen.has(d)) dagen.set(d, []); dagen.get(d).push(it); }
+  return [...dagen.entries()].map(([dag, lijst]) => ({ dag, items: lijst }));
+}
+async function beheerKijklog(request, env, ik, json) {
+  if (ik.rol !== 'eigenaar') return json({ error: 'alleen-eigenaar' }, 403);   // kijkoverzicht: alleen de eigenaar (niet de beheerder)
+  if (!env.TRACK_DB) return json({ error: 'geen-trackopslag', uitleg: 'D1-binding TRACK_DB ontbreekt of migratie 0002 is niet gedraaid' }, 503);
+  const q = new URL(request.url).searchParams, oid = String(q.get('oid') || '');
+  if (!GUID_RE.test(oid)) return json({ error: 'oid verplicht' }, 400);
+  const dag = /^\d{4}-\d{2}-\d{2}$/, nu = Date.now();
+  const tot = dag.test(q.get('tot') || '') ? eindeDagAmsterdam(q.get('tot')) : nu;
+  const vorigeDag = d => new Date(Date.parse(d + 'T12:00:00Z') - 864e5).toISOString().slice(0, 10);   // begin van de dag in Amsterdam = einde van de dag ervoor + 1 ms
+  const van = dag.test(q.get('van') || '') ? eindeDagAmsterdam(vorigeDag(q.get('van'))) + 1 : tot - 30 * DAG_S * 1000;
+  if (!(tot > van) || tot - van > (KIJKLOG_DAGEN + 1) * DAG_S * 1000) return json({ error: 'periode: max ' + KIJKLOG_DAGEN + ' dagen' }, 400);
+  const limiet = Math.max(1, Math.min(5000, parseInt(q.get('limit') || '3000', 10) || 3000));
+  try {
+    const db = env.TRACK_DB;
+    const s = await db.prepare('SELECT ts, methode, route, target, actie, status FROM kijklog WHERE oid = ? AND ts >= ? AND ts <= ? ORDER BY ts LIMIT ?').bind(oid, van, tot, limiet + 1).all();
+    const c = await db.prepare("SELECT ts, action, detail, ms FROM events WHERE ts >= ? AND ts <= ? AND event IN ('tab','project') AND user IN (SELECT DISTINCT user FROM kijklog WHERE oid = ?) ORDER BY ts LIMIT ?").bind(van, tot, oid, limiet + 1).all();
+    const sr = s.results || [], cr = c.results || [], afgekapt = sr.length > limiet || cr.length > limiet;
+    return json({ oid, van, tot, bewaartermijn_dagen: KIJKLOG_DAGEN, afgekapt, verzoeken: Math.min(sr.length, limiet), dagen: bouwTijdlijn(sr.slice(0, limiet), cr.slice(0, limiet)) });
+  } catch (e) { return json({ error: 'kijklog-lezen-mislukt', detail: clip(e && e.message, 120) }, 500); }
+}
+const werkerHandler = {
   // Cron Triggers (wrangler.toml [triggers]): zie koersCron. Fouten worden gelogd, nooit gegooid (de volgende ochtend probeert opnieuw).
   // Splitsing op cron-expressie: alleen SIG_REC_CRON gaat naar de dagelijkse signalen-controle; elke andere trigger (ook zonder
   // event.cron) gaat ongewijzigd naar de Koersmeter.
   async scheduled(event, env, ctx) {
+    waitUntil(ctx, kijkOpruimen(env));   // kijklog: ouder dan 180 dagen weg
     if (event && event.cron === SIG_REC_CRON) {
       const ctl = sigReconciliatie(env).catch(e => { sigLog({ controle: 'fout', fout: String((e && e.message) || e).slice(0, 200) }); return { status: 'fout' }; });
       waitUntil(ctx, ctl);
@@ -6141,7 +6224,7 @@ export default {
     waitUntil(ctx, taak);
     return await taak;
   },
-  async fetch(request, env, ctx) {
+  async fetch(request, env, ctx, kijk) {
     if (new URL(request.url).pathname === '/csp-rapport') return await cspRapport(request, env, ctx);
     // Moneybird-webhook (L3): server-naar-server, eigen handtekening (geen MS-token, geen CORS); zie mbWebhook.
     if (new URL(request.url).pathname === '/mb/webhook') return await mbWebhook(request, env);
@@ -6178,6 +6261,8 @@ export default {
       catch (e) { const vast = vasteEigenaar(env, msPayload.oid, tokenEmail(msPayload)); ik = { rol: vast ? 'eigenaar' : null, rec: null, vast, reden: 'rollen-fout' }; }
       ik.oid = msPayload.oid; ik.email = tokenEmail(msPayload);
       modus = effectieveModus(env, ik.rol, ik.rec);   // meekijker: altijd 'afdwingen', ook bij ROLLEN_MODUS log/uit
+      // Kijklog: alleen verzoeken van een meekijker (ook van een verlopen/ingetrokken account); de status komt in de omhulling onderaan erbij.
+      if (kijk && (ik.rol === 'meekijker' || (!ik.rol && ik.rec && ik.rec.role === 'meekijker'))) Object.assign(kijk, { oid: ik.oid, user: ik.email, methode: request.method, route: url.pathname, target: url.searchParams.get('target'), pad: url.searchParams.get('path') || '', ua: request.headers.get('User-Agent') });
 
       // Fail-closed voor externen: een gast (of ander e-maildomein) zonder rol komt nergens, ook niet in log-modus en ook niet bij een
       // KV-storing (rollen-fout) of ontbrekende rollenopslag. Alleen /me (eigen status) en /toegang (aanvragen) blijven bereikbaar.
@@ -6444,4 +6529,16 @@ export default {
       });
     }
   }
-}
+};
+// Omhulling: legt de HTTP-status van een meekijker-verzoek vast in de kijklog (waitUntil, vertraagt het antwoord niet).
+export default {
+  scheduled: werkerHandler.scheduled,
+  async fetch(request, env, ctx) {
+    const kijk = {};
+    let r;
+    try { r = await werkerHandler.fetch(request, env, ctx, kijk); }
+    catch (e) { if (kijk.oid) waitUntil(ctx, kijkLog(env, { ...kijk, status: 500 })); throw e; }
+    if (kijk.oid) waitUntil(ctx, kijkLog(env, { ...kijk, status: r.status }));
+    return r;
+  }
+};

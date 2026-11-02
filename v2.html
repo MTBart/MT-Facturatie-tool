@@ -3471,6 +3471,13 @@ function admRoute(naam){
   if(naam==='activiteit') return admMagActiviteit()?{tab:'admin',sub:'activiteit'}:null;
   return {tab:naam};
 }
+// Kijkoverzicht (alleen voor de rol meekijker): welk project of welke klant, en hoe lang. Detail = code, geen namen; de server legt
+// zelf ook vast wat er is opgevraagd (kijklog). Voor het eigen team gebeurt hier niets (data-minimalisme).
+let _kijkNu=null;   // {soort:'project'|'klant', code, sinds}
+function kijkIsMeekijker(){ try{ return !!(window.MTRol&&MTRol.me&&MTRol.me.rol==='meekijker'); }catch(e){ return false; } }
+function kijkSluit(){ if(!_kijkNu) return; const n=_kijkNu; _kijkNu=null; try{ if(window.track) track('project',n.soort+'_dwell',{detail:n.code,ms:Date.now()-n.sinds}); }catch(e){} }
+function kijkOpen(soort,code){ if(!kijkIsMeekijker()) return; code=String(code||'').slice(0,60); if(_kijkNu&&_kijkNu.soort===soort&&_kijkNu.code===code) return; kijkSluit(); _kijkNu={soort,code,sinds:Date.now()}; try{ if(window.track) track('project',soort+'_open',{detail:code}); }catch(e){} }
+window.addEventListener('pagehide',kijkSluit);
 function showTab(name,btn){
   const logNaam=name;   // gebruiksstatistiek blijft de oude tabnaam zien
   let sub=null;
@@ -3482,6 +3489,7 @@ function showTab(name,btn){
   // Vorige tab afsluiten met dwell-tijd, nieuwe tab loggen + presence verversen.
   try{
     if(window.track && logNaam!==_tabHuidig){
+      kijkSluit();
       track('tab','tab_dwell',{detail:_tabHuidig,ms:Date.now()-_tabSinds});
       track('tab','tab_open',{detail:logNaam});
       _tabHuidig=logNaam; _tabSinds=Date.now();
@@ -6795,6 +6803,7 @@ function openProject(code,{scroll=true,geschiedenis='push',sectie=null,filter=nu
   const proj=projVind(code); if(!proj) return null;
   code=proj.code;                                     // id of oude code → huidige code (URL wordt bijgewerkt)
   huidigProject=proj;
+  kijkOpen('project',code);
   window._calcMailPaneelActief=false;
   if(typeof _projKlantFilter!=='undefined'&&_projKlantFilter&&!_projInKlantFilter(proj)) _projKlantFilter=null;
   const zk=document.getElementById('project-zoek');
@@ -7912,6 +7921,7 @@ function projStatusZet(code,waarde){
 function openKlant(kl,loc,{sectie=null,filter=null}={}){
   kl=String(kl||'').toUpperCase(); loc=loc?String(loc).toUpperCase():'';
   _klantHuidig={kl,loc};
+  kijkOpen('klant',kl+(loc?'/'+loc:''));
   if(sectie&&KLANT_SECTIES.some(x=>x.k===sectie)) _klantSectie=sectie;
   if(filter&&typeof _dosFilter!=='undefined') _dosFilter[_klantDosKey()]=Object.assign({},_DOS_STD,filter);
   const host=document.getElementById('project-detail'); if(!host) return;

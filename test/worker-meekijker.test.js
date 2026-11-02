@@ -6,10 +6,10 @@ const { pathToFileURL } = require('url');
 
 (async () => {
   const bron = fs.readFileSync(path.join(__dirname, '..', 'worker.js'), 'utf8')
-    + '\nexport { requirePermission, effectieveModus, bepaalRol, handleBeheer, handleGeld, handleSignalen, handleKlanten, meAntwoord, toegangTotNorm, tokenAdressen, RECHTEN, ROLLEN, MB_ADMIN, eindeDagAmsterdam, kijkerRapportBody, mbMagerDoc, kijkerNamen, externToken, handleToegang };\n';
+    + '\nexport { requirePermission, effectieveModus, bepaalRol, handleBeheer, handleGeld, handleSignalen, handleKlanten, meAntwoord, toegangTotNorm, tokenAdressen, RECHTEN, ROLLEN, MB_ADMIN, eindeDagAmsterdam, kijkerRapportBody, mbMagerDoc, kijkerNamen, externToken, handleToegang, kijkOpruimen, bouwTijdlijn, kijkLabel };\n';
   const tmp = path.join(os.tmpdir(), `mt-worker-meekijker-${process.pid}.mjs`); fs.writeFileSync(tmp, bron, 'utf8');
   let W; try { W = await import(pathToFileURL(tmp).href); } finally { try { fs.unlinkSync(tmp); } catch { } }
-  const { requirePermission: rp, effectieveModus, bepaalRol, handleBeheer, handleGeld, handleSignalen, handleKlanten, meAntwoord, toegangTotNorm, tokenAdressen, RECHTEN, ROLLEN, MB_ADMIN, eindeDagAmsterdam, kijkerRapportBody, mbMagerDoc, kijkerNamen, externToken, handleToegang } = W;
+  const { requirePermission: rp, effectieveModus, bepaalRol, handleBeheer, handleGeld, handleSignalen, handleKlanten, meAntwoord, toegangTotNorm, tokenAdressen, RECHTEN, ROLLEN, MB_ADMIN, eindeDagAmsterdam, kijkerRapportBody, mbMagerDoc, kijkerNamen, externToken, handleToegang, kijkOpruimen, bouwTijdlijn, kijkLabel } = W;
 
   const kv = () => { const m = new Map(); return { m, async get(k) { return m.has(k) ? m.get(k).v : null; }, async put(k, v, o) { m.set(k, { v, meta: (o && o.metadata) || null }); }, async delete(k) { m.delete(k); },
     async list({ prefix }) { return { keys: [...m.keys()].filter(k => k.startsWith(prefix || '')).sort().map(name => ({ name, metadata: m.get(name).meta })), list_complete: true }; } }; };
@@ -209,10 +209,11 @@ const { pathToFileURL } = require('url');
     if (u.includes('/users')) return new Response(JSON.stringify([{ id: 7, fullname: 'Piet Voorbeeld', email: 'piet@example.com', phone: '06', name: 'Piet' }]));
     return new Response('[]');
   };
-  const ctx = { waitUntil: p => { p.catch(() => {}); } };
+  const pending = [];
+  const ctx = { waitUntil: p => { pending.push(p.catch(() => {})); } };
   const roepFetch = async (env, token, pad, init) => {
     const req = new Request('https://worker.test' + pad, { ...(init || {}), headers: { 'X-Auth-Token': token, 'Content-Type': 'application/json', ...((init && init.headers) || {}) } });
-    const r = await W.default.fetch(req, env, ctx); const t = await r.text(); let b; try { b = JSON.parse(t); } catch { b = t; }
+    const r = await W.default.fetch(req, env, ctx); const t = await r.text(); await Promise.all(pending.splice(0)); let b; try { b = JSON.parse(t); } catch { b = t; }
     return { status: r.status, body: b };
   };
   const envMet = (extra, kvx) => ({ MT_ROLLEN: kvx || kv(), ROLLEN_MODUS: 'log', MONEYBIRD_KEY: 'x', TOGGL_KEY: 'x', TOGGL_FOCUS_KEY: 'x', ...(extra || {}) });
@@ -378,6 +379,111 @@ const { pathToFileURL } = require('url');
     assert.strictEqual(iso('2026-10-25'), '2026-10-25T22:59:59.999Z');
     assert.ok(Number.isNaN(eindeDagAmsterdam('2026-02-30'))); assert.ok(Number.isNaN(eindeDagAmsterdam('26-1-1')));
     assert.strictEqual(toegangTotNorm('2026-02-30').fout, 'ongeldige-einddatum');
+  });
+
+  // ── Brok 3: kijklog ────────────────────────────────────────────────────────────────────────────────────────────────────────
+  const d1 = () => {
+    const kijklog = [], events = [];
+    return { kijklog, events, prepare(sql) {
+      return { bind(...a) {
+        return {
+          async run() {
+            if (/^INSERT INTO kijklog/.test(sql)) { const [ts, oid, user, methode, route, target, actie, status, ua] = a; kijklog.push({ ts, oid, user, methode, route, target, actie, status, ua }); }
+            else if (/^DELETE FROM kijklog/.test(sql)) { for (let i = kijklog.length - 1; i >= 0; i--) if (kijklog[i].ts < a[0]) kijklog.splice(i, 1); }
+            return {};
+          },
+          async all() {
+            if (/FROM kijklog/.test(sql) && !/FROM events/.test(sql)) { const [oid, van, tot, lim] = a; return { results: kijklog.filter(r => r.oid === oid && r.ts >= van && r.ts <= tot).sort((x, y) => x.ts - y.ts).slice(0, lim) }; }
+            if (/FROM events/.test(sql)) { const [van, tot, oid, lim] = a; const users = new Set(kijklog.filter(r => r.oid === oid).map(r => r.user)); return { results: events.filter(e => e.ts >= van && e.ts <= tot && users.has(e.user) && ['tab', 'project'].includes(e.event)).sort((x, y) => x.ts - y.ts).slice(0, lim) }; }
+            return { results: [] };
+          },
+        };
+      } };
+    } };
+  };
+
+  await test('kijklog: elk meekijker-verzoek (ook geweigerd) krijgt een serverregel zonder query of inhoud; team en heartbeat niet', async () => {
+    const db = d1(), env = envMet({ TRACK_DB: db }), oid = OID_K(20); await zetMeekijker(env, oid);
+    const tok = await maakToken({ oid, preferred_username: 'coach@example.org', name: 'Coach' });
+    await roepFetch(env, tok, '/?target=toggl_focus&path=' + encodeURIComponent('organizations/1/workspaces/2/tasks?page=1&zoek=geheimeklant'));
+    await roepFetch(env, tok, '/?target=moneybird&path=' + encodeURIComponent(MB_ADMIN + '/contacts'));
+    await roepFetch(env, tok, '/?target=claude', { method: 'POST', body: '{"messages":[{"content":"topgeheim"}]}' });
+    await roepFetch(env, tok, '/geld/tijdlijn?van=2026-01-01');
+    await roepFetch(env, tok, '/track/heartbeat', { method: 'POST', body: '{}' });
+    await roepFetch(env, tok, '/track', { method: 'POST', body: '{"events":[]}' });
+    await roepFetch(env, tok, '/me');
+    assert.strictEqual(db.kijklog.length, 5, JSON.stringify(db.kijklog.map(r => r.route + ' ' + r.status)));
+    const tekst = JSON.stringify(db.kijklog);
+    assert.ok(!/geheimeklant|topgeheim|page=1|van=2026|messages/.test(tekst), 'geen query of inhoud in de log');
+    const r0 = db.kijklog[0]; assert.strictEqual(r0.oid, oid); assert.strictEqual(r0.target, 'toggl_focus'); assert.strictEqual(r0.status, 200); assert.strictEqual(r0.route, '/'); assert.ok(r0.ts > 0);
+    assert.strictEqual(r0.actie, 'GET toggl_focus:tasks');
+    assert.deepStrictEqual(db.kijklog.map(r => r.status), [200, 403, 403, db.kijklog[3].status, 200]);
+    assert.strictEqual(db.kijklog[3].route, '/geld/tijdlijn');
+    // team en onbekenden: geen regel
+    const k = OID_K(21); await env.MT_ROLLEN.put('user:' + k, JSON.stringify({ oid: k, role: 'kantoor', active: true, lastSeen: Date.now() }));
+    const tk = await maakToken({ oid: k, preferred_username: 'kantoor@mortiseandtenon.nl' });
+    await roepFetch(env, tk, '/me'); await roepFetch(env, tk, '/?target=toggl_focus&path=tasks');
+    const gast = await maakToken({ oid: OID_K(22), preferred_username: 'x@example.org' }); await roepFetch(env, gast, '/klanten');
+    assert.strictEqual(db.kijklog.length, 5);
+  });
+
+  await test('kijklog: ook een verlopen of ingetrokken meekijker (geweigerde poging) wordt gelogd; zonder TRACK_DB geen fout', async () => {
+    const db = d1(), env = envMet({ TRACK_DB: db }), oid = OID_K(23); await zetMeekijker(env, oid, { toegangTot: Date.now() - 1000 });
+    const tok = await maakToken({ oid, preferred_username: 'coach@example.org' });
+    const r = await roepFetch(env, tok, '/klanten'); assert.strictEqual(r.status, 403);
+    assert.strictEqual(db.kijklog.length, 1); assert.strictEqual(db.kijklog[0].status, 403); assert.strictEqual(db.kijklog[0].route, '/klanten');
+    const zonder = envMet({}), o2 = OID_K(24); await zetMeekijker(zonder, o2);
+    const t2 = await maakToken({ oid: o2, preferred_username: 'coach@example.org' });
+    assert.strictEqual((await roepFetch(zonder, t2, '/me')).status, 200);
+    const kapot = envMet({ TRACK_DB: { prepare() { throw new Error('D1 down'); } } }), o3 = OID_K(25); await zetMeekijker(kapot, o3);
+    const t3 = await maakToken({ oid: o3, preferred_username: 'coach@example.org' });
+    assert.strictEqual((await roepFetch(kapot, t3, '/me')).status, 200, 'een D1-fout houdt het antwoord niet op');
+  });
+
+  await test('kijkoverzicht: alleen de eigenaar; tijdlijn per dag met tab/project (met duur) en gegroepeerde serverregels', async () => {
+    const db = d1(), env = envMet({ TRACK_DB: db }), oid = OID_K(26), user = 'coach@example.org';
+    const nu = Date.now(), t0 = nu - 3600e3;
+    const rij = (ts, route, target, actie, status) => db.kijklog.push({ ts, oid, user, methode: 'GET', route, target, actie, status });
+    rij(t0, '/geld/tijdlijn', null, null, 200); rij(t0 + 1000, '/geld/cijfers', null, null, 200); rij(t0 + 2000, '/geld/cijfers/detail', null, null, 403);
+    rij(t0 + 5000, '/', 'toggl_focus', 'GET toggl_focus:tasks', 200); rij(t0 + 6000, '/', 'moneybird', 'GET moneybird:sales_invoices', 200);
+    db.kijklog.push({ ts: t0, oid: OID_K(27), user: 'ander@example.org', methode: 'GET', route: '/geld/tijdlijn', status: 200 });
+    const ev = (ts, event, action, detail, ms) => db.events.push({ ts, event, action, detail, ms: ms || null, user });
+    ev(t0 + 100, 'tab', 'tab_open', 'geld'); ev(t0 + 100 + 60000, 'tab', 'tab_dwell', 'geld', 60000);
+    ev(t0 + 70000, 'project', 'project_open', 'P-1001'); ev(t0 + 70000 + 30000, 'project', 'project_dwell', 'P-1001', 30000);
+    ev(t0 + 99000, 'tab', 'tab_open', 'projecten');
+    db.events.push({ ts: t0 + 50, event: 'tab', action: 'tab_open', detail: 'inbox', user: 'ander@example.org' }, { ts: t0, event: 'action', action: 'factuur_boeken', detail: 'x', user });
+    const ik = rol => ({ rol, oid: 'oid-' + rol, email: rol + '@example.com', rec: { naam: rol } });
+    const vraag = (rol, qs) => handleBeheer('/beheer/kijklog', { method: 'GET', url: 'https://x.test/beheer/kijklog?' + qs, json: async () => ({}) }, env, ik(rol), json0);
+    assert.strictEqual((await vraag('beheerder', `oid=${oid}`)).status, 403);
+    assert.strictEqual((await vraag('kantoor', `oid=${oid}`)).status, 403);
+    assert.strictEqual((await vraag('eigenaar', 'oid=geen-guid')).status, 400);
+    assert.strictEqual((await vraag('eigenaar', `oid=${oid}&van=2020-01-01&tot=2026-11-02`)).status, 400, 'periode > 180 dagen');
+    const r = await vraag('eigenaar', `oid=${oid}`); assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+    assert.strictEqual(r.body.bewaartermijn_dagen, 180); assert.strictEqual(r.body.verzoeken, 5);
+    const items = r.body.dagen.flatMap(d => d.items);
+    const geld = items.find(i => i.bron === 'server' && i.label === 'Financiën / Forecast'); assert.strictEqual(geld.n, 3); assert.strictEqual(geld.geweigerd, 1);
+    assert.ok(items.some(i => i.bron === 'server' && i.label === 'Projecten / planning (Toggl)' && i.n === 1));
+    assert.ok(items.some(i => i.bron === 'server' && i.label === 'Moneybird'));
+    const tab = items.find(i => i.bron === 'tab' && i.label === 'geld'); assert.strictEqual(tab.duur_ms, 60000);
+    const pr = items.find(i => i.bron === 'project'); assert.strictEqual(pr.label, 'P-1001'); assert.strictEqual(pr.duur_ms, 30000);
+    assert.ok(items.some(i => i.bron === 'tab' && i.label === 'projecten' && i.duur_ms == null), 'laatste tab zonder duur');
+    assert.ok(!JSON.stringify(r.body).match(/inbox|ander@|factuur_boeken/), 'niets van andere gebruikers of andere events');
+    assert.ok(items.every((i, x, a) => x === 0 || a[x - 1].ts <= i.ts) || r.body.dagen.length > 1, 'op tijd gesorteerd');
+    const leeg = await handleBeheer('/beheer/kijklog', { method: 'GET', url: `https://x.test/beheer/kijklog?oid=${oid}`, json: async () => ({}) }, envMet({}), ik('eigenaar'), json0);
+    assert.strictEqual(leeg.status, 503);
+  });
+
+  await test('kijklog opruimen: ouder dan 180 dagen weg, rest blijft; labels', async () => {
+    const db = d1(), env = { TRACK_DB: db }, nu = Date.now();
+    db.kijklog.push({ ts: nu - 181 * D, oid: 'a' }, { ts: nu - 179 * D, oid: 'a' }, { ts: nu, oid: 'a' });
+    await kijkOpruimen(env); assert.strictEqual(db.kijklog.length, 2); assert.ok(db.kijklog.every(r => r.ts > nu - 180 * D));
+    await kijkOpruimen({}); // geen binding: geen fout
+    assert.strictEqual(kijkLabel({ route: '/geld/tijdlijn' }), 'Financiën / Forecast');
+    assert.strictEqual(kijkLabel({ route: '/', target: 'toggl_reports' }), 'Uren (rapporten)');
+    assert.strictEqual(kijkLabel({ route: '/', target: 'toggl_focus', actie: 'POST toggl_focus:reports/workspaces' }), 'Uren (rapporten)');
+    assert.strictEqual(kijkLabel({ route: '/spiegel/mt_projecten' }), 'Gegevens: mt_projecten');
+    const tl = bouwTijdlijn([], [{ ts: 1000, action: 'project_dwell', detail: 'P-2', ms: 500 }, { ts: 2000, action: 'tab_dwell', detail: 'x', ms: 0 }, { ts: 3000, action: 'ander', detail: 'y' }]);
+    assert.strictEqual(tl.length, 1); assert.strictEqual(tl[0].items.length, 1, 'dwell zonder open = eigen item; ms 0 en onbekende acties genegeerd');
   });
 
   globalThis.fetch = echteFetch;
