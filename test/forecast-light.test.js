@@ -612,5 +612,6 @@ atest('uit beeld: rollback schrijft niet over een item dat een collega intussen 
   assert.strictEqual(log.filter(x => x === 'p:A:aan').length, 1, 'geen tweede schrijfpoging na de 409'); assert.strictEqual(winkel['p:B'].aan, true, 'het andere item (nog onze versie) is wel teruggezet');
   assert.deepStrictEqual(fout.gewijzigd, ['p:A']); assert.deepStrictEqual(fout.mislukt, []); assert.strictEqual(fout.teruggedraaid, 1);
   assert.ok(/Niet teruggezet: intussen gewijzigd door Collega Voorbeeld: offerte 300000000951, item p:A/.test(fout.message), fout.message);
+  assert.ok(/Teruggezet: 1 van 2\./.test(fout.message) && !/al uitgezette prognose-items zijn teruggezet/.test(fout.message), 'zin noemt alleen wat echt teruggezet is: ' + fout.message);
 });
 kette.then(() => console.log(`\n${n} tests geslaagd${process.exitCode ? ' (met fouten)' : ''}`));

@@ -319,7 +319,7 @@
       if (!ok) mislukt.push(g.sleutel);
     }
     const teruggedraaid = gelukt.length - mislukt.length - gewijzigd.length;
-    const err = new Error(`Uit beeld zetten is niet gelukt (${stop}). ` + (!gelukt.length ? 'Er is niets gewijzigd.' : !mislukt.length ? `De ${gelukt.length === 1 ? 'al uitgezette prognose-item is' : gelukt.length + ' al uitgezette prognose-items zijn'} teruggezet.`
+    const err = new Error(`Uit beeld zetten is niet gelukt (${stop}). ` + (!gelukt.length ? 'Er is niets gewijzigd.' : !mislukt.length ? (!teruggedraaid ? '' : teruggedraaid === gelukt.length ? `De ${gelukt.length === 1 ? 'al uitgezette prognose-item is' : gelukt.length + ' al uitgezette prognose-items zijn'} teruggezet.` : `Teruggezet: ${teruggedraaid} van ${gelukt.length}.`)
       : `Teruggezet: ${teruggedraaid} van ${gelukt.length}. Niet teruggezet (nakijken in de uitgebreide forecast, Gaat zeker door staat uit): offerte ${o.eid}, ${mislukt.length === 1 ? 'item' : 'items'} ${mislukt.join(', ')}.`));
     if (gewijzigd.length) err.message += ` Niet teruggezet: intussen gewijzigd door ${[...new Set(gewijzigd.map(x => x.door || 'een collega'))].join(', ')}: offerte ${o.eid}, ${gewijzigd.length === 1 ? 'item' : 'items'} ${gewijzigd.map(x => x.sleutel).join(', ')} (laten staan; kijk na in de uitgebreide forecast).`;
     err.mislukt = mislukt; err.gewijzigd = gewijzigd.map(x => x.sleutel); err.teruggedraaid = teruggedraaid; throw err;
