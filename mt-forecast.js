@@ -55,8 +55,11 @@
   };
 
   // ── Offertes uit Moneybird (ruw) → kort ──────────────────────────────────────
+  // In Moneybird kan een "offerte" eigenlijk een orderbevestiging zijn: het woord ORDERBEVESTIGING (hoofdletters negeren) in de voorlooptekst, titel of referentie.
+  // Die horen niet in de Forecast: schatNorm geeft dan null. Staan er schetsbedragen bij, dan blijft hij via het "niet meer open"-pad van de light-forecast zichtbaar.
+  F.isOrderbevestiging = e => !!e && /orderbevestiging/i.test([e.pre_text, e.title, e.reference].map(v => String(v == null ? '' : v)).join('\n'));
   F.schatNorm = function (e) {
-    if (!e || e.id == null) return null;
+    if (!e || e.id == null || F.isOrderbevestiging(e)) return null;
     const t = parseFloat(e.total_price_incl_tax_base != null ? e.total_price_incl_tax_base : e.total_price_incl_tax);
     if (!isFinite(t) || t <= 0) return null;
     const k = e.contact || {}, naam = String(k.company_name || [k.firstname, k.lastname].filter(Boolean).join(' ') || '').trim();

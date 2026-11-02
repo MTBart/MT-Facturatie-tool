@@ -331,4 +331,17 @@ test('facturen koppelen op exacte referentie (vóór de deelfactuur-functie van 
   const cn = L.koppelFacturen([fx({ reference: 'Keuken Voorbeeldlaan 1' }), fx({ id: 400000000005, original_sales_invoice_id: 400000000001, total_price_incl_tax: '-10', reference: 'Creditnota' })], sch, null);
   assert.strictEqual(cn.perEid['300000000001'].facturen.length, 2, 'creditnota volgt zijn factuur'); assert.strictEqual(cn.los.length, 0);
 });
+test('orderbevestiging in de offertelijst telt niet en blijft zichtbaar als er schets bij staat', () => {
+  const ruw = (o) => Object.assign({ id: 300000000050, estimate_id: '2026-5050', contact_id: 500000000001, contact: { company_name: 'A' }, total_price_incl_tax: '1210', total_price_excl_tax: '1000', state: 'accepted', reference: 'Kast', pre_text: '', title: '' }, o);
+  assert.ok(F.schatNorm(ruw({})), 'gewone offerte telt');
+  assert.strictEqual(F.schatNorm(ruw({ pre_text: 'ORDERBEVESTIGING keuken' })), null);
+  assert.strictEqual(F.schatNorm(ruw({ title: 'Orderbevestiging' })), null);
+  assert.strictEqual(F.schatNorm(ruw({ reference: 'kast orderBevestiging 2' })), null);
+  assert.ok(F.schatNorm(ruw({ pre_text: 'Offerte voor een orderkast' })), 'alleen het woord orderbevestiging');
+  const sch = [ruw({}), ruw({ id: 300000000051, pre_text: 'Orderbevestiging' })].map(F.schatNorm).filter(Boolean);
+  assert.deepStrictEqual(sch.map(s => s.id), ['300000000050']);
+  const zonder = L.rijen(sch, {}, {}, null); assert.strictEqual(zonder.length, 1, 'zonder schets: weg uit de lijst');
+  const met = L.rijen(sch, { '300000000051': { cellen: { '2026-11': 5000 }, naam: 'A \u2014 Kast', nummer: '2026-5051' } }, {}, null);
+  assert.strictEqual(met.length, 2); const los = met.find(r => r.id === '300000000051'); assert.ok(los.los); assert.strictEqual(los.status, 'los'); assert.strictEqual(L.cel(los, '2026-11'), 5000, 'schets blijft meetellen');
+});
 console.log(`\n${n} tests geslaagd${process.exitCode ? ' (met fouten)' : ''}`);
