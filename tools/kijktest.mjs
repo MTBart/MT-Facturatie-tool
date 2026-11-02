@@ -39,13 +39,19 @@ const SPIEGEL = {
   mt_toeslag_lak: { waarde: 62 },   // mt_toeslag_spuit ontbreekt bewust: de kijkmodus mag dan nooit op de standaard terugvallen
 };
 const verzoeken = [];   // alles wat de pagina doet, zoals het de (nagebootste) worker of het netwerk bereikt
-function antwoord(u, m) {
+let ME_HUIDIG = ME;
+function antwoord(u, m, hdr) {
   const pad = u.pathname, target = u.searchParams.get('target');
   const json = (o, s = 200) => ({ s, b: JSON.stringify(o) });
   if (m === 'OPTIONS') return { s: 204, b: '' };
   if (pad.startsWith('/spiegel/') && m === 'POST') return json({ ok: true });
-  if (pad === '/me') return json(ME_ACTIEF);
-  if (pad === '/spiegel/_index' && ME_ACTIEF.rol !== 'meekijker') return json({ stores: {} });   // een teamlid ziet een lege spiegel: alles moet gevuld worden
+  if (pad === '/me') {
+    // `me` van een scenario mag een functie van de gebruikersnaam in het (nagebootste) id-token zijn: dan bepaalt het ingelogde account de rol
+    let me = ME_ACTIEF;
+    if (typeof me === 'function') { let naam = ''; try { naam = JSON.parse(Buffer.from(String(hdr && (hdr['X-Auth-Token'] || hdr['x-auth-token'])).split('.')[1], 'base64url').toString()).preferred_username || ''; } catch { } me = me(naam); }
+    ME_HUIDIG = me; return json(me);
+  }
+  if (pad === '/spiegel/_index' && ME_HUIDIG.rol !== 'meekijker') return json({ stores: {} });   // een teamlid ziet een lege spiegel: alles moet gevuld worden
   if (pad === '/spiegel/_index') return json({ stores: Object.fromEntries(Object.keys(SPIEGEL).map(k => [k, { ts: TS, etag: 'e', bytes: 10 }])) });
   if (pad.startsWith('/spiegel/')) { const s = decodeURIComponent(pad.slice(9)); return SPIEGEL[s] ? json({ store: s, ts: TS, etag: 'e', data: SPIEGEL[s] }) : json({ error: 'geen-spiegel' }, 404); }
   if (pad === '/klanten') return json({ klanten: [], rev: 0 });
@@ -72,8 +78,15 @@ function antwoord(u, m) {
 
 // ── Chrome en CDP ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 let ME_ACTIEF = ME;   // per scenario instelbaar (de controle met een gewoon teamlid gebruikt een andere rol)
-async function scenario(naam, pad, { wacht = 14000, controle, me = ME, gebruiker = 'coach_example.org#EXT#@example.net', graph = null, plant = false, vertraagMe = 0, halverwege = null }) {
-  ME_ACTIEF = me;
+async function scenario(naam, pad, { wacht = 14000, controle, me = ME, gebruiker = 'coach_example.org#EXT#@example.net', graph = null, plant = false, vertraagMe = 0, halverwege = null, plantAccounts = null, plantActief = null, plantRecord = undefined }) {
+  ME_ACTIEF = me; ME_HUIDIG = typeof me === 'function' ? ME : me;
+  // Wat er vóór de eerste pagina in de echte opslag staat (MSAL-cache, actief account, ons eigen record). Standaard: alleen het ingelogde account
+  // (een gast met zijn record, een teamlid zonder record). `plantAccounts: []` = niemand ingelogd.
+  const GAST_ACCT = { username: 'coach_example.org#EXT#@example.net', name: 'Coach Voorbeeld', homeAccountId: 'oid.tid', localAccountId: 'l', environment: 'login.microsoftonline.com', tenantId: 't' };
+  const eigenAcct = { username: gebruiker, name: 'Gebruiker Voorbeeld', homeAccountId: /#EXT#/i.test(gebruiker) ? 'oid.tid' : 'oid2.tid', localAccountId: 'l', environment: 'login.microsoftonline.com', tenantId: 't' };
+  const accountsPlant = plantAccounts === null ? [eigenAcct] : plantAccounts;
+  const recordPlantWaarde = plantRecord !== undefined ? plantRecord : (/#EXT#/i.test(gebruiker) ? { h: eigenAcct.homeAccountId, u: gebruiker.toLowerCase(), ext: true, m: false } : null);
+  const actiefPlant = plantActief !== null ? plantActief : (accountsPlant.length ? accountsPlant[0].homeAccountId : null);
   const port = 9300 + Math.floor(Math.random() * 400), PROF = `mt-kijk-prof-${Date.now()}-${process.pid}-${Math.floor(Math.random() * 1e4)}`;
   const ch = spawn(CHROME, ['--headless=new', '--disable-gpu', `--remote-debugging-port=${port}`, `--user-data-dir=${process.env.TEMP}/${PROF}`, 'about:blank'], { stdio: 'ignore' });
   const fouten = [], exc = [], netwerk = [], consoleFout = [];
@@ -103,7 +116,7 @@ async function scenario(naam, pad, { wacht = 14000, controle, me = ME, gebruiker
           const GCORS = [{ name: 'Access-Control-Allow-Origin', value: '*' }, { name: 'Access-Control-Allow-Methods', value: 'GET,PUT,POST,PATCH,DELETE,OPTIONS' }, { name: 'Access-Control-Allow-Headers', value: 'authorization,content-type,if-match,if-none-match,x-auth-token' }, { name: 'Access-Control-Expose-Headers', value: 'ETag' }, { name: 'Content-Type', value: 'application/json' }];
           send('Fetch.fulfillRequest', { requestId: m.params.requestId, responseCode: a.s, responseHeaders: [...GCORS, ...(a.etag ? [{ name: 'ETag', value: a.etag }] : [])], body: Buffer.from(a.b === '' ? '' : JSON.stringify(a.b)).toString('base64') });
         }
-        else if (u.origin === WORKER) { const a = antwoord(u, r.method); if (vertraagMe && u.pathname === '/me' && r.method === 'GET') await sleep(vertraagMe); send('Fetch.fulfillRequest', { requestId: m.params.requestId, responseCode: a.s, responseHeaders: CORS, body: Buffer.from(a.b).toString('base64') }); }
+        else if (u.origin === WORKER) { const a = antwoord(u, r.method, r.headers); if (vertraagMe && u.pathname === '/me' && r.method === 'GET') await sleep(vertraagMe); send('Fetch.fulfillRequest', { requestId: m.params.requestId, responseCode: a.s, responseHeaders: CORS, body: Buffer.from(a.b).toString('base64') }); }
         else send('Fetch.fulfillRequest', { requestId: m.params.requestId, responseCode: u.hostname.includes('microsoft') || u.hostname.includes('sharepoint') ? 401 : 200, responseHeaders: CORS.slice(0, 1), body: '' });
       }
     };
@@ -113,22 +126,32 @@ async function scenario(naam, pad, { wacht = 14000, controle, me = ME, gebruiker
     await send('Page.addScriptToEvaluateOnNewDocument', { source: `
       (function(){
         window.__acq = [];
+        const LS = window.localStorage;   // vóór mt-kijk.js: de echte opslag (zoals MSAL die bij het aanmaken ook krijgt)
+        const lees = () => { const l = []; for (let i = 0; i < LS.length; i++) { const k = LS.key(i); if (k.indexOf('login.microsoftonline.com') < 0) continue; try { const v = JSON.parse(LS.getItem(k)); if (v && v.homeAccountId && v.username) l.push(v); } catch (e) { } } return l; };
+        const zet = a => LS.setItem(a.homeAccountId + '-login.microsoftonline.com-tenant', JSON.stringify(a));
+        try { window.__loads = (+sessionStorage.getItem('__loads') || 0) + 1; sessionStorage.setItem('__loads', String(window.__loads)); } catch (e) { }
         try {
           if (window.top === window) {
-            if (${plant}) {
+            let eerste = false; try { eerste = !sessionStorage.getItem('__geplant1'); sessionStorage.setItem('__geplant1', '1'); } catch (e) { }
+            if (eerste) { ${JSON.stringify(accountsPlant)}.forEach(zet); if (${JSON.stringify(actiefPlant)}) LS.setItem('fake.active', ${JSON.stringify(actiefPlant)}); if (${JSON.stringify(recordPlantWaarde)}) LS.setItem('mtkijk.actief', JSON.stringify(${JSON.stringify(recordPlantWaarde)})); }
+            if (eerste && ${plant}) {
               localStorage.setItem('mt_projecten', JSON.stringify([{ code: 'LOKAAL-1', naam: 'LOKAAL GEPLANT' }])); localStorage.setItem('mt_planning', '{"LOKAAL-1":{}}'); localStorage.setItem('mt_uurtarieven', '{"x":9}');
               localStorage.setItem('mt_toeslag_spuit', '"77"'); localStorage.setItem('mt-stijl-keuze', 'oud');
               localStorage.setItem('mt_calc_offertes', JSON.stringify({ versie: 2, offertes: { 'LOKAAL-OFF': { titel: 'LOKAAL OFFERTE', meta: {}, materiaal: [], uren: [] } } }));
             }
-            if (${/#EXT#/i.test(gebruiker)}) localStorage.setItem('oid.tid-login.microsoftonline.com-tenant', JSON.stringify({ username: '${gebruiker}', name: 'Coach' }));
             window.__geplant = JSON.stringify(Object.keys(localStorage).sort().map(k => [k, localStorage.getItem(k)]));
           }
         } catch (e) { }
         const b64u = o => btoa(JSON.stringify(o)).replace(/=+$/,'').replace(/\\+/g,'-').replace(/\\//g,'_');
-        const acct = { username: '${gebruiker}', name: 'Coach Voorbeeld', homeAccountId: 'h', localAccountId: 'l', environment: 'login.microsoftonline.com', tenantId: 't' };
-        const idt = () => 'e30.' + b64u({ exp: Math.floor(Date.now()/1000) + 3600, oid: '${ME.oid}', preferred_username: acct.username }) + '.sig';
-        const maak = (soort) => async (r) => { window.__acq.push({ soort, scopes: (r && r.scopes) || [] }); return { idToken: idt(), accessToken: 'AT', account: acct }; };
-        const FAKE = { PublicClientApplication: class { constructor(){} async initialize(){} getAllAccounts(){ return [acct]; } acquireTokenSilent(r){ return maak('silent')(r); } acquireTokenPopup(r){ return maak('popup')(r); } acquireTokenRedirect(r){ return maak('redirect')(r); } async loginPopup(r){ window.__acq.push({ soort:'loginPopup', scopes:(r&&r.scopes)||[] }); return { account: acct }; } async logoutPopup(){} async handleRedirectPromise(){ return null; } } };
+        const acct = ${JSON.stringify(eigenAcct)}, gastAcct = ${JSON.stringify(GAST_ACCT)};
+        const idt = a => 'e30.' + b64u({ exp: Math.floor(Date.now()/1000) + 3600, oid: '${ME.oid}', preferred_username: a.username }) + '.sig';
+        const maak = (soort) => async (r) => { const a = (r && r.account) || acct; window.__acq.push({ soort, scopes: (r && r.scopes) || [], u: a.username }); return { idToken: idt(a), accessToken: 'AT', account: a }; };
+        // Nagebootste MSAL die zoals de echte alles uit de (echte) opslag leest: accounts uit de cache, het actieve account in "fake.active".
+        const FAKE = { PublicClientApplication: class { constructor(){} async initialize(){} getAllAccounts(){ return lees(); } getActiveAccount(){ const h = LS.getItem('fake.active'); return lees().find(x => x.homeAccountId === h) || null; } setActiveAccount(a){ if (a) LS.setItem('fake.active', a.homeAccountId); else LS.removeItem('fake.active'); }
+          acquireTokenSilent(r){ return maak('silent')(r); } acquireTokenPopup(r){ return maak('popup')(r); } acquireTokenRedirect(r){ return maak('redirect')(r); }
+          async loginPopup(r){ const a = window.__loginAls || acct; window.__acq.push({ soort:'loginPopup', scopes:(r&&r.scopes)||[], u: a.username }); zet(a); return { account: a }; }
+          async logoutPopup(){ const h = LS.getItem('fake.active'); if (h) LS.removeItem(h + '-login.microsoftonline.com-tenant'); LS.removeItem('fake.active'); } async handleRedirectPromise(){ return null; } } };
+        window.__gastAcct = gastAcct;
         Object.defineProperty(window, 'msal', { configurable: true, get(){ return FAKE; }, set(){} });
       })();` });
     await send('Page.navigate', { url: `${ORIGIN}/${pad}` });
@@ -242,6 +265,53 @@ for (const [titel, meX, tekstRe] of [['rol lezen', { ...ME, rol: 'lezen', rolNaa
   toets(`v2: gast zonder bevestigde meekijker-rol (${titel}): alles dicht, melding, app verborgen, alleen /me op het netwerk, geen Graph`, tekstRe.test(geen.staat.overlay) && geen.staat.appZichtbaar === false && geen.staat.modus === 'streng' && geen.staat.aan === false && geen.staat.moneybird === 403 && geen.staat.spiegel === 403 && geen.staat.lokaal === false
     && w.length >= 1 && w.every(n => n.pad === '/me' && n.methode === 'GET') && !geen.netwerk.some(n => GRAPH.test(n.host)) && !geen.acq.some(a => a.soort === 'popup'), JSON.stringify({ staat: geen.staat, w: w.map(n => n.methode + ' ' + n.pad), exc: geen.exc, con: geen.consoleFout.slice(0, 4) }));
 }
+// ── Actief account en accountwissel (brok 6b) ──────────────────────────────────────────────────────────────────────────────────────
+const BART_A = { username: 'collega@mortiseandtenon.nl', name: 'Teamlid Voorbeeld', homeAccountId: 'oid2.tid', localAccountId: 'l2', environment: 'login.microsoftonline.com', tenantId: 't' };
+const GAST_A = { username: 'coach_example.org#EXT#@example.net', name: 'Coach Voorbeeld', homeAccountId: 'oid.tid', localAccountId: 'l', environment: 'login.microsoftonline.com', tenantId: 't' };
+const TEAM_ME = { ...ME, rol: 'kantoor', rolNaam: 'Kantoor', modus: 'log', altijdAfdwingen: undefined, extern: undefined, rechten: { ...RECHTEN, projecten: 'wijzigen', moneybird: 'concepten', uren: 'team' } };
+const naarRol = naam => (/#ext#/i.test(naam) ? ME : TEAM_ME);   // de rol volgt het account in het id-token
+const stand = async ev => ({
+  modus: await ev('MTKijk.modus'), aan: await ev('MTKijk.aan'), loads: await ev('window.__loads'),
+  echtLokaal: await ev("(window.MTKijk._echt || localStorage).getItem('mt_projecten')"), recordEcht: await ev("(window.MTKijk._echt || localStorage).getItem('mtkijk.actief')"),
+  idb: await ev("typeof indexedDB !== 'undefined' && !!indexedDB"), appZichtbaar: await ev("(()=>{const a=document.getElementById('app-wrap'); return !!a && getComputedStyle(a).display!=='none' && getComputedStyle(a).visibility!=='hidden';})()"),
+  login: await ev("(()=>{const a=document.getElementById('login-screen'); return !!a && getComputedStyle(a).display!=='none';})()"),
+});
+// 1. Een gast staat ook in de cache, maar het ACTIEVE account is een teamlid: gewone app met de echte opslag (met en zonder record)
+for (const [titel, rec] of [['record van het teamlid', { h: 'oid2.tid', u: BART_A.username, ext: false, m: false }], ['geen record', null]]) {
+  const r = await scenario('v2 gast in cache, teamlid actief (' + titel + ')', 'v2.html', { wacht: 9000, plant: true, me: naarRol, gebruiker: BART_A.username, plantAccounts: [BART_A, GAST_A], plantActief: 'oid2.tid', plantRecord: rec, controle: async ({ ev }) => stand(ev) });
+  toets(`gast in cache + teamlid actief (${titel}): geen strenge modus, echte opslag en indexedDB, app zichtbaar, tokens alleen voor het teamlid`,
+    r.staat.modus === null && r.staat.aan === false && /LOKAAL-1/.test(r.staat.echtLokaal || '') && r.staat.idb === true && r.staat.loads === 1 && r.staat.appZichtbaar === true
+    && r.acq.length > 0 && r.acq.every(a => a.u === BART_A.username) && r.acq.some(a => a.scopes.some(sc => /graph\.microsoft\.com/.test(sc))), JSON.stringify({ staat: r.staat, acq: r.acq.slice(0, 4), exc: r.exc }));
+}
+// 2. Teamlid -> gast in dezelfde browser: één herlaadronde vóór er iets geladen wordt, daarna kijkmodus; geen lus; echte opslag onaangeroerd
+const bartNaarGast = await scenario('v2 teamlid logt in als gast', 'v2.html', { wacht: 8000, plant: true, me: naarRol, gebruiker: BART_A.username, plantAccounts: [BART_A], plantRecord: { h: 'oid2.tid', u: BART_A.username, ext: false, m: false },
+  controle: async ({ ev, sleep: slaap }) => {
+    const voor = await stand(ev);
+    await ev("(window.__loginAls = window.__gastAcct, msLogin().catch(()=>0), 1)"); await slaap(10000);
+    const na = await stand(ev); await slaap(4000); const later = await ev('window.__loads');
+    return { voor, na, later, record: await ev("JSON.stringify(JSON.parse(MTKijk._echt.getItem('mtkijk.actief')||'null'))"), lokaalGast: await ev("localStorage.getItem('mt_projecten')") };
+  } });
+toets('teamlid logt in als gast: precies één herlaadronde (geen lus), daarna kijkmodus', bartNaarGast.staat.voor.modus === null && bartNaarGast.staat.voor.aan === false && bartNaarGast.staat.na.loads === 2 && bartNaarGast.staat.later === 2 && bartNaarGast.staat.na.modus === 'kijk' && bartNaarGast.staat.na.aan === true, JSON.stringify(bartNaarGast.staat));
+toets('teamlid logt in als gast: het record wijst naar de gast; de echte opslag van het teamlid blijft onaangeroerd en onzichtbaar voor de gast', /"ext":true/.test(bartNaarGast.staat.record) && /LOKAAL-1/.test(bartNaarGast.staat.na.echtLokaal || '') && !/LOKAAL/.test(bartNaarGast.staat.lokaalGast || '') && /P-0001/.test(bartNaarGast.staat.lokaalGast || '') && bartNaarGast.staat.na.idb === false, JSON.stringify(bartNaarGast.staat));
+toets('teamlid logt in als gast: Graph blijft voor de gast dicht', !bartNaarGast.acq.some(a => a.u === GAST_A.username && a.scopes.some(sc => /graph\.microsoft\.com/.test(sc))), JSON.stringify(bartNaarGast.acq.filter(a => a.u === GAST_A.username)));
+// 3. Gast uitloggen en daarna als teamlid inloggen: schoon herladen (record weg, echte opslag intact), dan gewone app met de echte opslag, zonder tweede herlaadronde
+const gastNaarBart = await scenario('v2 gast logt uit en teamlid logt in', 'v2.html', { wacht: 9000, plant: true, me: naarRol, gebruiker: GAST_A.username,
+  controle: async ({ ev, sleep: slaap }) => {
+    const voor = await stand(ev);
+    await ev("window.confirm = () => true; msLogout().catch(()=>0); 1"); await slaap(8000);
+    const uit = await stand(ev);
+    await ev(`(window.__loginAls = ${JSON.stringify(BART_A)}, msLogin().catch(()=>0), 1)`); await slaap(12000);
+    const bart = await stand(ev); await slaap(3000);
+    return { voor, uit, bart, later: await ev('window.__loads'), lokaal: await ev("localStorage.getItem('mt_projecten')"), acq: await ev('JSON.stringify(window.__acq)') };
+  } });
+const gb = gastNaarBart.staat;
+toets('gast: kijkmodus voor het uitloggen', gb.voor.modus === 'kijk' && gb.voor.aan === true && gb.voor.loads === 1, JSON.stringify(gb.voor));
+toets('gast logt uit: herladen zonder record en zonder strenge modus; loginscherm; echte opslag intact', gb.uit.loads === 2 && gb.uit.modus === null && gb.uit.recordEcht === null && gb.uit.login === true && /LOKAAL-1/.test(gb.uit.echtLokaal || ''), JSON.stringify(gb.uit));
+toets('daarna teamlid-login: geen extra herlaadronde, gewone app met de echte opslag, record = teamlid, tokens voor het teamlid',
+  gb.bart.loads === 2 && gb.later === 2 && gb.bart.modus === null && gb.bart.aan === false && /LOKAAL-1/.test(gb.lokaal || '') && /"ext":false/.test(gb.bart.recordEcht || '') && gb.bart.idb === true && gb.bart.appZichtbaar === true
+  && JSON.parse(gb.acq).some(a => a.u === BART_A.username && a.scopes.some(sc => /graph\.microsoft\.com/.test(sc))), JSON.stringify(gb));
+toets('accountwissel: geen uitzonderingen in de pagina', bartNaarGast.exc.length === 0 && gastNaarBart.exc.length === 0, JSON.stringify([bartNaarGast.exc, gastNaarBart.exc]));
+
 // Integratietest van de zendkant met een teamlid (kantoor): het bijvulpad leest echt uit (nagebootst) SharePoint met een geldige URL en bearer-token,
 // de versie komt uit SharePoint (lastModifiedDateTime), en een geslaagde save levert een spiegelzending op met de versie uit het PUT-antwoord.
 const V_PROJ = '2026-11-01T08:00:00Z', V_PLAN = '2026-11-01T09:00:00Z', V_BLOK = '2026-11-01T10:00:00Z', V_SAVE = '2026-11-02T09:30:00Z';

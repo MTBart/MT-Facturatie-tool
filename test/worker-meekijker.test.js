@@ -805,9 +805,12 @@ const { pathToFileURL } = require('url');
     // grootboek en winst/verlies: ook geschoond (geen contacten, notities)
     mbAntwoord = [{ id: '1', name: 'Omzet', account_type: 'revenue', account_id: '8000', allowed_document_types: ['sales_invoice'], created_at: 'x', bankrekening: iban, notitie: mail }];
     r = await roepFetch(env, tok, '/?target=moneybird&path=' + encodeURIComponent(MB_ADMIN + '/ledger_accounts')); assert.deepStrictEqual(r.body, [{ id: '1', name: 'Omzet', account_type: 'revenue', account_id: '8000', allowed_document_types: ['sales_invoice'], created_at: 'x' }]);
-    mbAntwoord = { period: '2026', revenue: [{ ledger_account_id: '1', name: `Omzet ${mail}`, total: 1000 }], contacts: [{ email: mail }], notes: [{ n: iban }] };
+    mbAntwoord = { period: 'this_year', start_date: '2026-01-01', end_date: '2026-12-31', total_revenue: '1000.0', gross_profit: '400.0', net_profit: '150.0', nieuw_totaal: '5.0', nieuw_veld: { diep: { iban, mail } }, contacts: [{ email: mail }], notes: [{ n: iban }],
+      revenue_by_ledger_account: { total: '1000.0', ledger_accounts: [{ ledger_account_id: '1', value: '1000.0', name: `Omzet ${mail}`, contact: { email: mail }, extra: { iban } }], opmerking: mail },
+      expenses_by_ledger_account: { ledger_accounts: [{ ledger_account_id: '2', value: '300.0', bankrekening: iban }] }, onbekende_groep_by_ledger_account: { ledger_accounts: [{ ledger_account_id: '9', value: '1.0' }] } };
     r = await roepFetch(env, tok, '/?target=moneybird&path=' + encodeURIComponent(MB_ADMIN + '/reports/profit_loss'));
-    assert.strictEqual(r.status, 200); assert.ok(!JSON.stringify(r.body).includes(mail) && !JSON.stringify(r.body).includes(iban)); assert.strictEqual(r.body.revenue[0].total, 1000); assert.ok(!('contacts' in r.body) && !('notes' in r.body));
+    assert.strictEqual(r.status, 200); const pl = JSON.stringify(r.body); assert.ok(!pl.includes(mail) && !pl.includes(iban), pl);
+    assert.deepStrictEqual(r.body, { period: 'this_year', start_date: '2026-01-01', end_date: '2026-12-31', total_revenue: '1000.0', gross_profit: '400.0', net_profit: '150.0', revenue_by_ledger_account: { total: '1000.0', ledger_accounts: [{ ledger_account_id: '1', value: '1000.0', name: 'Omzet [e-mail]' }] }, expenses_by_ledger_account: { ledger_accounts: [{ ledger_account_id: '2', value: '300.0' }] } }, 'alleen het vaste schema; een nieuw of onbekend (genest) veld, een onbekende groep en contacten/notities vallen weg');
     // onbekend soort of ongeldige vorm: nooit ruw doorgeven
     assert.strictEqual(mbMagerDoc({ a: 1 }, 'onbekend'), null);
     mbAntwoord = 'geen object'; r = await roepFetch(env, tok, '/?target=moneybird&path=' + encodeURIComponent(MB_ADMIN + '/sales_invoices')); assert.strictEqual(r.status, 502, 'een vorm buiten het schema wordt nooit ruw doorgegeven');

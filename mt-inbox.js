@@ -255,7 +255,7 @@ async function todoAdd(){
 //  - NOOIT verwijderen: weg of niet meer toegewezen in Toggl = alleen melden;
 //  - altijd eerst een droogloop met de lijst van wat er zou gebeuren.
 const TDS_LIJST='MT test taken';
-function tdsMijnEmail(){ try{ const a=window._msal&&_msal.getAllAccounts(); return (a&&a[0]&&a[0].username||'').toLowerCase(); }catch(e){ return ''; } }
+function tdsMijnEmail(){ try{ let a=window._actiefAccount&&_actiefAccount(); if(!a){ const l=window._msal&&_msal.getAllAccounts(); a=l&&l[0]; } return (a&&a.username||'').toLowerCase(); }catch(e){ return ''; } }
 function tdsMapAll(){ try{ const v=JSON.parse(localStorage.getItem('mt_todo_sync')||'[]'); return Array.isArray(v)?v:[]; }catch(e){ return []; } }
 function tdsMapZet(rec){
   const all=tdsMapAll(), i=all.findIndex(x=>x.id===rec.id);

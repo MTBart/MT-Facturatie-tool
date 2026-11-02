@@ -25,7 +25,7 @@
   const pagina = eigenScript && eigenScript.getAttribute ? eigenScript.getAttribute('data-kijk') : null;
   const VERSIE = '1';                                                                    // X-MT-Kijk; de worker eist minimaal deze waarde van een meekijker
   const STANDAARD_WORKER = 'https://mt-claude-proxy.bart-a12.workers.dev';
-  const VLAG = 'mtkijk.gebruiker', HERSTART = 'mtkijk.herstart';                          // eigen sleutels (nooit sleutels van de app)
+  const ACTIEF = 'mtkijk.actief', WISSEL = 'mtkijk.wissel', HERSTART = 'mtkijk.herstart';   // eigen sleutels (nooit sleutels van de app)
   // Zelfde 15 stores als SPIEGEL_STORES in worker.js (de worker projecteert: geen contactgegevens, notities, e-mailadressen).
   const STORES = ['mt_projecten', 'mt_planning', 'mt_planblokken', 'mt_planinrichting', 'mt_project_taken_v2', 'mt_project_afhank', 'mt_vrijedagen',
     'mt_calc_offertes', 'mt_calc_defaults', 'mt_offerte_keuze', 'mt_toeslag_lak', 'mt_toeslag_spuit', 'mt_uurtarieven', 'mt_verbeterpunten', 'mt_feedback'];
@@ -44,7 +44,7 @@
 
   const nee = reden => ({ ok: false, reden }), ja = () => ({ ok: true });
   K.extern = account => /#ext#/i.test(String((account && account.username) || ''));
-  const huidigeAccount = () => { try { const a = root._msal && root._msal.getAllAccounts(); return a && a[0] || null; } catch (e) { return null; } };
+  const huidigeAccount = () => { try { if (!root._msal) return null; if (typeof root._actiefAccount === 'function') return root._actiefAccount(); const a = root._msal.getAllAccounts(); return a && a[0] || null; } catch (e) { return null; } };
   K.graphDicht = () => K.aan || K.modus === 'streng' || K.extern(huidigeAccount());
 
   // ── Opslag: leeg en alleen in het geheugen ────────────────────────────────────────────────────────────────────────────────────
@@ -78,26 +78,67 @@
   K.msalBegin = function () { if (K._opslag && K._echt) { try { Object.defineProperty(root, 'localStorage', { configurable: true, get() { return K._echt; } }); } catch (e) { } } };
   K.msalEinde = function () { if (K._opslag) { try { Object.defineProperty(root, 'localStorage', { configurable: true, get() { return K._opslag; } }); } catch (e) { } } };
 
-  // ── Vroege detectie: een gast in de MSAL-cache ──────────────────────────────────────────────────────────────────────────────────
-  // MSAL bewaart accounts als localStorage-sleutel "<id>-login.microsoftonline.com-<tenant>" met o.a. username. Alleen lezen.
-  function gebruikersInCache() {
-    const uit = [];
+  // ── Vroege detectie: is het ACTIEVE account een gast? ───────────────────────────────────────────────────────────────────────────
+  // Niet "staat er ergens een gast in de MSAL-cache", maar: bij elke geslaagde login schrijven we het actieve account in een eigen sleutel
+  // (mtkijk.actief = {h: homeAccountId, u: gebruikersnaam, ext: #EXT#-gast, m: bevestigde meekijker}) in de ECHTE opslag. Strenge modus alleen als dat
+  // record een gast/meekijker is EN dat account nog in de MSAL-cache staat. Geen record = niet streng; /me beslist en laadt bij een meekijker opnieuw.
+  const echtOpslag = () => { try { return K._echt || root.localStorage; } catch (e) { return null; } };
+  K.leesActief = function () {
+    try { const s = echtOpslag(); const v = s && JSON.parse(s.getItem(ACTIEF) || 'null'); return v && typeof v === 'object' && typeof v.h === 'string' && v.h ? v : null; } catch (e) { return null; }
+  };
+  function schrijfActief(rec) {
+    try { const s = echtOpslag(); if (!s) return; if (rec) s.setItem(ACTIEF, JSON.stringify(rec)); else s.removeItem(ACTIEF); } catch (e) { }
+  }
+  const recVan = (account, meekijker) => ({ h: String((account && account.homeAccountId) || ''), u: String((account && account.username) || '').toLowerCase(), ext: K.extern(account), m: !!meekijker });
+  // Staat dit account (homeAccountId) nog in de MSAL-cache? Alleen lezen.
+  function accountInCache(h) {
     try {
-      const ls = root.localStorage;
+      const ls = echtOpslag(); if (!ls || !h) return false;
       for (let i = 0; i < ls.length; i++) {
         const k = ls.key(i); if (!k || k.indexOf('login.microsoftonline.com') < 0) continue;
+        if (k.indexOf(h + '-') === 0) return true;
         let v; try { v = JSON.parse(ls.getItem(k)); } catch (e) { continue; }
-        if (v && typeof v.username === 'string') uit.push(v.username.toLowerCase());
+        if (v && v.homeAccountId === h) return true;
       }
     } catch (e) { }
-    return uit;
+    return false;
   }
   K.vroegKandidaat = function () {
-    const g = gebruikersInCache(); if (!g.length) return false;
-    let vlag = null; try { vlag = root.localStorage.getItem(VLAG); } catch (e) { }
-    return g.some(u => /#ext#/.test(u)) || !!(vlag && g.includes(String(vlag).toLowerCase()));
+    const rec = K.leesActief(); if (!rec || !(rec.ext || rec.m)) return false;
+    return accountInCache(rec.h);
   };
-
+  // Het account waarmee de pagina werkt: het actieve account van MSAL; anders het account uit ons record; anders het enige account. Meerdere accounts
+  // zonder actief/record: geen keuze (inlogscherm), zodat nooit een willekeurig account wordt genomen.
+  K.kiesAccount = function (m) {
+    try { const a = m.getActiveAccount && m.getActiveAccount(); if (a) return a; } catch (e) { }
+    const lijst = (m.getAllAccounts && m.getAllAccounts()) || [], rec = K.leesActief();
+    let k = rec && lijst.find(x => x.homeAccountId === rec.h);
+    if (!k && lijst.length === 1) k = lijst[0];
+    if (k) { try { m.setActiveAccount(k); } catch (e) { } }
+    return k || null;
+  };
+  // Na een geslaagde login (of het kiezen van het account bij het opstarten), VÓÓR toonApp/initStorage. Schrijft het record en herlaadt de pagina
+  // als de opslagmodus niet bij dit account past: gast/meekijker terwijl de pagina niet streng is geladen, of een ander account dan het vorige.
+  // Er wordt dan niets geladen in dit tabblad. Na het herladen volgt geen login meer (record klopt), dus geen lus; sessionStorage-grendel als extra vangnet.
+  // → true als er herladen wordt (de aanroeper stopt dan).
+  K.naLogin = function (account) {
+    if (!account) return false;
+    const nu = recVan(account, false), vorig = K.leesActief(), zelfde = !!vorig && vorig.h === nu.h;
+    if (zelfde) nu.m = !!vorig.m;
+    schrijfActief(nu);
+    const wissel = (!K._vroeg && (nu.ext || nu.m)) || (!!vorig && !zelfde);
+    try {
+      const ss = root.sessionStorage;
+      if (!wissel) { ss.removeItem(WISSEL); return false; }
+      if (ss.getItem(WISSEL) === nu.h) return false;                                    // al eens herladen voor dit account: nooit een lus
+      ss.setItem(WISSEL, nu.h); root.location.reload(); return true;
+    } catch (e) { return false; }
+  };
+  // Uitloggen: record weg en herladen, zodat het volgende account met schone opslagmodus begint.
+  K.naUitloggen = function () {
+    schrijfActief(null);
+    try { root.sessionStorage.removeItem(WISSEL); root.sessionStorage.removeItem(HERSTART); root.location.reload(); return true; } catch (e) { return false; }
+  };
   // ── Netwerktoets ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
   const werkerOrigin = () => { try { return new URL(K._worker || STANDAARD_WORKER).origin; } catch (e) { return ''; } };
   K.routeMag = function (u, methode) {
@@ -105,13 +146,15 @@
     const m = String(methode || 'GET').toUpperCase(), lees = m === 'GET' || m === 'HEAD';
     if (GRAPH_HOST.test(url.hostname)) return nee('graph');
     const wo = werkerOrigin();
+    // Strenge modus (nog niet bevestigd als meekijker) gaat vóór alles, ook vóór externe GET's: alleen GET /me bij de worker en de Microsoft-login.
+    if (K.modus === 'streng') return (lees && wo && url.origin === wo && url.pathname === '/me') || url.hostname === 'login.microsoftonline.com' ? ja() : nee('streng');
     if (!wo || url.origin !== wo) {
       if (lees) return ja();
       if (url.hostname === 'login.microsoftonline.com') return ja();                  // MSAL (alleen id-token: de Graph-scopes worden nooit gevraagd)
       return nee('schrijven');
     }
     const pad = url.pathname, target = url.searchParams.get('target'), wpad = url.searchParams.get('path') || '';
-    if (K.modus === 'streng') return lees && pad === '/me' ? ja() : nee('streng');   // nog niet bevestigd als meekijker: alleen /me
+
     if (pad === '/track' || pad === '/track/heartbeat') return m === 'POST' ? ja() : nee('track');
     if (pad === '/') {                                                                // de proxy: ?target=…&path=…
       if (lees && PROXY_LEES.includes(target)) return ja();
@@ -211,7 +254,7 @@
     try {
       if (root.sessionStorage.getItem(HERSTART)) return false;
       root.sessionStorage.setItem(HERSTART, '1');
-      root.localStorage.setItem(VLAG, String((account && account.username) || '').toLowerCase());
+      schrijfActief(recVan(account, true));
       root.location.reload(); return true;
     } catch (e) { return false; }
   };
@@ -238,7 +281,11 @@
         if (me && me.rol === 'meekijker' && me.altijdAfdwingen) {
           if (!K._vroeg && K.herstart(account)) return new Promise(() => { });
           K.activeer(me); if (root.MTRol) await root.MTRol.laad(K._worker);
-        } else if (K._vroeg || gast) K.weiger(me);                                        // gast zonder bevestigde meekijker-rol: alles dicht
+        } else if (K._vroeg || gast) {
+          const rec = K.leesActief();                                                      // niet langer meekijker en geen gast (rol gewijzigd): de volgende keer weer gewoon starten
+          if (!gast && me && me.rol && me.rol !== 'meekijker' && rec && rec.m) schrijfActief(Object.assign({}, rec, { m: false }));
+          K.weiger(me);                                                                   // gast zonder bevestigde meekijker-rol: alles dicht
+        }
       } catch (e) { if (K._vroeg || gast) K.weiger(null); }
     })();
     const grens = new Promise(r => root.setTimeout(r, K._vroeg || gast ? 15000 : 3000)); // /me traag of stuk: het team werkt dan als vroeger, een gast blijft buiten

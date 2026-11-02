@@ -132,6 +132,13 @@
     catch (e) { return 0; }                                       // onleesbaar of zonder exp → als verlopen behandelen
   }
   root._tokenExp = tokenExp;
+  // Het account waarmee deze pagina werkt: het ACTIEVE account van MSAL (gezet bij het inloggen), anders het eerste. Met meerdere accounts in
+  // dezelfde browser (bv. een teamlid en een externe gast) mag nooit het verkeerde account een token krijgen.
+  function actiefAccount(m) {
+    try { const a = m.getActiveAccount && m.getActiveAccount(); if (a) return a; } catch (e) { }
+    const l = m.getAllAccounts(); return l.length ? l[0] : null;
+  }
+  root._actiefAccount = () => (root._msal ? actiefAccount(root._msal) : null);
   function installAuth(config) {
     config = config || {};
     const GRAPH_SCOPES = config.graphScopes || [
@@ -148,9 +155,9 @@
     root.getAuthToken = async function (opt) {
       const m = root._msal;
       if (!m) return null;
-      const accounts = m.getAllAccounts();
-      if (!accounts.length) return null;
-      const req = { scopes: ['openid', 'profile'], account: accounts[0] };
+      const acc = actiefAccount(m);
+      if (!acc) return null;
+      const req = { scopes: ['openid', 'profile'], account: acc };
       try {
         const result = opt && opt.vers ? null : await m.acquireTokenSilent(req);
         if (result && result.idToken && tokenExp(result.idToken) - Date.now() >= 5 * 60 * 1000) return result.idToken;
@@ -169,10 +176,10 @@
     root.getGraphToken = async function () {
       const m = root._msal;
       if (!m) return null;
-      const accounts = m.getAllAccounts();
-      if (!accounts.length) return null;
+      const acc = actiefAccount(m);
+      if (!acc) return null;
       try {
-        const result = await m.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: accounts[0] });
+        const result = await m.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: acc });
         if (typeof config.onTokenOk === 'function') config.onTokenOk();
         return result.accessToken;
       } catch (e) {

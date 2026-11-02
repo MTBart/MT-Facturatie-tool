@@ -150,14 +150,15 @@ const maakWin = (opt = {}) => {
     return { win, K: win.MTKijk, echt, sess, doc, aanroepen, herladen };
   };
   const planten = { mt_projecten: JSON.stringify([{ code: 'LOKAAL-1', naam: 'LOKAAL GEPLANT' }]), mt_planning: '{"LOKAAL-1":{}}', 'mt-stijl-keuze': 'oud', mt_uurtarieven: '{"x":1}' };
-  const gastCache = () => ({ [MSAL_GAST]: JSON.stringify({ username: 'coach_example.org#EXT#@example.net', name: 'Coach' }), ...planten });
+  const ACT = (h, u, ext, m) => JSON.stringify({ h, u, ext: !!ext, m: !!m });
+  const gastCache = () => ({ [MSAL_GAST]: JSON.stringify({ username: 'coach_example.org#EXT#@example.net', homeAccountId: 'oid.tid', name: 'Coach' }), 'mtkijk.actief': ACT('oid.tid', 'coach_example.org#ext#@example.net', true), ...planten });
 
   await test('lege geheugenopslag: de echte opslag wordt niet gelezen, geschreven of gewist; wat de app schrijft verdwijnt met de pagina; indexedDB weg', () => {
     const t = maakVroeg({ ls: gastCache() });
     const vroeg = t.echt.log.length; assert.strictEqual(t.K.modus, 'streng'); assert.strictEqual(t.K._vroeg, true);
     assert.notStrictEqual(t.win.localStorage, t.echt.api, 'window.localStorage is vervangen');
     // de detectie las alleen MSAL-sleutels (en onze eigen vlag), nooit app-sleutels
-    const gelezen = t.echt.log.filter(l => l[0] === 'get').map(l => l[1]); assert.ok(gelezen.every(k => k.includes('login.microsoftonline.com') || k === 'mtkijk.gebruiker'), gelezen.join());
+    const gelezen = t.echt.log.filter(l => l[0] === 'get').map(l => l[1]); assert.ok(gelezen.every(k => k.includes('login.microsoftonline.com') || k === 'mtkijk.actief'), gelezen.join());
     const ls = t.win.localStorage;
     assert.strictEqual(ls.getItem('mt_projecten'), null); assert.strictEqual(ls.getItem('mt_planning'), null); assert.strictEqual(ls.getItem('mt-stijl-keuze'), null); assert.strictEqual(ls.length, 0); assert.strictEqual(ls.key(0), null);
     ls.setItem('mt_projecten', '[1]'); ls.setItem('x', '2'); assert.strictEqual(ls.getItem('mt_projecten'), '[1]'); assert.strictEqual(ls.length, 2); assert.strictEqual(ls.key(1), 'x'); assert.deepStrictEqual(Object.keys(ls), ['mt_projecten', 'x']); assert.strictEqual(ls.x, '2'); ls.y = 5; assert.strictEqual(ls.getItem('y'), '5');
@@ -172,9 +173,15 @@ const maakWin = (opt = {}) => {
   await test('vroege detectie: #EXT#-gast of eerder bevestigde meekijker (zelfde account) = streng; een teamlid niet (geen opslag vervangen); alleen op v2', () => {
     let t = maakVroeg({ ls: { [MSAL_TEAM]: JSON.stringify({ username: 'collega@mortiseandtenon.nl' }), ...planten } });
     assert.strictEqual(t.K.modus, null); assert.strictEqual(t.win.localStorage, t.echt.api, 'teamlid: echte opslag blijft'); assert.strictEqual(t.K._guards, false); assert.strictEqual(t.doc.attrs['data-kijk-laden'], undefined);
-    t = maakVroeg({ ls: { [MSAL_TEAM]: JSON.stringify({ username: 'coach@example.org' }), 'mtkijk.gebruiker': 'coach@example.org', ...planten } }); assert.strictEqual(t.K.modus, 'streng', 'vlag + zelfde account');
-    t = maakVroeg({ ls: { [MSAL_TEAM]: JSON.stringify({ username: 'iemand.anders@example.org' }), 'mtkijk.gebruiker': 'coach@example.org' } }); assert.strictEqual(t.K.modus, null, 'vlag van een ander account telt niet');
-    t = maakVroeg({ ls: { 'mtkijk.gebruiker': 'coach@example.org' } }); assert.strictEqual(t.K.modus, null, 'geen account in de cache');
+    t = maakVroeg({ ls: { [MSAL_TEAM]: JSON.stringify({ username: 'coach@example.org', homeAccountId: 'oid2.tid' }), 'mtkijk.actief': ACT('oid2.tid', 'coach@example.org', false, true), ...planten } }); assert.strictEqual(t.K.modus, 'streng', 'bevestigde meekijker = actief account');
+    t = maakVroeg({ ls: { [MSAL_TEAM]: JSON.stringify({ username: 'iemand.anders@example.org', homeAccountId: 'oid2.tid' }), 'mtkijk.actief': ACT('oidX.tid', 'coach@example.org', false, true) } }); assert.strictEqual(t.K.modus, null, 'record van een ander account telt niet');
+    t = maakVroeg({ ls: { 'mtkijk.actief': ACT('oid2.tid', 'coach@example.org', false, true) } }); assert.strictEqual(t.K.modus, null, 'geen account in de cache');
+    // een gast in de cache maakt NIET streng als het actieve account een teamlid is (of er geen record is: /me beslist)
+    const bart = { [MSAL_TEAM]: JSON.stringify({ username: 'collega@mortiseandtenon.nl', homeAccountId: 'oid2.tid' }), [MSAL_GAST]: JSON.stringify({ username: 'coach_example.org#EXT#@example.net', homeAccountId: 'oid.tid' }), ...planten };
+    t = maakVroeg({ ls: { ...bart, 'mtkijk.actief': ACT('oid2.tid', 'collega@mortiseandtenon.nl', false, false) } });
+    assert.strictEqual(t.K.modus, null, 'gast in cache + teamlid actief'); assert.strictEqual(t.win.localStorage, t.echt.api, 'echte opslag blijft'); assert.strictEqual(t.K._guards, false); assert.strictEqual(t.win.indexedDB !== undefined, true);
+    t = maakVroeg({ ls: { ...bart } }); assert.strictEqual(t.K.modus, null, 'gast in cache, geen record: niet streng'); assert.strictEqual(t.win.localStorage, t.echt.api);
+    t = maakVroeg({ ls: { ...bart, 'mtkijk.actief': '{kapot' } }); assert.strictEqual(t.K.modus, null, 'kapot record');
     t = maakVroeg({ ls: gastCache(), pagina: null }); assert.strictEqual(t.K.modus, null, 'niet op pagina\'s zonder data-kijk (mobiel)'); assert.strictEqual(t.win.localStorage, t.echt.api);
     t = maakVroeg({ ls: { [MSAL_GAST]: '{kapot' } }); assert.strictEqual(t.K.modus, null, 'onleesbare cache-entry');
     t = maakVroeg({ ls: gastCache() }); assert.strictEqual(t.doc.attrs['data-kijk-laden'], '1', 'app verborgen'); assert.ok(t.doc.elementen['mt-kijk-laden'] || t.doc.luisteraars.DOMContentLoaded, 'neutraal laadscherm');
@@ -183,7 +190,9 @@ const maakWin = (opt = {}) => {
   await test('streng: alleen /me en de Microsoft-login mogen het netwerk op (ook geen Moneybird-GET); na bevestiging de kijkroutes; Graph altijd dicht', async () => {
     const t = maakVroeg({ ls: gastCache() }), K = t.K, W2 = 'https://mt-claude-proxy.bart-a12.workers.dev';
     const mag = (u, m) => K.routeMag(u, m || 'GET').ok;
-    assert.ok(mag(W2 + '/me')); assert.ok(mag('https://login.microsoftonline.com/t/oauth2/v2.0/token', 'POST')); assert.ok(mag('https://app.test/mt-core.js')); assert.ok(mag('https://fonts.example/x.css'));
+    assert.ok(mag(W2 + '/me')); assert.ok(mag('https://login.microsoftonline.com/t/oauth2/v2.0/token', 'POST')); assert.ok(mag('https://login.microsoftonline.com/t/discovery'));
+    // streng gaat vooraf aan de uitzondering voor externe GET's: ook scripts/lettertypen/eigen site/andere hosts zijn dicht
+    for (const u of ['https://app.test/mt-core.js', 'https://fonts.example/x.css', 'https://cdnjs.cloudflare.com/x.js', 'vendor/msal.js', 'data:text/plain,x']) assert.ok(!mag(u), 'streng: ' + u);
     for (const [p, m] of [['/spiegel/mt_projecten', 'GET'], ['/spiegel/_index', 'GET'], ['/klanten', 'GET'], ['/geld/tijdlijn', 'GET'], ['/?target=moneybird&path=1/sales_invoices', 'GET'], ['/?target=toggl_focus&path=tasks', 'GET'], ['/track', 'POST'], ['/me', 'POST'], ['/instellingen', 'GET']])
       assert.ok(!mag(W2 + p, m), 'streng: ' + m + ' ' + p);
     for (const u of ['https://graph.microsoft.com/v1.0/me', 'https://x.sharepoint.com/y']) assert.ok(!mag(u));
@@ -200,7 +209,7 @@ const maakWin = (opt = {}) => {
     const t = maakVroeg({ ls: gastCache() }), K = t.K, W2 = 'https://mt-claude-proxy.bart-a12.workers.dev';
     await t.win.fetch(W2 + '/me', { headers: { 'X-Auth-Token': 'tok' } }); await t.win.fetch('https://app.test/x.js'); await t.win.fetch('https://login.microsoftonline.com/t', { method: 'POST' });
     assert.strictEqual(t.aanroepen[0].h['X-MT-Kijk'], '1'); assert.strictEqual(t.aanroepen[0].h['X-Auth-Token'], 'tok', 'bestaande headers blijven');
-    assert.ok(!t.aanroepen[1].h || !('X-MT-Kijk' in t.aanroepen[1].h)); assert.ok(!t.aanroepen[2].h || !('X-MT-Kijk' in t.aanroepen[2].h));
+    assert.strictEqual(t.aanroepen.length, 2, 'x.js is in de strenge modus geblokkeerd'); assert.ok(/login\.microsoftonline\.com/.test(t.aanroepen[1].u)); assert.ok(!t.aanroepen[1].h || !('X-MT-Kijk' in t.aanroepen[1].h));
     t.aanroepen.length = 0; K._worker = W2; await K.vraagMe(W2); assert.strictEqual(t.aanroepen[0].h['X-MT-Kijk'], '1');
     assert.strictEqual(K.VERSIE, '1');
   });
@@ -228,11 +237,11 @@ const maakWin = (opt = {}) => {
     const t = maakVroeg({ ls: { [MSAL_TEAM]: JSON.stringify({ username: 'coach@example.org' }), ...planten }, pagina: 'v2' }); assert.strictEqual(t.K._vroeg, false);
     // meekijker zonder #EXT# (bevestigd via /me)
     t.win.fetch = async () => ({ ok: true, status: 200, json: async () => ({ rol: 'meekijker', altijdAfdwingen: true }) });
-    let klaar = false; t.K.voorStart({ username: 'Coach@Example.org' }, 'https://w.test').then(() => { klaar = true; });
+    let klaar = false; t.K.voorStart({ username: 'Coach@Example.org', homeAccountId: 'oid2.tid' }, 'https://w.test').then(() => { klaar = true; });
     await new Promise(r => setTimeout(r, 50));
     assert.strictEqual(t.herladen.length, 1, 'één herlaadpoging'); assert.strictEqual(klaar, false, 'de app mag niet verder'); assert.strictEqual(t.K.aan, false);
-    assert.strictEqual(t.echt.m.get('mtkijk.gebruiker'), 'coach@example.org', 'onze eigen vlag, kleine letters'); assert.strictEqual(t.sess.m.get('mtkijk.herstart'), '1');
-    const geschreven = t.echt.log.filter(l => l[0] === 'set' || l[0] === 'del' || l[0] === 'clear').map(l => l.join(':')); assert.deepStrictEqual(geschreven, ['set:mtkijk.gebruiker'], 'alleen de eigen sleutel geschreven');
+    assert.deepStrictEqual(JSON.parse(t.echt.m.get('mtkijk.actief')), { h: 'oid2.tid', u: 'coach@example.org', ext: false, m: true }, 'onze eigen record, kleine letters'); assert.strictEqual(t.sess.m.get('mtkijk.herstart'), '1');
+    const geschreven = t.echt.log.filter(l => l[0] === 'set' || l[0] === 'del' || l[0] === 'clear').map(l => l.join(':')); assert.deepStrictEqual(geschreven, ['set:mtkijk.actief'], 'alleen de eigen sleutel geschreven');
     for (const k of Object.keys(planten)) assert.strictEqual(t.echt.m.get(k), planten[k]);
     // tweede keer (sessionStorage-vlag staat): geen nieuwe herlaadpoging; late activering als vangnet
     const t2 = maakVroeg({ ls: { [MSAL_TEAM]: JSON.stringify({ username: 'coach@example.org' }) }, sess: { 'mtkijk.herstart': '1' } }); t2.win.fetch = t.win.fetch;
@@ -242,6 +251,63 @@ const maakWin = (opt = {}) => {
     // team: niets
     const t4 = maakVroeg({ ls: { [MSAL_TEAM]: JSON.stringify({ username: 'collega@mortiseandtenon.nl' }) } }); t4.win.fetch = async () => ({ ok: true, status: 200, json: async () => ({ rol: 'kantoor' }) });
     await t4.K.voorStart({ username: 'collega@mortiseandtenon.nl' }, 'https://w.test'); assert.strictEqual(t4.herladen.length, 0); assert.strictEqual(t4.K.aan, false); assert.strictEqual(t4.win.localStorage, t4.echt.api);
+  });
+
+  await test('actief account: kiesAccount neemt het actieve account, anders het record, anders het enige; meerdere zonder keuze = geen account (nooit zomaar het eerste)', () => {
+    const { K, echt } = maakVroeg({ ls: {} });
+    const A = { homeAccountId: 'a.t', username: 'bart@mortiseandtenon.nl' }, G = { homeAccountId: 'g.t', username: 'coach_example.org#EXT#@example.net' };
+    const msal = (lijst, actief) => { const m = { actief, gezet: null, getAllAccounts: () => lijst, getActiveAccount: () => m.actief, setActiveAccount: a => { m.gezet = a; m.actief = a; } }; return m; };
+    let m = msal([G, A], A); assert.strictEqual(K.kiesAccount(m), A);
+    m = msal([G, A], null); assert.strictEqual(K.kiesAccount(m), null, 'twee accounts, geen actief, geen record'); assert.strictEqual(m.gezet, null);
+    m = msal([A], null); assert.strictEqual(K.kiesAccount(m), A); assert.strictEqual(m.gezet, A, 'enige account wordt actief gezet');
+    echt.m.set('mtkijk.actief', ACT('g.t', G.username, true)); m = msal([A, G], null); assert.strictEqual(K.kiesAccount(m), G, 'record wijst het account aan'); assert.strictEqual(m.gezet, G);
+    echt.m.set('mtkijk.actief', ACT('weg.t', G.username, true)); m = msal([A, G], null); assert.strictEqual(K.kiesAccount(m), null, 'record wijst naar een account dat er niet meer is');
+    m = msal([], null); assert.strictEqual(K.kiesAccount(m), null);
+  });
+
+  await test('accountwissel: naLogin herlaadt vóór er iets geladen wordt bij gast, bij een ander account en bij een meekijker, in beide richtingen; teamlid-naar-teamlid-start en dezelfde account niet; nooit een lus', () => {
+    const A = { homeAccountId: 'a.t', username: 'Bart@mortiseandtenon.nl' }, G = { homeAccountId: 'g.t', username: 'coach_example.org#EXT#@example.net' }, B = { homeAccountId: 'b.t', username: 'collega@mortiseandtenon.nl' };
+    // eerste login teamlid, nog geen record: niet herladen, record geschreven
+    let t = maakVroeg({ ls: {} }); assert.strictEqual(t.K.naLogin(A), false); assert.strictEqual(t.herladen.length, 0);
+    assert.deepStrictEqual(JSON.parse(t.echt.m.get('mtkijk.actief')), { h: 'a.t', u: 'bart@mortiseandtenon.nl', ext: false, m: false });
+    assert.strictEqual(t.K.naLogin(A), false, 'zelfde account, tweede keer'); assert.strictEqual(t.herladen.length, 0);
+    // Bart -> gast: herladen (record eerst), geen app geladen
+    assert.strictEqual(t.K.naLogin(G), true); assert.strictEqual(t.herladen.length, 1); assert.strictEqual(JSON.parse(t.echt.m.get('mtkijk.actief')).ext, true);
+    assert.strictEqual(t.sess.m.get('mtkijk.wissel'), 'g.t');
+    // na het herladen: nieuwe pagina met het gast-record en de gast in de cache = streng; geen login meer; kiesAccount/naLogin herlaadt niet nog eens
+    const cache = { 'g.t-login.microsoftonline.com-tenant': JSON.stringify({ homeAccountId: 'g.t', username: G.username }) };
+    let na = maakVroeg({ ls: { ...cache, 'mtkijk.actief': t.echt.m.get('mtkijk.actief') }, sess: { 'mtkijk.wissel': 'g.t' } });
+    assert.strictEqual(na.K.modus, 'streng'); assert.strictEqual(na.K.naLogin(G), false, 'al streng + dezelfde gast: geen tweede herlaadronde'); assert.strictEqual(na.herladen.length, 0);
+    // zonder strenge start (cache onleesbaar) mag de grendel een lus voorkomen
+    na = maakVroeg({ ls: { 'mtkijk.actief': t.echt.m.get('mtkijk.actief') }, sess: { 'mtkijk.wissel': 'g.t' } }); assert.strictEqual(na.K.naLogin(G), false); assert.strictEqual(na.herladen.length, 0, 'grendel: nooit twee keer voor hetzelfde account');
+    // gast -> Bart in dezelfde browser (na uitloggen is het record weg; zonder uitloggen: record = gast)
+    let g = maakVroeg({ ls: { ...cache, 'mtkijk.actief': ACT('g.t', G.username, true) } }); assert.strictEqual(g.K.modus, 'streng');
+    assert.strictEqual(g.K.naLogin(A), true, 'gast-record + teamlid logt in: herladen'); assert.strictEqual(g.herladen.length, 1); assert.strictEqual(JSON.parse(g.echt.m.get('mtkijk.actief')).h, 'a.t');
+    // daarna: Bart actief, gast in cache -> niet streng, echte opslag
+    const bartNa = maakVroeg({ ls: { ...cache, 'a.t-login.microsoftonline.com-tenant': JSON.stringify({ homeAccountId: 'a.t', username: A.username }), 'mtkijk.actief': g.echt.m.get('mtkijk.actief'), mt_projecten: '[1]' }, sess: { 'mtkijk.wissel': 'a.t' } });
+    assert.strictEqual(bartNa.K.modus, null); assert.strictEqual(bartNa.win.localStorage, bartNa.echt.api); assert.strictEqual(bartNa.K.naLogin(A), false); assert.strictEqual(bartNa.herladen.length, 0); assert.strictEqual(bartNa.sess.m.has('mtkijk.wissel'), false, 'grendel opgeruimd');
+    // teamlid -> ander teamlid: herladen (andere account); eerste keer na reload niet meer
+    t = maakVroeg({ ls: { 'mtkijk.actief': ACT('a.t', A.username, false) } }); assert.strictEqual(t.K.naLogin(B), true); assert.strictEqual(t.herladen.length, 1);
+    // gast eerste login (geen record, niet streng): herladen
+    t = maakVroeg({ ls: {} }); assert.strictEqual(t.K.naLogin(G), true); assert.strictEqual(t.herladen.length, 1);
+    // bevestigde meekijker zonder #EXT# (record m:true) maar niet streng: herladen
+    t = maakVroeg({ ls: { 'mtkijk.actief': ACT('a.t', A.username, false, true) } }); assert.strictEqual(t.K.naLogin(A), true);
+    // zonder account niets
+    t = maakVroeg({ ls: {} }); assert.strictEqual(t.K.naLogin(null), false);
+  });
+
+  await test('uitloggen: record weg en schoon herladen; de app-sleutels blijven onaangeroerd; niet-streng team raakt alleen onze eigen sleutel', () => {
+    const t = maakVroeg({ ls: { 'mtkijk.actief': ACT('a.t', 'bart@mortiseandtenon.nl', false), ...planten }, sess: { 'mtkijk.wissel': 'a.t', 'mtkijk.herstart': '1' } });
+    assert.strictEqual(t.K.naUitloggen(), true); assert.strictEqual(t.herladen.length, 1);
+    assert.strictEqual(t.echt.m.has('mtkijk.actief'), false); assert.strictEqual(t.sess.m.has('mtkijk.wissel'), false); assert.strictEqual(t.sess.m.has('mtkijk.herstart'), false);
+    for (const k of Object.keys(planten)) assert.strictEqual(t.echt.m.get(k), planten[k]);
+    assert.deepStrictEqual(t.echt.log.filter(l => l[0] === 'del' || l[0] === 'set' || l[0] === 'clear').map(l => l.join(':')), ['del:mtkijk.actief']);
+    // uit de strenge modus: het record gaat uit de ECHTE opslag (niet uit de lege)
+    const s = maakVroeg({ ls: gastCache() }); assert.strictEqual(s.K.modus, 'streng'); s.K.naUitloggen(); assert.strictEqual(s.echt.m.has('mtkijk.actief'), false); assert.strictEqual(s.echt.m.get('mt_projecten'), planten.mt_projecten);
+    // een rol die vervalt: niet-gast met m:true wordt na "geen meekijker" niet meer streng
+    const w = maakVroeg({ ls: { 'o.t-login.microsoftonline.com-t': JSON.stringify({ homeAccountId: 'o.t', username: 'coach@example.org' }), 'mtkijk.actief': ACT('o.t', 'coach@example.org', false, true) } });
+    assert.strictEqual(w.K.modus, 'streng'); w.win.fetch = async () => ({ ok: true, status: 200, json: async () => ({ rol: 'kantoor' }) });
+    return w.K.voorStart({ username: 'coach@example.org', homeAccountId: 'o.t' }, 'https://w.test').then(() => { assert.strictEqual(JSON.parse(w.echt.m.get('mtkijk.actief')).m, false); assert.strictEqual(maakVroeg({ ls: Object.fromEntries(w.echt.m) }).K.modus, null); });
   });
 
   await test('MSAL-opslag: msalBegin geeft MSAL de echte opslag, msalEinde zet de lege weer terug', () => {

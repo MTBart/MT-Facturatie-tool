@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <!-- Kijkmodus (rol meekijker): ALS EERSTE script, vóór alles wat localStorage aanraakt. Een gast in de MSAL-cache start hier al in streng/lege-opslag-modus (zie mt-kijk.js). -->
-<script src="mt-kijk.js?v=2026-11-02b" data-kijk="v2"></script>
+<script src="mt-kijk.js?v=2026-11-02c" data-kijk="v2"></script>
 <!-- Stijlkeuze (restyling fase 1, v2.18): de NIEUWE stijl is de standaard. Zet html[data-stijl="nieuw"] VOOR het eerste tekenen, tenzij dit toestel zelf voor de oude stijl koos:
      localStorage "mt-stijl-keuze" ('oud' of 'nieuw'; per toestel; een nieuwe sleutel, de proefwaarde "mt-stijl" uit de testperiode telt niet mee), of via ?stijl=oud / ?stijl=nieuw
      (wordt onthouden). De stijlregels staan in mt-stijl-nieuw.css onder dat attribuut; met de oude stijl blijft de tool zoals voorheen. Lettertypen laden alleen in de nieuwe stijl. -->
@@ -37,7 +37,7 @@
 <!-- Gedeelde kernlaag (esc, _encPath, MSAL-tokenhelpers, _SP-synclaag) — één bron
      voor cockpit én app (audit-actie S2). Moet vóór de code laden die het gebruikt;
      ?v= = cachebuster (bump bij elke wijziging), zelfde patroon als calc-engine.js. -->
-<script src="mt-core.js?v=2026-10-13a"></script>
+<script src="mt-core.js?v=2026-11-02c"></script>
 <script src="mt-spiegel.js?v=2026-11-02a"></script>
 <script src="mt-project.js?v=2026-10-15b"></script>
 <script src="mt-lead.js?v=2026-10-13b"></script>
@@ -6092,7 +6092,7 @@ function wijsAttentieAf(id){ _verwerkAttentie(id,'afgewezen'); }
 // zodat de samenvoeger (_SP.mergers.mt_bestellijst) per regel de nieuwste stand kiest.
 // Vóór elke wijziging gaat een kopie naar mt_bestellijst_journaal (gesynct).
 // Function-declaraties (gehoist): ze worden al vóór deze regel aangeroepen (KPI's).
-function _blWie(){ try{ const a=window._msal&&_msal.getAllAccounts(); return (a&&a[0]&&a[0].username)||''; }catch(e){ return ''; } }
+function _blWie(){ try{ const a=window._actiefAccount&&_actiefAccount(); return (a&&a.username)||''; }catch(e){ return ''; } }
 // Oude regels zonder id krijgen een id uit hun inhoud: op elke pc hetzelfde, dus de
 // samenvoeger herkent dezelfde regel aan beide kanten (geen dubbel, geen verlies).
 function _blLegacyId(b){
@@ -15915,7 +15915,7 @@ const MT_TEAM=[
 ];
 
 function mtMijEmail(){
-  try{const a=_msal&&_msal.getAllAccounts();return (a&&a[0]&&a[0].username||'').toLowerCase();}catch(e){return '';}
+  try{const a=window._actiefAccount&&_actiefAccount();return (a&&a.username||'').toLowerCase();}catch(e){return '';}
 }
 function mtIsAdmin(){
   const e=mtMijEmail(); if(!e) return false;
@@ -16887,7 +16887,7 @@ function helpActieveTab(){const el=document.querySelector('.tab-content.active')
 const _LOG={
   BUF:'mt_chatlog_buffer',_t:null,
   bestand(){const d=new Date();return `mt_chatlog-${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}.json`;},
-  gebruiker(){try{const a=_msal&&_msal.getAllAccounts();return (a&&a[0]&&a[0].username)||'?';}catch(e){return '?';}},
+  gebruiker(){try{const a=window._actiefAccount&&_actiefAccount();return (a&&a.username)||'?';}catch(e){return '?';}},
   add(kind,tab,vraag,antwoord){
     try{
       const buf=JSON.parse(localStorage.getItem(this.BUF)||'[]');
@@ -18289,7 +18289,12 @@ async function msLogin() {
   try {
     const result = await _msal.loginPopup({ scopes: ['openid','profile','email'] });
     const account = (result && result.account) || _msal.getAllAccounts()[0];
-    if (account) toonApp(account);
+    if (account) {
+      try { _msal.setActiveAccount(account); } catch(e) {}
+      // Kijkmodus: een gast of een ander account dan het vorige? Dan eerst herladen (met de juiste opslagmodus), nog vóór er iets geladen wordt.
+      if (window.MTKijk && MTKijk.naLogin(account)) return;
+      toonApp(account);
+    }
   } catch(e) {
     if (e.errorCode !== 'user_cancelled') {
       errEl.textContent = 'Inloggen mislukt: ' + e.message;
@@ -18303,6 +18308,7 @@ async function msLogout() {
   await _msal.logoutPopup();
   document.getElementById('app-wrap').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
+  try { if (window.MTKijk) MTKijk.naUitloggen(); } catch(e) {}   // record van het actieve account weg + schoon herladen
 }
 
 async function initMsal() {
@@ -18323,9 +18329,11 @@ async function initMsal() {
     });
     try { if (window.MTKijk) MTKijk.msalEinde(); } catch(e) {}
     await window._msal.initialize();
-    const accounts = window._msal.getAllAccounts();
-    if (accounts.length > 0) {
-      toonApp(accounts[0]);
+    // Het ACTIEVE account (niet zomaar het eerste): met een teamlid en een gast in dezelfde browser mag nooit het verkeerde account de app starten.
+    const acc = window.MTKijk ? MTKijk.kiesAccount(window._msal) : (window._msal.getAllAccounts()[0] || null);
+    if (acc) {
+      if (window.MTKijk && MTKijk.naLogin(acc)) return;
+      toonApp(acc);
     }
     // login-screen blijft zichtbaar als niemand ingelogd is
   } catch(e) {

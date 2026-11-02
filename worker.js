@@ -6175,7 +6175,7 @@ const SP_FLEX = { t: 'flex' };                                        // primiti
 const SP_TOMB = { t: 'tomb' };                                        // tombstone ({tijd, door}) wordt true: wie het deed hoort er niet in
 const SP_NAAM_UIT_MAIL = { t: 'naamuitmail' };                        // e-mailadres wordt een voornaam
 const SP_GETAL = { t: 'getal' };                                      // getal, of een tekst die een getal is (wordt een getal); anders weg
-const SP_DEEP = { t: 'deep' };                                        // diepe kopie (rapporten zonder contacten): kaarten, lijsten en primitieven, strings geschoond
+
 const spL = n => ({ t: 'l', n }), spK = (n, sleutelRe) => ({ t: 'k', n, re: sleutelRe }), spO = (velden, na) => ({ t: 'o', velden, na });
 const SP_SLEUTEL_RE = /^(?!__)[^\x00-\x1f]{1,120}$/;
 const SP_MAX_ITEMS = 50000, SP_MAX_TEKST = 4000;
@@ -6197,13 +6197,6 @@ function spSchoon(node, w, diep) {
     case 'tomb': return w ? true : undefined;
     case 'naamuitmail': return typeof w === 'string' && w ? (w.includes('@') ? spVoornaam(w) : spScrub(w)) : undefined;
     case 'getal': { const n = typeof w === 'number' ? w : (typeof w === 'string' && w.trim() !== '' ? Number(w.replace(',', '.')) : NaN); return Number.isFinite(n) && Math.abs(n) < 1e9 ? n : undefined; }
-    case 'deep': {
-      if (w === null || typeof w === 'number' || typeof w === 'boolean') return w;
-      if (typeof w === 'string') return spScrub(w);
-      if (Array.isArray(w)) return w.slice(0, 5000).map(x => spSchoon(SP_DEEP, x, diep + 1)).filter(x => x !== undefined);
-      if (typeof w === 'object') { const uit = {}; for (const [k, v] of Object.entries(w).slice(0, 1000)) { if (!SP_SLEUTEL_RE.test(k) || /^(contacts?|contact_person|custom_fields|notes?|attachments?|events|payments)$/i.test(k)) continue; const x = spSchoon(SP_DEEP, v, diep + 1); if (x !== undefined) uit[k] = x; } return uit; }
-      return undefined;
-    }
     case 'flex': {
       if (w === null || ['number', 'boolean', 'string'].includes(typeof w)) return spSchoon(SP_T, w, diep);
       if (Array.isArray(w)) return w.slice(0, 500).map(x => spSchoon(SP_T, x, diep + 1)).filter(x => x !== undefined);
@@ -6237,7 +6230,14 @@ const MB_DOC = spO({
   tax_totals: spL(spO({ tax_rate_id: SP_T, taxable_amount: SP_T, taxable_amount_base: SP_T, tax_amount: SP_T, tax_amount_base: SP_T })), details: spL(MB_DETAIL),
 });   // niet: notes, custom_fields, attachments, events, payments, contact_person(_id), betaal-/publieke links, workflow/stijl, url, en alles wat hier niet staat
 const MB_GROOTBOEK = spO({ id: SP_T, name: SP_T, account_type: SP_T, account_id: SP_T, parent_id: SP_T, allowed_document_types: SP_FLEX, created_at: SP_T, updated_at: SP_T });
-const MB_NODES = { doc: MB_DOC, grootboek: MB_GROOTBOEK, rapport: SP_DEEP };
+// Winst/verlies (reports/profit_loss): expliciet schema (zoals het Moneybird-antwoord waar de tool zelf van leest): totalen en per grootboek een bedrag; geen contacten, namen of vrije velden.
+const MB_PL_GROEP = spO({ ledger_accounts: spL(spO({ ledger_account_id: SP_T, value: SP_T, name: SP_T })), total: SP_T });
+const MB_RAPPORT = spO({
+  period: SP_T, start_date: SP_T, end_date: SP_T, from: SP_T, to: SP_T, currency: SP_T,
+  total_revenue: SP_T, total_direct_costs: SP_T, gross_profit: SP_T, total_expenses: SP_T, operating_profit: SP_T, total_other_income_expenses: SP_T, net_profit: SP_T,
+  revenue_by_ledger_account: MB_PL_GROEP, direct_costs_by_ledger_account: MB_PL_GROEP, expenses_by_ledger_account: MB_PL_GROEP, other_income_expenses_by_ledger_account: MB_PL_GROEP,
+});
+const MB_NODES = { doc: MB_DOC, grootboek: MB_GROOTBOEK, rapport: MB_RAPPORT };
 // ── de stores: bouwstenen per bestand ──
 const SP_STEMPEL = { _gewijzigd: SP_T, _vervallen: SP_TOMB, _weg: SP_TOMB };                       // wel: wijzigmoment en verwijdermarkering; niet: _vs, _veldconflict, _door, _eerder, _bron
 const SP_PROJECT = spO({
