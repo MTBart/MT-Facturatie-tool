@@ -330,7 +330,7 @@ const { pathToFileURL } = require('url');
 
   await test('uitnodiging meekijker activeert niet: eerste login komt in Aanvragen (met vlag); goedkeuren door de eigenaar geeft het account met de einddatum; weigeren ruimt op', async () => {
     const env = envMet({}), tot = Date.now() + 20 * D, oid = OID_K(11);
-    await env.MT_ROLLEN.put('invite:coach@example.org', JSON.stringify({ email: 'coach@example.org', role: 'meekijker', naam: 'Coach', createdBy: 'o', verloopt: Date.now() + D, toegangTot: tot }));
+    await env.MT_ROLLEN.put('invite:coach@example.org', JSON.stringify({ id: 'inv-1', email: 'coach@example.org', role: 'meekijker', naam: 'Coach', createdBy: 'o', verloopt: Date.now() + D, toegangTot: tot }));
     const tok = await maakToken({ oid, preferred_username: 'coach_example.org#EXT#@example.net', email: 'coach@example.org', name: 'Coach' });
     const me = await roepFetch(env, tok, '/me'); assert.strictEqual(me.body.rol, null); assert.strictEqual(me.body.reden, 'wacht-op-goedkeuring');
     assert.strictEqual((await roepFetch(env, tok, '/?target=toggl_focus&path=tasks')).status, 403);
@@ -346,11 +346,12 @@ const { pathToFileURL } = require('url');
     assert.strictEqual(r.body.gebruiker.role, 'meekijker'); assert.strictEqual(r.body.gebruiker.toegangTot, tot);
     assert.strictEqual(await env.MT_ROLLEN.get('invite:coach@example.org'), null);
     assert.strictEqual((await roepFetch(env, tok, '/me')).body.rol, 'meekijker');
-    const o2 = OID_K(12); await env.MT_ROLLEN.put('invite:b@example.org', JSON.stringify({ email: 'b@example.org', role: 'meekijker', verloopt: Date.now() + D, toegangTot: tot }));
+    const o2 = OID_K(12); await env.MT_ROLLEN.put('invite:b@example.org', JSON.stringify({ id: 'inv-b', email: 'b@example.org', role: 'meekijker', verloopt: Date.now() + D, toegangTot: tot }));
     const t2 = await maakToken({ oid: o2, preferred_username: 'b@example.org' }); await roepFetch(env, t2, '/me');
     r = await beheer('eigenaar', '/beheer/aanvraag', { oid: o2, weigeren: true }); assert.strictEqual(r.status, 200);
     assert.strictEqual(await env.MT_ROLLEN.get('invite:b@example.org'), null); assert.strictEqual(await env.MT_ROLLEN.get('aanvraag:' + o2), null);
-    const o3 = OID_K(13); await env.MT_ROLLEN.put('aanvraag:' + o3, JSON.stringify({ oid: o3, email: 'c@example.org', naam: 'C', ts: Date.now(), uitgenodigdAls: 'meekijker', toegangTot: Date.now() - 1000, inviteEmail: 'c@example.org' }));
+    const o3 = OID_K(13); await env.MT_ROLLEN.put('invite:c@example.org', JSON.stringify({ id: 'inv-c', email: 'c@example.org', role: 'meekijker', verloopt: Date.now() + D }));
+    await env.MT_ROLLEN.put('aanvraag:' + o3, JSON.stringify({ oid: o3, email: 'c@example.org', naam: 'C', ts: Date.now(), uitgenodigdAls: 'meekijker', toegangTot: Date.now() - 1000, inviteEmail: 'c@example.org', inviteId: 'inv-c' }));
     r = await beheer('eigenaar', '/beheer/aanvraag', { oid: o3 }); assert.strictEqual(r.status, 400); assert.strictEqual(r.body.error, 'einddatum-in-het-verleden');
     r = await beheer('eigenaar', '/beheer/aanvraag', { oid: o3, toegangTot: Date.now() + D }); assert.strictEqual(r.status, 200);
   });
@@ -484,6 +485,69 @@ const { pathToFileURL } = require('url');
     assert.strictEqual(kijkLabel({ route: '/spiegel/mt_projecten' }), 'Gegevens: mt_projecten');
     const tl = bouwTijdlijn([], [{ ts: 1000, action: 'project_dwell', detail: 'P-2', ms: 500 }, { ts: 2000, action: 'tab_dwell', detail: 'x', ms: 0 }, { ts: 3000, action: 'ander', detail: 'y' }]);
     assert.strictEqual(tl.length, 1); assert.strictEqual(tl[0].items.length, 1, 'dwell zonder open = eigen item; ms 0 en onbekende acties genegeerd');
+  });
+
+  // ── Brok 4 (Codex-ronde 2): lastSeen los van user:{oid}; aanvraag gekoppeld aan het id van de uitnodiging ───────────────────────
+  await test('laatst gezien: eigen record seen:{oid}; user:{oid} wordt door verkeer nooit geschreven (geen race met intrekken of einddatum)', async () => {
+    const env = envMet({}), oid = OID_K(30);
+    await zetMeekijker(env, oid, { lastSeen: undefined });
+    const voor = await env.MT_ROLLEN.get('user:' + oid);
+    const tok = await maakToken({ oid, preferred_username: 'coach@example.org' });
+    assert.strictEqual((await roepFetch(env, tok, '/me')).body.rol, 'meekijker');
+    assert.strictEqual(await env.MT_ROLLEN.get('user:' + oid), voor, 'user-record onaangeroerd');
+    const seen = JSON.parse(await env.MT_ROLLEN.get('seen:' + oid)); assert.strictEqual(seen.oid, oid); assert.ok(Date.now() - seen.ts < 5000);
+    // intrekken tussen twee verzoeken: het volgende verzoek (na de cache van 5 s) schrijft het niet terug
+    await env.MT_ROLLEN.put('user:' + oid, JSON.stringify({ ...JSON.parse(voor), active: false }));
+    await new Promise(r => setTimeout(r, 5100));
+    assert.strictEqual((await roepFetch(env, tok, '/me')).body.rol, null);
+    assert.strictEqual(JSON.parse(await env.MT_ROLLEN.get('user:' + oid)).active, false, 'blijft gedeactiveerd');
+    // Beheer toont de tijd uit seen:
+    const adm = await handleBeheer('/beheer/gebruikers', { method: 'GET', url: 'https://x.test/beheer/gebruikers', json: async () => ({}) }, env, { rol: 'eigenaar', oid: 'o', email: 'e@example.com', rec: {} }, json0);
+    assert.strictEqual(adm.body.gebruikers.find(g => g.oid === oid).lastSeen, seen.ts);
+  });
+
+  await test('aanvraag hoort bij het id van de uitnodiging: ingetrokken, vervangen of verlopen uitnodiging = aanvraag ongeldig; nieuwe uitnodiging werkt', async () => {
+    const env = envMet({}), tot = Date.now() + 20 * D, oid = OID_K(31), mailadres = 'nieuw@example.org';
+    const ikE = rol => ({ rol, oid: 'oid-' + rol, email: rol + '@example.com', rec: { naam: rol } });
+    const beheer = (p, body) => handleBeheer(p, { method: 'POST', url: 'https://x.test' + p, json: async () => body }, env, ikE('eigenaar'), json0);
+    const nodig = async () => (await beheer('/beheer/uitnodigen', { email: mailadres, rol: 'meekijker', toegangTot: tot })).body.uitnodiging;
+    const tok = await maakToken({ oid, preferred_username: mailadres, name: 'Nieuw' });
+    const loginEnAanvraag = async () => { await roepFetch(env, tok, '/me'); return JSON.parse(await env.MT_ROLLEN.get('aanvraag:' + oid)); };
+    // 1. intrekken van de uitnodiging ruimt de aanvraag op
+    const i1 = await nodig(); assert.ok(i1.id && i1.id.length >= 8);
+    let a = await loginEnAanvraag(); assert.strictEqual(a.inviteId, i1.id);
+    let r = await beheer('/beheer/uitnodiging-intrekken', { email: mailadres }); assert.strictEqual(r.status, 200);
+    assert.strictEqual(await env.MT_ROLLEN.get('aanvraag:' + oid), null, 'aanvraag weg met de uitnodiging');
+    // 2. aanvraag blijft staan terwijl de uitnodiging verdween (bv. TTL) = goedkeuren mislukt (409) en de aanvraag wordt opgeruimd
+    await env.MT_ROLLEN.put('aanvraag:' + oid, JSON.stringify(a));
+    r = await beheer('/beheer/aanvraag', { oid }); assert.strictEqual(r.status, 409); assert.strictEqual(r.body.error, 'uitnodiging-ongeldig');
+    assert.strictEqual(await env.MT_ROLLEN.get('aanvraag:' + oid), null); assert.strictEqual(await env.MT_ROLLEN.get('user:' + oid), null);
+    // 3. nieuwe uitnodiging (ander id) -> nieuwe aanvraag; een oude aanvraag met het oude id is ongeldig, ook al bestaat er weer een uitnodiging
+    const i2 = await nodig(); assert.notStrictEqual(i2.id, i1.id);
+    await env.MT_ROLLEN.put('aanvraag:' + oid, JSON.stringify(a));   // oude aanvraag (oud id)
+    r = await beheer('/beheer/aanvraag', { oid }); assert.strictEqual(r.status, 409, 'oud id past niet bij de nieuwe uitnodiging');
+    assert.ok(await env.MT_ROLLEN.get('invite:' + mailadres), 'nieuwe uitnodiging blijft staan');
+    // 4. na een nieuwe uitnodiging maakt de volgende login een verse aanvraag, ook als er nog een oude lag
+    await env.MT_ROLLEN.put('aanvraag:' + oid, JSON.stringify(a));
+    a = await loginEnAanvraag(); assert.strictEqual(a.inviteId, i2.id, 'aanvraag overschreven met het nieuwe id');
+    // 5. weigeren van een oude aanvraag verwijdert een nieuwere uitnodiging NIET
+    const oud = { ...a, inviteId: i1.id }; await env.MT_ROLLEN.put('aanvraag:' + oid, JSON.stringify(oud));
+    r = await beheer('/beheer/aanvraag', { oid, weigeren: true }); assert.strictEqual(r.status, 200);
+    assert.ok(await env.MT_ROLLEN.get('invite:' + mailadres), 'nieuwere uitnodiging blijft');
+    // 6. verlopen uitnodigingstermijn: goedkeuren mislukt
+    a = await loginEnAanvraag();
+    const inv = JSON.parse(await env.MT_ROLLEN.get('invite:' + mailadres)); await env.MT_ROLLEN.put('invite:' + mailadres, JSON.stringify({ ...inv, verloopt: Date.now() - 1 }));
+    r = await beheer('/beheer/aanvraag', { oid }); assert.strictEqual(r.status, 409);
+    // 7. een goede keten werkt nog steeds
+    await beheer('/beheer/uitnodigen', { email: mailadres, rol: 'meekijker', toegangTot: tot });
+    a = await loginEnAanvraag();
+    r = await beheer('/beheer/aanvraag', { oid }); assert.strictEqual(r.status, 200, JSON.stringify(r.body)); assert.strictEqual(r.body.gebruiker.role, 'meekijker'); assert.strictEqual(r.body.gebruiker.toegangTot, tot);
+    assert.strictEqual(await env.MT_ROLLEN.get('invite:' + mailadres), null);
+  });
+
+  await test('Moneybird: contact is een allowlist (id, bedrijfsnaam, voor-/achternaam); een nieuw veld lekt niet', () => {
+    const c = mbMagerDoc({ contact: { id: '1', company_name: 'X BV', nieuw_veld: 'lek', address1: 'a', bank_account: 'b' } }).contact;
+    assert.deepStrictEqual(c, { id: '1', company_name: 'X BV' });
   });
 
   globalThis.fetch = echteFetch;

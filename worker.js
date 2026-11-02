@@ -627,7 +627,8 @@ async function handleDashboard(pathname, request, env, msPayload, cors) {
 // wat geweigerd zóu worden) | 'afdwingen'. /beheer/* en de admin-leesroutes van
 // /track zijn in élke modus beperkt (die waren al beperkt of zijn nieuw).
 // KV-schema:
-//   user:{oid}     {oid, role, active, email, naam, createdBy, createdAt, updatedAt, lastSeen}
+//   user:{oid}     {oid, role, active, email, naam, createdBy, createdAt, updatedAt, toegangTot?}   (alleen door Beheer-acties/koppelen geschreven)
+//   seen:{oid}     {oid, ts}   laatst gezien (blind overschreven, hooguit eens per uur; raakt user:{oid} nooit)
 //   invite:{email} {email, role, naam, createdBy, createdAt, verloopt}   (TTL 30 dagen)
 //   aanvraag:{oid} {oid, email, naam, bericht, ts}                       (TTL 30 dagen)
 //   audit:{omgekeerde ts}:{rand}  één wijziging, nieuwste eerst          (TTL 400 dagen)
@@ -725,10 +726,15 @@ async function leesGebruiker(env, oid) {
   _gebruikerCache.set(oid, { rec, t: Date.now() });
   return rec;
 }
-// "Laatst gezien": vers lezen en alleen dat veld bijwerken, zodat een verouderde cache nooit een deactivering of nieuwe einddatum terugdraait.
-async function lastSeenBijwerken(env, oid) {
-  const vers = await kvJsonStrikt(env, 'user:' + oid);
-  if (vers) await kvZet(env, 'user:' + oid, { ...vers, lastSeen: Date.now() });
+// "Laatst gezien" staat in een eigen record `seen:{oid}` ({oid, ts}) en wordt blind overschreven (nooit gelezen-en-teruggeschreven):
+// zo schrijft het verkeer nooit autorisatievelden van `user:{oid}` (rol, active, toegangTot). `user:{oid}` wordt alleen door Beheer-acties,
+// het koppelen van een uitnodiging en de vaste-eigenaar-registratie geschreven. Beheer leest de tijd uit `seen:` (zie /beheer/gebruikers).
+const _seenGeschreven = new Map();   // oid -> ts (per isolate: hooguit eens per LASTSEEN_MS naar KV)
+async function seenBijwerken(env, oid) {
+  const nu = Date.now(), vorige = _seenGeschreven.get(oid) || 0;
+  if (nu - vorige < LASTSEEN_MS || !env.MT_ROLLEN) return;
+  _seenGeschreven.set(oid, nu);
+  try { await kvZet(env, 'seen:' + oid, { oid, ts: nu }); } catch { _seenGeschreven.delete(oid); }
 }
 async function schrijfGebruiker(env, rec) {
   await kvZet(env, 'user:' + rec.oid, rec);
@@ -740,6 +746,13 @@ function nieuweGebruiker(oid, role, email, naam, door) {
 }
 const waitUntil = (ctx, p) => { try { if (ctx && ctx.waitUntil) ctx.waitUntil(p); else p.catch(() => {}); } catch {} };
 
+// De uitnodiging waar een aanvraag bij hoort: moet nog bestaan, hetzelfde id hebben (elke uitnodiging krijgt een eigen id), niet verlopen zijn
+// en de meekijker-rol dragen. Anders null (de aanvraag is dan ongeldig).
+async function inviteBijAanvraag(env, a) {
+  if (!a || !a.uitgenodigdAls || !a.inviteEmail || !a.inviteId) return null;
+  const inv = await kvJson(env, 'invite:' + String(a.inviteEmail).toLowerCase());
+  return inv && inv.id === a.inviteId && inv.role === a.uitgenodigdAls && (!inv.verloopt || inv.verloopt > Date.now()) ? inv : null;
+}
 // Eindtijd van de toegang (epoch ms, optioneel op user-record en uitnodiging). Verlopen = geen rol, ook niet voor 'lezen' enz.
 function toegangVerlopen(rec, nu = Date.now()) {
   return !!(rec && rec.toegangTot != null && Number(rec.toegangTot) <= nu);
@@ -790,11 +803,7 @@ async function bepaalRol(env, payload, ctx) {
   const oid = payload.oid, naam = payload.name || '';
   let email = tokenEmail(payload);
   let rec = await leesGebruiker(env, oid);
-  if (rec && Date.now() - (rec.lastSeen || 0) > LASTSEEN_MS) {
-    rec = { ...rec, lastSeen: Date.now() };
-    _gebruikerCache.set(oid, { rec, t: Date.now() });   // zelfde inhoud, alleen lastSeen; de opslag zelf wordt vers gelezen en bijgewerkt
-    waitUntil(ctx, lastSeenBijwerken(env, oid).catch(() => {}));
-  }
+  if (rec) waitUntil(ctx, seenBijwerken(env, oid));
   const vast = vasteEigenaar(env, oid, email);
   if (vast) {
     // Record vastleggen/bijwerken (idempotent); bij 'email' is dit hoe we de oid leren.
@@ -820,8 +829,9 @@ async function bepaalRol(env, payload, ctx) {
     // Externe rol (meekijker): een uitnodiging activeert NIET zelf. De eerste login zet de persoon in Aanvragen (met oid, naam, adres en de
     // vlag "uitgenodigd als meekijker"); pas na goedkeuring door de eigenaar ontstaat het account (met de einddatum uit de uitnodiging).
     if (ALTIJD_AFDWINGEN.has(inv.role)) {
-      if (!(await kvJson(env, 'aanvraag:' + oid))) {
-        await kvZet(env, 'aanvraag:' + oid, { oid, email, naam: clip(naam, 80) || email, bericht: '', ts: Date.now(), uitgenodigdAls: inv.role, toegangTot: inv.toegangTot || null, inviteEmail: email }, { expirationTtl: 30 * DAG_S });
+      const bestaandeAanvraag = await kvJson(env, 'aanvraag:' + oid);
+      if (!bestaandeAanvraag || (bestaandeAanvraag.inviteId || null) !== (inv.id || null)) {   // ook bij een nieuwere uitnodiging (nieuw id) na een ingetrokken of verlopen vorige
+        await kvZet(env, 'aanvraag:' + oid, { oid, email, naam: clip(naam, 80) || email, bericht: '', ts: Date.now(), uitgenodigdAls: inv.role, toegangTot: inv.toegangTot || null, inviteEmail: email, inviteId: inv.id || null }, { expirationTtl: 30 * DAG_S });
         await audit(env, { actie: 'toegang-aangevraagd', door: oid, doorNaam: clip(naam, 80) || email, doel: oid, doelNaam: clip(naam, 80) || email, nieuw: 'uitgenodigd als ' + inv.role });
       }
       return { rol: null, rec: null, reden: 'wacht-op-goedkeuring' };
@@ -4853,7 +4863,7 @@ async function handleToegang(request, env, ik, payload, json) {
   const bestaand = await kvJson(env, 'aanvraag:' + payload.oid);
   if (bestaand && Date.now() - bestaand.ts < 3600 * 1000) return json({ ok: true, alAangevraagd: true });
   const a = { oid: payload.oid, email: ik.email, naam: clip(payload.name, 80) || ik.email, bericht: clip(body && body.bericht, 300) || '', ts: Date.now() };
-  if (bestaand && bestaand.uitgenodigdAls) Object.assign(a, { uitgenodigdAls: bestaand.uitgenodigdAls, toegangTot: bestaand.toegangTot || null, inviteEmail: bestaand.inviteEmail || ik.email });   // de uitnodigingsvlag blijft (komt alleen uit de server, nooit uit de body)
+  if (bestaand && bestaand.uitgenodigdAls) Object.assign(a, { uitgenodigdAls: bestaand.uitgenodigdAls, toegangTot: bestaand.toegangTot || null, inviteEmail: bestaand.inviteEmail || ik.email, inviteId: bestaand.inviteId || null });   // de uitnodigingsvlag blijft (komt alleen uit de server, nooit uit de body)
   await kvZet(env, 'aanvraag:' + payload.oid, a, { expirationTtl: 30 * DAG_S });
   await audit(env, { actie: 'toegang-aangevraagd', door: payload.oid, doorNaam: a.naam, doel: payload.oid, doelNaam: a.naam });
   return json({ ok: true });
@@ -4897,7 +4907,8 @@ async function handleBeheer(pathname, request, env, ik, json) {
   const p = pathname, m = request.method;
 
   if (p === '/beheer/gebruikers' && m === 'GET') {
-    const gebruikers = (await lijstKV(env, 'user:')).map(g => { const vast = beheerVast(env, g); return { ...g, rolNaam: ROL_NAAM[g.role] || g.role, beschermd: !!vast, vast }; });
+    const gezien = new Map((await lijstKV(env, 'seen:')).map(s => [s.oid, s.ts]));   // laatst gezien staat in eigen records (seen:{oid}), zie seenBijwerken
+    const gebruikers = (await lijstKV(env, 'user:')).map(g => { const vast = beheerVast(env, g); return { ...g, lastSeen: Math.max(g.lastSeen || 0, gezien.get(g.oid) || 0) || undefined, rolNaam: ROL_NAAM[g.role] || g.role, beschermd: !!vast, vast }; });
     for (const o of ownerOids(env)) if (!gebruikers.some(g => String(g.oid).toLowerCase() === o))
       gebruikers.push({ oid: o, role: 'eigenaar', rolNaam: 'Eigenaar', active: true, naam: '(vaste eigenaar, nog niet ingelogd)', beschermd: true, vast: 'oid' });
     for (const e of ownerEmails(env)) if (!gebruikers.some(g => (g.email || '').toLowerCase() === e))
@@ -4913,7 +4924,7 @@ async function handleBeheer(pathname, request, env, ik, json) {
     const tt = toegangTotNorm(b.toegangTot);
     if (tt.fout) return json({ error: tt.fout }, 400);
     if (rol === 'meekijker' && !tt.waarde) return json({ error: 'einddatum-verplicht' }, 400);
-    const inv = { email, role: rol, naam: clip(b.naam, 80) || '', createdBy: ik.oid, createdAt: Date.now(), verloopt: Date.now() + 30 * DAG_S * 1000 };
+    const inv = { id: randHex(8), email, role: rol, naam: clip(b.naam, 80) || '', createdBy: ik.oid, createdAt: Date.now(), verloopt: Date.now() + 30 * DAG_S * 1000 };
     if (tt.waarde) inv.toegangTot = tt.waarde;
     await kvZet(env, 'invite:' + email, inv, { expirationTtl: 30 * DAG_S });
     await audit(env, { ...door, actie: 'uitgenodigd', doel: email, doelNaam: inv.naam || email, nieuw: rol + (tt.waarde ? ' tot ' + datumTekst(tt.waarde) : '') });
@@ -4924,6 +4935,8 @@ async function handleBeheer(pathname, request, env, ik, json) {
     const inv = await kvJson(env, 'invite:' + email); if (!inv) return json({ error: 'niet-gevonden' }, 404);
     const fout = magBeheren(env, ik, null, inv.role); if (fout) return json({ error: fout }, 403);
     await env.MT_ROLLEN.delete('invite:' + email);
+    // Een gekoppelde aanvraag (eerste login na de uitnodiging) wordt daarmee ongeldig en verdwijnt uit Aanvragen.
+    for (const a of await lijstKV(env, 'aanvraag:')) if (a.uitgenodigdAls && String(a.inviteEmail || '').toLowerCase() === email && (!inv.id || a.inviteId === inv.id)) { try { await env.MT_ROLLEN.delete('aanvraag:' + a.oid); } catch {} }
     await audit(env, { ...door, actie: 'uitnodiging-ingetrokken', doel: email, oud: inv.role });
     return json({ ok: true });
   }
@@ -4954,9 +4967,16 @@ async function handleBeheer(pathname, request, env, ik, json) {
     const a = await kvJson(env, 'aanvraag:' + oid); if (!a) return json({ error: 'niet-gevonden' }, 404);
     if (b.weigeren) {
       await env.MT_ROLLEN.delete('aanvraag:' + oid);
-      if (a.uitgenodigdAls && a.inviteEmail) { try { await env.MT_ROLLEN.delete('invite:' + String(a.inviteEmail).toLowerCase()); } catch {} }   // anders zet de volgende login hem opnieuw in Aanvragen
+      if (await inviteBijAanvraag(env, a)) { try { await env.MT_ROLLEN.delete('invite:' + String(a.inviteEmail).toLowerCase()); } catch {} }   // anders zet de volgende login hem opnieuw in Aanvragen (alleen de eigen uitnodiging, niet een nieuwere)
       await audit(env, { ...door, actie: 'aanvraag-geweigerd', doel: oid, doelNaam: a.naam });
       return json({ ok: true });
+    }
+    // Uitgenodigd als meekijker: de uitnodiging moet nog bestaan, ongewijzigd (zelfde id) en niet verlopen zijn; anders is de aanvraag ongeldig.
+    if (a.uitgenodigdAls && ALTIJD_AFDWINGEN.has(a.uitgenodigdAls) && ik.rol !== 'eigenaar') return json({ error: 'alleen-eigenaar-mag-meekijker' }, 403);
+    if (a.uitgenodigdAls && !(await inviteBijAanvraag(env, a))) {
+      await env.MT_ROLLEN.delete('aanvraag:' + oid);
+      await audit(env, { ...door, actie: 'aanvraag-vervallen', doel: oid, doelNaam: a.naam, nieuw: 'uitnodiging ingetrokken, verlopen of vervangen' });
+      return json({ error: 'uitnodiging-ongeldig' }, 409);
     }
     // Uitgenodigd als meekijker: de rol staat vast (geen andere rol kiezen) en de einddatum uit de uitnodiging geldt, tenzij de eigenaar een nieuwe meegeeft.
     const rol = a.uitgenodigdAls && ALTIJD_AFDWINGEN.has(a.uitgenodigdAls) ? a.uitgenodigdAls : String(b.rol || ''), fout = magBeheren(env, ik, { oid }, rol); if (fout) return json({ error: fout }, fout === 'onbekende-rol' ? 400 : 403);
