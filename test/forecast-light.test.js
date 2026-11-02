@@ -520,4 +520,54 @@ atest('uit beeld: keten met 409-nieuwe-poging, terugdraaien en melding', async (
   assert.ok(m.winkel['p:A'].aan === true && m.winkel['p:B'].aan === true);
   assert.strictEqual(m.log.filter(x => x[1] === 'markering').length, 2, 'markering twee keer geprobeerd');
 });
+test('datums uit Moneybird worden echt op de kalender gecontroleerd; ongeldig = niet rekenen en nooit een fout', () => {
+  for (const d of ['2026-99-99', '2026-02-30', '2026-13-01', '2026-00-10', '2026-04-31', '2025-02-29', '2026-1-1', 'morgen', '', null, undefined, 20261102]) assert.strictEqual(L.geldigeDatum(d), false, String(d));
+  for (const d of ['2026-02-28', '2024-02-29', '2026-12-31', '2026-01-01']) assert.strictEqual(L.geldigeDatum(d), true, d);
+  assert.strictEqual(L.dagPlus('2026-12-30', 3), '2027-01-02'); assert.strictEqual(L.dagPlus('2026-03-01', -1), '2026-02-28'); assert.strictEqual(L.dagPlus('2026-99-99', 5), null); assert.strictEqual(L.dagPlus('2026-01-01', NaN), null);
+  assert.strictEqual(L.dagenTussen('2026-01-01', '2026-03-01'), 59); assert.strictEqual(L.dagenTussen('2026-99-99', '2026-03-01'), null);
+  assert.strictEqual(fx({ invoice_date: '2026-99-99' }), null, 'factuur met onmogelijke datum telt niet');
+  const off = o => F.schatNorm(Object.assign({ id: 300000000701, estimate_id: '2026-701', contact_id: 500000000001, contact: { company_name: 'Jansen Voorbeeld' }, total_price_incl_tax: '1210', state: 'accepted', reference: 'Kast Voorbeeld', estimate_date: '2026-99-99' }, o));
+  const f = fx({ reference: 'kast voorbeeld', invoice_date: '2026-10-15' });
+  assert.doesNotThrow(() => L.koppelFacturen([f], [off({})], null)); assert.strictEqual(L.koppelFacturen([f], [off({})], null).los.length, 1, 'onmogelijke offertedatum: niet koppelen op referentie');
+  const sch = [off({ estimate_date: '2026-02-30' })], fk = L.koppelFacturen([f], sch, null);
+  assert.doesNotThrow(() => L.vragen(L.rijen(sch, {}, {}, fk), [f], fk, sch, { vandaag: '2026-11-02', ok: {}, prog: {} })); assert.deepStrictEqual(L.vragen(L.rijen(sch, {}, {}, fk), [f], fk, sch, { vandaag: '2026-11-02', ok: {}, prog: {} }), [], 'ongeldige offertedatum: geen factuur- en geen oud-vraag');
+  assert.deepStrictEqual(L.vragen(L.rijen([off({ estimate_date: '2026-01-01' })], {}, {}, null), [], null, [off({ estimate_date: '2026-01-01' })], { vandaag: '2026-99-99', ok: {}, prog: {} }), [], 'ongeldige vandaag: geen vragen en geen fout');
+  const ok = L.vragen(L.rijen([off({ estimate_date: '2026-01-01' })], {}, {}, null), [], null, [off({ estimate_date: '2026-01-01' })], { vandaag: '2026-11-02', ok: { 'o:300000000701': '2026-99-99' }, prog: {} });
+  assert.strictEqual(ok.length, 1, 'een onleesbare "komt nog"-datum onthouden we niet');
+});
+atest('factuur koppelen: keten met terugdraaien en melding', async () => {
+  const termijn = [{ id: 't1', label: 'rest', bedrag: 1210, factuurdatum: '2026-12-01', aan: true }], FID = '400000000801', EID = '300000000801';
+  const it = o => Object.assign({ soort: 'project', naam: 'Wandkast', estimate_id: EID, totaal: 1210, termijnen: termijn, betaaltermijn: 14, aan: true, k: [], x: [], ts: 10, door: 'X' }, o);
+  const schat = { id: EID, naam: 'Jansen', ref: 'Kast', nummer: '2026-801', contact_id: '500000000001', totaalC: 121000, status: 'geaccepteerd' };
+  const maak = (opties, start) => {
+    const o = Object.assign({ falen: {}, eenmaal409: new Set() }, opties), winkel = start || { 'p:A': it({ x: [FID] }), 'p:C': it({ x: [FID], ts: 20 }) }, log = []; let ts = 100;
+    const haal = async (pad, opt) => {
+      const b = opt.body; log.push(b.sleutel + (b.item === null ? ':wis' : ''));
+      const huidig = winkel[b.sleutel];
+      if (o.eenmaal409.has(b.sleutel)) { o.eenmaal409.delete(b.sleutel); winkel[b.sleutel] = Object.assign({}, huidig, { ts: ++ts }); return { error: 'deze prognose is intussen aangepast \u2014 herlaad' }; }
+      if ((huidig ? huidig.ts : null) !== b.vorige_ts) return { error: 'deze prognose is intussen aangepast \u2014 herlaad' };
+      if (o.falen[b.sleutel] === 'altijd' || (o.falen[b.sleutel] === 'terug' && log.filter(x => x === b.sleutel).length > 1)) return { error: 'opslaan mislukt' };
+      if (b.item === null) { delete winkel[b.sleutel]; return { ok: true, item: null }; }
+      const nw = Object.assign({}, b.item, { ts: ++ts }); winkel[b.sleutel] = nw; return { ok: true, item: nw };
+    };
+    return { winkel, log, run: () => L.koppelKeten({ acties: [{ soort: 'k', eid: EID, fid: FID }], fid: FID, schatVan: () => schat, vandaag: '2026-11-02', lees: async () => JSON.parse(JSON.stringify(winkel)), haal }) };
+  };
+  // alles gelukt: beide items bijgewerkt (k erbij, x eraf)
+  let m = maak({}); const gel = await m.run(); assert.strictEqual(gel.length, 2); assert.deepStrictEqual(m.log, ['p:A', 'p:C']);
+  assert.deepStrictEqual([m.winkel['p:A'].k, m.winkel['p:A'].x, m.winkel['p:C'].x], [[FID], [], []]);
+  // 409 bij het tweede item: opnieuw lezen en een keer opnieuw
+  m = maak({ eenmaal409: new Set(['p:C']) }); await m.run(); assert.deepStrictEqual(m.log, ['p:A', 'p:C', 'p:C']); assert.deepStrictEqual(m.winkel['p:C'].x, []);
+  // tweede item mislukt: eerste krijgt zijn vorige k/x terug (met verse ts), melding zegt het
+  m = maak({ falen: { 'p:C': 'altijd' } });
+  await assert.rejects(m.run(), e => /niet gelukt/.test(e.message) && /teruggezet/.test(e.message) && e.teruggedraaid === 1 && e.mislukt.length === 0);
+  assert.deepStrictEqual([m.winkel['p:A'].k, m.winkel['p:A'].x], [[], [FID]], 'vorige stand terug'); assert.ok(m.winkel['p:A'].ts > 100, 'met een verse ts');
+  // terugzetten mislukt ook: offerte en item staan in de melding
+  m = maak({ falen: { 'p:C': 'altijd', 'p:A': 'terug' } });
+  await assert.rejects(m.run(), e => /nakijken/.test(e.message) && new RegExp('offerte ' + EID).test(e.message) && /p:A/.test(e.message) && e.mislukt.join() === 'p:A' && e.teruggedraaid === 0);
+  // nieuw aangemaakt item wordt bij een fout weer gewist
+  m = maak({ falen: { 'p:C': 'altijd' } }, { 'p:C': it({ ts: 20 }) }); m.winkel['p:C'].estimate_id = EID;
+  const nieuw = L.koppelKeten({ acties: [{ soort: 'k', eid: EID, fid: FID }, { soort: 'x', eid: '300000000802', fid: FID }], fid: FID, schatVan: id => id === EID ? schat : Object.assign({}, schat, { id }), vandaag: '2026-11-02', lees: async () => JSON.parse(JSON.stringify(m.winkel)),
+    haal: async (pad, opt) => { const b = opt.body; if (b.sleutel === 'p:e300000000802') return { error: 'opslaan mislukt' }; const nw = Object.assign({}, b.item, { ts: 500 }); m.winkel[b.sleutel] = nw; return { ok: true, item: nw }; } });
+  await assert.rejects(nieuw, e => e.teruggedraaid === 1 && /teruggezet/.test(e.message)); assert.deepStrictEqual(m.winkel['p:C'].k, [], 'eerste actie teruggezet');
+});
 kette.then(() => console.log(`\n${n} tests geslaagd${process.exitCode ? ' (met fouten)' : ''}`));

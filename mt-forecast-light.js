@@ -45,13 +45,22 @@
     return { c: neg ? -c : c };
   };
 
+  // Datums uit Moneybird: echt op de kalender controleren (2026-99-99 en 2026-02-30 zijn geen datum); rekenen met datums geeft bij ongeldige invoer null, nooit een fout.
+  L.geldigeDatum = d => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d == null ? '' : d)); if (!m) return false;
+    const j = Number(m[1]), mnd = Number(m[2]), dag = Number(m[3]); if (j < 1000 || mnd < 1 || mnd > 12 || dag < 1) return false;
+    const t = new Date(Date.UTC(j, mnd - 1, dag)); return t.getUTCFullYear() === j && t.getUTCMonth() === mnd - 1 && t.getUTCDate() === dag;
+  };
+  L.dagPlus = (d, n) => L.geldigeDatum(d) && Number.isFinite(n) ? new Date(Date.UTC(Number(d.slice(0, 4)), Number(d.slice(5, 7)) - 1, Number(d.slice(8, 10))) + n * 864e5).toISOString().slice(0, 10) : null;
+  L.dagenTussen = (van, tot) => L.geldigeDatum(van) && L.geldigeDatum(tot) ? Math.round((Date.parse(tot + 'T00:00:00Z') - Date.parse(van + 'T00:00:00Z')) / 864e5) : null;
+
   // ── Verkoopfacturen (Moneybird, alleen lezen; Bart 30-10) ──
   // Een factuur bij een offerte vervangt in zijn factuurmaand het schetsbedrag (het vakje staat dan vast, in de kleur van de status); het
   // schetsbedrag zelf blijft bewaard. Bij de offerte staat wat er nog te factureren is.
   const cent = v => { const n = parseFloat(v); return isFinite(n) ? Math.round(n * 100) : null; };
   L.factuurNorm = function (x) {
     if (!x || x.id == null || String(x.state || '') === 'draft') return null;
-    const datum = String(x.invoice_date || ''); if (!/^\d{4}-\d{2}-\d{2}$/.test(datum)) return null;
+    const datum = String(x.invoice_date || ''); if (!L.geldigeDatum(datum)) return null;
     const incl = cent(x.total_price_incl_tax_base != null ? x.total_price_incl_tax_base : x.total_price_incl_tax); if (incl == null) return null;
     const excl = cent(x.total_price_excl_tax_base != null ? x.total_price_excl_tax_base : x.total_price_excl_tax), k = x.contact || {};
     return { id: String(x.id), nummer: String(x.invoice_id || ''), contact_id: x.contact_id != null ? String(x.contact_id) : '', klant: String(k.company_name || [k.firstname, k.lastname].filter(Boolean).join(' ') || '').trim(),
@@ -75,8 +84,7 @@
     // Staat een factuur bevestigd bij twee of meer verschillende offertes, dan is dat een conflict: niet koppelen (blijft los) en een vraag in het paneel. Twee items van dezelfde offerte met k is geen conflict.
     for (const [k, s] of bevAlle) { if (s.size === 1) bevestigd.set(k, [...s][0]); else conflicten[k] = [...s].sort(); }
     const offertes = (schatten || []).filter(s => s && s.nummer && s.nummer.length >= 4 && s.contact_id), inLijst = new Set((schatten || []).filter(Boolean).map(s => s.id));
-    const dagPlus = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10);
-    const refKey = t => String(t || '').trim().toLowerCase(), refOffertes = (schatten || []).filter(s => s && s.contact_id && refKey(s.ref) && /^\d{4}-\d{2}-\d{2}$/.test(String(s.datum || '')) && s.status !== 'concept' && s.status !== 'afgewezen');   // zonder geldige offertedatum nooit automatisch koppelen
+    const refKey = t => String(t || '').trim().toLowerCase(), refOffertes = (schatten || []).filter(s => s && s.contact_id && refKey(s.ref) && L.geldigeDatum(s.datum) && s.status !== 'concept' && s.status !== 'afgewezen');   // zonder geldige offertedatum nooit automatisch koppelen
     for (const f of (facturen || []).filter(Boolean).slice().sort((a, b) => (a.orig ? 1 : 0) - (b.orig ? 1 : 0))) {
       if (conflicten[f.id]) { los.push(f); continue; }
       const niet = nee.get(f.id) || new Set();
@@ -84,7 +92,7 @@
       let via = null;
       if (!eid && f.eid && !niet.has(f.eid) && inLijst.has(f.eid)) eid = f.eid;
       if (!eid && f.orig && perId.has(f.orig)) eid = perId.get(f.orig);
-      if (!eid && f.contact_id && refKey(f.ref)) { const kand = refOffertes.filter(s => s.contact_id === f.contact_id && !niet.has(s.id) && refKey(s.ref) === refKey(f.ref) && f.datum >= dagPlus(s.datum, -7)); if (kand.length === 1) { eid = kand[0].id; via = 'referentie'; } }
+      if (!eid && f.contact_id && refKey(f.ref)) { const kand = refOffertes.filter(s => s.contact_id === f.contact_id && !niet.has(s.id) && refKey(s.ref) === refKey(f.ref) && L.geldigeDatum(f.datum) && f.datum >= L.dagPlus(s.datum, -7)); if (kand.length === 1) { eid = kand[0].id; via = 'referentie'; } }
       if (!eid) { const ref = f.ref.toLowerCase(), kand = offertes.filter(s => s.contact_id === f.contact_id && !niet.has(s.id) && ref.includes(s.nummer.toLowerCase())); if (kand.length === 1) eid = kand[0].id; }
       if (!eid && f.eid && !niet.has(f.eid)) eid = f.eid;   // een offerte die niet (meer) in de lijst staat: eigen "gefactureerd"-rij
       if (!eid) { los.push(f); continue; }
@@ -145,13 +153,13 @@
   const BEDRIJF = new Set(['holding', 'beheer', 'stichting', 'groep', 'group', 'gemeente', 'nederland', 'vastgoed', 'bouw', 'projecten', 'interieurbouw', 'gmbh', 'meubel', 'meubelen', 'interiors', 'interior', 'international', 'mevrouw', 'heer', 'dhr', 'mw']);
   const woorden = (t, uit) => new Set(String(t == null ? '' : t).toLowerCase().split(/[^a-z0-9\u00e0-\u00ff]+/).filter(w => w.length >= 4 && !/^\d+$/.test(w) && !ALGEMEEN.has(w) && !(uit && uit.has(w))));
   const deelt = (a, b) => { for (const w of a) if (b.has(w)) return true; return false; };
-  const dagenTot = (van, tot) => Math.round((Date.parse(tot + 'T00:00:00Z') - Date.parse(van + 'T00:00:00Z')) / 864e5);
+  const dagenTot = L.dagenTussen;
   const dmj = d => String(d || '').split('-').reverse().join('-');
   L.OK_DAGEN = 60;
   L.vragen = function (rijen, fact, fk, schatten, antwoorden) {
-    const a = antwoorden || {}, vandaag = /^\d{4}-\d{2}-\d{2}$/.test(String(a.vandaag || '')) ? a.vandaag : null, ok = a.ok || {}, uit = [];
+    const a = antwoorden || {}, vandaag = L.geldigeDatum(a.vandaag) ? a.vandaag : null, ok = a.ok || {}, uit = [];
     if (!vandaag) return uit;
-    const beantwoord = id => { const d = ok[id]; return !!d && (id.startsWith('d:') || dagenTot(String(d).slice(0, 10), vandaag) < L.OK_DAGEN); };
+    const beantwoord = id => { const d = ok[id]; if (!d) return false; if (id.startsWith('d:')) return true; const dd = dagenTot(String(d).slice(0, 10), vandaag); return dd !== null && dd < L.OK_DAGEN; };   // een onleesbare datum onthouden we niet
     const sch = (schatten || []).filter(Boolean), perId = new Map(sch.map(s => [s.id, s])), nee = new Map(), bev = new Set();
     for (const it of Object.values(a.prog || {})) {
       if (!it || !it.estimate_id) continue;
@@ -170,13 +178,13 @@
     const pe = (fk && fk.perEid) || {}, rijVan = new Map((rijen || []).filter(Boolean).map(r => [r.id, r])), df = new Map(), namen = new Set();
     for (const n of sch.map(s => s.naam).concat((fact || []).map(f => f && f.klant))) { const k = String(n || '').trim().toLowerCase(); if (!k || namen.has(k)) continue; namen.add(k); for (const w of woorden(k, BEDRIJF)) df.set(w, (df.get(w) || 0) + 1); }
     const onderscheidend = n => new Set([...woorden(n, BEDRIJF)].filter(w => (df.get(w) || 0) < 3));
-    const plus = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+    const plus = L.dagPlus;
     for (const f of (fk && fk.los) || []) {
       if (!f || f.orig || !(f.inclC > 0) || bev.has(f.id)) continue;
       const fw = woorden(f.ref + ' ' + (f.tekst || '')), fkl = onderscheidend(f.klant), niet = nee.get(f.id) || new Set();
       let beste = null;
       for (const s of open) {
-        if (niet.has(s.id) || !s.datum || f.datum < s.datum || f.datum > plus(s.datum, 365)) continue;
+        if (niet.has(s.id) || !L.geldigeDatum(s.datum) || !L.geldigeDatum(f.datum) || f.datum < s.datum || f.datum > plus(s.datum, 365)) continue;
         const r = rijVan.get(s.id); if (r && r.fstatus === 'gefactureerd') continue;
         const zelfde = !!f.contact_id && s.contact_id === f.contact_id, woord = deelt(fw, woorden(s.ref));
         if (zelfde ? !(woord || (s.status === 'geaccepteerd' && f.datum <= plus(s.datum, 120))) : !(woord && deelt(fkl, onderscheidend(s.naam)))) continue;
@@ -208,9 +216,10 @@
     }
     // 2. geaccepteerd maar weinig of niets gefactureerd
     for (const r of rijen || []) {
-      if (!r || r.uitbeeld || r.los || r.status !== 'geaccepteerd' || r.fstatus === 'gefactureerd' || !(r.inclC > 0) || !r.datum) continue;
+      if (!r || r.uitbeeld || r.los || r.status !== 'geaccepteerd' || r.fstatus === 'gefactureerd' || !(r.inclC > 0) || !L.geldigeDatum(r.datum)) continue;
       const gef = r.gef ? r.gef.inclC : 0, laatste = r.gef && r.gef.facturen.length ? r.gef.facturen.map(f => f.datum).sort().pop() : null;
-      const weinig = gef < r.inclC * 0.1 && dagenTot(r.datum, vandaag) > 60, stil = gef >= r.inclC * 0.1 && !!laatste && dagenTot(laatste, vandaag) >= 90;
+      const sindsOfferte = dagenTot(r.datum, vandaag), sindsFactuur = laatste ? dagenTot(laatste, vandaag) : null;
+      const weinig = gef < r.inclC * 0.1 && sindsOfferte !== null && sindsOfferte > 60, stil = gef >= r.inclC * 0.1 && sindsFactuur !== null && sindsFactuur >= 90;
       if (!(weinig || stil) || r.inclC - gef <= 100) continue;
       const id = 'o:' + r.id; if (beantwoord(id)) continue;
       uit.push({ id, soort: 'oud', tekst: `Offerte ${[r.nummer, r.naam].filter(Boolean).join(' ')} staat sinds ${dmj(r.datum)} op geaccepteerd, gefactureerd ${eur(gef)}/${eur(r.inclC)}${stil ? ` (laatste factuur ${dmj(laatste)})` : ''}. Nog te factureren?`,
@@ -307,6 +316,49 @@
     const teruggedraaid = gelukt.length - mislukt.length;
     const err = new Error(`Uit beeld zetten is niet gelukt (${stop}). ` + (!gelukt.length ? 'Er is niets gewijzigd.' : !mislukt.length ? `De ${gelukt.length === 1 ? 'al uitgezette prognose-item is' : gelukt.length + ' al uitgezette prognose-items zijn'} teruggezet.`
       : `Teruggezet: ${teruggedraaid} van ${gelukt.length}. Niet teruggezet (nakijken in de uitgebreide forecast, Gaat zeker door staat uit): offerte ${o.eid}, ${mislukt.length === 1 ? 'item' : 'items'} ${mislukt.join(', ')}.`));
+    err.mislukt = mislukt; err.teruggedraaid = teruggedraaid; throw err;
+  };
+  // Factuur bevestigen/uitsluiten als keten met terugdraaien (zoals L.uitBeeldKeten). o = { acties: [{ soort: 'k'|'x', eid, fid }], fid, schatVan(eid), vandaag, haal, lees, noteer? }.
+  // Per item bij een 409: opnieuw lezen en een keer opnieuw proberen. Mislukt er een, dan krijgen de al geslaagde items hun vorige k/x voor deze factuur terug (een nieuw aangemaakt item wordt weer gewist);
+  // lukt dat niet, dan noemt de fout de offerte en de items die handmatig nagekeken moeten worden. Gooit een Error met .mislukt en .teruggedraaid, of geeft de geschreven items terug.
+  L.koppelKeten = async function (o) {
+    const kapot = r => !r || r.error, is409 = r => /intussen aangepast|HTTP 409/.test(String(r && (r.error || r.message) || ''));
+    const maak = items => { const plannen = []; for (const a of o.acties) { const pl = L.koppelPlannen(items, a, o.schatVan(a.eid), o.vandaag); if (pl.fout) return { fout: pl.fout }; plannen.push(...pl.plannen); } return { plannen }; };
+    const items = await o.lees(), pl = maak(items); if (pl.fout) throw new Error(pl.fout);
+    const gelukt = []; let stop = null;
+    for (const plan of pl.plannen) {
+      try {
+        let huidig = plan, bron = items;
+        for (let poging = 0; poging < 2; poging++) {
+          const r = await o.haal('/geld/prognose', { method: 'POST', body: { sleutel: huidig.sleutel, item: huidig.item, vorige_ts: huidig.vorige_ts } });
+          if (!kapot(r)) { gelukt.push({ sleutel: huidig.sleutel, voor: bron[huidig.sleutel] || null, item: r.item }); if (o.noteer) o.noteer(r, huidig.sleutel); break; }
+          if (poging === 0 && is409(r)) { bron = await o.lees(); const nw = maak(bron); if (nw.fout) throw new Error(nw.fout); huidig = nw.plannen.find(x => x.sleutel === plan.sleutel); if (!huidig) break; continue; }
+          throw new Error(r && r.error || 'opslaan mislukt');
+        }
+      } catch (e) { stop = e.message || String(e); break; }
+    }
+    if (!stop) return gelukt;
+    const mislukt = [], fid = String(o.fid);
+    for (const g of gelukt.slice().reverse()) {
+      let ok = false, cur = g.item;
+      try {
+        for (let poging = 0; poging < 2 && !ok; poging++) {
+          let item = null;
+          if (g.voor) {
+            item = JSON.parse(JSON.stringify(cur)); delete item.ts; delete item.door;
+            for (const lijst of ['k', 'x']) { item[lijst] = (item[lijst] || []).filter(x => String(x) !== fid); if ((g.voor[lijst] || []).map(String).includes(fid)) item[lijst].push(fid); }
+          }
+          const r = await o.haal('/geld/prognose', { method: 'POST', body: { sleutel: g.sleutel, item, vorige_ts: cur.ts } });
+          if (!kapot(r)) { ok = true; if (o.noteer) o.noteer(r, g.sleutel); break; }
+          if (poging === 0 && is409(r)) { const vers = await o.lees(); if (!vers[g.sleutel]) { ok = !g.voor; break; } cur = vers[g.sleutel]; continue; }
+          break;
+        }
+      } catch (e) { ok = false; }
+      if (!ok) mislukt.push(g.sleutel);
+    }
+    const teruggedraaid = gelukt.length - mislukt.length, eids = [...new Set(o.acties.map(a => a.eid))].join(', ');
+    const err = new Error(`Koppelen is niet gelukt (${stop}). ` + (!gelukt.length ? 'Er is niets gewijzigd.' : !mislukt.length ? `Wat al was opgeslagen (${gelukt.length} ${gelukt.length === 1 ? 'item' : 'items'}) is teruggezet.`
+      : `Teruggezet: ${teruggedraaid} van ${gelukt.length}. Niet teruggezet (nakijken in de uitgebreide forecast, bij Bevestigd en Uitgesloten van de factuur): offerte ${eids}, ${mislukt.length === 1 ? 'item' : 'items'} ${mislukt.join(', ')}.`));
     err.mislukt = mislukt; err.teruggedraaid = teruggedraaid; throw err;
   };
   L.FILTERS = ['geaccepteerd', 'openstaand', 'verlopen', 'concept', 'afgewezen', 'los', 'gefactureerd', 'afgerond', 'uitbeeld'];
@@ -861,7 +913,7 @@
   const okLees = () => { try { const o = JSON.parse(ls.get('mtl:vragenOk') || '{}'); return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; } catch (e) { return {}; } };
   function okZet(id) {                                                  // alleen "komt nog" en "gezien", per apparaat; oude "komt nog"-regels (> 120 dagen) ruimen we op
     const o = okLees(), nuD = dagVandaag(); o[id] = nuD;
-    for (const k of Object.keys(o)) if (!k.startsWith('d:') && (!/^\d{4}-\d{2}-\d{2}$/.test(String(o[k])) || Date.parse(nuD) - Date.parse(String(o[k])) > 120 * 864e5)) delete o[k];
+    for (const k of Object.keys(o)) if (!k.startsWith('d:') && (L.dagenTussen(String(o[k]), nuD) === null || L.dagenTussen(String(o[k]), nuD) > 120)) delete o[k];
     ls.set('mtl:vragenOk', JSON.stringify(o));
   }
   function huidigeVragen() {
@@ -882,19 +934,8 @@
   }
   // Factuur bevestigen (k) of uitsluiten (x) via L.koppelPlan (eerst een bestaand item met die estimate_id, anders een uit-item).
   // Bij een 409 (intussen aangepast): opnieuw lezen en één keer opnieuw proberen.
-  async function zetKoppeling(a) {
-    for (let poging = 0; poging < 2; poging++) {
-      const items = await prognoseLezen(), pl = L.koppelPlannen(items, a, (st.schatten || []).find(x => x.id === a.eid), dagVandaag());
-      if (pl.fout) throw new Error(pl.fout);
-      let again = false;
-      for (const plan of pl.plannen) {
-        const w = await st.opt.bron.haal('/geld/prognose', { method: 'POST', body: { sleutel: plan.sleutel, item: plan.item, vorige_ts: plan.vorige_ts } });
-        if (w && !w.error) { noteerPrognose(w, plan.sleutel); continue; }
-        if (poging === 0 && verouderd409(w)) { again = true; break; }
-        throw new Error(w && w.error || 'opslaan mislukt');
-      }
-      if (!again) return;
-    }
+  async function zetKoppeling(acties) {
+    await L.koppelKeten({ acties, fid: acties[0].fid, schatVan: eid => (st.schatten || []).find(x => x.id === eid), vandaag: dagVandaag(), lees: prognoseLezen, noteer: noteerPrognose, haal: (pad, opt) => st.opt.bron.haal(pad, opt) });
   }
   // Offerte uit beeld zetten: L.uitBeeldKeten (met terugdraaien); bij succes de markering lokaal bijhouden.
   async function zetUitBeeld(eid) {
@@ -905,8 +946,8 @@
     if (!st.mag || st.vragenBezig) return;
     const a = o.actie; st.vragenBezig = true; vulVragenSheet();
     try {
-      if (a.soort === 'k' || a.soort === 'x') await zetKoppeling(a);
-      else if (a.soort === 'kies') { await zetKoppeling({ soort: 'k', eid: a.eid, fid: a.fid }); for (const e of a.andere) await zetKoppeling({ soort: 'x', eid: e, fid: a.fid }); }
+      if (a.soort === 'k' || a.soort === 'x') await zetKoppeling([a]);
+      else if (a.soort === 'kies') await zetKoppeling([{ soort: 'k', eid: a.eid, fid: a.fid }].concat(a.andere.map(e => ({ soort: 'x', eid: e, fid: a.fid }))));
       else if (a.soort === 'uitbeeld') await zetUitBeeld(a.eid);
       else okZet(v.id);
       toast(a.soort === 'k' || a.soort === 'kies' ? 'Factuur bij de offerte gezet.' : a.soort === 'x' ? 'Factuur staat los van deze offerte.' : a.soort === 'uitbeeld' ? 'Offerte uit beeld gezet. Zet hem in Moneybird ook op afgewezen.' : 'Onthouden.');
@@ -944,7 +985,7 @@
       const onv = (r.waarschuwingen || []).filter(w => w && w.onvolledig && !['prognose', 'verkoop'].includes(w.bron)).map(w => String(w.fout || 'onvolledig'));
       if (r.bronnen && r.bronnen.facturen && r.bronnen.facturen.onvolledig) onv.unshift('inkoopfacturen niet volledig opgehaald');
       if (r.bronnen && r.bronnen.bankmutaties && r.bronnen.bankmutaties.onvolledig) onv.unshift('bankmutaties niet volledig opgehaald');
-      const vd = /^\d{4}-\d{2}-\d{2}$/.test(String(r.vandaag || '')) ? r.vandaag : v, asOf = r.patronen && r.patronen.as_of ? String(r.patronen.as_of).slice(0, 10) : null;
+      const vd = L.geldigeDatum(r.vandaag) ? r.vandaag : v, asOf = r.patronen && r.patronen.as_of ? String(r.patronen.as_of).slice(0, 10) : null;
       const hist = r.historie_maand_partij && typeof r.historie_maand_partij === 'object' ? r.historie_maand_partij : null;
       st.tl = { events: r.events, vandaag: vd, onvolledig: onv, hist, histVers: !!(hist && asOf && asOf >= vd), histAsOf: asOf };
       // Bankhistorie ontbreekt of is niet van vandaag: één keer per sessie opnieuw laten berekenen (alleen de eigenaar mag dat), daarna opnieuw laden.
