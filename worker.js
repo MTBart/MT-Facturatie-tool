@@ -634,8 +634,14 @@ async function handleDashboard(pathname, request, env, msPayload, cors) {
 //     token-e-mail (zelfde tenant) → Eigenaar; bij eerste login user:{oid} met bron 'owner_email'
 //     (alleen lezen + idempotente put, geen race). Beheer toont de oid om naar OWNER_OIDS te verplaatsen.
 // Gewone eigenaren (via Beheer) zijn wél te wijzigen, maar nooit de laatste Eigenaar.
-const ROLLEN = ['eigenaar', 'beheerder', 'kantoor', 'werkplaats', 'lezen', 'administratie'];
-const ROL_NAAM = { eigenaar: 'Eigenaar', beheerder: 'Beheerder', kantoor: 'Kantoor', werkplaats: 'Werkplaats', lezen: 'Alleen lezen', administratie: 'Administratie' };
+const ROLLEN = ['eigenaar', 'beheerder', 'kantoor', 'werkplaats', 'lezen', 'administratie', 'meekijker'];
+const ROL_NAAM = { eigenaar: 'Eigenaar', beheerder: 'Beheerder', kantoor: 'Kantoor', werkplaats: 'Werkplaats', lezen: 'Alleen lezen', administratie: 'Administratie', meekijker: 'Meekijker' };
+// Externe meekijker (bv. bedrijfscoach): mag alles inzien behalve mail/Inbox, AI en Beheer, en wijzigt niets. Deze rol wordt in
+// ELKE ROLLEN_MODUS afgedwongen (ook bij 'log' of 'uit'): zie effectieveModus. Toegang heeft een einddatum (user.toegangTot).
+//   uren 'team-lezen' = alleen team-rapporten lezen (geen eigen timer/tijdregels); geld/moneybird 'kijken' = lezen zonder de
+//   schrijf-uitzonderingen (vraag stellen, afvinken) en voor Moneybird zonder contacten en bijlage-downloads.
+const ALTIJD_AFDWINGEN = new Set(['meekijker']);
+const TOEGANG_MAX_DAGEN = 400;
 // De matrix (ontwerp F1 + besluiten Bart 7-10). Ook naar de front-end via /me (alleen UI-gemak; de worker beslist).
 //   taken: 'status-nieuw' = taakstatus wijzigen + nieuwe taak/opdracht aanmaken (niet hernoemen/verwijderen/toewijzen)
 //   bestellijst/opmerkingen: lopen via SharePoint → alleen UI (niet afdwingbaar in de worker)
@@ -649,17 +655,24 @@ const RECHTEN = {
   werkplaats: { projecten: 'lezen',    taken: 'status-nieuw', bestellijst: 'toevoegen', opmerkingen: 'toevoegen', inbox: null,        offertes: null,       moneybird: null,        mb_verwijderen: null, uren: 'eigen',       verbeterpunten: 'maken',   ai: 'beperkt', beheer: null, geld: null },
   administratie: { projecten: null, taken: null, bestellijst: null, opmerkingen: null, inbox: null, offertes: null, moneybird: 'lezen', mb_verwijderen: null, uren: null, verbeterpunten: null, ai: null, beheer: null, geld: 'lezen' },
   lezen:      { projecten: 'lezen',    taken: null,           bestellijst: null,        opmerkingen: null,        inbox: null,        offertes: 'lezen',    moneybird: 'lezen',     mb_verwijderen: null, uren: 'eigen-lezen', verbeterpunten: 'lezen',   ai: null,      beheer: null, geld: null },
+  meekijker:  { projecten: 'lezen',    taken: null,           bestellijst: null,        opmerkingen: null,        inbox: null,        offertes: 'lezen',    moneybird: 'kijken',    mb_verwijderen: null, uren: 'team-lezen',  verbeterpunten: 'lezen',   ai: null,      beheer: null, geld: 'kijken' },
 };
 const ROLLEN_MODI = ['uit', 'log', 'afdwingen'];
 const AI_BEPERKT_MAX_TOKENS = 1024;      // werkplaats: AI "beperkt"
 const LOG_FLUSH_MS = 5 * 60 * 1000;      // teller hooguit eens per 5 min naar KV (KV-schrijflimiet)
 const LASTSEEN_MS = 60 * 60 * 1000;      // "laatst gezien" hooguit eens per uur
 const CACHE_MS = 60 * 1000;              // gebruikersrecord per isolate 60 s in geheugen
+const KIJKER_CACHE_MS = 5 * 1000;        // idem voor rol meekijker: 5 s
 const DAG_S = 86400;
 
 function rollenModus(env) {
   const m = String((env && env.ROLLEN_MODUS) || 'log').trim().toLowerCase();
   return ROLLEN_MODI.includes(m) ? m : 'log';
+}
+// Modus voor déze gebruiker: rollen in ALTIJD_AFDWINGEN krijgen 'afdwingen', ongeacht ROLLEN_MODUS.
+// Ook een verlopen/gedeactiveerde meekijker (rol null, record nog bekend) wordt afgedwongen: anders liep die in 'log' door.
+function effectieveModus(env, rol, rec) {
+  return (rol && ALTIJD_AFDWINGEN.has(rol)) || (!rol && rec && ALTIJD_AFDWINGEN.has(rec.role)) ? 'afdwingen' : rollenModus(env);
 }
 async function kvJson(env, key) {
   if (!env.MT_ROLLEN) return null;
@@ -696,7 +709,8 @@ function vasteEigenaar(env, oid, email) {
 const _gebruikerCache = new Map();   // oid -> {rec, t}
 async function leesGebruiker(env, oid) {
   const c = _gebruikerCache.get(oid);
-  if (c && Date.now() - c.t < CACHE_MS) return c.rec;
+  // Externe meekijker: korte cache (5 s), zodat intrekken/deactiveren/verlopen snel doorwerkt (KV zelf is eventually consistent).
+  if (c && Date.now() - c.t < (c.rec && ALTIJD_AFDWINGEN.has(c.rec.role) ? KIJKER_CACHE_MS : CACHE_MS)) return c.rec;
   const rec = await kvJson(env, 'user:' + oid);
   _gebruikerCache.set(oid, { rec, t: Date.now() });
   return rec;
@@ -711,10 +725,37 @@ function nieuweGebruiker(oid, role, email, naam, door) {
 }
 const waitUntil = (ctx, p) => { try { if (ctx && ctx.waitUntil) ctx.waitUntil(p); else p.catch(() => {}); } catch {} };
 
+// Eindtijd van de toegang (epoch ms, optioneel op user-record en uitnodiging). Verlopen = geen rol, ook niet voor 'lezen' enz.
+function toegangVerlopen(rec, nu = Date.now()) {
+  return !!(rec && rec.toegangTot != null && Number(rec.toegangTot) <= nu);
+}
+// Kandidaat-adressen uit het token voor de uitnodiging: preferred_username/upn/email (zoals tokenEmail) + het echte adres achter
+// een gast-UPN (UPN met "#EXT#": voor het laatste "_" staat de lokale naam, erna het domein van het echte adres). Kleine letters, uniek, in deze volgorde.
+function tokenAdressen(payload) {
+  const lijst = [], voeg = a => { a = String(a || '').trim().toLowerCase(); if (a && !lijst.includes(a)) lijst.push(a); };
+  const p = payload || {};
+  for (const a of [p.preferred_username, p.upn, p.email]) {
+    voeg(a);
+    const m = /^(.+)_([^_@#]+)#ext#@/i.exec(String(a || ''));
+    if (m) voeg(m[1] + '@' + m[2]);
+  }
+  return lijst;
+}
+// Einddatum uit een Beheer-verzoek → {ok, waarde} (waarde null = geen einddatum) of {fout}.
+function toegangTotNorm(v, nu = Date.now()) {
+  if (v === null || v === '' || v === undefined) return { ok: true, waarde: null };
+  const n = typeof v === 'number' ? v : (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? Date.parse(v + 'T23:59:59+01:00') : NaN);
+  if (!Number.isFinite(n) || !Number.isInteger(n)) return { fout: 'ongeldige-einddatum' };
+  if (n <= nu) return { fout: 'einddatum-in-het-verleden' };
+  if (n > nu + TOEGANG_MAX_DAGEN * DAG_S * 1000) return { fout: 'einddatum-te-ver' };
+  return { ok: true, waarde: n };
+}
+const datumTekst = ms => ms ? new Date(ms).toISOString().slice(0, 10) : 'geen';
 // Rol van de ingelogde gebruiker → {rol, rec, reden}. Koppelt bij eerste login een
 // uitnodiging (invite:{email}) of een vaste eigenaar via e-mail (OWNER_EMAILS) aan de oid.
 async function bepaalRol(env, payload, ctx) {
-  const oid = payload.oid, email = tokenEmail(payload), naam = payload.name || '';
+  const oid = payload.oid, naam = payload.name || '';
+  let email = tokenEmail(payload);
   let rec = await leesGebruiker(env, oid);
   if (rec && Date.now() - (rec.lastSeen || 0) > LASTSEEN_MS) {
     rec = { ...rec, lastSeen: Date.now() };
@@ -734,12 +775,16 @@ async function bepaalRol(env, payload, ctx) {
   }
   if (rec) {
     if (rec.active === false) return { rol: null, rec, reden: 'gedeactiveerd' };
+    if (toegangVerlopen(rec)) return { rol: null, rec, reden: 'verlopen' };
     return ROLLEN.includes(rec.role) ? { rol: rec.role, rec } : { rol: null, rec, reden: 'onbekende-rol' };
   }
   if (!env.MT_ROLLEN) return { rol: null, rec: null, reden: 'geen-rollen-opslag' };
-  const inv = email ? await kvJson(env, 'invite:' + email) : null;
-  if (inv && ROLLEN.includes(inv.role) && (!inv.verloopt || inv.verloopt > Date.now())) {
+  // Uitnodiging zoeken op het token-adres, daarna op het mail-claim en het adres achter een gast-UPN (#EXT#); lukt dat niet, dan kan de gebruiker toegang aanvragen.
+  let inv = null;
+  for (const adres of tokenAdressen(payload)) { inv = await kvJson(env, 'invite:' + adres); if (inv) { email = adres; break; } }
+  if (inv && ROLLEN.includes(inv.role) && (!inv.verloopt || inv.verloopt > Date.now()) && !(inv.toegangTot && inv.toegangTot <= Date.now())) {
     rec = nieuweGebruiker(oid, inv.role, email, inv.naam || naam, inv.createdBy);
+    if (inv.toegangTot) rec.toegangTot = inv.toegangTot;
     await schrijfGebruiker(env, rec);
     try { await env.MT_ROLLEN.delete('invite:' + email); } catch {}
     try { await env.MT_ROLLEN.delete('aanvraag:' + oid); } catch {}
@@ -764,6 +809,8 @@ const MB_CONCEPT = [
   ['POST',   /^estimates$/],
   ['PATCH',  /^estimates\/\d+\/bill_estimate$/],
 ];
+// Wat een meekijker (moneybird 'kijken') mag lezen: facturen/offertes/rapporten/grootboek, niet de contacten.
+const MB_KIJKEN_RE = /^(documents\/(purchase|sales)_invoices(\/\d+)?|sales_invoices(\/\d+)?|estimates(\/\d+)?|ledger_accounts|reports\/(creditors|debtors|creditors_aging|debtors_aging|expenses_by_contact|profit_loss))$/;
 function mbRest(pad) {
   const m = /^(\d+)\/([^?#]*)$/.exec(String(pad || '').split(/[?#]/)[0]);
   return m && m[1] === MB_ADMIN ? m[2].replace(/\.json$/, '').replace(/\/$/, '') : null;
@@ -810,10 +857,16 @@ function requirePermission(rol, target, methode, pad, velden) {
     case 'claude':
       return R.ai === 'ja' ? ja() : R.ai === 'beperkt' ? ja({ beperkt: true }) : nee('ai');
     case 'moneybird_download':
+      if (R.moneybird === 'kijken') return nee('moneybird-kijken-geen-download');
       return R.moneybird ? ja() : nee('moneybird');
     case 'moneybird':
     case 'moneybird_upload': {
       if (!R.moneybird) return nee('moneybird');
+      if (R.moneybird === 'kijken') {   // alleen lezen van cijfer- en documentpaden; geen contacten, geen uploads
+        if (target !== 'moneybird' || !lees) return nee('moneybird-kijken-alleen-lezen');
+        const rest = mbRest(pad);
+        return rest != null && MB_KIJKEN_RE.test(rest) ? ja() : nee('moneybird-kijken-pad');
+      }
       if (target === 'moneybird' && lees) return ja();
       if (R.moneybird !== 'concepten') return nee('moneybird-schrijven');
       const soort = mbConcept(target === 'moneybird_upload' ? 'POST' : m, pad);
@@ -825,6 +878,9 @@ function requirePermission(rol, target, methode, pad, velden) {
     case 'toggl_reports':
     case 'toggl_admin_projects': {
       const k = togglKlasse(target, pad);
+      // team-lezen (meekijker): Reports-API leest ook met POST; andere methoden nooit. Eigen tijdregels/timer: dicht (gedeelde sleutel = ieders uren).
+      if (k === 'uren-team' && R.uren === 'team-lezen') return (lees || m === 'POST') ? ja() : nee('uren-team-lezen');
+      if (k === 'uren' && R.uren === 'team-lezen') return nee('uren-team-lezen');
       if (k === 'uren-team') return ['alles', 'team'].includes(R.uren) ? ja() : nee('uren-team');
       if (k === 'uren') return lees ? (R.uren ? ja() : nee('uren')) : (['alles', 'team', 'eigen'].includes(R.uren) ? ja() : nee('uren-schrijven'));
       // meta (gebruikers, werkruimtes, organisatie, profiel): lezen mag, schrijven alleen met beheerrecht
@@ -846,6 +902,7 @@ function requirePermission(rol, target, methode, pad, velden) {
       return ja();
     case 'mijn':        // eigen instellingen (Toggl koppelen) — alleen wie met uren of projecten werkt
     case 'aanwezig':    // aanwezigheidsbord (met projecten/taken) — idem; niet voor bv. administratie
+      if (rol === 'meekijker') return nee(target === 'mijn' ? 'mijn-toggl' : 'aanwezig');   // extern: geen eigen Toggl-koppeling, geen live aanwezigheid
       return (R.uren || R.projecten) ? ja() : nee(target === 'mijn' ? 'mijn-toggl' : 'aanwezig');
     case 'track_admin':
     case 'beheer':
@@ -4220,6 +4277,8 @@ async function handleGeld(p, request, env, ik, json0) {
   // Recht `geld`, in élke ROLLEN_MODUS: lezen (eigenaar, administratie), wijzigen alleen de eigenaar.
   const R = RECHTEN[ik.rol], m = request.method, url = new URL(request.url);
   if (!R || !R.geld) return json({ error: 'geen-toegang', reden: 'geld' }, 403);
+  // 'kijken' (meekijker): alleen lezen, dus ook geen vraag bij een rapport en geen "gelezen"-markering (die schrijven in KV).
+  if (R.geld === 'kijken' && !['GET', 'HEAD'].includes(m.toUpperCase())) return json({ error: 'geen-toegang', reden: 'geld-kijken' }, 403);
   if (p === '/geld/cijfers' || p.startsWith('/geld/cijfers/')) {
     if (m.toUpperCase() !== 'GET') return json({ error: 'alleen GET' }, 405);
     return await geldCijfersRoute(p, env, url, R, json);
@@ -4668,7 +4727,8 @@ function meAntwoord(env, ik, payload) {
   return {
     oid: payload.oid, email: ik.email, naam: (ik.rec && ik.rec.naam) || payload.name || ik.email,
     rol: ik.rol, rolNaam: ik.rol ? ROL_NAAM[ik.rol] : null, actief: !!ik.rol, reden: ik.rol ? null : (ik.reden || 'onbekend'),
-    modus: rollenModus(env), rechten: ik.rol ? RECHTEN[ik.rol] : null,
+    modus: effectieveModus(env, ik.rol, ik.rec), altijdAfdwingen: !!(ik.rol && ALTIJD_AFDWINGEN.has(ik.rol)) || undefined,
+    toegangTot: (ik.rec && ik.rec.toegangTot) || undefined, rechten: ik.rol ? RECHTEN[ik.rol] : null,
     // Vaste eigenaar via e-mail: zet deze oid (bovenaan) later in OWNER_OIDS.
     vasteEigenaar: ik.vast || undefined,
     ownerOidNogZetten: ik.vast === 'email' ? true : undefined,
@@ -4704,6 +4764,7 @@ function magBeheren(env, ik, doel, nieuweRol, alle, deactiveren) {
   if (doel && (vasteEigenaar(env, doel.oid) || (doel.bron === 'owner_email' && vasteEigenaar(env, null, doel.email)))) return 'eigenaar-beschermd';
   if (doel && doel.oid === ik.oid) return 'niet-jezelf';
   if (ik.rol !== 'eigenaar' && ((doel && doel.role === 'eigenaar') || nieuweRol === 'eigenaar')) return 'alleen-eigenaar-mag-eigenaar';
+  if (ik.rol !== 'eigenaar' && ((doel && doel.role === 'meekijker') || nieuweRol === 'meekijker')) return 'alleen-eigenaar-mag-meekijker';   // externe toegang: alleen de eigenaar
   const wegAlsEigenaar = doel && doel.role === 'eigenaar' && doel.active !== false && ((nieuweRol != null && nieuweRol !== 'eigenaar') || deactiveren);
   if (wegAlsEigenaar && alle) {
     const eig = new Set([...ownerOids(env)]);
@@ -4737,9 +4798,13 @@ async function handleBeheer(pathname, request, env, ik, json) {
     if (!EMAIL_RE.test(email)) return json({ error: 'ongeldig-email' }, 400);
     const fout = magBeheren(env, ik, null, rol); if (fout) return json({ error: fout }, fout === 'onbekende-rol' ? 400 : 403);
     if ((await lijstKV(env, 'user:')).some(g => (g.email || '').toLowerCase() === email)) return json({ error: 'bestaat-al' }, 409);
+    const tt = toegangTotNorm(b.toegangTot);
+    if (tt.fout) return json({ error: tt.fout }, 400);
+    if (rol === 'meekijker' && !tt.waarde) return json({ error: 'einddatum-verplicht' }, 400);
     const inv = { email, role: rol, naam: clip(b.naam, 80) || '', createdBy: ik.oid, createdAt: Date.now(), verloopt: Date.now() + 30 * DAG_S * 1000 };
+    if (tt.waarde) inv.toegangTot = tt.waarde;
     await kvZet(env, 'invite:' + email, inv, { expirationTtl: 30 * DAG_S });
-    await audit(env, { ...door, actie: 'uitgenodigd', doel: email, doelNaam: inv.naam || email, nieuw: rol });
+    await audit(env, { ...door, actie: 'uitgenodigd', doel: email, doelNaam: inv.naam || email, nieuw: rol + (tt.waarde ? ' tot ' + datumTekst(tt.waarde) : '') });
     return json({ ok: true, uitnodiging: inv });
   }
   if (p === '/beheer/uitnodiging-intrekken' && m === 'POST') {
@@ -4757,6 +4822,16 @@ async function handleBeheer(pathname, request, env, ik, json) {
     const fout = magBeheren(env, ik, doel, nieuweRol, await lijstKV(env, 'user:'), actief === false);
     if (fout) return json({ error: fout }, fout === 'onbekende-rol' ? 400 : fout === 'laatste-eigenaar' ? 409 : 403);
     const nieuw = { ...doel, updatedAt: Date.now() };
+    // Einddatum: ms of "JJJJ-MM-DD" instellen/verlengen, null = verwijderen (niet bij een meekijker: die heeft altijd een einddatum).
+    if ('toegangTot' in b) {
+      const tt = toegangTotNorm(b.toegangTot); if (tt.fout) return json({ error: tt.fout }, 400);
+      const rolNa = nieuweRol != null ? nieuweRol : doel.role;
+      if (rolNa === 'meekijker' && !tt.waarde) return json({ error: 'einddatum-verplicht' }, 400);
+      if ((tt.waarde || null) !== (doel.toegangTot || null)) {
+        if (tt.waarde) nieuw.toegangTot = tt.waarde; else delete nieuw.toegangTot;
+        await audit(env, { ...door, actie: 'einddatum-gewijzigd', doel: oid, doelNaam: doel.naam, oud: datumTekst(doel.toegangTot), nieuw: datumTekst(tt.waarde) });
+      }
+    } else if (nieuweRol === 'meekijker' && doel.role !== 'meekijker' && !doel.toegangTot) return json({ error: 'einddatum-verplicht' }, 400);
     if (nieuweRol != null && nieuweRol !== doel.role) { nieuw.role = nieuweRol; await audit(env, { ...door, actie: 'rol-gewijzigd', doel: oid, doelNaam: doel.naam, oud: doel.role, nieuw: nieuweRol }); }
     if (actief != null && actief !== (doel.active !== false)) { nieuw.active = actief; await audit(env, { ...door, actie: actief ? 'gereactiveerd' : 'gedeactiveerd', doel: oid, doelNaam: doel.naam }); }
     await schrijfGebruiker(env, nieuw);
@@ -4772,7 +4847,10 @@ async function handleBeheer(pathname, request, env, ik, json) {
     }
     const rol = String(b.rol || ''), fout = magBeheren(env, ik, { oid }, rol); if (fout) return json({ error: fout }, fout === 'onbekende-rol' ? 400 : 403);
     if (await kvJson(env, 'user:' + oid)) return json({ error: 'bestaat-al' }, 409);
+    const tt = toegangTotNorm(b.toegangTot); if (tt.fout) return json({ error: tt.fout }, 400);
+    if (rol === 'meekijker' && !tt.waarde) return json({ error: 'einddatum-verplicht' }, 400);
     const rec = nieuweGebruiker(oid, rol, a.email, a.naam, ik.oid); rec.lastSeen = a.ts;
+    if (tt.waarde) rec.toegangTot = tt.waarde;
     await schrijfGebruiker(env, rec);
     await env.MT_ROLLEN.delete('aanvraag:' + oid);
     await audit(env, { ...door, actie: 'aanvraag-toegekend', doel: oid, doelNaam: a.naam, nieuw: rol });
@@ -4923,8 +5001,9 @@ async function handleKlanten(request, env, ik, json, ctx) {
   const revVan = klantenRevVan;
   if (m === 'GET') {
     if (!ik.rol) {
-      if (rollenModus(env) === 'afdwingen') return json({ error: 'geen-toegang', reden: ik.reden || 'geen-rol' }, 403);
-      if (rollenModus(env) === 'log') { try { await noteerBesluit(env, ctx, { ok: false, modus: 'log', rol: null, oid: ik.oid, target: 'klanten', actie: 'klanten.zonder_rol', reden: ik.reden || 'geen-rol' }); } catch {} }
+      const kModus = effectieveModus(env, ik.rol, ik.rec);
+      if (kModus === 'afdwingen') return json({ error: 'geen-toegang', reden: ik.reden || 'geen-rol' }, 403);
+      if (kModus === 'log') { try { await noteerBesluit(env, ctx, { ok: false, modus: 'log', rol: null, oid: ik.oid, target: 'klanten', actie: 'klanten.zonder_rol', reden: ik.reden || 'geen-rol' }); } catch {} }
     }
     const d = await huidig();
     if (!d || !Array.isArray(d.klanten) || !d.klanten.length) return json({ error: 'geen-klantenlijst', rev: 0 }, 404);
@@ -5555,6 +5634,7 @@ async function handleSignalen(p, request, env, ik, json) {
   const R = ik.rol ? RECHTEN[ik.rol] : null, m = request.method;
   const zien = !!(R && (R.offertes || R.projecten)), wijzigen = !!(R && R.offertes === 'wijzigen');
   if (!zien) return json({ error: 'geen-toegang', reden: R ? 'offertes' : (ik.reden || 'geen-rol') }, 403);
+  if (p.startsWith('/push/') && ik.rol === 'meekijker') return json({ error: 'geen-toegang', reden: 'push-meekijker' }, 403);   // extern: geen pushmeldingen aan een apparaat koppelen
   if (p.startsWith('/push/')) return await handlePush(p, request, env, ik, json, R);
   const doe = sigStub(env);
   if (!doe) return json({ error: 'geen-signalen-opslag', uitleg: 'Durable Object-binding MT_TELLER ontbreekt (zie wrangler.toml)' }, 503);
@@ -5976,12 +6056,13 @@ export default {
 
     try {
       const url = new URL(request.url);
-      const modus = rollenModus(env);
+      let modus = rollenModus(env);
       // Rollen mogen de tool niet platleggen: KV-storing → geen rol (vaste eigenaren blijven eigenaar).
       let ik;
       try { ik = await bepaalRol(env, msPayload, ctx); }
       catch (e) { const vast = vasteEigenaar(env, msPayload.oid, tokenEmail(msPayload)); ik = { rol: vast ? 'eigenaar' : null, rec: null, vast, reden: 'rollen-fout' }; }
       ik.oid = msPayload.oid; ik.email = tokenEmail(msPayload);
+      modus = effectieveModus(env, ik.rol, ik.rec);   // meekijker: altijd 'afdwingen', ook bij ROLLEN_MODUS log/uit
 
       // Eigen rol + rechten (front-end: tabs/knoppen verbergen — UI-gemak, geen beveiliging).
       if (url.pathname === '/me') return json(meAntwoord(env, ik, msPayload));
