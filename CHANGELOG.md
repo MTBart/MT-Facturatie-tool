@@ -5,8 +5,101 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-11-02 — Release v2.32.0: opname-module als afgeschermde beta (alleen beheer + schakelaar) voor de Android-proef met testgegevens; fotoronde, maatlijnen op de foto, 3D-lijnenmodel, hoekmeldingen, export met foto's; Codex-bundelronde verwerkt (tab-conflicten, atomaire import, manifestcontrole); backup = v2.31.0
+- Commit: `984c74b` | Auteur: Bart Witte
+
 ## 2026-11-02 — Backup = v2.31.0
 - Commit: `67ccf50` | Auteur: Bart Witte
+
+## 2026-11-02 — Opname brok 3e: Codex-review (tab-conflicten, atomaire import, manifestcontrole, vrijgave bij kopie, rolintrekking)
+- Commit: `b68e34f` | Auteur: Bart Witte
+
+## 2026-11-01 — Opname brok 3d: substatus conflict_gemeten / aanname_past_niet, melding 'hoekaanname controleren', wandfoto-hint, 1 graad als voorlopige detectiedrempel
+- Commit: `63baf57` | Auteur: Bart Witte
+
+## 2026-11-01 — Opname brok 3c: decimale komma bij hoeken en criteria; VOORTGANG met de nieuwe kalibratiepunten (R1-k)
+- Commit: `ef0ca15` | Auteur: Bart Witte
+
+## 2026-11-01 — Opname brok 3c: docs (ondersteunde vormgevallen, hoekvelden) en VOORTGANG
+- Commit: `528ecfa` | Auteur: Bart Witte
+
+## 2026-11-01 — Opname brok 3c: gemeten hoeken nooit stil negeren of wegronden (review 046 P1, P2)
+- Commit: `39af480` | Auteur: Bart Witte
+
+## 2026-11-01 — Opname brok 3b-3: de statustekst noemt alleen diagonalen die meetellen
+- Commit: `959a8df` | Auteur: Bart Witte
+
+## 2026-11-01 — Opname brok 3b-7: loephint bij bovenhoeken zonder het woord doos/vloer
+- Commit: `bcffc12` | Auteur: Bart Witte
+
+## 2026-11-01 — Opname brok 3b: VOORTGANG en docs (sluiting, drie statussen, bronnen, extra foto, kern, export)
+- Commit: `dd6d91b` | Auteur: Bart Witte
+
+## 2026-11-01 — Opname brok 3b-7/8 (schermen): loepinstructie, label binnen beeld, originele foto, 'alleen op dit toestel', export en terugzetten
+- Commit: `f43b35a` | Auteur: Bart Witte
+
+## 2026-11-01 — Opname brok 3b-8 (module): volledige herstelbare export en terugzetten
+- Commit: `01aa901` | Auteur: Bart Witte
+
+## 2026-11-01 — Opname brok 3b-6: historische v0.3-vrijgave toont 'gevalideerd met oude kern (v0.3)'
+- Commit: `dd736b6` | Auteur: Bart Witte
+
+## 2026-11-01 — Opname brok 3b-4/5: uitsprong in drie gescheiden bronnen, extra foto's maken geen nieuwe wand
+- Commit: `3735bab` | Auteur: Bart Witte
+
+## 2026-11-01 — Opname brok 3b-3 (schermen): statussen gescheiden in teksten, volgende maat, haaksheidscontrole met driehoek
+- Commit: `5a190a6` | Auteur: Bart Witte
+
+## 2026-11-01 — Opname brok 3b-1/2/3 (kern): sluiting in positie en richting, wand is geen diagonaal, drie vormstatussen
+- Commit: `4a1db05` | Auteur: Bart Witte
+
+## 2026-11-01 — Opname brok 3f: VOORTGANG en docs bijgewerkt voor de review van ChatGPT (loep, onbekende hoek, bevestigen, toetsenbord)
+- Commit: `f045f68` | Auteur: Bart Witte
+
+## 2026-11-01 — Opname brok 3e: rustige wandfoto, hoeken met loep (onbekend mag), schermtoetsenbord
+- Commit: `9ff8762` | Auteur: Bart Witte
+
+## 2026-11-01 — Opname brok 3d: geen vaste minimale maat; onwaarschijnlijke maten bevestigen, onmogelijke combinaties blokkeren
+- Commit: `59d0700` | Auteur: Bart Witte
+
+## 2026-11-01 — Opname brok 3c: schermen voor de vorm uit de fotos
+- Commit: `1530a5c` | Auteur: Bart Witte
+
+## 2026-11-01 — Opname brok 3a-b: vorm uit de fotos (kern v0.4 en geo)
+- Commit: `4b01b20` | Auteur: Bart Witte
+
+## 2026-11-01 — Opname brok 2c: VOORTGANG bijgewerkt (wat werkt, bewust niet gedaan, keuzes ter bevestiging)
+- Commit: `178ea24` | Auteur: Bart Witte
+
+## 2026-11-01 — Opname brok 2c-4: beta-laag in mobiel.html (alleen beheer, schakelaar in Meer, lazy geladen)
+- Commit: `bca7bc8` | Auteur: Bart Witte
+
+## 2026-11-01 — Opname brok 2c-3: schermen voor start, fotoronde, draadmodel, wandfoto met lijnenoverlay, rondje en afronden
+- Commit: `8ad0536` | Auteur: Bart Witte
+
+## 2026-11-01 — Opname brok 2c-2: eigen lokale opslag (IndexedDB mt-opname) voor opnames en fotos
+- Commit: `b7d46e2` | Auteur: Bart Witte
+
+## 2026-11-01 — Opname brok 2c-1: reken- en projectiefuncties voor het draadmodel en de wandfoto (homografie, 3D-projectie, wandlijnen)
+- Commit: `1d415ce` | Auteur: Bart Witte
+
+## 2026-11-01 — Opname brok 2b: kern kan openingen, objecten en bijzonderheden per wand vastleggen
+- Commit: `c85de83` | Auteur: Bart Witte
+
+## 2026-11-01 — Opname brok 2a: werkzone-foto's in de hash, plafond 300 mm uit de hoek, melding wand niet te lood
+- Commit: `78c7b71` | Auteur: Bart Witte
+
+## 2026-11-01 — Opname brok 1d: foto van elke werkzone-wand is verplicht voor het vrijgeven
+- Commit: `15d1722` | Auteur: Bart Witte
+
+## 2026-11-01 — Opname brok 1c: werkzone-wand op 3 hoogtes en 3 plafondpunten, definitie blokkeert in de werkzone
+- Commit: `1d2a086` | Auteur: Bart Witte
+
+## 2026-11-01 — Opname brok 1b: route, vorm zonder rechthoek, vrijgave met hash en scope
+- Commit: `b82c907` | Auteur: Bart Witte
+
+## 2026-11-01 — Opname brok 1: rekenkern en datamodel opname-JSON v0.3
+- Commit: `6fb1566` | Auteur: Bart Witte
 
 ## 2026-10-31 — Release v2.31.0: telefoon-app bovenrij met zoeken en timerknop (start lokaal, één POST na projectkeuze, Codex go na 5 rondes), kop zonder groene knoppen, logo als app-icoon, kostenindeling per maand; backup = v2.30.0
 - Commit: `b6dd09a` | Auteur: Bart Witte
