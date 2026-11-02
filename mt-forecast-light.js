@@ -73,6 +73,7 @@
       for (const k of it.x || []) { const s = nee.get(String(k)) || new Set(); s.add(e); nee.set(String(k), s); }
     }
     const offertes = (schatten || []).filter(s => s && s.nummer && s.nummer.length >= 4 && s.contact_id), inLijst = new Set((schatten || []).filter(Boolean).map(s => s.id));
+    const dagPlus = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10);
     const refKey = t => String(t || '').trim().toLowerCase(), refOffertes = (schatten || []).filter(s => s && s.contact_id && refKey(s.ref) && s.status !== 'concept' && s.status !== 'afgewezen');
     for (const f of (facturen || []).filter(Boolean).slice().sort((a, b) => (a.orig ? 1 : 0) - (b.orig ? 1 : 0))) {
       const niet = nee.get(f.id) || new Set();
@@ -80,7 +81,7 @@
       let via = null;
       if (!eid && f.eid && !niet.has(f.eid) && inLijst.has(f.eid)) eid = f.eid;
       if (!eid && f.orig && perId.has(f.orig)) eid = perId.get(f.orig);
-      if (!eid && f.contact_id && refKey(f.ref)) { const kand = refOffertes.filter(s => s.contact_id === f.contact_id && !niet.has(s.id) && refKey(s.ref) === refKey(f.ref)); if (kand.length === 1) { eid = kand[0].id; via = 'referentie'; } }
+      if (!eid && f.contact_id && refKey(f.ref)) { const kand = refOffertes.filter(s => s.contact_id === f.contact_id && !niet.has(s.id) && refKey(s.ref) === refKey(f.ref) && (!s.datum || f.datum >= dagPlus(s.datum, -7))); if (kand.length === 1) { eid = kand[0].id; via = 'referentie'; } }
       if (!eid) { const ref = f.ref.toLowerCase(), kand = offertes.filter(s => s.contact_id === f.contact_id && !niet.has(s.id) && ref.includes(s.nummer.toLowerCase())); if (kand.length === 1) eid = kand[0].id; }
       if (!eid && f.eid && !niet.has(f.eid)) eid = f.eid;   // een offerte die niet (meer) in de lijst staat: eigen "gefactureerd"-rij
       if (!eid) { los.push(f); continue; }
@@ -138,7 +139,7 @@
   // soort 'schets' = alleen ter info: schets valt weg door eerdere facturen. Acties: k = bevestigd, x = uitgesloten (beide in het prognose-item), ok = komt nog (60 dagen), uitbeeld, gezien.
   const ALGEMEEN = new Set(['pantry', 'commode', 'kast', 'kasten', 'keuken', 'renovatie', 'meubilair', 'oplevering', 'offerte', 'factuur', 'aanbetaling', 'termijn', 'termijnfactuur', 'eindfactuur', 'deelfactuur', 'betaling', 'project',
     'maatwerk', 'interieur', 'woning', 'huis', 'voor', 'naar', 'met', 'van', 'een', 'het', 'deze', 'onze', 'volgens', 'inzake', 'conform', 'omschrijving', 'totaal', 'bedrag']);
-  const BEDRIJF = new Set(['holding', 'beheer', 'stichting', 'groep', 'group', 'gemeente', 'nederland', 'vastgoed', 'bouw', 'projecten', 'interieurbouw', 'mevrouw', 'heer', 'dhr', 'mw']);
+  const BEDRIJF = new Set(['holding', 'beheer', 'stichting', 'groep', 'group', 'gemeente', 'nederland', 'vastgoed', 'bouw', 'projecten', 'interieurbouw', 'gmbh', 'meubel', 'meubelen', 'interiors', 'interior', 'international', 'mevrouw', 'heer', 'dhr', 'mw']);
   const woorden = (t, uit) => new Set(String(t == null ? '' : t).toLowerCase().split(/[^a-z0-9\u00e0-\u00ff]+/).filter(w => w.length >= 4 && !/^\d+$/.test(w) && !ALGEMEEN.has(w) && !(uit && uit.has(w))));
   const deelt = (a, b) => { for (const w of a) if (b.has(w)) return true; return false; };
   const dagenTot = (van, tot) => Math.round((Date.parse(tot + 'T00:00:00Z') - Date.parse(van + 'T00:00:00Z')) / 864e5);
@@ -159,26 +160,30 @@
     const fTekst = f => `${f.nummer ? 'factuur ' + f.nummer : 'factuur'} (${eur(f.inclC)}${f.ref ? ', referentie \u201c' + f.ref + '\u201d' : ''})`;
     const oTekst = s => `${s.nummer ? 'offerte ' + s.nummer : 'offerte'} ${[s.naam, s.ref].filter(Boolean).join(' \u2014 ')} (${eur(s.totaalC)})`;
     const open = sch.filter(s => (s.status === 'geaccepteerd' || s.status === 'openstaand' || s.status === 'verlopen') && s.totaalC > 0);
-    // 1. facturen die nergens (zeker) aan hangen
-    const kandidaten = [], pe = (fk && fk.perEid) || {};
-    for (const f of (fk && fk.los) || []) kandidaten.push(f);
-    for (const [eid, g] of Object.entries(pe)) if (!perId.has(eid)) for (const f of g.facturen) if (f.via !== 'referentie') kandidaten.push(f);
-    for (const f of kandidaten) {
+    // 1. losse facturen (zonder offerte). Facturen die aan een offerte buiten de lijst hangen zijn aparte opdrachten (of al op exacte referentie gekoppeld): geen vraag.
+    //    Zelfde contact: factuurdatum binnen een jaar na de offertedatum, offerte niet helemaal gefactureerd, en een gedeeld betekenisvol woord in de referentie (of regels),
+    //    of een geaccepteerde offerte met de factuur binnen 120 dagen. Ander contact: beide namen delen een onderscheidend woord (niet: rechtsvormen, algemene bedrijfswoorden
+    //    en woorden die in 3 of meer verschillende contactnamen voorkomen, de koepelnaam) en de referentie deelt een woord. Een rond percentage is alleen extra tekst in de vraag.
+    const pe = (fk && fk.perEid) || {}, rijVan = new Map((rijen || []).filter(Boolean).map(r => [r.id, r])), df = new Map(), namen = new Set();
+    for (const n of sch.map(s => s.naam).concat((fact || []).map(f => f && f.klant))) { const k = String(n || '').trim().toLowerCase(); if (!k || namen.has(k)) continue; namen.add(k); for (const w of woorden(k, BEDRIJF)) df.set(w, (df.get(w) || 0) + 1); }
+    const onderscheidend = n => new Set([...woorden(n, BEDRIJF)].filter(w => (df.get(w) || 0) < 3));
+    const plus = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+    for (const f of (fk && fk.los) || []) {
       if (!f || f.orig || !(f.inclC > 0) || bev.has(f.id)) continue;
-      const fw = woorden(f.ref + ' ' + (f.tekst || '')), fkl = woorden(f.klant, BEDRIJF), niet = nee.get(f.id) || new Set();
+      const fw = woorden(f.ref + ' ' + (f.tekst || '')), fkl = onderscheidend(f.klant), niet = nee.get(f.id) || new Set();
       let beste = null;
       for (const s of open) {
-        if (niet.has(s.id) || (s.datum && f.datum < s.datum)) continue;
-        const zelfde = !!f.contact_id && s.contact_id === f.contact_id, naam = zelfde || deelt(fkl, woorden(s.naam, BEDRIJF));
-        if (!naam) continue;
-        const woord = deelt(fw, woorden(s.ref)), pct = f.inclC / s.totaalC * 100, rond = pct >= 9.5 && pct <= 100.5 && Math.abs(pct - Math.round(pct / 5) * 5) <= 0.5;
-        if (!woord && !rond) continue;
+        if (niet.has(s.id) || !s.datum || f.datum < s.datum || f.datum > plus(s.datum, 365)) continue;
+        const r = rijVan.get(s.id); if (r && r.fstatus === 'gefactureerd') continue;
+        const zelfde = !!f.contact_id && s.contact_id === f.contact_id, woord = deelt(fw, woorden(s.ref));
+        if (zelfde ? !(woord || (s.status === 'geaccepteerd' && f.datum <= plus(s.datum, 120))) : !(woord && deelt(fkl, onderscheidend(s.naam)))) continue;
+        const pct = f.inclC / s.totaalC * 100, rond = pct >= 9.5 && pct <= 100.5 && Math.abs(pct - Math.round(pct / 5) * 5) <= 0.5;
         const score = (zelfde ? 2 : 0) + (woord ? 2 : 0) + (rond ? 1 : 0);
-        if (!beste || score > beste.score || (score === beste.score && (s.datum || '') > (beste.s.datum || ''))) beste = { s, score };
+        if (!beste || score > beste.score || (score === beste.score && (s.datum || '') > (beste.s.datum || ''))) beste = { s, score, rond: rond ? Math.round(pct / 5) * 5 : null };
       }
       if (!beste) continue;
       const id = 'f:' + f.id + ':' + beste.s.id; if (beantwoord(id)) continue;
-      uit.push({ id, soort: 'factuur', tekst: `Hoort ${fTekst(f)} bij ${oTekst(beste.s)}?`, opties: opties('Hoort erbij', 'Staat los').map(o => Object.assign(o, { actie: Object.assign(o.actie, { eid: beste.s.id, fid: f.id }) })),
+      uit.push({ id, soort: 'factuur', tekst: `Hoort ${fTekst(f)} bij ${oTekst(beste.s)}?` + (beste.rond ? ` (${beste.rond}% van de offerte)` : ''), opties: opties('Hoort erbij', 'Staat los').map(o => Object.assign(o, { actie: Object.assign(o.actie, { eid: beste.s.id, fid: f.id }) })),
         refs: { factuur: { id: f.id, nummer: f.nummer }, offerte: { id: beste.s.id, nummer: beste.s.nummer } } });
     }
     // 1b. automatisch op referentie gekoppeld: bevestigen of terugdraaien

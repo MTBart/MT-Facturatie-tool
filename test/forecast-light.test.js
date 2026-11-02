@@ -367,33 +367,53 @@ test('verlopen en afgewezen: statussen, filters, standaard en eenmalige migratie
   assert.strictEqual(L.nuFactureren([afw], '2026-10', 'incl').length, 0);
   assert.strictEqual(L.offertesMet(rijen, '2026-10', 'openstaand', 'incl').length, 2, 'openstaand en verlopen');
 });
-test('vragen: losse factuur bij een offerte (contact, datum, woord of rond percentage), referentie-koppeling, prognose k/x', () => {
+test('vragen: losse factuur bij een offerte (zelfde contact, onderscheidend naamwoord, datumvenster), referentie-koppeling, prognose k/x', () => {
   const off = (id, o) => F.schatNorm(Object.assign({ id, estimate_id: '2026-' + id, contact_id: 500000000001, contact: { company_name: 'Jansen Voorbeeld' }, total_price_incl_tax: '10000', state: 'accepted', reference: 'Wandkast Zeeland', estimate_date: '2026-06-01' }, o));
   const sch = [off(300000000101)];
   const V = (facs, o, prog, schatten) => { const s = schatten || sch, fk = L.koppelFacturen(facs, s, prog); return L.vragen(L.rijen(s, {}, {}, fk), facs, fk, s, Object.assign({ vandaag: '2026-11-02', ok: {}, prog: prog || {} }, o)); };
   const fac = o => fx(Object.assign({ contact_id: 500000000001, invoice_date: '2026-09-10', reference: 'Aanbetaling wandkast zeeland', total_price_incl_tax: '1234' }, o));
-  const a = V([fac({})]).filter(q => q.soort === 'factuur'); assert.strictEqual(a.length, 1, 'gedeeld woord, zelfde contact, datum na offerte');
+  const van = (f, s) => V([f], {}, null, s).filter(q => q.soort === 'factuur').length;
+  const a = V([fac({})]).filter(q => q.soort === 'factuur'); assert.strictEqual(a.length, 1, 'zelfde contact, gedeeld woord, binnen een jaar');
   assert.deepStrictEqual(a[0].opties.map(o => o.actie.soort), ['k', 'x']); assert.strictEqual(a[0].opties[0].actie.eid, '300000000101'); assert.strictEqual(a[0].opties[0].actie.fid, '400000000001'); assert.deepStrictEqual(a[0].refs.offerte, { id: '300000000101', nummer: '2026-300000000101' });
   assert.ok(/Hoort/.test(a[0].tekst) && /Wandkast Zeeland/.test(a[0].tekst));
-  const van = f => V([f]).filter(q => q.soort === 'factuur').length;
-  assert.strictEqual(van(fac({ reference: 'Iets anders', total_price_incl_tax: '3000' })), 1, 'rond percentage (30%)');
-  assert.strictEqual(van(fac({ reference: 'Iets anders', total_price_incl_tax: '3333' })), 0, 'geen woord en geen rond percentage');
-  assert.strictEqual(van(fac({ reference: 'Iets anders', total_price_incl_tax: '500' })), 0, 'onder de 10%');
-  assert.strictEqual(van(fac({ reference: 'Nieuwe keuken renovatie 2026' })), 0, 'alleen algemene woorden telt niet');
+  // zelfde contact: geaccepteerd en binnen 120 dagen na de offerte telt ook zonder woord; daarna alleen met woord
+  assert.strictEqual(van(fac({ reference: 'Iets anders', invoice_date: '2026-08-01' })), 1, 'geaccepteerd, 61 dagen na de offerte');
+  assert.strictEqual(van(fac({ reference: 'Iets anders', invoice_date: '2026-11-01' })), 0, 'te laat voor het 120-dagenvenster, geen woord');
+  assert.strictEqual(van(fac({ invoice_date: '2026-11-01' })), 1, 'wel een woord: binnen een jaar volstaat');
+  assert.strictEqual(van(fac({ reference: 'Iets anders', invoice_date: '2026-08-01' }), [off(300000000101, { state: 'open' })]), 0, 'niet geaccepteerd: woord nodig');
+  assert.strictEqual(van(fac({ invoice_date: '2027-07-01' })), 0, 'meer dan een jaar na de offerte');
   assert.strictEqual(van(fac({ invoice_date: '2026-05-01' })), 0, 'factuur van vóór de offerte');
-  assert.strictEqual(van(fac({ contact_id: 500000000009, contact: { company_name: 'Heel Anders' } })), 0, 'ander contact zonder gedeelde naam');
-  assert.strictEqual(van(fac({ contact_id: 500000000009, contact: { company_name: 'Jansen Interieurs' } })), 1, 'andere contact-id maar gedeeld naamwoord');
+  assert.strictEqual(van(fac({ reference: 'Nieuwe keuken renovatie 2026', invoice_date: '2026-11-01' })), 0, 'alleen algemene woorden telt niet');
   assert.strictEqual(van(fac({ total_price_incl_tax: '-100' })), 0, 'creditnota nooit');
-  assert.strictEqual(V([fac({})], {}, null, [off(300000000101, { state: 'draft' })]).length, 0, 'concept-offerte telt niet');
+  assert.strictEqual(van(fac({}), [off(300000000101, { state: 'draft' })]), 0, 'concept-offerte telt niet');
+  // een rond percentage is alleen extra tekst, nooit de reden
+  assert.ok(/\(30% van de offerte\)/.test(V([fac({ total_price_incl_tax: '3000' })])[0].tekst)); assert.ok(!/% van de offerte/.test(a[0].tekst));
+  assert.strictEqual(van(fac({ reference: 'Iets anders', invoice_date: '2026-11-01', total_price_incl_tax: '3000' })), 0, '3.000 is 30% maar zonder woord of venster geen vraag');
+  // niet helemaal gefactureerde offertes alleen
+  assert.strictEqual(V([fac({ original_estimate_id: 300000000101, total_price_incl_tax: '10000' }), fac({ id: 400000000002, reference: 'Aanbetaling wandkast' })]).filter(q => q.soort === 'factuur').length, 0, 'offerte is al helemaal gefactureerd');
+  // ander contact: onderscheidend naamwoord in beide namen + woord in de referentie; koepelnaam (in 3+ namen) en rechtsvormen tellen niet
+  const andere = (naam, ref) => fac({ contact_id: 500000000009, contact: { company_name: naam }, reference: ref || 'Aanbetaling wandkast' });
+  assert.strictEqual(van(andere('Jansen Interieurs')), 1, 'ander contact, gedeeld onderscheidend naamwoord en woord in de referentie');
+  assert.strictEqual(van(andere('Jansen Interieurs', 'Iets anders')), 0, 'zonder woord in de referentie niet');
+  assert.strictEqual(van(andere('Heel Anders B.V.')), 0, 'geen gedeeld naamwoord');
+  const koepel = [off(300000000101, { contact: { company_name: 'Koepelgroep Nederland B.V.' } }), off(300000000102, { contact_id: 500000000002, contact: { company_name: 'Koepelgroep HQ' }, reference: 'Andere opdracht' }), off(300000000103, { contact_id: 500000000003, contact: { company_name: 'Koepelgroep Utrecht' }, reference: 'Nog een' })];
+  assert.strictEqual(van(andere('Koepelgroep Zwolle'), koepel), 0, 'koepelnaam komt in 3 contactnamen voor: telt niet als onderscheidend');
+  // facturen die aan een offerte buiten de lijst hangen zijn aparte opdrachten
+  assert.strictEqual(van(fac({ original_estimate_id: 300000000999, reference: 'Aanbetaling wandkast' })), 0);
   // al beantwoord: uitgesloten (x) of bevestigd (k) in de prognose
   assert.strictEqual(V([fac({})], {}, { 'p:e1': { estimate_id: '300000000101', k: [], x: ['400000000001'] } }).filter(q => q.soort === 'factuur').length, 0);
   assert.strictEqual(V([fac({})], {}, { 'p:e1': { estimate_id: '300000000101', k: ['400000000001'], x: [] } }).length, 0);
-  // hangt aan een kopie-offerte buiten de lijst: toch een vraag
-  assert.strictEqual(V([fac({ original_estimate_id: 300000000999, reference: 'Aanbetaling wandkast' })]).filter(q => q.soort === 'factuur').length, 1);
-  // automatisch op referentie gekoppeld: andere toon, k bevestigt, x draait terug
-  const b = V([fac({ reference: 'wandkast zeeland ' })]); assert.deepStrictEqual(b.map(q => q.soort), ['referentie']); assert.ok(/^Gekoppeld op referentie, klopt dat/.test(b[0].tekst)); assert.deepStrictEqual(b[0].opties.map(o => o.actie.soort), ['k', 'x']);
-  assert.strictEqual(V([fac({ reference: 'wandkast zeeland ' })], {}, { 'p:e1': { estimate_id: '300000000101', k: ['400000000001'], x: [] } }).length, 0, 'bevestigd: geen vraag meer');
   assert.strictEqual(V([fac({})], { ok: { ['f:400000000001:300000000101']: '2026-10-30' } }).filter(q => q.soort === 'factuur').length, 0, 'recent beantwoord onthouden');
+  // automatisch op referentie gekoppeld (met of zonder offerte-id buiten de lijst): andere toon, k bevestigt, x draait terug
+  const refFac = o => fac(Object.assign({ reference: 'wandkast zeeland ' }, o));
+  const b = V([refFac({})]); assert.deepStrictEqual(b.map(q => q.soort), ['referentie']); assert.ok(/^Gekoppeld op referentie, klopt dat/.test(b[0].tekst)); assert.deepStrictEqual(b[0].opties.map(o => o.actie.soort), ['k', 'x']);
+  assert.strictEqual(L.koppelFacturen([refFac({})], sch, null).perEid['300000000101'].facturen[0].via, 'referentie', 'patroon a: via gezet');
+  assert.strictEqual(L.koppelFacturen([refFac({ original_estimate_id: 300000000999 })], sch, null).perEid['300000000101'].facturen[0].via, 'referentie', 'patroon b: via gezet');
+  assert.strictEqual(V([refFac({})], {}, { 'p:e1': { estimate_id: '300000000101', k: ['400000000001'], x: [] } }).length, 0, 'bevestigd: geen vraag meer');
+  // referentie-koppeling alleen als de factuur niet meer dan 7 dagen vóór de offerte ligt
+  assert.strictEqual(L.koppelFacturen([refFac({ invoice_date: '2025-12-10' })], sch, null).los.length, 1, 'factuur van ver vóór de offerte: niet koppelen');
+  assert.strictEqual(L.koppelFacturen([refFac({ invoice_date: '2026-05-26' })], sch, null).los.length, 0, '6 dagen vóór de offerte mag nog');
+  assert.strictEqual(L.koppelFacturen([refFac({ invoice_date: '2026-05-24' })], sch, null).los.length, 1, '8 dagen ervoor niet');
 });
 test('vragen: geaccepteerd maar weinig of niets gefactureerd, en schets die wegvalt', () => {
   const off = (id, o) => F.schatNorm(Object.assign({ id, estimate_id: '2026-' + id, contact_id: 500000000001, contact: { company_name: 'Jansen Voorbeeld' }, total_price_incl_tax: '10000', state: 'accepted', reference: 'Wandkast', estimate_date: '2026-05-01' }, o));
