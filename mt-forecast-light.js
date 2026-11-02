@@ -217,6 +217,28 @@
     }
     return uit;
   };
+  // Bevestigen (k) of uitsluiten (x) van een factuur in het prognose-item van een offerte. Zoekt EERST een bestaand item met dezelfde estimate_id, ongeacht de sleutel (ook een
+  // projectitem; een actief item gaat voor); alleen als er geen is komt er een nieuw uit-item p:e<id> (zelfde vorm als F.nieuwItem), zodat er nooit twee items per offerte ontstaan.
+  // → { sleutel, item, vorige_ts } voor POST /geld/prognose, of { fout }.
+  L.koppelPlan = function (items, a, schat, vandaag) {
+    const F = root.MTForecast, its = items || {}, sleutels = Object.keys(its).sort().filter(k => its[k] && its[k].soort !== 'post' && String(its[k].estimate_id || '') === String(a.eid));
+    let sleutel = sleutels.find(k => its[k].aan !== false) || sleutels[0] || null, item;
+    const huidig = sleutel ? its[sleutel] : null;
+    if (huidig) { item = JSON.parse(JSON.stringify(huidig)); delete item.ts; delete item.door; }
+    else {
+      if (!schat) return { fout: 'deze offerte staat er niet meer; vernieuw' };
+      sleutel = 'p:e' + a.eid;
+      item = F.nieuwItem({ naam: [schat.naam, schat.ref].filter(Boolean).join(' \u2014 ') || schat.nummer || schat.id, contactId: schat.contact_id, estimateId: schat.id, offertenr: schat.nummer, code: '', totaalC: schat.totaalC, status: schat.status }, 14, vandaag);
+      item.aan = false;
+    }
+    const doel = a.soort, tegen = doel === 'k' ? 'x' : 'k', lijst = (item[doel] || []).map(String);
+    item[tegen] = (item[tegen] || []).filter(x => String(x) !== String(a.fid));
+    if (!lijst.includes(String(a.fid))) lijst.push(String(a.fid));
+    if (lijst.length > (doel === 'k' ? 10 : 20)) return { fout: 'er staan al te veel ' + (doel === 'k' ? 'bevestigde' : 'uitgesloten') + ' facturen bij deze offerte' };
+    item[doel] = lijst;
+    if (F.itemGrootte(item) > 1000) return { fout: 'het prognose-item van deze offerte is te groot om er nog een factuur bij te zetten' };
+    return { sleutel, item, vorige_ts: huidig ? huidig.ts : null };
+  };
   L.FILTERS = ['geaccepteerd', 'openstaand', 'verlopen', 'concept', 'afgewezen', 'los', 'gefactureerd', 'afgerond', 'uitbeeld'];
   // Met maanden: helemaal gefactureerd en in die maanden niets meer dat telt = Afgerond (eigen filter, standaard uit).
   L.filter = (rijen, aan, maanden) => { const mag = new Set(aan); return rijen.filter(r => maanden && !L.inBeeld(r, maanden) ? mag.has('afgerond') : r.uitbeeld ? mag.has('uitbeeld') : mag.has(r.status)); };
@@ -478,7 +500,7 @@
 .mtl-chip:hover{background:var(--l-surface2)}.mtl-vraag{color:var(--l-warn);border-color:var(--l-warn);background:var(--l-warnbg)}.mtl-vr-uitroep{display:inline-grid;place-items:center;width:16px;height:16px;border-radius:50%;background:var(--l-warn);color:var(--l-surface);font-size:11px;font-weight:700;line-height:1}
 .mtl-sheet.mtl-vr{left:auto;right:16px;bottom:16px;width:min(460px,calc(100vw - 32px));max-height:min(78vh,720px);border:1px solid var(--l-line);border-radius:12px}.mtl-vr-lijst{display:flex;flex-direction:column;gap:12px;padding:12px 0}
 .mtl-vr-kaart{border:1px solid var(--l-soft);border-radius:var(--l-rp);padding:12px;background:var(--l-surface2);display:flex;flex-direction:column;gap:8px}.mtl-vr-tekst{margin:0;font-size:14px;line-height:20px}.mtl-vr-links{display:flex;gap:14px;font-size:13px}.mtl-vr-knoppen{display:flex;flex-wrap:wrap;gap:8px}
-.mtl-vr-tip{margin:0;font-size:13px;line-height:18px;color:var(--l-ink2)}.mtl-vr-leeg{margin:0;padding:24px 0;text-align:center;color:var(--l-ink3)}
+.mtl-vr-tip{margin:0;font-size:13px;line-height:18px;color:var(--l-ink2)}.mtl-vr-info{border-top:1px solid var(--l-soft);margin-top:4px}.mtl-vr-leeg{margin:0;padding:24px 0;text-align:center;color:var(--l-ink3)}
 .mtl-chip[aria-pressed=true]{background:var(--l-psoft);border-color:var(--l-psoft);color:var(--l-ptext)}.mtl-tel{font-family:var(--l-mono);font-size:11px;opacity:.75}
 .mtl-nav{display:inline-flex;align-items:center;gap:4px;margin-left:auto}.mtl-nav .ui-knop{height:28px;padding:0 10px;font-size:12px}.mtl-periode{font-size:12px;color:var(--l-ink2);margin:0 6px;white-space:nowrap}
 .mtl-scroll{flex:1 1 auto;min-height:0;overflow:auto;position:relative;scrollbar-width:thin;scrollbar-color:var(--l-strong) var(--l-surface2)}
@@ -788,27 +810,15 @@
     if (w.item) st.progVers[sleutel] = { item: w.item, t: Date.now() };
     const G = root.MTGeld; if (G && G._st) { if (w.cachever) G._st.cv = w.cachever; if (w.ks) G._st.ks = (G._st.ks || []).filter(x => x.k !== w.ks).concat({ k: w.ks, t: Date.now() }).slice(-10); }
   }
-  // Factuur bevestigen (k) of uitsluiten (x) in het prognose-item van de offerte; bestaat dat nog niet, dan komt er een uit-item (aan: false) met alleen de offertegegevens.
+  // Factuur bevestigen (k) of uitsluiten (x) via L.koppelPlan (eerst een bestaand item met die estimate_id, anders een uit-item).
   // Bij een 409 (intussen aangepast): opnieuw lezen en één keer opnieuw proberen.
   async function zetKoppeling(a) {
     const F = root.MTForecast;
     for (let poging = 0; poging < 2; poging++) {
-      const items = await prognoseLezen(), sleutels = Object.keys(items).sort().filter(k => items[k] && items[k].soort !== 'post' && String(items[k].estimate_id || '') === a.eid);
-      let sleutel = sleutels.find(k => items[k].aan !== false) || sleutels[0] || null, huidig = sleutel ? items[sleutel] : null, item;
-      if (huidig) { item = JSON.parse(JSON.stringify(huidig)); delete item.ts; delete item.door; }
-      else {
-        const s = (st.schatten || []).find(x => x.id === a.eid); if (!s) throw new Error('deze offerte staat er niet meer; vernieuw');
-        sleutel = 'p:e' + a.eid;
-        item = F.nieuwItem({ naam: [s.naam, s.ref].filter(Boolean).join(' \u2014 ') || s.nummer || s.id, contactId: s.contact_id, estimateId: s.id, offertenr: s.nummer, code: '', totaalC: s.totaalC, status: s.status }, 14, dagVandaag());
-        item.aan = false;
-      }
-      const doel = a.soort, tegen = doel === 'k' ? 'x' : 'k', lijst = (item[doel] || []).map(String);
-      item[tegen] = (item[tegen] || []).filter(x => String(x) !== a.fid);
-      if (!lijst.includes(a.fid)) lijst.push(a.fid);
-      if (lijst.length > (doel === 'k' ? 10 : 20)) throw new Error('er staan al te veel ' + (doel === 'k' ? 'bevestigde' : 'uitgesloten') + ' facturen bij deze offerte');
-      item[doel] = lijst;
-      if (F.itemGrootte(item) > 1000) throw new Error('het prognose-item van deze offerte is te groot om er nog een factuur bij te zetten');
-      const w = await st.opt.bron.haal('/geld/prognose', { method: 'POST', body: { sleutel, item, vorige_ts: huidig ? huidig.ts : null } });
+      const items = await prognoseLezen(), plan = L.koppelPlan(items, a, (st.schatten || []).find(x => x.id === a.eid), dagVandaag());
+      if (plan.fout) throw new Error(plan.fout);
+      const { sleutel, item } = plan;
+      const w = await st.opt.bron.haal('/geld/prognose', { method: 'POST', body: { sleutel, item, vorige_ts: plan.vorige_ts } });
       if (w && !w.error) { noteerPrognose(w, sleutel); return w; }
       if (poging === 0 && verouderd409(w)) continue;
       throw new Error(w && w.error || 'opslaan mislukt');
@@ -816,7 +826,7 @@
   }
   // Offerte uit beeld zetten, zoals in de uitgebreide forecast: eerst controleren, dan de prognose-items uit (Gaat zeker door uit), dan de markering (2 pogingen).
   async function zetUitBeeld(eid) {
-    const F = root.MTForecast, reden = 'verkeerd', items = await prognoseLezen(), plan = F.bulkUitBeeld([{ estimateId: eid, sleutel: 'p:e' + eid }], items, reden);
+    const F = root.MTForecast, reden = 'verkeerd' /* bestaande reden: "Verkeerd of vervallen"; de worker kent geen vrije notitie */, items = await prognoseLezen(), plan = F.bulkUitBeeld([{ estimateId: eid, sleutel: 'p:e' + eid }], items, reden);
     if (plan.fout) throw new Error(plan.fout); if (!plan.ids.length) throw new Error('deze offerte heeft geen geldig offerte-id');
     const ub = async body => { const r = await st.opt.bron.haal('/geld/uitbeeld', { method: 'POST', body }); if (!r || r.error) throw new Error(r && r.error || 'opslaan mislukt'); return r; };
     await ub({ ids: plan.ids, reden, controle: true });
@@ -844,15 +854,16 @@
   function openVragen() { const el = maakSheet('vragen', {}); el.classList.add('mtl-vr'); vulVragenSheet(); const x = el.querySelector('.mtl-sheet-x'); if (x) x.focus({ preventScroll: true }); }
   function vulVragenSheet() {
     const s = st.sheet; if (!s || s.soort !== 'vragen') return;
-    const hoog = s.el.scrollTop, vr = huidigeVragen(), adm = st.opt.administratie ? st.opt.administratie() : null, mb = (soort, id) => root.MTForecast.mbUrl(adm, soort, id);
+    const hoog = s.el.scrollTop, alle = huidigeVragen(), vr = alle.filter(v => v.soort !== 'schets'), info = alle.filter(v => v.soort === 'schets'), adm = st.opt.administratie ? st.opt.administratie() : null, mb = (soort, id) => root.MTForecast.mbUrl(adm, soort, id);
     const link = (url, tekst) => url ? h('a', { class: 'mtl-link', href: url, target: '_blank', rel: 'noopener' }, tekst) : null;
-    s.el.replaceChildren(sheetKop('Te controleren', vr.length ? vr.length + (vr.length === 1 ? ' vraag' : ' vragen') : null),
-      h('div', { class: 'mtl-vr-lijst' }, vr.length ? vr.map(v => h('div', { class: 'mtl-vr-kaart ' + v.soort },
+    const kaart = v => h('div', { class: 'mtl-vr-kaart ' + v.soort },
         h('p', { class: 'mtl-vr-tekst' }, v.tekst),
         h('div', { class: 'mtl-vr-links' }, v.refs.factuur ? link(mb('sales_invoices', v.refs.factuur.id), 'Factuur openen') : null, v.refs.offerte ? link(mb('estimates', v.refs.offerte.id), 'Offerte openen') : null),
         h('div', { class: 'mtl-vr-knoppen' }, v.opties.map(o => h('button', { type: 'button', class: 'ui-knop', disabled: !st.mag || st.vragenBezig, title: !st.mag ? 'Je mag geen gegevens in Financi\u00ebn wijzigen' : null, onclick: () => beantwoordVraag(v, o) }, o.tekst))),
-        v.opties.some(o => o.tip) ? h('p', { class: 'mtl-vr-tip' }, v.opties.find(o => o.tip).tip) : null))
-        : h('p', { class: 'mtl-vr-leeg' }, st.bezig ? 'Laden\u2026' : 'Geen open vragen.')),
+        v.opties.some(o => o.tip) ? h('p', { class: 'mtl-vr-tip' }, v.opties.find(o => o.tip).tip) : null);
+    s.el.replaceChildren(sheetKop('Te controleren', vr.length ? vr.length + (vr.length === 1 ? ' vraag' : ' vragen') : null),
+      h('div', { class: 'mtl-vr-lijst' }, vr.length ? vr.map(kaart) : h('p', { class: 'mtl-vr-leeg' }, st.bezig ? 'Laden\u2026' : 'Geen open vragen.')),
+      info.length ? h('div', { class: 'mtl-vr-info' }, h('h3', { class: 'mtl-os-h' }, 'Ter info'), h('div', { class: 'mtl-vr-lijst' }, info.map(kaart))) : null,
       !st.mag ? h('p', { class: 'mtl-vr-tip' }, 'Je kunt de vragen lezen, maar niet beantwoorden (daar is het recht om geld te wijzigen voor nodig).') : null);
     s.el.scrollTop = hoog;
   }
@@ -1196,8 +1207,9 @@
         L.FILTERS.filter(f => (f !== 'los' || tel.los) && (f !== 'gefactureerd' || tel.gefactureerd) && (f !== 'afgerond' || tel.afgerond) && (f !== 'verlopen' || tel.verlopen || st.filter.includes(f)) && (f !== 'afgewezen' || tel.afgewezen || st.filter.includes(f))).map(f => h('button', { type: 'button', class: 'mtl-chip', 'aria-pressed': String(st.filter.includes(f)),
           title: f === 'los' ? 'Offertes die niet meer open staan in Moneybird maar waar nog bedragen in de schets staan' : f === 'gefactureerd' ? 'Offertes die niet meer open staan en waarvan facturen in Moneybird staan' : f === 'afgerond' ? 'Helemaal gefactureerd, en in de getoonde maanden telt er niets meer van mee' : f === 'verlopen' ? 'Offertes in Moneybird waarvan de geldigheid verlopen is (telden eerst als openstaand)' : f === 'afgewezen' ? 'Afgewezen offertes in Moneybird' + (st.afgewezenAfgekapt ? ' (lijst niet compleet: de oudste ontbreken)' : '') : f === 'uitbeeld' ? 'Offertes die bij de uitgebreide forecast uit beeld zijn gezet' : null,
           onclick: () => { st.filter = st.filter.includes(f) ? st.filter.filter(x => x !== f) : st.filter.concat(f); ls.set('mtl:filter', JSON.stringify(st.filter)); teken(); } }, STATUS_TEKST[f], h('span', { class: 'mtl-tel' }, String(tel[f])))),
-        (n => n ? h('button', { type: 'button', class: 'mtl-chip mtl-vraag', title: 'Te controleren: de tool heeft ' + n + (n === 1 ? ' vraag' : ' vragen') + ' over facturen en offertes', 'aria-label': 'Te controleren, ' + n + (n === 1 ? ' vraag' : ' vragen'), onclick: () => openVragen() },
-          h('span', { class: 'mtl-vr-uitroep', 'aria-hidden': 'true' }, '!'), String(n)) : null)(huidigeVragen().length),
+        ((n, m) => n ? h('button', { type: 'button', class: 'mtl-chip mtl-vraag', title: 'Te controleren: de tool heeft ' + n + (n === 1 ? ' vraag' : ' vragen') + ' over facturen en offertes', 'aria-label': 'Te controleren, ' + n + (n === 1 ? ' vraag' : ' vragen'), onclick: () => openVragen() },
+          h('span', { class: 'mtl-vr-uitroep', 'aria-hidden': 'true' }, '!'), String(n)) : m ? h('button', { type: 'button', class: 'mtl-chip', title: 'Geen open vragen; wel ' + m + (m === 1 ? ' melding' : ' meldingen') + ' ter info', 'aria-label': 'Te controleren: geen open vragen, ' + m + ' ter info', onclick: () => openVragen() }, 'Ter info') : null)(
+          huidigeVragen().filter(v => v.soort !== 'schets').length, huidigeVragen().filter(v => v.soort === 'schets').length),
         h('div', { class: 'mtl-nav' },
           knop('\u2039', { title: 'Eén maand terug', 'aria-label': 'Eén maand terug', onclick: () => { st.start = maandPlus(st.start, -1); teken(); } }),
           h('span', { class: 'mtl-periode' }, maandTekst(ms[0]) + ' \u2013 ' + maandTekst(ms[ms.length - 1])),

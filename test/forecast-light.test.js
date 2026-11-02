@@ -2,7 +2,7 @@
 'use strict';
 const assert = require('assert');
 const F = require('../mt-forecast.js'); require('../mt-forecast-light.js');
-const L = globalThis.MTForecastLight;
+const L = globalThis.MTForecastLight; globalThis.MTForecast = globalThis.MTForecast || F;   // in de browser is dit het globale object; L.koppelPlan gebruikt het
 let n = 0; const test = (naam, fn) => { try { fn(); n++; console.log('ok  - ' + naam); } catch (e) { console.log('FOUT - ' + naam + '\n' + (e.stack || e)); process.exitCode = 1; } };
 
 test('invoer: Nederlandse notatie, minteken, leeg, percentage', () => {
@@ -435,5 +435,26 @@ test('vragen: geaccepteerd maar weinig of niets gefactureerd, en schets die wegv
   const rijen = L.rijen(s, { '300000000201': { cellen: { '2026-12': 500000 } } }, {}, fk);
   const z = L.vragen(rijen, [], fk, s, { vandaag: '2026-11-02', ok: {}, prog: {} }); assert.deepStrictEqual(z.map(x => x.soort), ['schets']); assert.deepStrictEqual(z[0].opties.map(o => o.actie.soort), ['gezien']);
   assert.strictEqual(L.vragen(rijen, [], fk, s, { vandaag: '2026-11-02', ok: { [z[0].id]: '2026-01-01' }, prog: {} }).length, 0, 'gezien blijft onthouden');
+});
+test('vragen beantwoorden: bestaand prognose-item (ook projectitem) gaat voor, nooit twee items per offerte', () => {
+  const s = F.schatNorm({ id: 300000000301, estimate_id: '2026-301', contact_id: 500000000001, contact: { company_name: 'Jansen Voorbeeld' }, total_price_incl_tax: '1210', state: 'accepted', reference: 'Wandkast' });
+  const termijn = [{ id: 't1', label: 'rest', bedrag: 1210, factuurdatum: '2026-11-01', aan: true }];
+  const item = o => Object.assign({ soort: 'project', naam: 'Wandkast', estimate_id: '300000000301', totaal: 1210, termijnen: termijn, aan: true, k: [], x: [], ts: 5, door: 'X' }, o);
+  // projectitem onder een andere sleutel
+  let p = L.koppelPlan({ 'p:PRJ1': item({}) }, { soort: 'k', eid: '300000000301', fid: '400000000001' }, s, '2026-11-02');
+  assert.strictEqual(p.sleutel, 'p:PRJ1'); assert.deepStrictEqual(p.item.k, ['400000000001']); assert.strictEqual(p.vorige_ts, 5); assert.ok(!('ts' in p.item) && !('door' in p.item)); assert.strictEqual(p.item.aan, true, 'bestaand item blijft zoals het is');
+  // x haalt hem uit k en omgekeerd
+  p = L.koppelPlan({ 'p:PRJ1': item({ k: ['400000000001'] }) }, { soort: 'x', eid: '300000000301', fid: '400000000001' }, s, '2026-11-02'); assert.deepStrictEqual([p.item.k, p.item.x], [[], ['400000000001']]);
+  // meerdere items voor dezelfde offerte: het actieve gaat voor, geen nieuw item
+  p = L.koppelPlan({ 'p:A': item({ aan: false }), 'p:B': item({}), 'h:z': { soort: 'post' } }, { soort: 'k', eid: '300000000301', fid: '400000000002' }, s, '2026-11-02'); assert.strictEqual(p.sleutel, 'p:B');
+  p = L.koppelPlan({ 'p:A': item({ aan: false }) }, { soort: 'k', eid: '300000000301', fid: '400000000002' }, s, '2026-11-02'); assert.strictEqual(p.sleutel, 'p:A', 'ook een uitgezet item');
+  // pas zonder item: nieuw uit-item p:e<id> in de vorm van F.nieuwItem
+  p = L.koppelPlan({ 'p:ANDERS': item({ estimate_id: '300000000999' }) }, { soort: 'k', eid: '300000000301', fid: '400000000001' }, s, '2026-11-02');
+  assert.strictEqual(p.sleutel, 'p:e300000000301'); assert.strictEqual(p.vorige_ts, null); assert.strictEqual(p.item.aan, false); assert.strictEqual(p.item.estimate_id, '300000000301'); assert.strictEqual(p.item.totaal, 1210); assert.deepStrictEqual(p.item.termijnen.map(t => [t.id, t.bedrag, t.aan]), [['t1', 1210, false]]); assert.deepStrictEqual(p.item.k, ['400000000001']);
+  assert.ok(L.koppelPlan({}, { soort: 'k', eid: '300000000301', fid: '1' }, null, '2026-11-02').fout, 'offerte niet meer in de lijst');
+  // grenzen van de worker: hooguit 10 bevestigd, 20 uitgesloten
+  assert.ok(L.koppelPlan({ 'p:A': item({ k: Array.from({ length: 10 }, (_, i) => 'f' + i) }) }, { soort: 'k', eid: '300000000301', fid: 'nieuw' }, s, '2026-11-02').fout);
+  assert.ok(L.koppelPlan({ 'p:A': item({ x: Array.from({ length: 20 }, (_, i) => 'f' + i) }) }, { soort: 'x', eid: '300000000301', fid: 'nieuw' }, s, '2026-11-02').fout);
+  assert.ok(F.UITBEELD_REDENEN.verkeerd, 'de reden bij uit beeld bestaat in de uitgebreide forecast');
 });
 console.log(`\n${n} tests geslaagd${process.exitCode ? ' (met fouten)' : ''}`);
