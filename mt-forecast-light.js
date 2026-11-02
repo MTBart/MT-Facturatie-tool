@@ -45,42 +45,64 @@
     return { c: neg ? -c : c };
   };
 
+  // Datums uit Moneybird: echt op de kalender controleren (2026-99-99 en 2026-02-30 zijn geen datum); rekenen met datums geeft bij ongeldige invoer null, nooit een fout.
+  L.geldigeDatum = d => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d == null ? '' : d)); if (!m) return false;
+    const j = Number(m[1]), mnd = Number(m[2]), dag = Number(m[3]); if (j < 1000 || mnd < 1 || mnd > 12 || dag < 1) return false;
+    const t = new Date(Date.UTC(j, mnd - 1, dag)); return t.getUTCFullYear() === j && t.getUTCMonth() === mnd - 1 && t.getUTCDate() === dag;
+  };
+  L.dagPlus = (d, n) => L.geldigeDatum(d) && Number.isFinite(n) ? new Date(Date.UTC(Number(d.slice(0, 4)), Number(d.slice(5, 7)) - 1, Number(d.slice(8, 10))) + n * 864e5).toISOString().slice(0, 10) : null;
+  L.dagenTussen = (van, tot) => L.geldigeDatum(van) && L.geldigeDatum(tot) ? Math.round((Date.parse(tot + 'T00:00:00Z') - Date.parse(van + 'T00:00:00Z')) / 864e5) : null;
+
   // ── Verkoopfacturen (Moneybird, alleen lezen; Bart 30-10) ──
   // Een factuur bij een offerte vervangt in zijn factuurmaand het schetsbedrag (het vakje staat dan vast, in de kleur van de status); het
   // schetsbedrag zelf blijft bewaard. Bij de offerte staat wat er nog te factureren is.
   const cent = v => { const n = parseFloat(v); return isFinite(n) ? Math.round(n * 100) : null; };
   L.factuurNorm = function (x) {
     if (!x || x.id == null || String(x.state || '') === 'draft') return null;
-    const datum = String(x.invoice_date || ''); if (!/^\d{4}-\d{2}-\d{2}$/.test(datum)) return null;
+    const datum = String(x.invoice_date || ''); if (!L.geldigeDatum(datum)) return null;
     const incl = cent(x.total_price_incl_tax_base != null ? x.total_price_incl_tax_base : x.total_price_incl_tax); if (incl == null) return null;
     const excl = cent(x.total_price_excl_tax_base != null ? x.total_price_excl_tax_base : x.total_price_excl_tax), k = x.contact || {};
     return { id: String(x.id), nummer: String(x.invoice_id || ''), contact_id: x.contact_id != null ? String(x.contact_id) : '', klant: String(k.company_name || [k.firstname, k.lastname].filter(Boolean).join(' ') || '').trim(),
       datum, ym: datum.slice(0, 7), inclC: incl, exclC: excl, eid: x.original_estimate_id != null ? String(x.original_estimate_id) : null,
-      orig: x.original_sales_invoice_id != null ? String(x.original_sales_invoice_id) : null, ref: String(x.reference || '') };
+      orig: x.original_sales_invoice_id != null ? String(x.original_sales_invoice_id) : null, ref: String(x.reference || ''),
+      tekst: (Array.isArray(x.details) ? x.details.map(d => d && d.description).filter(Boolean).join(' ') : '').slice(0, 500) };
   };
   // Welke factuur hoort bij welke offerte: door de eigenaar bevestigd of uitgesloten in de uitgebreide forecast (prognose k/x), aangemaakt
   // vanuit de offerte (original_estimate_id), een creditnota volgt zijn factuur, anders hetzelfde contact met het offertenummer in de
   // referentie (alleen als dat precies één offerte is). De rest is "zonder offerte".
+  // Facturen van vóór de deelfactuur-functie van Moneybird (Bart 2-11) hebben geen original_estimate_id of hangen aan een kopie-offerte die alleen
+  // gemaakt is om een deel te factureren (niet in de lijst): die koppelen op een exact gelijke referentie (trim, hoofdletters negeren) + hetzelfde
+  // contact, alleen als dat precies één open of geaccepteerde offerte in de lijst is (f.via = 'referentie'; twee offertes met dezelfde referentie = niet koppelen).
   L.koppelFacturen = function (facturen, schatten, prognose) {
-    const perEid = {}, los = [], perId = new Map(), bevestigd = new Map(), nee = new Map();
+    const perEid = {}, los = [], perId = new Map(), bevestigd = new Map(), nee = new Map(), bevAlle = new Map(), conflicten = {};
     for (const it of Object.values(prognose || {})) {
       if (!it || !it.estimate_id) continue; const e = String(it.estimate_id);
-      for (const k of it.k || []) bevestigd.set(String(k), e);
+      for (const k of it.k || []) { const s = bevAlle.get(String(k)) || new Set(); s.add(e); bevAlle.set(String(k), s); }
       for (const k of it.x || []) { const s = nee.get(String(k)) || new Set(); s.add(e); nee.set(String(k), s); }
     }
-    const offertes = (schatten || []).filter(s => s && s.nummer && s.nummer.length >= 4 && s.contact_id);
+    // Staat een factuur bevestigd bij twee of meer verschillende offertes, dan is dat een conflict: niet koppelen (blijft los) en een vraag in het paneel. Twee items van dezelfde offerte met k is geen conflict.
+    for (const [k, s] of bevAlle) { if (s.size === 1) bevestigd.set(k, [...s][0]); else conflicten[k] = [...s].sort(); }
+    const offertes = (schatten || []).filter(s => s && s.nummer && s.nummer.length >= 4 && s.contact_id), inLijst = new Set((schatten || []).filter(Boolean).map(s => s.id));
+    const refKey = t => String(t || '').trim().toLowerCase(), refOffertes = (schatten || []).filter(s => s && s.contact_id && refKey(s.ref) && L.geldigeDatum(s.datum) && s.status !== 'concept' && s.status !== 'afgewezen');   // zonder geldige offertedatum nooit automatisch koppelen
     for (const f of (facturen || []).filter(Boolean).slice().sort((a, b) => (a.orig ? 1 : 0) - (b.orig ? 1 : 0))) {
+      if (conflicten[f.id]) { los.push(f); continue; }
       const niet = nee.get(f.id) || new Set();
       let eid = bevestigd.get(f.id) || null; if (eid && niet.has(eid)) eid = null;   // uitgesloten wint van bevestigd (tegenstrijdige prognose)
-      if (!eid && f.eid && !niet.has(f.eid)) eid = f.eid;
+      let via = null;
+      if (!eid && f.eid && !niet.has(f.eid) && inLijst.has(f.eid)) eid = f.eid;
       if (!eid && f.orig && perId.has(f.orig)) eid = perId.get(f.orig);
+      if (!eid && f.contact_id && refKey(f.ref)) { const kand = refOffertes.filter(s => s.contact_id === f.contact_id && !niet.has(s.id) && refKey(s.ref) === refKey(f.ref) && L.geldigeDatum(f.datum) && f.datum >= L.dagPlus(s.datum, -7)); if (kand.length === 1) { eid = kand[0].id; via = 'referentie'; } }
       if (!eid) { const ref = f.ref.toLowerCase(), kand = offertes.filter(s => s.contact_id === f.contact_id && !niet.has(s.id) && ref.includes(s.nummer.toLowerCase())); if (kand.length === 1) eid = kand[0].id; }
+      if (!eid && f.eid && !niet.has(f.eid)) eid = f.eid;   // een offerte die niet (meer) in de lijst staat: eigen "gefactureerd"-rij
       if (!eid) { los.push(f); continue; }
+      let g0 = f;
+      if (via) g0 = Object.assign({}, f, { via });
       perId.set(f.id, eid);
       const g = perEid[eid] = perEid[eid] || { inclC: 0, exclC: 0, maand: {}, facturen: [], klant: f.klant };
-      g.inclC += f.inclC; g.exclC += f.exclC == null ? 0 : f.exclC; g.maand[f.ym] = (g.maand[f.ym] || 0) + f.inclC; g.facturen.push(f);
+      g.inclC += f.inclC; g.exclC += f.exclC == null ? 0 : f.exclC; g.maand[f.ym] = (g.maand[f.ym] || 0) + f.inclC; g.facturen.push(g0);
     }
-    return { perEid, los };
+    return { perEid, los, conflicten };
   };
 
   // Rijen: elke offerte uit Moneybird (genormaliseerd met MTForecast.schatNorm), plus schets-records van offertes die niet (meer) in de
@@ -111,14 +133,269 @@
     }
     return uit;
   };
-  L.FILTERS = ['geaccepteerd', 'openstaand', 'concept', 'los', 'gefactureerd', 'afgerond', 'uitbeeld'];
+  // Opgeslagen filters (mtl:filter) bij het starten, met de eenmalige migraties (mtl:fv = versie): 2 = Gefactureerd aan (30-10); 3 = Verlopen aan voor wie Openstaand aan had
+  // (2-11: verlopen offertes telden eerst als openstaand mee, dus er verandert niets zichtbaars). Afgewezen staat standaard uit. Zonder opslag: de standaard.
+  L.filterStart = function (opgeslagen, fv) {
+    if (!Array.isArray(opgeslagen)) return ['geaccepteerd', 'openstaand', 'verlopen', 'los', 'gefactureerd'];
+    const f = opgeslagen.filter(x => L.FILTERS.includes(x));
+    if (fv !== '2' && fv !== '3' && !f.includes('gefactureerd')) f.push('gefactureerd');
+    if (fv !== '3' && f.includes('openstaand') && !f.includes('verlopen')) f.push('verlopen');
+    return f;
+  };
+  // ── Vragen ("Te controleren", Bart 2-11): de tool scant facturen en offertes op context en stelt zelf vragen; elk antwoord is een knop ──
+  // L.vragen(rijen, fact, fk, schatten, antwoorden) → [{ id, soort, tekst, tip?, opties: [{ id, tekst, actie }], refs: { factuur?, offerte? } }]. Zuiver (geen netwerk, geen opslag).
+  // antwoorden = { vandaag: 'JJJJ-MM-DD', ok: { vraagId: datum } (lokaal onthouden), prog: /geld/prognose items (voor bevestigd k en uitgesloten x) }.
+  // soort 'factuur'  = losse factuur (of hangt aan een offerte buiten de lijst) die waarschijnlijk bij een open of geaccepteerde offerte hoort;
+  // soort 'referentie' = automatisch op referentie gekoppeld (bevestigen of terugdraaien); soort 'oud' = geaccepteerd maar weinig of niets gefactureerd;
+  // soort 'schets' = alleen ter info: schets valt weg door eerdere facturen. Acties: k = bevestigd, x = uitgesloten (beide in het prognose-item), ok = komt nog (60 dagen), uitbeeld, gezien.
+  const ALGEMEEN = new Set(['pantry', 'commode', 'kast', 'kasten', 'keuken', 'renovatie', 'meubilair', 'oplevering', 'offerte', 'factuur', 'aanbetaling', 'termijn', 'termijnfactuur', 'eindfactuur', 'deelfactuur', 'betaling', 'project',
+    'maatwerk', 'interieur', 'woning', 'huis', 'voor', 'naar', 'met', 'van', 'een', 'het', 'deze', 'onze', 'volgens', 'inzake', 'conform', 'omschrijving', 'totaal', 'bedrag']);
+  const BEDRIJF = new Set(['holding', 'beheer', 'stichting', 'groep', 'group', 'gemeente', 'nederland', 'vastgoed', 'bouw', 'projecten', 'interieurbouw', 'gmbh', 'meubel', 'meubelen', 'interiors', 'interior', 'international', 'mevrouw', 'heer', 'dhr', 'mw']);
+  const woorden = (t, uit) => new Set(String(t == null ? '' : t).toLowerCase().split(/[^a-z0-9\u00e0-\u00ff]+/).filter(w => w.length >= 4 && !/^\d+$/.test(w) && !ALGEMEEN.has(w) && !(uit && uit.has(w))));
+  const deelt = (a, b) => { for (const w of a) if (b.has(w)) return true; return false; };
+  const dagenTot = L.dagenTussen;
+  const dmj = d => String(d || '').split('-').reverse().join('-');
+  L.OK_DAGEN = 60;
+  L.vragen = function (rijen, fact, fk, schatten, antwoorden) {
+    const a = antwoorden || {}, vandaag = L.geldigeDatum(a.vandaag) ? a.vandaag : null, ok = a.ok || {}, uit = [];
+    if (!vandaag) return uit;
+    const beantwoord = id => { const d = ok[id]; if (!d) return false; if (id.startsWith('d:')) return true; const dd = dagenTot(String(d).slice(0, 10), vandaag); return dd !== null && dd < L.OK_DAGEN; };   // een onleesbare datum onthouden we niet
+    const sch = (schatten || []).filter(Boolean), perId = new Map(sch.map(s => [s.id, s])), nee = new Map(), bev = new Set();
+    for (const it of Object.values(a.prog || {})) {
+      if (!it || !it.estimate_id) continue;
+      for (const k of it.k || []) bev.add(String(k));
+      for (const k of it.x || []) { const s = nee.get(String(k)) || new Set(); s.add(String(it.estimate_id)); nee.set(String(k), s); }
+    }
+    const opties = (ja, nee_) => [{ id: 'ja', tekst: ja, actie: { soort: 'k' } }, { id: 'nee', tekst: nee_, actie: { soort: 'x' } }];
+    const eur = c => '\u20ac ' + L.fmt(c);
+    const fTekst = f => `${f.nummer ? 'factuur ' + f.nummer : 'factuur'} (${eur(f.inclC)}${f.ref ? ', referentie \u201c' + f.ref + '\u201d' : ''})`;
+    const oTekst = s => `${s.nummer ? 'offerte ' + s.nummer : 'offerte'} ${[s.naam, s.ref].filter(Boolean).join(' \u2014 ')} (${eur(s.totaalC)})`;
+    const open = sch.filter(s => (s.status === 'geaccepteerd' || s.status === 'openstaand' || s.status === 'verlopen') && s.totaalC > 0);
+    // 1. losse facturen (zonder offerte). Facturen die aan een offerte buiten de lijst hangen zijn aparte opdrachten (of al op exacte referentie gekoppeld): geen vraag.
+    //    Zelfde contact: factuurdatum binnen een jaar na de offertedatum, offerte niet helemaal gefactureerd, en een gedeeld betekenisvol woord in de referentie (of regels),
+    //    of een geaccepteerde offerte met de factuur binnen 120 dagen. Ander contact: beide namen delen een onderscheidend woord (niet: rechtsvormen, algemene bedrijfswoorden
+    //    en woorden die in 3 of meer verschillende contactnamen voorkomen, de koepelnaam) en de referentie deelt een woord. Een rond percentage is alleen extra tekst in de vraag.
+    const pe = (fk && fk.perEid) || {}, rijVan = new Map((rijen || []).filter(Boolean).map(r => [r.id, r])), df = new Map(), namen = new Set();
+    for (const n of sch.map(s => s.naam).concat((fact || []).map(f => f && f.klant))) { const k = String(n || '').trim().toLowerCase(); if (!k || namen.has(k)) continue; namen.add(k); for (const w of woorden(k, BEDRIJF)) df.set(w, (df.get(w) || 0) + 1); }
+    const onderscheidend = n => new Set([...woorden(n, BEDRIJF)].filter(w => (df.get(w) || 0) < 3));
+    const plus = L.dagPlus;
+    for (const f of (fk && fk.los) || []) {
+      if (!f || f.orig || !(f.inclC > 0) || bev.has(f.id)) continue;
+      const fw = woorden(f.ref + ' ' + (f.tekst || '')), fkl = onderscheidend(f.klant), niet = nee.get(f.id) || new Set();
+      let beste = null;
+      for (const s of open) {
+        if (niet.has(s.id) || !L.geldigeDatum(s.datum) || !L.geldigeDatum(f.datum) || f.datum < s.datum || f.datum > plus(s.datum, 365)) continue;
+        const r = rijVan.get(s.id); if (r && r.fstatus === 'gefactureerd') continue;
+        const zelfde = !!f.contact_id && s.contact_id === f.contact_id, woord = deelt(fw, woorden(s.ref));
+        if (zelfde ? !(woord || (s.status === 'geaccepteerd' && f.datum <= plus(s.datum, 120))) : !(woord && deelt(fkl, onderscheidend(s.naam)))) continue;
+        const pct = f.inclC / s.totaalC * 100, rond = pct >= 9.5 && pct <= 100.5 && Math.abs(pct - Math.round(pct / 5) * 5) <= 0.5;
+        const score = (zelfde ? 2 : 0) + (woord ? 2 : 0) + (rond ? 1 : 0);
+        if (!beste || score > beste.score || (score === beste.score && (s.datum || '') > (beste.s.datum || ''))) beste = { s, score, rond: rond ? Math.round(pct / 5) * 5 : null };
+      }
+      if (!beste) continue;
+      const id = 'f:' + f.id + ':' + beste.s.id; if (beantwoord(id)) continue;
+      uit.push({ id, soort: 'factuur', tekst: `Hoort ${fTekst(f)} bij ${oTekst(beste.s)}?` + (beste.rond ? ` (${beste.rond}% van de offerte)` : ''), opties: opties('Hoort erbij', 'Staat los').map(o => Object.assign(o, { actie: Object.assign(o.actie, { eid: beste.s.id, fid: f.id }) })),
+        refs: { factuur: { id: f.id, nummer: f.nummer }, offerte: { id: beste.s.id, nummer: beste.s.nummer } } });
+    }
+    // 1b. automatisch op referentie gekoppeld: bevestigen of terugdraaien
+    for (const [eid, g] of Object.entries(pe)) {
+      const s = perId.get(eid); if (!s) continue;
+      for (const f of g.facturen) {
+        if (f.via !== 'referentie') continue; const id = 'r:' + f.id + ':' + eid; if (beantwoord(id)) continue;
+        uit.push({ id, soort: 'referentie', tekst: `Gekoppeld op referentie, klopt dat? ${fTekst(f)} staat nu bij ${oTekst(s)}.`,
+          opties: opties('Klopt', 'Klopt niet').map(o => Object.assign(o, { actie: Object.assign(o.actie, { eid, fid: f.id }) })), refs: { factuur: { id: f.id, nummer: f.nummer }, offerte: { id: eid, nummer: s.nummer } } });
+      }
+    }
+    // 1c. bevestigd bij meerdere offertes: welke?
+    for (const [fid, eids] of Object.entries((fk && fk.conflicten) || {})) {
+      const f = (fact || []).find(x => x && x.id === fid); if (!f) continue;
+      const id = 'c:' + fid + ':' + eids.join(','); if (beantwoord(id)) continue;
+      uit.push({ id, soort: 'conflict', tekst: `${fTekst(f).replace(/^f/, 'F')} staat bevestigd bij ${eids.length === 2 ? 'twee' : eids.length} offertes: welke?`,
+        opties: eids.map(eid => { const s = perId.get(eid); return { id: 'kies-' + eid, tekst: s ? `${s.nummer ? 'Offerte ' + s.nummer : 'Offerte'} ${[s.naam, s.ref].filter(Boolean).join(' \u2014 ')}`.trim() : 'Offerte ' + eid, actie: { soort: 'kies', eid, fid, andere: eids.filter(x => x !== eid) } }; }),
+        refs: { factuur: { id: f.id, nummer: f.nummer } } });
+    }
+    // 2. geaccepteerd maar weinig of niets gefactureerd
+    for (const r of rijen || []) {
+      if (!r || r.uitbeeld || r.los || r.status !== 'geaccepteerd' || r.fstatus === 'gefactureerd' || !(r.inclC > 0) || !L.geldigeDatum(r.datum)) continue;
+      const gef = r.gef ? r.gef.inclC : 0, laatste = r.gef && r.gef.facturen.length ? r.gef.facturen.map(f => f.datum).sort().pop() : null;
+      const sindsOfferte = dagenTot(r.datum, vandaag), sindsFactuur = laatste ? dagenTot(laatste, vandaag) : null;
+      const weinig = gef < r.inclC * 0.1 && sindsOfferte !== null && sindsOfferte > 60, stil = gef >= r.inclC * 0.1 && sindsFactuur !== null && sindsFactuur >= 90;
+      if (!(weinig || stil) || r.inclC - gef <= 100) continue;
+      const id = 'o:' + r.id; if (beantwoord(id)) continue;
+      uit.push({ id, soort: 'oud', tekst: `Offerte ${[r.nummer, r.naam].filter(Boolean).join(' ')} staat sinds ${dmj(r.datum)} op geaccepteerd, gefactureerd ${eur(gef)}/${eur(r.inclC)}${stil ? ` (laatste factuur ${dmj(laatste)})` : ''}. Nog te factureren?`,
+        opties: [{ id: 'ja', tekst: 'Ja, komt nog', actie: { soort: 'ok' } }, { id: 'nee', tekst: 'Vervallen / anders gefactureerd', actie: { soort: 'uitbeeld', eid: r.id }, tip: 'Tip: zet de offerte in Moneybird ook op afgewezen.' }],
+        refs: { offerte: { id: r.id, nummer: r.nummer } } });
+    }
+    // 3. ter info: schets die wegvalt omdat er al gefactureerd is
+    for (const r of rijen || []) {
+      if (!r || r.uitbeeld || r.los || r.status === 'afgewezen' || !r.gef || !(r.inclC > 0)) continue;
+      let weg = 0; for (const m of Object.keys(r.cellen || {})) { const d = L.dekking(r, m); if (d) weg += d.gedekt; }
+      if (!weg) continue;
+      const id = 'd:' + r.id + ':' + weg; if (beantwoord(id)) continue;
+      uit.push({ id, soort: 'schets', tekst: `Bij offerte ${[r.nummer, r.naam].filter(Boolean).join(' ')} telt ${eur(weg)} van de schets niet mee, want er is al ${eur(r.gef.inclC)} van ${eur(r.inclC)} gefactureerd.`,
+        opties: [{ id: 'gezien', tekst: 'Gezien', actie: { soort: 'gezien' } }], refs: { offerte: { id: r.id, nummer: r.nummer } } });
+    }
+    return uit;
+  };
+  // Bevestigen (k) of uitsluiten (x) van een factuur in het prognose-item van een offerte. Zoekt EERST een bestaand item met dezelfde estimate_id, ongeacht de sleutel (ook een
+  // projectitem; een actief item gaat voor); alleen als er geen is komt er een nieuw uit-item p:e<id> (zelfde vorm als F.nieuwItem), zodat er nooit twee items per offerte ontstaan.
+  // → { sleutel, item, vorige_ts } voor POST /geld/prognose, of { fout }.
+  L.koppelPlan = function (items, a, schat, vandaag) {
+    const F = root.MTForecast, its = items || {}, sleutels = Object.keys(its).sort().filter(k => its[k] && its[k].soort !== 'post' && String(its[k].estimate_id || '') === String(a.eid));
+    let sleutel = sleutels.find(k => its[k].aan !== false) || sleutels[0] || null, item;
+    const huidig = sleutel ? its[sleutel] : null;
+    if (huidig) { item = JSON.parse(JSON.stringify(huidig)); delete item.ts; delete item.door; }
+    else {
+      if (!schat) return { fout: 'deze offerte staat er niet meer; vernieuw' };
+      sleutel = 'p:e' + a.eid;
+      item = F.nieuwItem({ naam: [schat.naam, schat.ref].filter(Boolean).join(' \u2014 ') || schat.nummer || schat.id, contactId: schat.contact_id, estimateId: schat.id, offertenr: schat.nummer, code: '', totaalC: schat.totaalC, status: schat.status }, 14, vandaag);
+      item.aan = false;
+    }
+    const doel = a.soort, tegen = doel === 'k' ? 'x' : 'k', lijst = (item[doel] || []).map(String);
+    item[tegen] = (item[tegen] || []).filter(x => String(x) !== String(a.fid));
+    if (!lijst.includes(String(a.fid))) lijst.push(String(a.fid));
+    if (lijst.length > (doel === 'k' ? 10 : 20)) return { fout: 'er staan al te veel ' + (doel === 'k' ? 'bevestigde' : 'uitgesloten') + ' facturen bij deze offerte' };
+    item[doel] = lijst;
+    if (F.itemGrootte(item) > 1000) return { fout: 'het prognose-item van deze offerte is te groot om er nog een factuur bij te zetten' };
+    return { sleutel, item, vorige_ts: huidig ? huidig.ts : null };
+  };
+  // Alle plannen voor één antwoord: het item van L.koppelPlan, plus andere items van dezelfde offerte waar de factuur nog in de tegenovergestelde lijst staat (anders blijft hij daar bevestigd of uitgesloten).
+  L.koppelPlannen = function (items, a, schat, vandaag) {
+    const p = L.koppelPlan(items, a, schat, vandaag); if (p.fout) return p;
+    const plannen = [p], tegen = a.soort === 'k' ? 'x' : 'k';
+    for (const k of Object.keys(items || {}).sort()) {
+      const it = items[k]; if (k === p.sleutel || !it || it.soort === 'post' || String(it.estimate_id || '') !== String(a.eid) || !(it[tegen] || []).map(String).includes(String(a.fid))) continue;
+      const item = JSON.parse(JSON.stringify(it)); delete item.ts; delete item.door; item[tegen] = item[tegen].filter(x => String(x) !== String(a.fid)); plannen.push({ sleutel: k, item, vorige_ts: it.ts });
+    }
+    return { plannen };
+  };
+  // Offerte uit beeld zetten als keten met terugdraaien (alle prognose-items uit, daarna pas de markering). o = { haal(pad, opties), lees() → verse prognose-items, F, eid, reden, noteer?(antwoord, sleutel) }.
+  // Per item bij een 409: opnieuw lezen en één keer opnieuw proberen. Mislukt er iets, dan worden de al geslaagde items teruggezet (aan: true); lukt dat niet, dan staat in de fout welke offerte en welke
+  // items handmatig nagekeken moeten worden. Geeft het antwoord van /geld/uitbeeld, of gooit een Error met .mislukt (items die niet terug zijn) en .teruggedraaid.
+  L.uitBeeldKeten = async function (o) {
+    const F = o.F, items = await o.lees(), plan = F.bulkUitBeeld([{ estimateId: o.eid, sleutel: 'p:e' + o.eid }], items, o.reden);
+    if (plan.fout) throw new Error(plan.fout); if (!plan.ids.length) throw new Error('deze offerte heeft geen geldig offerte-id');
+    const kapot = r => !r || r.error, is409 = r => /intussen aangepast|HTTP 409/.test(String(r && (r.error || r.message) || ''));
+    const ub = async body => { const r = await o.haal('/geld/uitbeeld', { method: 'POST', body }); if (kapot(r)) throw new Error(r && r.error || 'opslaan mislukt'); return r; };
+    await ub({ ids: plan.ids, reden: o.reden, controle: true });
+    const gelukt = []; let stop = null, res = null;
+    for (const u of plan.updates) {
+      try {
+        let w = null, bron = items;
+        for (let poging = 0; poging < 2 && !w; poging++) {
+          const huidig = bron[u.sleutel]; if (!huidig) throw new Error('het prognose-item ' + u.sleutel + ' bestaat niet meer');
+          const nieuw = poging ? F.uitBeeldItem(huidig) : u.item;
+          if (!nieuw) { w = { overslaan: true }; break; }
+          const r = await o.haal('/geld/prognose', { method: 'POST', body: { sleutel: u.sleutel, item: nieuw, vorige_ts: huidig.ts } });
+          if (!kapot(r)) { w = r; break; }
+          if (poging === 0 && is409(r)) { bron = await o.lees(); continue; }
+          throw new Error(r && r.error || 'opslaan mislukt');
+        }
+        if (w && !w.overslaan) { gelukt.push({ sleutel: u.sleutel, item: w.item }); if (o.noteer) o.noteer(w, u.sleutel); }
+      } catch (e) { stop = e.message || String(e); break; }
+    }
+    if (!stop) {
+      let laatste = null; for (let poging = 0; poging < 2 && !res; poging++) { try { res = await ub({ ids: plan.ids, reden: o.reden }); } catch (e) { laatste = e; } }
+      if (!res) stop = 'de markering uit beeld: ' + ((laatste && laatste.message) || 'opslaan mislukt');
+    }
+    if (!stop) return res;
+    // Terugzetten alleen als het item nog precies de versie is die wij schreven (zelfde ts): is het intussen door iemand anders gewijzigd (409), dan schrijven we niets en laten we het staan.
+    const mislukt = [], gewijzigd = [];
+    for (const g of gelukt.slice().reverse()) {
+      let ok = false, cur = g.item;
+      try {
+        for (let poging = 0; poging < 2 && !ok; poging++) {
+          const terug = JSON.parse(JSON.stringify(cur)); delete terug.ts; delete terug.door; terug.aan = true;
+          const r = await o.haal('/geld/prognose', { method: 'POST', body: { sleutel: g.sleutel, item: terug, vorige_ts: cur.ts } });
+          if (!kapot(r)) { ok = true; if (o.noteer) o.noteer(r, g.sleutel); break; }
+          if (poging === 0 && is409(r)) {
+            const vers = (await o.lees())[g.sleutel];
+            if (vers && vers.ts === g.item.ts) { cur = vers; continue; }                                     // nog onze eigen versie: een keer opnieuw
+            gewijzigd.push({ sleutel: g.sleutel, door: vers && vers.door ? String(vers.door) : null }); ok = true; break;   // iemand anders was ons voor: niet overschrijven
+          }
+          break;
+        }
+      } catch (e) { ok = false; }
+      if (!ok) mislukt.push(g.sleutel);
+    }
+    const teruggedraaid = gelukt.length - mislukt.length - gewijzigd.length;
+    const err = new Error(`Uit beeld zetten is niet gelukt (${stop}). ` + (!gelukt.length ? 'Er is niets gewijzigd.' : !mislukt.length ? (!teruggedraaid ? '' : teruggedraaid === gelukt.length ? `De ${gelukt.length === 1 ? 'al uitgezette prognose-item is' : gelukt.length + ' al uitgezette prognose-items zijn'} teruggezet.` : `Teruggezet: ${teruggedraaid} van ${gelukt.length}.`)
+      : `Teruggezet: ${teruggedraaid} van ${gelukt.length}. Niet teruggezet (nakijken in de uitgebreide forecast, Gaat zeker door staat uit): offerte ${o.eid}, ${mislukt.length === 1 ? 'item' : 'items'} ${mislukt.join(', ')}.`));
+    if (gewijzigd.length) err.message += ` Niet teruggezet: intussen gewijzigd door ${[...new Set(gewijzigd.map(x => x.door || 'een collega'))].join(', ')}: offerte ${o.eid}, ${gewijzigd.length === 1 ? 'item' : 'items'} ${gewijzigd.map(x => x.sleutel).join(', ')} (laten staan; kijk na in de uitgebreide forecast).`;
+    err.mislukt = mislukt; err.gewijzigd = gewijzigd.map(x => x.sleutel); err.teruggedraaid = teruggedraaid; throw err;
+  };
+  // Factuur bevestigen/uitsluiten als keten met terugdraaien (zoals L.uitBeeldKeten). o = { acties: [{ soort: 'k'|'x', eid, fid }], fid, schatVan(eid), vandaag, haal, lees, noteer? }.
+  // Per item bij een 409: opnieuw lezen en een keer opnieuw proberen. Mislukt er een, dan krijgen de al geslaagde items hun vorige k/x voor deze factuur terug (een nieuw aangemaakt item wordt weer gewist);
+  // lukt dat niet, dan noemt de fout de offerte en de items die handmatig nagekeken moeten worden. Gooit een Error met .mislukt en .teruggedraaid, of geeft de geschreven items terug.
+  L.koppelKeten = async function (o) {
+    const kapot = r => !r || r.error, is409 = r => /intussen aangepast|HTTP 409/.test(String(r && (r.error || r.message) || ''));
+    const maak = items => { const plannen = []; for (const a of o.acties) { const pl = L.koppelPlannen(items, a, o.schatVan(a.eid), o.vandaag); if (pl.fout) return { fout: pl.fout }; plannen.push(...pl.plannen); } return { plannen }; };
+    const items = await o.lees(), pl = maak(items); if (pl.fout) throw new Error(pl.fout);
+    const gelukt = []; let stop = null;
+    for (const plan of pl.plannen) {
+      try {
+        let huidig = plan, bron = items;
+        for (let poging = 0; poging < 2; poging++) {
+          const r = await o.haal('/geld/prognose', { method: 'POST', body: { sleutel: huidig.sleutel, item: huidig.item, vorige_ts: huidig.vorige_ts } });
+          if (!kapot(r)) { gelukt.push({ sleutel: huidig.sleutel, voor: bron[huidig.sleutel] || null, item: r.item }); if (o.noteer) o.noteer(r, huidig.sleutel); break; }
+          if (poging === 0 && is409(r)) { bron = await o.lees(); const nw = maak(bron); if (nw.fout) throw new Error(nw.fout); huidig = nw.plannen.find(x => x.sleutel === plan.sleutel); if (!huidig) break; continue; }
+          throw new Error(r && r.error || 'opslaan mislukt');
+        }
+      } catch (e) { stop = e.message || String(e); break; }
+    }
+    if (!stop) return gelukt;
+    const mislukt = [], bleef = [], fid = String(o.fid);
+    for (const g of gelukt.slice().reverse()) {
+      let ok = false, cur = g.item;
+      try {
+        for (let poging = 0; poging < 2 && !ok; poging++) {
+          // Een door de keten zelf aangemaakt item wordt alleen gewist als het nog precies is zoals wij het schreven (zelfde ts); is het intussen gewijzigd, dan blijft het staan en gaat alleen de factuur eruit.
+          const wis = !g.voor && cur.ts === g.item.ts; let item = null;
+          if (!wis) {
+            item = JSON.parse(JSON.stringify(cur)); delete item.ts; delete item.door;
+            for (const lijst of ['k', 'x']) { item[lijst] = (item[lijst] || []).filter(x => String(x) !== fid); if (g.voor && (g.voor[lijst] || []).map(String).includes(fid)) item[lijst].push(fid); }
+          }
+          const r = await o.haal('/geld/prognose', { method: 'POST', body: { sleutel: g.sleutel, item, vorige_ts: cur.ts } });
+          if (!kapot(r)) { ok = true; if (!g.voor && !wis) bleef.push(g.sleutel); if (o.noteer) o.noteer(r, g.sleutel); break; }
+          if (poging === 0 && is409(r)) { const vers = await o.lees(); if (!vers[g.sleutel]) { ok = !g.voor; break; } cur = vers[g.sleutel]; continue; }
+          break;
+        }
+      } catch (e) { ok = false; }
+      if (!ok) mislukt.push(g.sleutel);
+    }
+    const teruggedraaid = gelukt.length - mislukt.length, eids = [...new Set(o.acties.map(a => a.eid))].join(', ');
+    const err = new Error(`Koppelen is niet gelukt (${stop}). ` + (!gelukt.length ? 'Er is niets gewijzigd.' : !mislukt.length ? `Wat al was opgeslagen (${gelukt.length} ${gelukt.length === 1 ? 'item' : 'items'}) is teruggezet.`
+      : `Teruggezet: ${teruggedraaid} van ${gelukt.length}. Niet teruggezet (nakijken in de uitgebreide forecast, bij Bevestigd en Uitgesloten van de factuur): offerte ${eids}, ${mislukt.length === 1 ? 'item' : 'items'} ${mislukt.join(', ')}.`));
+    if (bleef.length) err.message += ` Let op: ${bleef.length === 1 ? 'item' : 'items'} ${bleef.join(', ')} ${bleef.length === 1 ? 'bleef' : 'bleven'} staan omdat ${bleef.length === 1 ? 'het' : 'ze'} intussen gewijzigd ${bleef.length === 1 ? 'is' : 'zijn'}; alleen de factuurkoppeling is teruggezet.`;
+    err.mislukt = mislukt; err.bleef = bleef; err.teruggedraaid = teruggedraaid; throw err;
+  };
+  L.FILTERS = ['geaccepteerd', 'openstaand', 'verlopen', 'concept', 'afgewezen', 'los', 'gefactureerd', 'afgerond', 'uitbeeld'];
   // Met maanden: helemaal gefactureerd en in die maanden niets meer dat telt = Afgerond (eigen filter, standaard uit).
   L.filter = (rijen, aan, maanden) => { const mag = new Set(aan); return rijen.filter(r => maanden && !L.inBeeld(r, maanden) ? mag.has('afgerond') : r.uitbeeld ? mag.has('uitbeeld') : mag.has(r.status)); };
-  L.tel = (rijen, maanden) => { const t = { geaccepteerd: 0, openstaand: 0, concept: 0, los: 0, gefactureerd: 0, afgerond: 0, uitbeeld: 0 }; for (const r of rijen) { if (maanden && !L.inBeeld(r, maanden)) t.afgerond++; else if (r.uitbeeld) t.uitbeeld++; else if (t[r.status] != null) t[r.status]++; } return t; };
+  L.tel = (rijen, maanden) => { const t = { geaccepteerd: 0, openstaand: 0, verlopen: 0, concept: 0, afgewezen: 0, los: 0, gefactureerd: 0, afgerond: 0, uitbeeld: 0 }; for (const r of rijen) { if (maanden && !L.inBeeld(r, maanden)) t.afgerond++; else if (r.uitbeeld) t.uitbeeld++; else if (t[r.status] != null) t[r.status]++; } return t; };
   L.bedrag = (r, btw) => btw === 'excl' ? r.exclC : r.inclC;
   // Wat telt in een maand: het gefactureerde bedrag als er in die maand een factuur is (het vakje staat dan vast), anders de schets.
   L.vast = (r, ym) => !!(r.gef && ym in r.gef.maand);
-  L.cel = (r, ym) => L.vast(r, ym) ? r.gef.maand[ym] : (r.cellen[ym] || 0);
+  // Wat telt er echt (Bart 2-11): bij een offerte met bekend bedrag en facturen is het gefactureerde totaal al "weg" uit de schets. Rest = offertebedrag
+  // min gefactureerd (incl. btw, nooit onder nul). De positieve schetsvakjes in maanden zonder factuur tellen samen hooguit mee tot die rest, waarbij de
+  // LAATSTE maanden blijven staan en de vroegste het eerst wegvallen (de eerste termijnen zijn al gefactureerd, de laatste = oplevering blijft over).
+  // Negatieve vakjes (creditnota) blijven onaangeroerd en tellen niet mee in de begrenzing. Het opgeslagen schetsbedrag verandert nooit; alleen wat meetelt.
+  // Zonder offertebedrag of zonder facturen is het de schets zoals ingevuld. Resultaat: { 'JJJJ-MM': centen } voor elke maand met een factuur of schetsbedrag.
+  L.effectief = function (r) {
+    const uit = {}, c = (r && r.cellen) || {}, gm = (r && r.gef && r.gef.maand) || {};
+    for (const m of Object.keys(gm)) uit[m] = gm[m];
+    let over = r && r.gef && r.inclC != null ? Math.max(0, r.inclC - r.gef.inclC) : Infinity;
+    const vrij = Object.keys(c).filter(m => !(m in gm)).sort();
+    for (const m of vrij.slice().reverse()) { if (!(c[m] > 0)) continue; const keep = Math.min(c[m], over); over -= keep; uit[m] = keep; }
+    for (const m of vrij) if (!(c[m] > 0)) uit[m] = c[m] || 0;
+    return uit;
+  };
+  // Schetsvakje dat deels of geheel buiten beeld valt door eerdere facturen: { schets, gedekt } of null.
+  L.dekking = function (r, ym) {
+    if (L.vast(r, ym)) return null; const s = r.cellen && r.cellen[ym]; if (!(s > 0)) return null;
+    const e = L.effectief(r)[ym]; return e < s ? { schets: s, gedekt: s - e } : null;
+  };
+  L.cel = (r, ym) => L.vast(r, ym) ? r.gef.maand[ym] : (L.effectief(r)[ym] || 0);
   // Nog te factureren: het offertebedrag min wat er al gefactureerd is (in dezelfde weergave incl./excl.), nooit onder nul.
   L.nog = (r, btw) => { const b = L.bedrag(r, btw); if (b == null || !r.gef) return null; return Math.max(0, b - (btw === 'excl' ? r.gef.exclC : r.gef.inclC)); };
   // Helemaal gefactureerd (afgerond): alleen in de lijst als er in de getoonde maanden iets van meetelt. Deels gefactureerd blijft altijd staan.
@@ -238,7 +515,7 @@
   const SORT_RE = /^(offerte|datum|status|zeker|bedrag|totaal|m:\d{4}-\d{2}):(op|af)$/;
   L.SORT_STANDAARD = { sleutel: 'datum', richting: 'af' };
   L.sortLees = t => { const m = SORT_RE.exec(String(t || '')); return m ? { sleutel: m[1], richting: m[2] } : L.SORT_STANDAARD; };
-  const STATUS = ['geaccepteerd', 'openstaand', 'concept', 'los', 'gefactureerd'];
+  const STATUS = ['geaccepteerd', 'openstaand', 'verlopen', 'concept', 'afgewezen', 'los', 'gefactureerd'];
   L.sorteer = function (rijen, sort, btw, maanden) {
     const s = sort || L.SORT_STANDAARD, f = s.richting === 'op' ? 1 : -1, nl = (a, b) => String(a).localeCompare(String(b), 'nl', { numeric: true, sensitivity: 'base' });
     const getal = (a, b) => (a == null) - (b == null) || (a == null ? 0 : a - b);
@@ -295,12 +572,12 @@
   };
   // Nu factureren: geaccepteerd of zeker, nog niet helemaal gefactureerd, en een bedrag gepland in deze of een eerdere maand dat nog niet gefactureerd is. Bedrag = wat er nog openstaat (L.nog), anders de geplande som.
   // Per maand telt het geplande bedrag min wat er in die maand al gefactureerd is (deels gefactureerd in dezelfde maand blijft dus staan); ontbreekt het offertebedrag, dan geldt de som van die restanten.
-  L.nuFactureren = (rijen, nuYm, btw) => rijen.filter(r => !r.uitbeeld && !r.los && (r.status === 'geaccepteerd' || r.zeker) && r.fstatus !== 'gefactureerd').map(r => {
-    const rest = m => (r.cellen[m] || 0) - (r.gef && r.gef.maand[m] ? r.gef.maand[m] : 0), gepland = Object.keys(r.cellen).filter(m => m <= nuYm && rest(m) > 0).sort(); if (!gepland.length) return null;
+  L.nuFactureren = (rijen, nuYm, btw) => rijen.filter(r => !r.uitbeeld && !r.los && r.status !== 'afgewezen' && (r.status === 'geaccepteerd' || r.zeker) && r.fstatus !== 'gefactureerd').map(r => {
+    const eff = L.effectief(r), rest = m => (r.gef && r.gef.maand[m] ? (r.cellen[m] || 0) - r.gef.maand[m] : (eff[m] || 0)), gepland = Object.keys(r.cellen).filter(m => m <= nuYm && rest(m) > 0).sort(); if (!gepland.length) return null;
     const nog = L.nog(r, btw), bedrag = nog != null ? nog : gepland.reduce((a, m) => a + rest(m), 0); return bedrag > 0 ? { r, bedrag, gepland } : null;
   }).filter(Boolean).sort((a, b) => b.bedrag - a.bedrag);
   // Offertes met een bepaalde status (openstaand, concept): bedrag en de eerstvolgende geplande maand (vanaf nuYm); helemaal gefactureerde offertes niet.
-  L.offertesMet = (rijen, nuYm, status, btw) => rijen.filter(r => !r.uitbeeld && !r.los && r.status === status && r.fstatus !== 'gefactureerd').map(r => ({ r, bedrag: L.bedrag(r, btw), eerstvolgende: Object.keys(r.cellen).filter(m => r.cellen[m] > 0 && m >= nuYm).sort()[0] || null }))
+  L.offertesMet = (rijen, nuYm, status, btw) => rijen.filter(r => !r.uitbeeld && !r.los && (r.status === status || (status === 'openstaand' && r.status === 'verlopen')) && r.fstatus !== 'gefactureerd').map(r => ({ r, bedrag: L.bedrag(r, btw), eerstvolgende: (e => Object.keys(e).filter(m => e[m] > 0 && m >= nuYm).sort()[0] || null)(L.effectief(r)) }))
     .sort((a, b) => (b.bedrag || 0) - (a.bedrag || 0));
   // Geaccepteerd maar nog nergens ingepland (en niet helemaal gefactureerd): mag niet uit beeld verdwijnen.
   L.nietIngepland = (rijen, btw) => rijen.filter(r => !r.uitbeeld && !r.los && r.status === 'geaccepteerd' && r.fstatus !== 'gefactureerd' && !Object.values(r.cellen).some(v => v)).map(r => ({ r, bedrag: L.bedrag(r, btw), eerstvolgende: null, nietIngepland: true }))
@@ -324,11 +601,12 @@
   const telefoon = () => !!(window.matchMedia && window.matchMedia('(max-width:700px)').matches);
   const kort = cc => { const e = Math.round(Math.abs(cc) / 100); return (cc < 0 && e ? '−' : '') + duizend(e); };
   const dtxt = cc => cc == null ? '' : telefoon() ? kort(cc) : L.fmt(cc);
+  const dekTitel = (r, m) => { const d = L.dekking(r, m); return d ? `Schets ${L.fmt(d.schets)}, al gedekt door eerdere facturen ${L.fmt(d.gedekt)}` + (d.schets - d.gedekt ? `; telt mee ${L.fmt(d.schets - d.gedekt)}` : '; telt niet mee') + '. Het schetsbedrag blijft bewaard.' : ''; };
   const nu = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
   const st = L._st = { el: null, opt: null, mag: false, schatten: null, schattenT: 0, afgekapt: false, schets: null, uitbeeld: {}, start: nu(), btw: 'incl', filter: null, sort: null,
     bezig: false, fout: null, bewaren: new Map(), keten: new Map(), mislukt: new Map(), zekerBezig: new Set(), sessie: Math.random().toString(36).slice(2), laadNr: 0,
-    fact: null, factFout: null, factAfgekapt: false, prog: null, fk: null, kas: null, tl: null, tlFout: null, tlBezig: false, kasOpen: false, kasAan: {}, paneel: null };
-  const STATUS_TEKST = { geaccepteerd: 'Geaccepteerd', openstaand: 'Openstaand', concept: 'Concept', los: 'Niet meer open', gefactureerd: 'Gefactureerd', afgerond: 'Afgerond', uitbeeld: 'Uit beeld' };
+    progVers: {}, ubVers: {}, vragenBezig: false, fact: null, factFout: null, factAfgekapt: false, prog: null, fk: null, kas: null, tl: null, tlFout: null, tlBezig: false, kasOpen: false, kasAan: {}, paneel: null };
+  const STATUS_TEKST = { geaccepteerd: 'Geaccepteerd', openstaand: 'Openstaand', verlopen: 'Verlopen', concept: 'Concept', afgewezen: 'Afgewezen', los: 'Niet meer open', gefactureerd: 'Gefactureerd', afgerond: 'Afgerond', uitbeeld: 'Uit beeld' };
   const FSTATUS_TEKST = { deels: 'Deels gefactureerd', gefactureerd: 'Gefactureerd' };
   const KAS_TEKST = { open: 'Openstaande facturen', betaald: 'Betaalde facturen', vast: 'Vaste kosten', patroon: 'Vaste patronen', overig: 'Overige voorspelling', uit: 'Niet meetellen' };
   const KAS_UITLEG = { open: 'Inkoopfacturen die wij nog moeten betalen, per verwachte betaalmaand (uit Financiën)', betaald: 'Inkoopfacturen en andere betalingen die al van de bank zijn afgeschreven (voorbije maanden en wat deze maand al betaald is); verzamelbetalingen staan als één regel', vast: 'Vaste kosten: lonen, energie (Vattenfall), water (PWN), verzekeringen, hypotheek, abonnementen, lease. Herkend uit de bank en de inkoopfacturen; met Indeling zet je een regel in een andere groep',
@@ -349,7 +627,11 @@
 .mtl-kaart{background:var(--l-surface);border:1px solid var(--l-line);border-radius:var(--l-rp);flex:1 1 auto;min-height:0;display:flex;flex-direction:column;overflow:hidden}
 .mtl-balk{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--l-line);flex:none}
 .mtl-chip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:var(--l-r);border:1px solid var(--l-line);background:var(--l-surface);color:var(--l-ink3);font-size:12px;font-weight:500;cursor:pointer}
-.mtl-chip:hover{background:var(--l-surface2)}.mtl-chip[aria-pressed=true]{background:var(--l-psoft);border-color:var(--l-psoft);color:var(--l-ptext)}.mtl-tel{font-family:var(--l-mono);font-size:11px;opacity:.75}
+.mtl-chip:hover{background:var(--l-surface2)}.mtl-vraag{color:var(--l-warn);border-color:var(--l-warn);background:var(--l-warnbg)}.mtl-vr-uitroep{display:inline-grid;place-items:center;width:16px;height:16px;border-radius:50%;background:var(--l-warn);color:var(--l-surface);font-size:11px;font-weight:700;line-height:1}
+.mtl-sheet.mtl-vr{left:auto;right:16px;bottom:16px;width:min(460px,calc(100vw - 32px));max-height:min(78vh,720px);border:1px solid var(--l-line);border-radius:12px}.mtl-vr-lijst{display:flex;flex-direction:column;gap:12px;padding:12px 0}
+.mtl-vr-kaart{border:1px solid var(--l-soft);border-radius:var(--l-rp);padding:12px;background:var(--l-surface2);display:flex;flex-direction:column;gap:8px}.mtl-vr-tekst{margin:0;font-size:14px;line-height:20px}.mtl-vr-links{display:flex;gap:14px;font-size:13px}.mtl-vr-knoppen{display:flex;flex-wrap:wrap;gap:8px}
+.mtl-vr-tip{margin:0;font-size:13px;line-height:18px;color:var(--l-ink2)}.mtl-vr-info{border-top:1px solid var(--l-soft);margin-top:4px}.mtl-vr-leeg{margin:0;padding:24px 0;text-align:center;color:var(--l-ink3)}
+.mtl-chip[aria-pressed=true]{background:var(--l-psoft);border-color:var(--l-psoft);color:var(--l-ptext)}.mtl-tel{font-family:var(--l-mono);font-size:11px;opacity:.75}
 .mtl-nav{display:inline-flex;align-items:center;gap:4px;margin-left:auto}.mtl-nav .ui-knop{height:28px;padding:0 10px;font-size:12px}.mtl-periode{font-size:12px;color:var(--l-ink2);margin:0 6px;white-space:nowrap}
 .mtl-scroll{flex:1 1 auto;min-height:0;overflow:auto;position:relative;scrollbar-width:thin;scrollbar-color:var(--l-strong) var(--l-surface2)}
 .mtl-tabel{border-collapse:separate;border-spacing:0;min-width:100%;min-height:100%;font-size:13px}
@@ -368,14 +650,14 @@
 .mtl-naam a{color:inherit;text-decoration:none}.mtl-naam a:hover,.mtl-naam a:focus-visible{color:var(--l-primary);text-decoration:underline}
 .mtl-mbd{display:none}.mtl-meta{display:flex;gap:4px 8px;align-items:center;flex-wrap:wrap;font-size:11px;line-height:16px;color:var(--l-ink3)}
 .mtl-st{display:inline-flex;align-items:center;height:18px;padding:0 6px;border-radius:var(--l-r);font-size:11px;font-weight:500}
-.mtl-st.geaccepteerd{color:var(--l-ok);background:var(--l-okbg)}.mtl-st.openstaand{color:var(--l-warn);background:var(--l-warnbg)}.mtl-st.concept,.mtl-st.los,.mtl-st.uitbeeld{color:var(--l-ink2);background:var(--l-surface2)}
+.mtl-st.geaccepteerd{color:var(--l-ok);background:var(--l-okbg)}.mtl-st.openstaand{color:var(--l-warn);background:var(--l-warnbg)}.mtl-st.concept,.mtl-st.los,.mtl-st.uitbeeld{color:var(--l-ink2);background:var(--l-surface2)}.mtl-st.verlopen{color:var(--l-warn);background:var(--l-surface2)}.mtl-st.afgewezen{color:var(--l-ink3);background:var(--l-surface2)}
 .mtl-tabel .zk{width:72px;min-width:72px;text-align:center}.mtl-tabel .bd{min-width:96px;color:var(--l-ink2)}.mtl-tabel .tot{min-width:96px;font-weight:500;box-shadow:inset 1px 0 0 var(--l-line)}
 .mtl-sw{position:relative;display:inline-block;width:34px;height:20px;vertical-align:middle;cursor:pointer}.mtl-sw input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer;z-index:1}
 .mtl-sw span{position:absolute;inset:0;border-radius:10px;background:var(--l-strong);transition:background .15s}.mtl-sw span::after{content:"";position:absolute;left:2px;top:2px;width:16px;height:16px;border-radius:50%;background:var(--l-surface);box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
 .mtl-sw input:checked+span{background:var(--l-primary)}.mtl-sw input:checked+span::after{transform:translateX(14px)}.mtl-sw input:focus-visible+span{outline:2px solid var(--l-primary);outline-offset:2px}.mtl-sw input:disabled{cursor:not-allowed}.mtl-sw input:disabled+span{opacity:.45}
 .mtl-in{width:96px;height:28px;box-sizing:border-box;text-align:right;border:1px solid var(--l-soft);border-radius:var(--l-r);padding:0 6px;background:var(--l-surface);color:var(--l-ink);font:inherit;font-family:var(--l-mono);font-variant-numeric:tabular-nums}
 .mtl-in::placeholder{color:var(--l-ink3);opacity:.6}.mtl-in:hover:not(:disabled){border-color:var(--l-strong)}.mtl-in:focus{outline:2px solid var(--l-primary);outline-offset:1px;border-color:var(--l-strong)}
-.mtl-in.bewaren{color:var(--l-ink3)}.mtl-in.fout{border-color:var(--l-err);background:var(--l-errbg)}.mtl-in:disabled{background:transparent;border-color:transparent;cursor:default}
+.mtl-in.bewaren{color:var(--l-ink3)}.mtl-in.gedekt{color:var(--l-ink3);text-decoration:line-through;text-decoration-color:var(--l-strong)}.mtl-in.fout{border-color:var(--l-err);background:var(--l-errbg)}.mtl-in:disabled{background:transparent;border-color:transparent;cursor:default}
 .mtl-sortknop{border:0;background:none;font:inherit;color:inherit;cursor:pointer;padding:2px 4px;border-radius:var(--l-r);white-space:nowrap}.mtl-sortknop:hover{background:var(--l-surface2);color:var(--l-ink)}.mtl-sortknop.actief{color:var(--l-ink);font-weight:600}
 .mtl-sortrij{display:flex;gap:2px;align-items:center;flex-wrap:wrap}.mtl-0{color:var(--l-ink3);font-weight:400}
 .mtl-melding{padding:24px;color:var(--l-ink2)}.mtl-fout{padding:10px 14px;border:1px solid var(--l-err);background:var(--l-errbg);color:var(--l-err);border-radius:var(--l-rp);font-size:13px;flex:none}
@@ -529,10 +811,8 @@
   L.start = function (el, opt) {
     st.el = el; st.opt = opt || {}; st.mag = !!st.opt.magWijzigen; css();
     st.btw = ls.get('mtl:btw') === 'excl' ? 'excl' : 'incl';
-    try { const f = JSON.parse(ls.get('mtl:filter') || 'null'); st.filter = Array.isArray(f) ? f.filter(x => L.FILTERS.includes(x)) : null; } catch (e) { st.filter = null; }
-    if (!st.filter) st.filter = ['geaccepteerd', 'openstaand', 'los', 'gefactureerd'];
-    else if (ls.get('mtl:fv') !== '2' && !st.filter.includes('gefactureerd')) st.filter.push('gefactureerd');   // nieuw filter (30-10): eenmalig aan, anders telt een factuur niet mee
-    ls.set('mtl:fv', '2'); ls.set('mtl:filter', JSON.stringify(st.filter));
+    try { st.filter = L.filterStart(JSON.parse(ls.get('mtl:filter') || 'null'), ls.get('mtl:fv')); } catch (e) { st.filter = L.filterStart(null, null); }
+    ls.set('mtl:fv', '3'); ls.set('mtl:filter', JSON.stringify(st.filter));
     try { const k = JSON.parse(ls.get('mtl:kas') || '{}'); st.kasAan = k && typeof k === 'object' ? k.aan || {} : {}; st.kasOpen = !!(k && k.open); } catch (e) { st.kasAan = {}; }
     st.sort = L.sortLees(ls.get('mtl:sort'));
     if (!L._resize) { L._resize = true; window.addEventListener('resize', () => { if (st.el && st.el.isConnected) pasHoogte(); });
@@ -616,24 +896,89 @@
         if (nr !== st.laadNr) return;
       }
       st.schets = sch.items; ls.set('mtl:kopie', JSON.stringify({ ts: Date.now(), items: sch.items }));   // reservekopie op deze computer
-      if (ub && ub.items) st.uitbeeld = ub.items;
-      if (sr) { st.schatten = (sr.lijst || []).map(e => root.MTForecast.schatNorm(e)).filter(Boolean); st.afgekapt = !!sr.afgekapt; st.schattenT = Date.now(); }
+      if (ub && ub.items) { st.uitbeeld = Object.assign({}, ub.items); for (const [id, e] of Object.entries(st.ubVers)) if (Date.now() - e.t < 120000) st.uitbeeld[id] = e.rec; }   // de lijst loopt even achter op onze eigen schrijfactie
+      if (sr) { st.schatten = (sr.lijst || []).map(e => root.MTForecast.schatNorm(e)).filter(Boolean); st.afgekapt = !!sr.afgekapt; st.afgewezenAfgekapt = !!(sr.afgewezenAfgekapt || sr.afgewezenFout); st.schattenT = Date.now(); }
       // Fail-closed (Codex): mislukt of afgekapt = géén factuurgegevens (ook niet die van een vorige keer); dan telt alleen de schets en zegt de melding dat.
       if (fr && fr.fout) { st.factFout = fr.fout; st.fact = null; }
       else if (Array.isArray(fr)) {
         const [fl, pg] = fr;
         if (fl && fl.afgekapt) { st.fact = null; st.factFout = 'te veel facturen om in één keer te lezen'; }
         else { st.fact = ((fl && fl.lijst) || []).map(L.factuurNorm).filter(Boolean); st.factFout = null; }
-        st.prog = pg && pg.items ? pg.items : null;
+        st.prog = pg && pg.items ? Object.assign({}, pg.items) : null;
+        if (st.prog) for (const [k, e] of Object.entries(st.progVers)) if (Date.now() - e.t < 120000 && (!st.prog[k] || (st.prog[k].ts || 0) < (e.item.ts || 0))) st.prog[k] = e.item;
       }
       if (sch.kas !== undefined) { st.kas = sch.kas; st.kasStart = sch.kas_start || null; st.kasGeladen = true; } else { st.kas = null; st.kasStart = null; st.kasGeladen = false; }   // geen kas in de respons: geen oude of startindeling gebruiken
       st.fk = st.fact ? L.koppelFacturen(st.fact, st.schatten, st.prog) : null;
     } catch (e) { if (nr === st.laadNr) st.fout = String(e.message || e); }
     if (nr !== st.laadNr) return;
-    st.bezig = false; teken();
+    st.bezig = false; teken(); if (st.sheet && st.sheet.soort === 'vragen') vulVragenSheet();
     if (!st.fout) laadKas(!!(o && o.vers));                                  // altijd: het netto resultaat staat vast onderaan
     if (!st.fout && st.schets && st.schatten && st.mag) { herstel(); werkBij(); }
   };
+
+  // ── Vragen "Te controleren" (desktop): scan = L.vragen; antwoorden schrijven via het bestaande pad van de uitgebreide forecast (/geld/prognose k/x, /geld/uitbeeld) ──
+  const dagVandaag = () => { const d = new Date(); return `${nu()}-${String(d.getDate()).padStart(2, '0')}`; };
+  const okLees = () => { try { const o = JSON.parse(ls.get('mtl:vragenOk') || '{}'); return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; } catch (e) { return {}; } };
+  function okZet(id) {                                                  // alleen "komt nog" en "gezien", per apparaat; oude "komt nog"-regels (> 120 dagen) ruimen we op
+    const o = okLees(), nuD = dagVandaag(); o[id] = nuD;
+    for (const k of Object.keys(o)) if (!k.startsWith('d:') && (L.dagenTussen(String(o[k]), nuD) === null || L.dagenTussen(String(o[k]), nuD) > 120)) delete o[k];
+    ls.set('mtl:vragenOk', JSON.stringify(o));
+  }
+  function huidigeVragen() {
+    if (!st.schets || !st.schatten || !st.fact || !st.fk) return [];
+    try { return L.vragen(L.rijen(st.schatten, st.schets, st.uitbeeld, st.fk), st.fact, st.fk, st.schatten, { vandaag: dagVandaag(), ok: okLees(), prog: st.prog || {} }); } catch (e) { return []; }
+  }
+  const verouderd409 = r => /intussen aangepast|HTTP 409/.test(String(r && (r.error || r.message) || r || ''));
+  async function prognoseLezen() {
+    const r = await st.opt.bron.haal('/geld/prognose'); if (!r || r.error) throw new Error(r && r.error || 'prognose niet te lezen');
+    if (r.compleet === false) throw new Error('de prognoselijst is niet compleet geladen; vernieuw');
+    const items = Object.assign({}, r.items || {});
+    for (const [k, e] of Object.entries(st.progVers)) if (Date.now() - e.t < 120000 && (!items[k] || (items[k].ts || 0) < (e.item.ts || 0))) items[k] = e.item;   // de KV-lijst loopt achter op onze eigen schrijfactie
+    return items;
+  }
+  function noteerPrognose(w, sleutel) {
+    if (w.item) st.progVers[sleutel] = { item: w.item, t: Date.now() };
+    const G = root.MTGeld; if (G && G._st) { if (w.cachever) G._st.cv = w.cachever; if (w.ks) G._st.ks = (G._st.ks || []).filter(x => x.k !== w.ks).concat({ k: w.ks, t: Date.now() }).slice(-10); }
+  }
+  // Factuur bevestigen (k) of uitsluiten (x) via L.koppelPlan (eerst een bestaand item met die estimate_id, anders een uit-item).
+  // Bij een 409 (intussen aangepast): opnieuw lezen en één keer opnieuw proberen.
+  async function zetKoppeling(acties) {
+    await L.koppelKeten({ acties, fid: acties[0].fid, schatVan: eid => (st.schatten || []).find(x => x.id === eid), vandaag: dagVandaag(), lees: prognoseLezen, noteer: noteerPrognose, haal: (pad, opt) => st.opt.bron.haal(pad, opt) });
+  }
+  // Offerte uit beeld zetten: L.uitBeeldKeten (met terugdraaien); bij succes de markering lokaal bijhouden.
+  async function zetUitBeeld(eid) {
+    const res = await L.uitBeeldKeten({ F: root.MTForecast, eid, reden: 'verkeerd' /* bestaande reden: "Verkeerd of vervallen"; de worker kent geen vrije notitie */, lees: prognoseLezen, noteer: noteerPrognose, haal: (pad, opt) => st.opt.bron.haal(pad, opt) });
+    for (const [id, rec] of Object.entries(res.items || {})) { st.uitbeeld[id] = rec; st.ubVers[id] = { rec, t: Date.now() }; }
+  }
+  async function beantwoordVraag(v, o) {
+    if (!st.mag || st.vragenBezig) return;
+    const a = o.actie; st.vragenBezig = true; vulVragenSheet();
+    try {
+      if (a.soort === 'k' || a.soort === 'x') await zetKoppeling([a]);
+      else if (a.soort === 'kies') await zetKoppeling([{ soort: 'k', eid: a.eid, fid: a.fid }].concat(a.andere.map(e => ({ soort: 'x', eid: e, fid: a.fid }))));
+      else if (a.soort === 'uitbeeld') await zetUitBeeld(a.eid);
+      else okZet(v.id);
+      toast(a.soort === 'k' || a.soort === 'kies' ? 'Factuur bij de offerte gezet.' : a.soort === 'x' ? 'Factuur staat los van deze offerte.' : a.soort === 'uitbeeld' ? 'Offerte uit beeld gezet. Zet hem in Moneybird ook op afgewezen.' : 'Onthouden.');
+      if (a.soort === 'k' || a.soort === 'x' || a.soort === 'kies' || a.soort === 'uitbeeld') await L.laad({ vers: true });
+    } catch (e) { toast('Niet opgeslagen: ' + (e.message || e) + (verouderd409(e) ? ' \u2014 vernieuw en probeer opnieuw' : '')); }
+    st.vragenBezig = false; teken(); vulVragenSheet();
+  }
+  function openVragen() { const el = maakSheet('vragen', {}); el.classList.add('mtl-vr'); vulVragenSheet(); const x = el.querySelector('.mtl-sheet-x'); if (x) x.focus({ preventScroll: true }); }
+  function vulVragenSheet() {
+    const s = st.sheet; if (!s || s.soort !== 'vragen') return;
+    const hoog = s.el.scrollTop, alle = huidigeVragen(), vr = alle.filter(v => v.soort !== 'schets'), info = alle.filter(v => v.soort === 'schets'), adm = st.opt.administratie ? st.opt.administratie() : null, mb = (soort, id) => root.MTForecast.mbUrl(adm, soort, id);
+    const link = (url, tekst) => url ? h('a', { class: 'mtl-link', href: url, target: '_blank', rel: 'noopener' }, tekst) : null;
+    const kaart = v => h('div', { class: 'mtl-vr-kaart ' + v.soort },
+        h('p', { class: 'mtl-vr-tekst' }, v.tekst),
+        h('div', { class: 'mtl-vr-links' }, v.refs.factuur ? link(mb('sales_invoices', v.refs.factuur.id), 'Factuur openen') : null, v.refs.offerte ? link(mb('estimates', v.refs.offerte.id), 'Offerte openen') : null),
+        h('div', { class: 'mtl-vr-knoppen' }, v.opties.map(o => h('button', { type: 'button', class: 'ui-knop', disabled: !st.mag || st.vragenBezig, title: !st.mag ? 'Je mag geen gegevens in Financi\u00ebn wijzigen' : null, onclick: () => beantwoordVraag(v, o) }, o.tekst))),
+        v.opties.some(o => o.tip) ? h('p', { class: 'mtl-vr-tip' }, v.opties.find(o => o.tip).tip) : null);
+    s.el.replaceChildren(sheetKop('Te controleren', vr.length ? vr.length + (vr.length === 1 ? ' vraag' : ' vragen') : null),
+      h('div', { class: 'mtl-vr-lijst' }, vr.length ? vr.map(kaart) : h('p', { class: 'mtl-vr-leeg' }, st.bezig ? 'Laden\u2026' : 'Geen open vragen.')),
+      info.length ? h('div', { class: 'mtl-vr-info' }, h('h3', { class: 'mtl-os-h' }, 'Ter info'), h('div', { class: 'mtl-vr-lijst' }, info.map(kaart))) : null,
+      !st.mag ? h('p', { class: 'mtl-vr-tip' }, 'Je kunt de vragen lezen, maar niet beantwoorden (daar is het recht om geld te wijzigen voor nodig).') : null);
+    s.el.scrollTop = hoog;
+  }
 
   // ── Opslaan van één vakje ──
   function rijVan(id) { return L.rijen(st.schatten, st.schets, st.uitbeeld, st.fk).find(r => r.id === id) || null; }
@@ -648,7 +993,7 @@
       const onv = (r.waarschuwingen || []).filter(w => w && w.onvolledig && !['prognose', 'verkoop'].includes(w.bron)).map(w => String(w.fout || 'onvolledig'));
       if (r.bronnen && r.bronnen.facturen && r.bronnen.facturen.onvolledig) onv.unshift('inkoopfacturen niet volledig opgehaald');
       if (r.bronnen && r.bronnen.bankmutaties && r.bronnen.bankmutaties.onvolledig) onv.unshift('bankmutaties niet volledig opgehaald');
-      const vd = /^\d{4}-\d{2}-\d{2}$/.test(String(r.vandaag || '')) ? r.vandaag : v, asOf = r.patronen && r.patronen.as_of ? String(r.patronen.as_of).slice(0, 10) : null;
+      const vd = L.geldigeDatum(r.vandaag) ? r.vandaag : v, asOf = r.patronen && r.patronen.as_of ? String(r.patronen.as_of).slice(0, 10) : null;
       const hist = r.historie_maand_partij && typeof r.historie_maand_partij === 'object' ? r.historie_maand_partij : null;
       st.tl = { events: r.events, vandaag: vd, onvolledig: onv, hist, histVers: !!(hist && asOf && asOf >= vd), histAsOf: asOf };
       // Bankhistorie ontbreekt of is niet van vandaag: één keer per sessie opnieuw laten berekenen (alleen de eigenaar mag dat), daarna opnieuw laden.
@@ -829,12 +1174,12 @@
     const ms = maanden(), rijen = zichtbareRijen(), perId = new Map(rijen.map(r => [r.id, r]));
     t.querySelectorAll('input.mtl-in').forEach(inp => {
       const r = perId.get(inp.dataset.id); if (!r) return; const sl = inp.dataset.id + '|' + inp.dataset.ym;
-      inp.classList.toggle('fout', st.mislukt.has(sl)); inp.classList.toggle('bewaren', st.bewaren.has(sl));
+      inp.classList.toggle('fout', st.mislukt.has(sl)); inp.classList.toggle('bewaren', st.bewaren.has(sl)); inp.classList.toggle('gedekt', !!L.dekking(r, inp.dataset.ym));
       const v = r.cellen[inp.dataset.ym]; inp.dataset.oud = v == null ? '' : String(v);              // altijd de laatst bekende stand van de server
       if ((document.activeElement === inp && sl !== forceer) || st.bewaren.has(sl)) return;   // niet door iemands getyp heen schrijven
       const m = st.mislukt.get(sl), toon = m ? m.nieuw : v;                                    // rood vakje: jouw niet-opgeslagen bedrag blijft staan
       inp.value = m && m.tekst != null ? m.tekst : toon == null ? '' : dtxt(toon);
-      inp.title = telefoon() && toon != null && toon % 100 ? L.fmt(toon) : '';
+      inp.title = dekTitel(r, inp.dataset.ym) || (telefoon() && toon != null && toon % 100 ? L.fmt(toon) : '');
     });
     t.querySelectorAll('td.tot[data-id]').forEach(td => { const r = perId.get(td.dataset.id); if (r) { zetGetal(td, L.rijTotaal(r, ms)); td.title = td.dataset.ex || ''; } });
     t.querySelectorAll('input.mtl-zk').forEach(cb => { const r = perId.get(cb.dataset.id); if (r) cb.checked = r.zeker; });
@@ -943,7 +1288,7 @@
     return h('div', { class: 'mtl-kop' },
       h('div', { class: 'mtl-titelblok' }, h('h1', { class: 'mtl-titel' }, 'Forecast'), h('p', { class: 'mtl-sub' }, 'Schets van de facturatie per maand. De bedragen tellen alleen hier op.')),
       h('div', { class: 'mtl-acties' },
-        h('div', { class: 'mtl-seg', role: 'group', 'aria-label': 'Offertebedrag' }, ['incl', 'excl'].map(b => knop(b + '. btw', { class: 'ui-knop' + (st.btw === b ? ' ui-knop--primair' : ''), 'aria-pressed': String(st.btw === b), title: 'Alleen de kolom Bedrag (offertetotaal uit Moneybird)',
+        h('div', { class: 'mtl-seg', role: 'group', 'aria-label': 'Offertebedrag' }, ['incl', 'excl'].map(b => knop(b + '. btw', { class: 'ui-knop' + (st.btw === b ? ' ui-knop--primair' : ''), 'aria-pressed': String(st.btw === b), title: 'Alleen de kolom Bedrag (offertetotaal uit Moneybird). Maandbedragen en totalen zijn altijd incl. btw.',
           onclick: () => { st.btw = b; ls.set('mtl:btw', b); teken(); } }))),
         st.mob ? h('button', { type: 'button', class: 'ui-knop mtl-m-filter', 'aria-label': 'Filter' + (filterActief() ? ', ' + st.filter.length + ' aan' : ''), 'aria-haspopup': 'dialog', onclick: () => openFilterSheet() }, lijnIcoon(PAD_FILTER), 'Filter', filterActief() ? h('span', { class: 'mtl-m-fn' }, String(st.filter.length)) : null) : null,
         st.mob ? h('button', { type: 'button', class: 'ui-knop mtl-m-kal', 'aria-label': 'Maanden kiezen', 'aria-haspopup': 'dialog', title: 'Maanden kiezen', onclick: () => openMaandSheet() }, lijnIcoon(PAD_KAL)) : null,
@@ -971,9 +1316,12 @@
     } else {
       const alle = L.rijen(st.schatten, st.schets, st.uitbeeld, st.fk), tel = L.tel(alle, ms), rijen = zichtbareRijen(), tot = L.totalen(rijen, ms);
       kaart.appendChild(h('div', { class: 'mtl-balk' },
-        L.FILTERS.filter(f => (f !== 'los' || tel.los) && (f !== 'gefactureerd' || tel.gefactureerd) && (f !== 'afgerond' || tel.afgerond)).map(f => h('button', { type: 'button', class: 'mtl-chip', 'aria-pressed': String(st.filter.includes(f)),
-          title: f === 'los' ? 'Offertes die niet meer open staan in Moneybird maar waar nog bedragen in de schets staan' : f === 'gefactureerd' ? 'Offertes die niet meer open staan en waarvan facturen in Moneybird staan' : f === 'afgerond' ? 'Helemaal gefactureerd, en in de getoonde maanden telt er niets meer van mee' : f === 'uitbeeld' ? 'Offertes die bij de uitgebreide forecast uit beeld zijn gezet' : null,
+        L.FILTERS.filter(f => (f !== 'los' || tel.los) && (f !== 'gefactureerd' || tel.gefactureerd) && (f !== 'afgerond' || tel.afgerond) && (f !== 'verlopen' || tel.verlopen || st.filter.includes(f)) && (f !== 'afgewezen' || tel.afgewezen || st.filter.includes(f))).map(f => h('button', { type: 'button', class: 'mtl-chip', 'aria-pressed': String(st.filter.includes(f)),
+          title: f === 'los' ? 'Offertes die niet meer open staan in Moneybird maar waar nog bedragen in de schets staan' : f === 'gefactureerd' ? 'Offertes die niet meer open staan en waarvan facturen in Moneybird staan' : f === 'afgerond' ? 'Helemaal gefactureerd, en in de getoonde maanden telt er niets meer van mee' : f === 'verlopen' ? 'Offertes in Moneybird waarvan de geldigheid verlopen is (telden eerst als openstaand)' : f === 'afgewezen' ? 'Afgewezen offertes in Moneybird' + (st.afgewezenAfgekapt ? ' (lijst niet compleet: de oudste ontbreken)' : '') : f === 'uitbeeld' ? 'Offertes die bij de uitgebreide forecast uit beeld zijn gezet' : null,
           onclick: () => { st.filter = st.filter.includes(f) ? st.filter.filter(x => x !== f) : st.filter.concat(f); ls.set('mtl:filter', JSON.stringify(st.filter)); teken(); } }, STATUS_TEKST[f], h('span', { class: 'mtl-tel' }, String(tel[f])))),
+        ((n, m) => n ? h('button', { type: 'button', class: 'mtl-chip mtl-vraag', title: 'Te controleren: de tool heeft ' + n + (n === 1 ? ' vraag' : ' vragen') + ' over facturen en offertes', 'aria-label': 'Te controleren, ' + n + (n === 1 ? ' vraag' : ' vragen'), onclick: () => openVragen() },
+          h('span', { class: 'mtl-vr-uitroep', 'aria-hidden': 'true' }, '!'), String(n)) : m ? h('button', { type: 'button', class: 'mtl-chip', title: 'Geen open vragen; wel ' + m + (m === 1 ? ' melding' : ' meldingen') + ' ter info', 'aria-label': 'Te controleren: geen open vragen, ' + m + ' ter info', onclick: () => openVragen() }, 'Ter info') : null)(
+          huidigeVragen().filter(v => v.soort !== 'schets').length, huidigeVragen().filter(v => v.soort === 'schets').length),
         h('div', { class: 'mtl-nav' },
           knop('\u2039', { title: 'Eén maand terug', 'aria-label': 'Eén maand terug', onclick: () => { st.start = maandPlus(st.start, -1); teken(); } }),
           h('span', { class: 'mtl-periode' }, maandTekst(ms[0]) + ' \u2013 ' + maandTekst(ms[ms.length - 1])),
@@ -1002,11 +1350,11 @@
           ms.map(m => { const v = r.cellen[m], sl = r.id + '|' + m;
             if (L.vast(r, m)) {                                         // gefactureerd in deze maand: vast, in de statuskleur; de schets blijft bewaard
               const fs = r.gef.facturen.filter(f => f.ym === m), u = fs.length === 1 ? fUrl(fs[0].id) : null;
-              const titel = 'Gefactureerd in Moneybird (incl. btw):\n' + fs.map(f => (f.nummer || 'factuur') + ' van ' + f.datum.split('-').reverse().join('-') + '   ' + L.fmt(f.inclC)).join('\n') + (v != null ? `\nJe schetsbedrag hier (${L.fmt(v)}) blijft bewaard maar telt niet.` : '');
+              const titel = 'Gefactureerd in Moneybird (incl. btw):\n' + fs.map(f => (f.nummer || 'factuur') + ' van ' + f.datum.split('-').reverse().join('-') + '   ' + L.fmt(f.inclC) + (f.via === 'referentie' ? '  (gekoppeld op referentie)' : '')).join('\n') + (v != null ? `\nJe schetsbedrag hier (${L.fmt(v)}) blijft bewaard maar telt niet.` : '');
               return h('td', { class: 'num gef' + (m === dezeMaand ? ' nu' : ''), title: titel }, u ? h('a', { class: 'mtl-gefcel', href: u, target: '_blank', rel: 'noopener', 'aria-label': r.naam + ', ' + maandTekst(m) + ': gefactureerd ' + L.fmt(r.gef.maand[m]) }, dtxt(r.gef.maand[m])) : h('span', { class: 'mtl-gefcel' }, dtxt(r.gef.maand[m])));
             }
-            return h('td', { class: 'num' + (m === dezeMaand ? ' nu' : '') }, h('input', { class: 'mtl-in' + (st.mislukt.has(sl) ? ' fout' : '') + (st.bewaren.has(sl) ? ' bewaren' : ''), type: 'text', inputmode: 'decimal', autocomplete: 'off', placeholder: st.mag ? '\u2013' : '',
-              'aria-label': r.naam + ', ' + maandTekst(m), disabled: !st.mag, data: { id: r.id, ym: m, oud: v == null ? '' : String(v) }, value: st.mislukt.has(sl) ? (st.mislukt.get(sl).tekst != null ? st.mislukt.get(sl).tekst : L.fmt(st.mislukt.get(sl).nieuw)) : v == null ? '' : dtxt(v), title: telefoon() && v != null && v % 100 ? L.fmt(v) : null })); }),
+            return h('td', { class: 'num' + (m === dezeMaand ? ' nu' : '') }, h('input', { class: 'mtl-in' + (st.mislukt.has(sl) ? ' fout' : '') + (st.bewaren.has(sl) ? ' bewaren' : '') + (L.dekking(r, m) ? ' gedekt' : ''), type: 'text', inputmode: 'decimal', autocomplete: 'off', placeholder: st.mag ? '\u2013' : '',
+              'aria-label': r.naam + ', ' + maandTekst(m), disabled: !st.mag, data: { id: r.id, ym: m, oud: v == null ? '' : String(v) }, value: st.mislukt.has(sl) ? (st.mislukt.get(sl).tekst != null ? st.mislukt.get(sl).tekst : L.fmt(st.mislukt.get(sl).nieuw)) : v == null ? '' : dtxt(v), title: dekTitel(r, m) || (telefoon() && v != null && v % 100 ? L.fmt(v) : null) })); }),
           h('td', { class: 'tot num', data: { id: r.id } }));
       }) : h('tr', null, h('td', { class: 's', colspan: String(ms.length + 4), style: 'text-align:left;color:var(--l-ink3)' }, 'Geen offertes met dit filter.')),
         // vulrij: neemt de rest van de hoogte, zodat de totalen ook bij weinig offertes tegen de onderrand staan
@@ -1069,7 +1417,7 @@
   const PAD_CHEV = 'M9 6l6 6l-6 6', PAD_X = 'M6 6l12 12M18 6L6 18', PAD_REGELS = 'M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1M15 4v4M9 10v4M17 16v4', PAD_LINKS = 'M15 6l-6 6l6 6';
   function lijnIcoon(pad) { const s = document.createElementNS(SVGNS, 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('class', 'mtl-ico'); s.setAttribute('aria-hidden', 'true'); s.setAttribute('focusable', 'false'); const p = document.createElementNS(SVGNS, 'path'); p.setAttribute('d', pad); s.appendChild(p); return s; }
   const ONBEKEND_TEKST = 'Geen (complete) bankgegevens voor deze maand';
-  const PAD_FILTER = 'M3 5h18l-7 8v6l-4 2v-8z', PAD_NEER = 'M6 9l6 6l6-6', PAD_VERNIEUW = 'M20 12a8 8 0 1 1-2.5-5.8M20 4v5h-5', PAD_KAL = 'M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM4 10h16M8 2v4M16 2v4', FILTER_STANDAARD = ['geaccepteerd', 'openstaand', 'los', 'gefactureerd'];
+  const PAD_FILTER = 'M3 5h18l-7 8v6l-4 2v-8z', PAD_NEER = 'M6 9l6 6l6-6', PAD_VERNIEUW = 'M20 12a8 8 0 1 1-2.5-5.8M20 4v5h-5', PAD_KAL = 'M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM4 10h16M8 2v4M16 2v4', FILTER_STANDAARD = ['geaccepteerd', 'openstaand', 'verlopen', 'los', 'gefactureerd'];
   const eur = cc => (cc < 0 ? '\u2212' : '') + '\u20ac\u00a0' + duizend(Math.round(Math.abs(cc) / 100));
   // Het gekozen blok maanden (bewaard in mtl:mper): voorkeuzen rekenen elke keer vanaf deze maand, een vrije keuze of verschuiving ligt vast.
   const mobSel = () => { if (st.mSel === undefined) { try { const x = JSON.parse(ls.get('mtl:mper') || 'null'); st.mSel = x && typeof x === 'object' ? x : null; } catch (e) { st.mSel = null; } } return st.mSel; };
@@ -1152,7 +1500,7 @@
   }
   const sheetKop = (titel, sub) => h('div', { class: 'mtl-sheet-kop' }, h('div', { class: 'mtl-sheet-t' }, h('b', null, titel), sub ? h('small', null, sub) : null),
     h('button', { type: 'button', class: 'mtl-sheet-x', 'aria-label': 'Sluiten', onclick: () => sluitSheet() }, lijnIcoon(PAD_X)));
-  function vernieuwSheet() { const s = st.sheet; if (!s) return; if (!s.el.isConnected) { st.sheet = null; return; } if (s.soort === 'kosten') vulKostenSheet(); else if (s.soort === 'filter') vulFilterSheet(); else if (s.soort === 'offerte') vulOfferteSheet(false); }
+  function vernieuwSheet() { const s = st.sheet; if (!s) return; if (!s.el.isConnected) { st.sheet = null; return; } if (s.soort === 'kosten') vulKostenSheet(); else if (s.soort === 'filter') vulFilterSheet(); else if (s.soort === 'offerte') vulOfferteSheet(false); else if (s.soort === 'vragen') vulVragenSheet(); }
   function openKostenSheet(i) {
     const el = maakSheet('kosten', {}); st.ksIdx = i || 0; vulKostenSheet();
     const x = el.querySelector('.mtl-sheet-x'); if (x) x.focus({ preventScroll: true });
@@ -1216,7 +1564,7 @@
     const s = st.sheet; if (!s || s.soort !== 'filter') return;
     const el = s.el, hoog = el.scrollTop, a = document.activeElement, actief = a && el.contains(a) ? a.dataset.filter : null, ms = mobMaanden(), tel = L.tel(L.rijen(st.schatten, st.schets, st.uitbeeld, st.fk), ms);
     const zet = f => ev => { st.filter = ev.target.checked ? st.filter.concat(f) : st.filter.filter(x => x !== f); ls.set('mtl:filter', JSON.stringify(st.filter)); tekenMobiel(); vulFilterSheet(); };
-    const rijen = L.FILTERS.filter(f => (f !== 'los' || tel.los) && (f !== 'gefactureerd' || tel.gefactureerd) && (f !== 'afgerond' || tel.afgerond)).map(f => h('label', { class: 'mtl-ks-rij' }, h('input', { type: 'checkbox', class: 'mtl-ks-in', data: { filter: f }, checked: st.filter.includes(f), onchange: zet(f) }), h('span', { class: 'mtl-ks-v', 'aria-hidden': 'true' }),
+    const rijen = L.FILTERS.filter(f => (f !== 'los' || tel.los) && (f !== 'gefactureerd' || tel.gefactureerd) && (f !== 'afgerond' || tel.afgerond) && (f !== 'verlopen' || tel.verlopen || st.filter.includes(f)) && (f !== 'afgewezen' || tel.afgewezen || st.filter.includes(f))).map(f => h('label', { class: 'mtl-ks-rij' }, h('input', { type: 'checkbox', class: 'mtl-ks-in', data: { filter: f }, checked: st.filter.includes(f), onchange: zet(f) }), h('span', { class: 'mtl-ks-v', 'aria-hidden': 'true' }),
       h('span', { class: 'mtl-ks-t' }, STATUS_TEKST[f]), h('span', { class: 'mtl-ks-b' }, String(tel[f]))));
     el.replaceChildren(sheetKop('Filter', 'Welke offertes meetellen in de cijfers en de lijsten'), h('div', { class: 'mtl-ks-lijst' }, rijen),
       h('div', { class: 'mtl-ks-voet' }, h('span', { class: 'mtl-mp-t' }, st.filter.length + ' van ' + L.FILTERS.length + ' aan'), knop('Standaard', { disabled: !filterActief(), onclick: () => { st.filter = FILTER_STANDAARD.slice(); ls.set('mtl:filter', JSON.stringify(st.filter)); tekenMobiel(); vulFilterSheet(); } })));
@@ -1246,7 +1594,7 @@
     const maandRij = m => {
       const v = r.cellen[m], sl = r.id + '|' + m;
       if (L.vast(r, m)) return h('div', { class: 'mtl-os-rij vast' }, h('span', null, maandTekst(m)), h('span', { class: 'mtl-os-gf', title: 'Gefactureerd in Moneybird; je schetsbedrag' + (v != null ? ' (' + L.fmt(v) + ')' : '') + ' blijft bewaard maar telt niet' }, L.fmt(r.gef.maand[m]), h('small', null, 'gefactureerd')));
-      return h('label', { class: 'mtl-os-rij' }, h('span', null, maandTekst(m)), h('input', { class: 'mtl-in' + (st.mislukt.has(sl) ? ' fout' : '') + (st.bewaren.has(sl) ? ' bewaren' : ''), type: 'text', inputmode: 'decimal', autocomplete: 'off', placeholder: st.mag ? '–' : '', 'aria-label': r.naam + ', ' + maandTekst(m),
+      return h('label', { class: 'mtl-os-rij', title: dekTitel(r, m) || null }, h('span', null, maandTekst(m)), h('input', { class: 'mtl-in' + (st.mislukt.has(sl) ? ' fout' : '') + (st.bewaren.has(sl) ? ' bewaren' : '') + (L.dekking(r, m) ? ' gedekt' : ''), type: 'text', inputmode: 'decimal', autocomplete: 'off', placeholder: st.mag ? '–' : '', 'aria-label': r.naam + ', ' + maandTekst(m),
         disabled: !st.mag, data: { id: r.id, ym: m, oud: v == null ? '' : String(v) }, value: st.mislukt.has(sl) ? (st.mislukt.get(sl).tekst != null ? st.mislukt.get(sl).tekst : L.fmt(st.mislukt.get(sl).nieuw)) : v == null ? '' : L.fmt(v),
         onfocus: ev => ev.target.select(), onchange: ev => verwerk(ev.target), oninput: ev => getypt(ev.target), onkeydown: toets }));
     };
