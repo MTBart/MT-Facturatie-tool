@@ -98,6 +98,7 @@ function clip(v, n) {
 // ?target=-routes hierboven. Het MSAL-token is al gevalideerd vóór dit punt.
 // Schrijfroutes: alle ingelogde gebruikers. Leesroutes: rollen met beheerrecht (isAdmin).
 // Faalt nooit hard op ontbrekende bindings — tracking mag de tool niet ophouden.
+const TRACK_BODY_MAX = 256 * 1024;
 async function handleTrack(pathname, request, env, msPayload, cors, isAdmin) {
   const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
     status, headers: { 'Content-Type': 'application/json', ...cors }
@@ -108,7 +109,10 @@ async function handleTrack(pathname, request, env, msPayload, cors, isAdmin) {
   if (pathname === '/track' && request.method === 'POST') {
     if (!env.TRACK_DB) return json({ ok: false, skipped: 'no-d1' });
     let payload;
-    try { payload = await request.json(); } catch { return json({ ok: false, error: 'bad-json' }, 400); }
+    // Body begrensd (200 events × velden): groter = 413. /track blijft ook voor de meekijker open (nodig voor het kijkoverzicht).
+    const cl = Number(request.headers && request.headers.get ? request.headers.get('content-length') : NaN);
+    if (Number.isFinite(cl) && cl > TRACK_BODY_MAX) return json({ ok: false, error: 'te-groot' }, 413);
+    try { const t = await request.text(); if (t.length > TRACK_BODY_MAX) return json({ ok: false, error: 'te-groot' }, 413); payload = JSON.parse(t); } catch { return json({ ok: false, error: 'bad-json' }, 400); }
     const events = Array.isArray(payload?.events) ? payload.events : [];
     if (!events.length) return json({ ok: true, written: 0 });
     const recv = Date.now();
@@ -678,6 +682,12 @@ async function kvJson(env, key) {
   if (!env.MT_ROLLEN) return null;
   try { const v = await env.MT_ROLLEN.get(key); return v ? JSON.parse(v) : null; } catch { return null; }
 }
+// Zoals kvJson, maar een KV-fout (of ontbrekende binding) gooit: onderscheid "fout" van "geen record" (voor fail-closed bij externen).
+async function kvJsonStrikt(env, key) {
+  if (!env.MT_ROLLEN) return null;   // geen binding: zoals kvJson (bepaalRol meldt dan 'geen-rollen-opslag')
+  const v = await env.MT_ROLLEN.get(key);
+  return v ? JSON.parse(v) : null;
+}
 async function kvZet(env, key, val, opts) {
   if (!env.MT_ROLLEN) return;
   await env.MT_ROLLEN.put(key, JSON.stringify(val), opts || {});
@@ -711,9 +721,14 @@ async function leesGebruiker(env, oid) {
   const c = _gebruikerCache.get(oid);
   // Externe meekijker: korte cache (5 s), zodat intrekken/deactiveren/verlopen snel doorwerkt (KV zelf is eventually consistent).
   if (c && Date.now() - c.t < (c.rec && ALTIJD_AFDWINGEN.has(c.rec.role) ? KIJKER_CACHE_MS : CACHE_MS)) return c.rec;
-  const rec = await kvJson(env, 'user:' + oid);
+  const rec = await kvJsonStrikt(env, 'user:' + oid);   // een KV-fout gooit (rollen-fout), 'geen record' is null
   _gebruikerCache.set(oid, { rec, t: Date.now() });
   return rec;
+}
+// "Laatst gezien": vers lezen en alleen dat veld bijwerken, zodat een verouderde cache nooit een deactivering of nieuwe einddatum terugdraait.
+async function lastSeenBijwerken(env, oid) {
+  const vers = await kvJsonStrikt(env, 'user:' + oid);
+  if (vers) await kvZet(env, 'user:' + oid, { ...vers, lastSeen: Date.now() });
 }
 async function schrijfGebruiker(env, rec) {
   await kvZet(env, 'user:' + rec.oid, rec);
@@ -741,14 +756,32 @@ function tokenAdressen(payload) {
   }
   return lijst;
 }
+// "JJJJ-MM-DD" → laatste milliseconde van die dag in Europe/Amsterdam (zomer-/wintertijd correct) als epoch ms; NaN bij een ongeldige datum.
+function eindeDagAmsterdam(ymd) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ymd || '')); if (!m) return NaN;
+  const y = +m[1], mo = +m[2], d = +m[3], chk = new Date(Date.UTC(y, mo - 1, d));
+  if (chk.getUTCFullYear() !== y || chk.getUTCMonth() !== mo - 1 || chk.getUTCDate() !== d) return NaN;
+  const fmt = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Amsterdam', hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric' });
+  const offset = t => { const p = Object.fromEntries(fmt.formatToParts(new Date(t)).map(x => [x.type, +x.value])); return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - Math.floor(t / 1000) * 1000; };
+  const lokaal = Date.UTC(y, mo - 1, d + 1, 0, 0, 0);                  // middernacht erna als "wandkloktijd"
+  let t = lokaal - offset(lokaal - 3600e3);                            // schatting; één verfijning voor de overgangsdagen
+  t = lokaal - offset(t - 1);
+  return t - 1;
+}
 // Einddatum uit een Beheer-verzoek → {ok, waarde} (waarde null = geen einddatum) of {fout}.
 function toegangTotNorm(v, nu = Date.now()) {
   if (v === null || v === '' || v === undefined) return { ok: true, waarde: null };
-  const n = typeof v === 'number' ? v : (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? Date.parse(v + 'T23:59:59+01:00') : NaN);
+  const n = typeof v === 'number' ? v : (typeof v === 'string' ? eindeDagAmsterdam(v) : NaN);
   if (!Number.isFinite(n) || !Number.isInteger(n)) return { fout: 'ongeldige-einddatum' };
   if (n <= nu) return { fout: 'einddatum-in-het-verleden' };
   if (n > nu + TOEGANG_MAX_DAGEN * DAG_S * 1000) return { fout: 'einddatum-te-ver' };
   return { ok: true, waarde: n };
+}
+// Is dit token van buiten het eigen bedrijf (gast met #EXT#-UPN, ander e-maildomein, of zonder bruikbaar adres)? Voor fail-closed bij externen.
+function externToken(payload) {
+  const ad = tokenAdressen(payload);
+  if (!ad.length) return true;
+  return ad.some(a => a.includes('#ext#') || a.split('@').pop() !== 'mortiseandtenon.nl');
 }
 const datumTekst = ms => ms ? new Date(ms).toISOString().slice(0, 10) : 'geen';
 // Rol van de ingelogde gebruiker → {rol, rec, reden}. Koppelt bij eerste login een
@@ -759,7 +792,8 @@ async function bepaalRol(env, payload, ctx) {
   let rec = await leesGebruiker(env, oid);
   if (rec && Date.now() - (rec.lastSeen || 0) > LASTSEEN_MS) {
     rec = { ...rec, lastSeen: Date.now() };
-    waitUntil(ctx, schrijfGebruiker(env, rec).catch(() => {}));
+    _gebruikerCache.set(oid, { rec, t: Date.now() });   // zelfde inhoud, alleen lastSeen; de opslag zelf wordt vers gelezen en bijgewerkt
+    waitUntil(ctx, lastSeenBijwerken(env, oid).catch(() => {}));
   }
   const vast = vasteEigenaar(env, oid, email);
   if (vast) {
@@ -783,6 +817,15 @@ async function bepaalRol(env, payload, ctx) {
   let inv = null;
   for (const adres of tokenAdressen(payload)) { inv = await kvJson(env, 'invite:' + adres); if (inv) { email = adres; break; } }
   if (inv && ROLLEN.includes(inv.role) && (!inv.verloopt || inv.verloopt > Date.now()) && !(inv.toegangTot && inv.toegangTot <= Date.now())) {
+    // Externe rol (meekijker): een uitnodiging activeert NIET zelf. De eerste login zet de persoon in Aanvragen (met oid, naam, adres en de
+    // vlag "uitgenodigd als meekijker"); pas na goedkeuring door de eigenaar ontstaat het account (met de einddatum uit de uitnodiging).
+    if (ALTIJD_AFDWINGEN.has(inv.role)) {
+      if (!(await kvJson(env, 'aanvraag:' + oid))) {
+        await kvZet(env, 'aanvraag:' + oid, { oid, email, naam: clip(naam, 80) || email, bericht: '', ts: Date.now(), uitgenodigdAls: inv.role, toegangTot: inv.toegangTot || null, inviteEmail: email }, { expirationTtl: 30 * DAG_S });
+        await audit(env, { actie: 'toegang-aangevraagd', door: oid, doorNaam: clip(naam, 80) || email, doel: oid, doelNaam: clip(naam, 80) || email, nieuw: 'uitgenodigd als ' + inv.role });
+      }
+      return { rol: null, rec: null, reden: 'wacht-op-goedkeuring' };
+    }
     rec = nieuweGebruiker(oid, inv.role, email, inv.naam || naam, inv.createdBy);
     if (inv.toegangTot) rec.toegangTot = inv.toegangTot;
     await schrijfGebruiker(env, rec);
@@ -810,7 +853,33 @@ const MB_CONCEPT = [
   ['PATCH',  /^estimates\/\d+\/bill_estimate$/],
 ];
 // Wat een meekijker (moneybird 'kijken') mag lezen: facturen/offertes/rapporten/grootboek, niet de contacten.
-const MB_KIJKEN_RE = /^(documents\/(purchase|sales)_invoices(\/\d+)?|sales_invoices(\/\d+)?|estimates(\/\d+)?|ledger_accounts|reports\/(creditors|debtors|creditors_aging|debtors_aging|expenses_by_contact|profit_loss))$/;
+const MB_KIJKEN_RE = /^(documents\/(purchase|sales)_invoices(\/\d+)?|sales_invoices(\/\d+)?|estimates(\/\d+)?|ledger_accounts|reports\/profit_loss)$/;   // rapporten per contact (creditors, debtors, *_aging, expenses_by_contact) bewust niet
+// Moneybird-antwoord voor een meekijker: per contact alleen id + bedrijfsnaam (of voor-/achternaam bij een particulier); alle andere
+// contactvelden (adres, mail, telefoon, bank, kvk/btw, notities, eigen velden) weg, en ook bijlagen, notities, events, betalingen en publieke links.
+const MB_DOC_WEG = new Set(['attachments', 'notes', 'events', 'payments', 'contact_person', 'contact_person_id', 'custom_fields', 'payment_url', 'public_view_code', 'public_view_code_expires_at', 'url', 'original_estimate_id', 'workflow_id']);
+// Toggl-gebruikerslijst voor een meekijker: alleen id's en namen (Track: array; Focus: array of {data:[…]}). Onleesbaar → leeg.
+const NAMEN_BLIJFT = new Set(['id', 'uid', 'user_id', 'user_account_id', 'name', 'fullname', 'full_name']);
+function kijkerNamen(tekst) {
+  let j; try { j = JSON.parse(tekst); } catch { return '[]'; }
+  const mager = l => Array.isArray(l) ? l.map(u => Object.fromEntries(Object.entries(u && typeof u === 'object' ? u : {}).filter(([k]) => NAMEN_BLIJFT.has(k)))) : [];
+  return JSON.stringify(Array.isArray(j) ? mager(j) : (j && typeof j === 'object' ? { data: mager(j.data || j.users) } : []));
+}
+function mbContactMager(c) {
+  if (!c || typeof c !== 'object') return c;
+  const uit = { id: c.id };
+  if (c.company_name) uit.company_name = c.company_name; else { if (c.firstname) uit.firstname = c.firstname; if (c.lastname) uit.lastname = c.lastname; }
+  return uit;
+}
+function mbMagerDoc(d) {
+  if (Array.isArray(d)) return d.map(mbMagerDoc);
+  if (!d || typeof d !== 'object') return d;
+  const uit = {};
+  for (const [k, v] of Object.entries(d)) {
+    if (MB_DOC_WEG.has(k)) continue;
+    uit[k] = k === 'contact' ? mbContactMager(v) : v;
+  }
+  return uit;
+}
 function mbRest(pad) {
   const m = /^(\d+)\/([^?#]*)$/.exec(String(pad || '').split(/[?#]/)[0]);
   return m && m[1] === MB_ADMIN ? m[2].replace(/\.json$/, '').replace(/\/$/, '') : null;
@@ -846,6 +915,47 @@ function togglKlasse(target, pad) {
   if (['me', 'workspaces', 'organizations', 'users', ''].includes(s)) return 'meta';
   return 'planning';
 }
+// Meekijker en Toggl: ALLEEN deze routes (exact wat de tool voor planning en teamuren leest). Geen me/organisatie/werkruimte-meta,
+// geen eigen tijdregels of timer, geen schrijven. Reports (POST leest hier) hebben daarbovenop een bodycontrole (kijkerRapportBody).
+const KIJKER_TOGGL = {
+  toggl: [['GET', /^workspaces\/\d+\/(projects|workspace_users|users)$/]],
+  toggl_admin_projects: [['GET', /^workspaces\/\d+\/projects$/]],
+  toggl_reports: [['POST', /^workspace\/\d+\/search\/time_entries$/]],
+  toggl_focus: [
+    ['GET', /^(tasks|tasks\/stream|tasks\/\d+|projects|projects\/\d+|statuses|clients|capacities\/users|users)$/],
+    ['POST', /^reports\/workspaces\/\d+\/query$/],
+  ],
+};
+function kijkerToggl(target, m, pad) {
+  const lijst = KIJKER_TOGGL[target]; if (!lijst) return { ok: false, reden: 'uren-team-lezen' };
+  const p = target === 'toggl_focus' ? focusRest(pad) : String(pad || '').split(/[?#]/)[0].replace(/^\/+/, '').replace(/\/$/, '');
+  return lijst.some(([mm, re]) => mm === m && re.test(p)) ? { ok: true } : { ok: false, reden: 'uren-team-lezen' };
+}
+const KIJKER_PERIODE_MAX_MS = 400 * 86400e3, KIJKER_BODY_MAX = 4096;
+// Bodycontrole voor de twee Reports-aanroepen van een meekijker → null (oké) of een reden. Beperkt periode (≤ 400 dagen), paginagrootte en bodygrootte.
+function kijkerRapportBody(target, pad, tekst) {
+  if (typeof tekst !== 'string' || tekst.length > KIJKER_BODY_MAX) return 'rapport-body-te-groot';
+  let b; try { b = JSON.parse(tekst); } catch { return 'rapport-body-ongeldig'; }
+  if (!b || typeof b !== 'object' || Array.isArray(b)) return 'rapport-body-ongeldig';
+  const dag = /^\d{4}-\d{2}-\d{2}$/;
+  if (target === 'toggl_reports') {   // Track Reports v3: search/time_entries
+    const toegestaan = new Set(['start_date', 'end_date', 'page_size', 'first_row_number']);
+    if (Object.keys(b).some(k => !toegestaan.has(k))) return 'rapport-veld';
+    if (!dag.test(String(b.start_date || '')) || !dag.test(String(b.end_date || ''))) return 'rapport-periode';
+    const span = Date.parse(b.end_date) - Date.parse(b.start_date);
+    if (!(span >= 0 && span <= KIJKER_PERIODE_MAX_MS)) return 'rapport-periode';
+    if (b.page_size != null && !(Number.isInteger(b.page_size) && b.page_size >= 1 && b.page_size <= 1000)) return 'rapport-pagina';
+    if (b.first_row_number != null && !(Number.isInteger(b.first_row_number) && b.first_row_number >= 1 && b.first_row_number <= 100000)) return 'rapport-pagina';
+    return null;
+  }
+  // Focus reports/…/query: groupings + aggregations + filters, met verplicht een periodefilter op `start` van ≤ 400 dagen.
+  if (Object.keys(b).some(k => !['groupings', 'aggregations', 'filters'].includes(k))) return 'rapport-veld';
+  const f = Array.isArray(b.filters) ? b.filters.find(x => x && x.property === 'start' && x.operator === 'between' && Array.isArray(x.value) && x.value.length === 2) : null;
+  if (!f) return 'rapport-periode';
+  const a = Date.parse(f.value[0]), e = Date.parse(f.value[1]);
+  if (!(Number.isFinite(a) && Number.isFinite(e) && e >= a && e - a <= KIJKER_PERIODE_MAX_MS)) return 'rapport-periode';
+  return null;
+}
 // Centrale toets: mag `rol` deze actie? → {ok, reden?, beperkt?}
 // `velden` = top-level sleutels van de JSON-body (alleen nodig voor Toggl-taak-PATCH van Werkplaats).
 function requirePermission(rol, target, methode, pad, velden) {
@@ -877,10 +987,9 @@ function requirePermission(rol, target, methode, pad, velden) {
     case 'toggl_focus':
     case 'toggl_reports':
     case 'toggl_admin_projects': {
+      // team-lezen (meekijker): vaste lijst van exact de leesroutes die de tool gebruikt (zie kijkerToggl); al het andere dicht.
+      if (R.uren === 'team-lezen') return kijkerToggl(target, m, pad);
       const k = togglKlasse(target, pad);
-      // team-lezen (meekijker): Reports-API leest ook met POST; andere methoden nooit. Eigen tijdregels/timer: dicht (gedeelde sleutel = ieders uren).
-      if (k === 'uren-team' && R.uren === 'team-lezen') return (lees || m === 'POST') ? ja() : nee('uren-team-lezen');
-      if (k === 'uren' && R.uren === 'team-lezen') return nee('uren-team-lezen');
       if (k === 'uren-team') return ['alles', 'team'].includes(R.uren) ? ja() : nee('uren-team');
       if (k === 'uren') return lees ? (R.uren ? ja() : nee('uren')) : (['alles', 'team', 'eigen'].includes(R.uren) ? ja() : nee('uren-schrijven'));
       // meta (gebruikers, werkruimtes, organisatie, profiel): lezen mag, schrijven alleen met beheerrecht
@@ -4737,11 +4846,14 @@ function meAntwoord(env, ik, payload) {
 async function handleToegang(request, env, ik, payload, json) {
   if (request.method !== 'POST') return json({ error: 'POST verwacht' }, 405);
   if (ik.rol) return json({ ok: true, alToegang: true });
+  // Een (verlopen of ingetrokken) meekijker kan zichzelf niet opnieuw aanvragen: de eigenaar verlengt of maakt een nieuwe uitnodiging.
+  if (ik.rec && ALTIJD_AFDWINGEN.has(ik.rec.role)) return json({ error: 'geen-toegang', reden: 'toegang-ingetrokken' }, 403);
   if (!env.MT_ROLLEN) return json({ ok: false, error: 'geen-rollen-opslag' }, 503);
   let body = {}; try { body = await request.json(); } catch {}
   const bestaand = await kvJson(env, 'aanvraag:' + payload.oid);
   if (bestaand && Date.now() - bestaand.ts < 3600 * 1000) return json({ ok: true, alAangevraagd: true });
   const a = { oid: payload.oid, email: ik.email, naam: clip(payload.name, 80) || ik.email, bericht: clip(body && body.bericht, 300) || '', ts: Date.now() };
+  if (bestaand && bestaand.uitgenodigdAls) Object.assign(a, { uitgenodigdAls: bestaand.uitgenodigdAls, toegangTot: bestaand.toegangTot || null, inviteEmail: bestaand.inviteEmail || ik.email });   // de uitnodigingsvlag blijft (komt alleen uit de server, nooit uit de body)
   await kvZet(env, 'aanvraag:' + payload.oid, a, { expirationTtl: 30 * DAG_S });
   await audit(env, { actie: 'toegang-aangevraagd', door: payload.oid, doorNaam: a.naam, doel: payload.oid, doelNaam: a.naam });
   return json({ ok: true });
@@ -4842,18 +4954,21 @@ async function handleBeheer(pathname, request, env, ik, json) {
     const a = await kvJson(env, 'aanvraag:' + oid); if (!a) return json({ error: 'niet-gevonden' }, 404);
     if (b.weigeren) {
       await env.MT_ROLLEN.delete('aanvraag:' + oid);
+      if (a.uitgenodigdAls && a.inviteEmail) { try { await env.MT_ROLLEN.delete('invite:' + String(a.inviteEmail).toLowerCase()); } catch {} }   // anders zet de volgende login hem opnieuw in Aanvragen
       await audit(env, { ...door, actie: 'aanvraag-geweigerd', doel: oid, doelNaam: a.naam });
       return json({ ok: true });
     }
-    const rol = String(b.rol || ''), fout = magBeheren(env, ik, { oid }, rol); if (fout) return json({ error: fout }, fout === 'onbekende-rol' ? 400 : 403);
+    // Uitgenodigd als meekijker: de rol staat vast (geen andere rol kiezen) en de einddatum uit de uitnodiging geldt, tenzij de eigenaar een nieuwe meegeeft.
+    const rol = a.uitgenodigdAls && ALTIJD_AFDWINGEN.has(a.uitgenodigdAls) ? a.uitgenodigdAls : String(b.rol || ''), fout = magBeheren(env, ik, { oid }, rol); if (fout) return json({ error: fout }, fout === 'onbekende-rol' ? 400 : 403);
     if (await kvJson(env, 'user:' + oid)) return json({ error: 'bestaat-al' }, 409);
-    const tt = toegangTotNorm(b.toegangTot); if (tt.fout) return json({ error: tt.fout }, 400);
+    const tt = toegangTotNorm('toegangTot' in b ? b.toegangTot : (a.toegangTot || null)); if (tt.fout) return json({ error: tt.fout }, 400);
     if (rol === 'meekijker' && !tt.waarde) return json({ error: 'einddatum-verplicht' }, 400);
     const rec = nieuweGebruiker(oid, rol, a.email, a.naam, ik.oid); rec.lastSeen = a.ts;
     if (tt.waarde) rec.toegangTot = tt.waarde;
     await schrijfGebruiker(env, rec);
     await env.MT_ROLLEN.delete('aanvraag:' + oid);
-    await audit(env, { ...door, actie: 'aanvraag-toegekend', doel: oid, doelNaam: a.naam, nieuw: rol });
+    if (a.uitgenodigdAls && a.inviteEmail) { try { await env.MT_ROLLEN.delete('invite:' + String(a.inviteEmail).toLowerCase()); } catch {} }
+    await audit(env, { ...door, actie: 'aanvraag-toegekend', doel: oid, doelNaam: a.naam, nieuw: rol + (tt.waarde ? ' tot ' + datumTekst(tt.waarde) : '') });
     return json({ ok: true, gebruiker: rec });
   }
   // Centrale instelling wijzigen (alle pc's lezen hem bij het laden via /instellingen): alleen de eigenaar.
@@ -6064,6 +6179,12 @@ export default {
       ik.oid = msPayload.oid; ik.email = tokenEmail(msPayload);
       modus = effectieveModus(env, ik.rol, ik.rec);   // meekijker: altijd 'afdwingen', ook bij ROLLEN_MODUS log/uit
 
+      // Fail-closed voor externen: een gast (of ander e-maildomein) zonder rol komt nergens, ook niet in log-modus en ook niet bij een
+      // KV-storing (rollen-fout) of ontbrekende rollenopslag. Alleen /me (eigen status) en /toegang (aanvragen) blijven bereikbaar.
+      // Vaste eigenaren (worker-secrets) zijn hier uitgezonderd.
+      if (!ik.rol && !ik.vast && externToken(msPayload) && url.pathname !== '/me' && url.pathname !== '/toegang')
+        return json({ error: 'geen-toegang', reden: ik.reden || 'geen-rol' }, 403);
+
       // Eigen rol + rechten (front-end: tabs/knoppen verbergen — UI-gemak, geen beveiliging).
       if (url.pathname === '/me') return json(meAntwoord(env, ik, msPayload));
       // Toegang aanvragen (onbekende/gedeactiveerde gebruiker) → lijst in Beheer.
@@ -6106,6 +6227,12 @@ export default {
           try { const j = await request.clone().json(); velden = j && typeof j === 'object' && !Array.isArray(j) ? Object.keys(j) : []; } catch { velden = []; }
         }
         let besluit = ik.rol ? requirePermission(ik.rol, target, request.method, pad, velden) : { ok: false, reden: ik.reden || 'geen-rol' };
+        // Meekijker: Reports-aanroepen (POST leest hier) alleen met een begrensde body (periode ≤ 400 dagen, vaste velden, klein).
+        if (besluit.ok && ik.rol === 'meekijker' && (target === 'toggl_reports' || (target === 'toggl_focus' && request.method === 'POST'))) {
+          const cl = Number(request.headers.get('content-length'));
+          const fout = Number.isFinite(cl) && cl > KIJKER_BODY_MAX ? 'rapport-body-te-groot' : kijkerRapportBody(target, pad, await request.clone().text());
+          if (fout) besluit = { ok: false, reden: fout };
+        }
         if (besluit.ok && (target === 'toggl' || target === 'toggl_focus') && ['eigen', 'eigen-lezen'].includes(RECHTEN[ik.rol].uren)
             && togglKlasse(target, pad) === 'uren' && !(tgS && (tgS.bron === 'eigen' || tgS.bron === 'secret'))) besluit = { ok: false, reden: 'uren-zonder-eigen-sleutel' };
         try { await noteerBesluit(env, ctx, { ...besluit, modus, rol: ik.rol, oid: ik.oid, target, actie: actieNaam(target, request.method, pad) }); } catch {}
@@ -6227,6 +6354,10 @@ export default {
         if (actie && (env.MT_ACTIES || env.MT_ROLLEN)) return await mbIdempotent(env, ik, actie, method, mbPath, mbFetch, corsHeaders, body);
         const response = await mbFetch();
         const text = await response.text();
+        if (ik.rol === 'meekijker') {   // geen contactgegevens, bijlagen, notities of publieke links naar een externe
+          let j; try { j = JSON.parse(text); } catch { return json({ error: 'moneybird-antwoord-onleesbaar' }, 502); }
+          return new Response(JSON.stringify(response.ok ? mbMagerDoc(j) : { error: 'moneybird-fout' }), { status: response.status, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
         return new Response(text, { status: response.status, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
 
       } else if (target === 'moneybird_upload') {
@@ -6250,7 +6381,8 @@ export default {
           headers: { 'Content-Type': 'application/json', 'Authorization': `Basic ${token}` },
           body
         });
-        const text = await response.text();
+        let text = await response.text();
+        if (ik.rol === 'meekijker' && response.ok && /\/(workspace_users|users)$/.test(String(togglPath).split(/[?#]/)[0])) text = kijkerNamen(text);   // alleen namen, geen e-mail e.d.
         return new Response(text, { status: response.status, headers: { 'Content-Type': 'application/json', ...corsHeaders, ...(response.headers.get('Retry-After') ? { 'Retry-After': response.headers.get('Retry-After') } : {}) } });   // Retry-After van Toggl doorgeven (429)
 
       } else if (target === 'toggl_focus') {
@@ -6266,7 +6398,8 @@ export default {
           },
           body
         });
-        const text = await response.text();
+        let text = await response.text();
+        if (ik.rol === 'meekijker' && response.ok && focusRest(focusPath) === 'users') text = kijkerNamen(text);   // alleen namen, geen e-mail e.d.
         return new Response(text, { status: response.status, headers: { 'Content-Type': 'application/json', ...corsHeaders, ...(response.headers.get('Retry-After') ? { 'Retry-After': response.headers.get('Retry-After') } : {}) } });   // Retry-After van Toggl doorgeven (429)
 
       } else if (target === 'toggl_admin_projects') {
