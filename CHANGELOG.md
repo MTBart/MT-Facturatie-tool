@@ -5,8 +5,41 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-31 — Release v2.31.0: telefoon-app bovenrij met zoeken en timerknop (start lokaal, één POST na projectkeuze, Codex go na 5 rondes), kop zonder groene knoppen, logo als app-icoon, kostenindeling per maand; backup = v2.30.0
+- Commit: `b6dd09a` | Auteur: Bart Witte
+
 ## 2026-10-31 — Backup = v2.30.0
 - Commit: `e54044a` | Auteur: Bart Witte
+
+## 2026-10-31 — Mobiel timer: stop-akkoord per timer, lock-lease en oude worker (Codex ronde 4)
+- Commit: `4cd149c` | Auteur: Bart Witte
+
+## 2026-10-31 — Mobiel timer: stop-race, gestopte POST zoeken, lopende timer elders en een tab-lock (Codex ronde 3)
+- Commit: `c097ec6` | Auteur: Bart Witte
+
+## 2026-10-31 — Mobiel timer: lokaal starten en één POST bij de projectkeuze; geen projectloze entry en geen PUT meer (Codex ronde 2)
+- Commit: `5c2451d` | Auteur: Bart Witte
+
+## 2026-10-31 — Mobiel timer: geen dubbele entry, fail-closed rechten en een zichtbare projectsynchronisatie (Codex-punten)
+- Commit: `ed8b635` | Auteur: Bart Witte
+
+## 2026-10-31 — Mobiel: app-icoon met het woordmerk mortise & tenon onder het beeldmerk
+- Commit: `85a8c0a` | Auteur: Bart Witte
+
+## 2026-10-31 — Mobiel Forecast: de indeling toont de kosten van de gekozen maand in plaats van een totaal over de horizon
+- Commit: `bf49ef0` | Auteur: Bart Witte
+
+## 2026-10-31 — Mobiel Forecast: indeling kosten en patronen als compacte kaarten op de telefoon, met duidelijk bedraglabel
+- Commit: `4979e9d` | Auteur: Bart Witte
+
+## 2026-10-31 — Mobiel timer: een tik start meteen zonder project, daarna kies je project en taak in een sheet
+- Commit: `652be87` | Auteur: Bart Witte
+
+## 2026-10-31 — Mobiel: app-icoon, apple-touch-icon en laadscherm met het eigen logo
+- Commit: `a5ff341` | Auteur: Bart Witte
+
+## 2026-10-31 — Mobiel: bovenrij met Forecast, Planning, Opname, Zoeken en Timer; lopende tijd in de kop; kop zonder groene knoppen
+- Commit: `626f39f` | Auteur: Bart Witte
 
 ## 2026-10-31 — Release v2.30.0: Forecast op de telefoon als compacte tabel met maandkiezer, filters en sorteren zoals op de pc; backup = v2.29.0
 - Commit: `7433133` | Auteur: Bart Witte
