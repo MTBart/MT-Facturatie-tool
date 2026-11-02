@@ -120,10 +120,19 @@
     }
     return uit;
   };
-  L.FILTERS = ['geaccepteerd', 'openstaand', 'concept', 'los', 'gefactureerd', 'afgerond', 'uitbeeld'];
+  // Opgeslagen filters (mtl:filter) bij het starten, met de eenmalige migraties (mtl:fv = versie): 2 = Gefactureerd aan (30-10); 3 = Verlopen aan voor wie Openstaand aan had
+  // (2-11: verlopen offertes telden eerst als openstaand mee, dus er verandert niets zichtbaars). Afgewezen staat standaard uit. Zonder opslag: de standaard.
+  L.filterStart = function (opgeslagen, fv) {
+    if (!Array.isArray(opgeslagen)) return ['geaccepteerd', 'openstaand', 'verlopen', 'los', 'gefactureerd'];
+    const f = opgeslagen.filter(x => L.FILTERS.includes(x));
+    if (fv !== '2' && fv !== '3' && !f.includes('gefactureerd')) f.push('gefactureerd');
+    if (fv !== '3' && f.includes('openstaand') && !f.includes('verlopen')) f.push('verlopen');
+    return f;
+  };
+  L.FILTERS = ['geaccepteerd', 'openstaand', 'verlopen', 'concept', 'afgewezen', 'los', 'gefactureerd', 'afgerond', 'uitbeeld'];
   // Met maanden: helemaal gefactureerd en in die maanden niets meer dat telt = Afgerond (eigen filter, standaard uit).
   L.filter = (rijen, aan, maanden) => { const mag = new Set(aan); return rijen.filter(r => maanden && !L.inBeeld(r, maanden) ? mag.has('afgerond') : r.uitbeeld ? mag.has('uitbeeld') : mag.has(r.status)); };
-  L.tel = (rijen, maanden) => { const t = { geaccepteerd: 0, openstaand: 0, concept: 0, los: 0, gefactureerd: 0, afgerond: 0, uitbeeld: 0 }; for (const r of rijen) { if (maanden && !L.inBeeld(r, maanden)) t.afgerond++; else if (r.uitbeeld) t.uitbeeld++; else if (t[r.status] != null) t[r.status]++; } return t; };
+  L.tel = (rijen, maanden) => { const t = { geaccepteerd: 0, openstaand: 0, verlopen: 0, concept: 0, afgewezen: 0, los: 0, gefactureerd: 0, afgerond: 0, uitbeeld: 0 }; for (const r of rijen) { if (maanden && !L.inBeeld(r, maanden)) t.afgerond++; else if (r.uitbeeld) t.uitbeeld++; else if (t[r.status] != null) t[r.status]++; } return t; };
   L.bedrag = (r, btw) => btw === 'excl' ? r.exclC : r.inclC;
   // Wat telt in een maand: het gefactureerde bedrag als er in die maand een factuur is (het vakje staat dan vast), anders de schets.
   L.vast = (r, ym) => !!(r.gef && ym in r.gef.maand);
@@ -266,7 +275,7 @@
   const SORT_RE = /^(offerte|datum|status|zeker|bedrag|totaal|m:\d{4}-\d{2}):(op|af)$/;
   L.SORT_STANDAARD = { sleutel: 'datum', richting: 'af' };
   L.sortLees = t => { const m = SORT_RE.exec(String(t || '')); return m ? { sleutel: m[1], richting: m[2] } : L.SORT_STANDAARD; };
-  const STATUS = ['geaccepteerd', 'openstaand', 'concept', 'los', 'gefactureerd'];
+  const STATUS = ['geaccepteerd', 'openstaand', 'verlopen', 'concept', 'afgewezen', 'los', 'gefactureerd'];
   L.sorteer = function (rijen, sort, btw, maanden) {
     const s = sort || L.SORT_STANDAARD, f = s.richting === 'op' ? 1 : -1, nl = (a, b) => String(a).localeCompare(String(b), 'nl', { numeric: true, sensitivity: 'base' });
     const getal = (a, b) => (a == null) - (b == null) || (a == null ? 0 : a - b);
@@ -323,12 +332,12 @@
   };
   // Nu factureren: geaccepteerd of zeker, nog niet helemaal gefactureerd, en een bedrag gepland in deze of een eerdere maand dat nog niet gefactureerd is. Bedrag = wat er nog openstaat (L.nog), anders de geplande som.
   // Per maand telt het geplande bedrag min wat er in die maand al gefactureerd is (deels gefactureerd in dezelfde maand blijft dus staan); ontbreekt het offertebedrag, dan geldt de som van die restanten.
-  L.nuFactureren = (rijen, nuYm, btw) => rijen.filter(r => !r.uitbeeld && !r.los && (r.status === 'geaccepteerd' || r.zeker) && r.fstatus !== 'gefactureerd').map(r => {
+  L.nuFactureren = (rijen, nuYm, btw) => rijen.filter(r => !r.uitbeeld && !r.los && r.status !== 'afgewezen' && (r.status === 'geaccepteerd' || r.zeker) && r.fstatus !== 'gefactureerd').map(r => {
     const eff = L.effectief(r), rest = m => (r.gef && r.gef.maand[m] ? (r.cellen[m] || 0) - r.gef.maand[m] : (eff[m] || 0)), gepland = Object.keys(r.cellen).filter(m => m <= nuYm && rest(m) > 0).sort(); if (!gepland.length) return null;
     const nog = L.nog(r, btw), bedrag = nog != null ? nog : gepland.reduce((a, m) => a + rest(m), 0); return bedrag > 0 ? { r, bedrag, gepland } : null;
   }).filter(Boolean).sort((a, b) => b.bedrag - a.bedrag);
   // Offertes met een bepaalde status (openstaand, concept): bedrag en de eerstvolgende geplande maand (vanaf nuYm); helemaal gefactureerde offertes niet.
-  L.offertesMet = (rijen, nuYm, status, btw) => rijen.filter(r => !r.uitbeeld && !r.los && r.status === status && r.fstatus !== 'gefactureerd').map(r => ({ r, bedrag: L.bedrag(r, btw), eerstvolgende: (e => Object.keys(e).filter(m => e[m] > 0 && m >= nuYm).sort()[0] || null)(L.effectief(r)) }))
+  L.offertesMet = (rijen, nuYm, status, btw) => rijen.filter(r => !r.uitbeeld && !r.los && (r.status === status || (status === 'openstaand' && r.status === 'verlopen')) && r.fstatus !== 'gefactureerd').map(r => ({ r, bedrag: L.bedrag(r, btw), eerstvolgende: (e => Object.keys(e).filter(m => e[m] > 0 && m >= nuYm).sort()[0] || null)(L.effectief(r)) }))
     .sort((a, b) => (b.bedrag || 0) - (a.bedrag || 0));
   // Geaccepteerd maar nog nergens ingepland (en niet helemaal gefactureerd): mag niet uit beeld verdwijnen.
   L.nietIngepland = (rijen, btw) => rijen.filter(r => !r.uitbeeld && !r.los && r.status === 'geaccepteerd' && r.fstatus !== 'gefactureerd' && !Object.values(r.cellen).some(v => v)).map(r => ({ r, bedrag: L.bedrag(r, btw), eerstvolgende: null, nietIngepland: true }))
@@ -357,7 +366,7 @@
   const st = L._st = { el: null, opt: null, mag: false, schatten: null, schattenT: 0, afgekapt: false, schets: null, uitbeeld: {}, start: nu(), btw: 'incl', filter: null, sort: null,
     bezig: false, fout: null, bewaren: new Map(), keten: new Map(), mislukt: new Map(), zekerBezig: new Set(), sessie: Math.random().toString(36).slice(2), laadNr: 0,
     fact: null, factFout: null, factAfgekapt: false, prog: null, fk: null, kas: null, tl: null, tlFout: null, tlBezig: false, kasOpen: false, kasAan: {}, paneel: null };
-  const STATUS_TEKST = { geaccepteerd: 'Geaccepteerd', openstaand: 'Openstaand', concept: 'Concept', los: 'Niet meer open', gefactureerd: 'Gefactureerd', afgerond: 'Afgerond', uitbeeld: 'Uit beeld' };
+  const STATUS_TEKST = { geaccepteerd: 'Geaccepteerd', openstaand: 'Openstaand', verlopen: 'Verlopen', concept: 'Concept', afgewezen: 'Afgewezen', los: 'Niet meer open', gefactureerd: 'Gefactureerd', afgerond: 'Afgerond', uitbeeld: 'Uit beeld' };
   const FSTATUS_TEKST = { deels: 'Deels gefactureerd', gefactureerd: 'Gefactureerd' };
   const KAS_TEKST = { open: 'Openstaande facturen', betaald: 'Betaalde facturen', vast: 'Vaste kosten', patroon: 'Vaste patronen', overig: 'Overige voorspelling', uit: 'Niet meetellen' };
   const KAS_UITLEG = { open: 'Inkoopfacturen die wij nog moeten betalen, per verwachte betaalmaand (uit Financiën)', betaald: 'Inkoopfacturen en andere betalingen die al van de bank zijn afgeschreven (voorbije maanden en wat deze maand al betaald is); verzamelbetalingen staan als één regel', vast: 'Vaste kosten: lonen, energie (Vattenfall), water (PWN), verzekeringen, hypotheek, abonnementen, lease. Herkend uit de bank en de inkoopfacturen; met Indeling zet je een regel in een andere groep',
@@ -397,7 +406,7 @@
 .mtl-naam a{color:inherit;text-decoration:none}.mtl-naam a:hover,.mtl-naam a:focus-visible{color:var(--l-primary);text-decoration:underline}
 .mtl-mbd{display:none}.mtl-meta{display:flex;gap:4px 8px;align-items:center;flex-wrap:wrap;font-size:11px;line-height:16px;color:var(--l-ink3)}
 .mtl-st{display:inline-flex;align-items:center;height:18px;padding:0 6px;border-radius:var(--l-r);font-size:11px;font-weight:500}
-.mtl-st.geaccepteerd{color:var(--l-ok);background:var(--l-okbg)}.mtl-st.openstaand{color:var(--l-warn);background:var(--l-warnbg)}.mtl-st.concept,.mtl-st.los,.mtl-st.uitbeeld{color:var(--l-ink2);background:var(--l-surface2)}
+.mtl-st.geaccepteerd{color:var(--l-ok);background:var(--l-okbg)}.mtl-st.openstaand{color:var(--l-warn);background:var(--l-warnbg)}.mtl-st.concept,.mtl-st.los,.mtl-st.uitbeeld{color:var(--l-ink2);background:var(--l-surface2)}.mtl-st.verlopen{color:var(--l-warn);background:var(--l-surface2)}.mtl-st.afgewezen{color:var(--l-ink3);background:var(--l-surface2)}
 .mtl-tabel .zk{width:72px;min-width:72px;text-align:center}.mtl-tabel .bd{min-width:96px;color:var(--l-ink2)}.mtl-tabel .tot{min-width:96px;font-weight:500;box-shadow:inset 1px 0 0 var(--l-line)}
 .mtl-sw{position:relative;display:inline-block;width:34px;height:20px;vertical-align:middle;cursor:pointer}.mtl-sw input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer;z-index:1}
 .mtl-sw span{position:absolute;inset:0;border-radius:10px;background:var(--l-strong);transition:background .15s}.mtl-sw span::after{content:"";position:absolute;left:2px;top:2px;width:16px;height:16px;border-radius:50%;background:var(--l-surface);box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
@@ -558,10 +567,8 @@
   L.start = function (el, opt) {
     st.el = el; st.opt = opt || {}; st.mag = !!st.opt.magWijzigen; css();
     st.btw = ls.get('mtl:btw') === 'excl' ? 'excl' : 'incl';
-    try { const f = JSON.parse(ls.get('mtl:filter') || 'null'); st.filter = Array.isArray(f) ? f.filter(x => L.FILTERS.includes(x)) : null; } catch (e) { st.filter = null; }
-    if (!st.filter) st.filter = ['geaccepteerd', 'openstaand', 'los', 'gefactureerd'];
-    else if (ls.get('mtl:fv') !== '2' && !st.filter.includes('gefactureerd')) st.filter.push('gefactureerd');   // nieuw filter (30-10): eenmalig aan, anders telt een factuur niet mee
-    ls.set('mtl:fv', '2'); ls.set('mtl:filter', JSON.stringify(st.filter));
+    try { st.filter = L.filterStart(JSON.parse(ls.get('mtl:filter') || 'null'), ls.get('mtl:fv')); } catch (e) { st.filter = L.filterStart(null, null); }
+    ls.set('mtl:fv', '3'); ls.set('mtl:filter', JSON.stringify(st.filter));
     try { const k = JSON.parse(ls.get('mtl:kas') || '{}'); st.kasAan = k && typeof k === 'object' ? k.aan || {} : {}; st.kasOpen = !!(k && k.open); } catch (e) { st.kasAan = {}; }
     st.sort = L.sortLees(ls.get('mtl:sort'));
     if (!L._resize) { L._resize = true; window.addEventListener('resize', () => { if (st.el && st.el.isConnected) pasHoogte(); });
@@ -646,7 +653,7 @@
       }
       st.schets = sch.items; ls.set('mtl:kopie', JSON.stringify({ ts: Date.now(), items: sch.items }));   // reservekopie op deze computer
       if (ub && ub.items) st.uitbeeld = ub.items;
-      if (sr) { st.schatten = (sr.lijst || []).map(e => root.MTForecast.schatNorm(e)).filter(Boolean); st.afgekapt = !!sr.afgekapt; st.schattenT = Date.now(); }
+      if (sr) { st.schatten = (sr.lijst || []).map(e => root.MTForecast.schatNorm(e)).filter(Boolean); st.afgekapt = !!sr.afgekapt; st.afgewezenAfgekapt = !!(sr.afgewezenAfgekapt || sr.afgewezenFout); st.schattenT = Date.now(); }
       // Fail-closed (Codex): mislukt of afgekapt = géén factuurgegevens (ook niet die van een vorige keer); dan telt alleen de schets en zegt de melding dat.
       if (fr && fr.fout) { st.factFout = fr.fout; st.fact = null; }
       else if (Array.isArray(fr)) {
@@ -1000,8 +1007,8 @@
     } else {
       const alle = L.rijen(st.schatten, st.schets, st.uitbeeld, st.fk), tel = L.tel(alle, ms), rijen = zichtbareRijen(), tot = L.totalen(rijen, ms);
       kaart.appendChild(h('div', { class: 'mtl-balk' },
-        L.FILTERS.filter(f => (f !== 'los' || tel.los) && (f !== 'gefactureerd' || tel.gefactureerd) && (f !== 'afgerond' || tel.afgerond)).map(f => h('button', { type: 'button', class: 'mtl-chip', 'aria-pressed': String(st.filter.includes(f)),
-          title: f === 'los' ? 'Offertes die niet meer open staan in Moneybird maar waar nog bedragen in de schets staan' : f === 'gefactureerd' ? 'Offertes die niet meer open staan en waarvan facturen in Moneybird staan' : f === 'afgerond' ? 'Helemaal gefactureerd, en in de getoonde maanden telt er niets meer van mee' : f === 'uitbeeld' ? 'Offertes die bij de uitgebreide forecast uit beeld zijn gezet' : null,
+        L.FILTERS.filter(f => (f !== 'los' || tel.los) && (f !== 'gefactureerd' || tel.gefactureerd) && (f !== 'afgerond' || tel.afgerond) && (f !== 'verlopen' || tel.verlopen || st.filter.includes(f)) && (f !== 'afgewezen' || tel.afgewezen || st.filter.includes(f))).map(f => h('button', { type: 'button', class: 'mtl-chip', 'aria-pressed': String(st.filter.includes(f)),
+          title: f === 'los' ? 'Offertes die niet meer open staan in Moneybird maar waar nog bedragen in de schets staan' : f === 'gefactureerd' ? 'Offertes die niet meer open staan en waarvan facturen in Moneybird staan' : f === 'afgerond' ? 'Helemaal gefactureerd, en in de getoonde maanden telt er niets meer van mee' : f === 'verlopen' ? 'Offertes in Moneybird waarvan de geldigheid verlopen is (telden eerst als openstaand)' : f === 'afgewezen' ? 'Afgewezen offertes in Moneybird' + (st.afgewezenAfgekapt ? ' (lijst niet compleet: de oudste ontbreken)' : '') : f === 'uitbeeld' ? 'Offertes die bij de uitgebreide forecast uit beeld zijn gezet' : null,
           onclick: () => { st.filter = st.filter.includes(f) ? st.filter.filter(x => x !== f) : st.filter.concat(f); ls.set('mtl:filter', JSON.stringify(st.filter)); teken(); } }, STATUS_TEKST[f], h('span', { class: 'mtl-tel' }, String(tel[f])))),
         h('div', { class: 'mtl-nav' },
           knop('\u2039', { title: 'Eén maand terug', 'aria-label': 'Eén maand terug', onclick: () => { st.start = maandPlus(st.start, -1); teken(); } }),
@@ -1098,7 +1105,7 @@
   const PAD_CHEV = 'M9 6l6 6l-6 6', PAD_X = 'M6 6l12 12M18 6L6 18', PAD_REGELS = 'M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1M15 4v4M9 10v4M17 16v4', PAD_LINKS = 'M15 6l-6 6l6 6';
   function lijnIcoon(pad) { const s = document.createElementNS(SVGNS, 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('class', 'mtl-ico'); s.setAttribute('aria-hidden', 'true'); s.setAttribute('focusable', 'false'); const p = document.createElementNS(SVGNS, 'path'); p.setAttribute('d', pad); s.appendChild(p); return s; }
   const ONBEKEND_TEKST = 'Geen (complete) bankgegevens voor deze maand';
-  const PAD_FILTER = 'M3 5h18l-7 8v6l-4 2v-8z', PAD_NEER = 'M6 9l6 6l6-6', PAD_VERNIEUW = 'M20 12a8 8 0 1 1-2.5-5.8M20 4v5h-5', PAD_KAL = 'M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM4 10h16M8 2v4M16 2v4', FILTER_STANDAARD = ['geaccepteerd', 'openstaand', 'los', 'gefactureerd'];
+  const PAD_FILTER = 'M3 5h18l-7 8v6l-4 2v-8z', PAD_NEER = 'M6 9l6 6l6-6', PAD_VERNIEUW = 'M20 12a8 8 0 1 1-2.5-5.8M20 4v5h-5', PAD_KAL = 'M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM4 10h16M8 2v4M16 2v4', FILTER_STANDAARD = ['geaccepteerd', 'openstaand', 'verlopen', 'los', 'gefactureerd'];
   const eur = cc => (cc < 0 ? '\u2212' : '') + '\u20ac\u00a0' + duizend(Math.round(Math.abs(cc) / 100));
   // Het gekozen blok maanden (bewaard in mtl:mper): voorkeuzen rekenen elke keer vanaf deze maand, een vrije keuze of verschuiving ligt vast.
   const mobSel = () => { if (st.mSel === undefined) { try { const x = JSON.parse(ls.get('mtl:mper') || 'null'); st.mSel = x && typeof x === 'object' ? x : null; } catch (e) { st.mSel = null; } } return st.mSel; };
@@ -1245,7 +1252,7 @@
     const s = st.sheet; if (!s || s.soort !== 'filter') return;
     const el = s.el, hoog = el.scrollTop, a = document.activeElement, actief = a && el.contains(a) ? a.dataset.filter : null, ms = mobMaanden(), tel = L.tel(L.rijen(st.schatten, st.schets, st.uitbeeld, st.fk), ms);
     const zet = f => ev => { st.filter = ev.target.checked ? st.filter.concat(f) : st.filter.filter(x => x !== f); ls.set('mtl:filter', JSON.stringify(st.filter)); tekenMobiel(); vulFilterSheet(); };
-    const rijen = L.FILTERS.filter(f => (f !== 'los' || tel.los) && (f !== 'gefactureerd' || tel.gefactureerd) && (f !== 'afgerond' || tel.afgerond)).map(f => h('label', { class: 'mtl-ks-rij' }, h('input', { type: 'checkbox', class: 'mtl-ks-in', data: { filter: f }, checked: st.filter.includes(f), onchange: zet(f) }), h('span', { class: 'mtl-ks-v', 'aria-hidden': 'true' }),
+    const rijen = L.FILTERS.filter(f => (f !== 'los' || tel.los) && (f !== 'gefactureerd' || tel.gefactureerd) && (f !== 'afgerond' || tel.afgerond) && (f !== 'verlopen' || tel.verlopen || st.filter.includes(f)) && (f !== 'afgewezen' || tel.afgewezen || st.filter.includes(f))).map(f => h('label', { class: 'mtl-ks-rij' }, h('input', { type: 'checkbox', class: 'mtl-ks-in', data: { filter: f }, checked: st.filter.includes(f), onchange: zet(f) }), h('span', { class: 'mtl-ks-v', 'aria-hidden': 'true' }),
       h('span', { class: 'mtl-ks-t' }, STATUS_TEKST[f]), h('span', { class: 'mtl-ks-b' }, String(tel[f]))));
     el.replaceChildren(sheetKop('Filter', 'Welke offertes meetellen in de cijfers en de lijsten'), h('div', { class: 'mtl-ks-lijst' }, rijen),
       h('div', { class: 'mtl-ks-voet' }, h('span', { class: 'mtl-mp-t' }, st.filter.length + ' van ' + L.FILTERS.length + ' aan'), knop('Standaard', { disabled: !filterActief(), onclick: () => { st.filter = FILTER_STANDAARD.slice(); ls.set('mtl:filter', JSON.stringify(st.filter)); tekenMobiel(); vulFilterSheet(); } })));

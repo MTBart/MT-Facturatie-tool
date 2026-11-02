@@ -66,8 +66,11 @@
     const tx = parseFloat(e.total_price_excl_tax_base != null ? e.total_price_excl_tax_base : e.total_price_excl_tax);
     return { id: String(e.id), nummer: String(e.estimate_id || ''), naam, ref: String(e.reference || '').trim(), contact_id: e.contact_id != null ? String(e.contact_id) : '', totaalC: c(t), exclC: isFinite(tx) && c(tx) > 0 && c(tx) <= c(t) ? c(tx) : null,
       datum: String(e.estimate_date || String(e.created_at || '').slice(0, 10) || ''),
-      status: { accepted: 'geaccepteerd', open: 'openstaand', late: 'openstaand', draft: 'concept' }[String(e.state || 'accepted')] || 'overig' };
+      status: { accepted: 'geaccepteerd', open: 'openstaand', late: 'verlopen', draft: 'concept', rejected: 'afgewezen' }[String(e.state || 'accepted')] || 'overig' };
   };
+
+  // De uitgebreide forecast kent alleen geaccepteerd / openstaand / concept: een verlopen offerte telt daar als openstaand (zoals altijd), een afgewezen niet.
+  F.voorUitgebreid = s => !s || s.status === 'overig' || s.status === 'afgewezen' ? null : s.status === 'verlopen' ? Object.assign({}, s, { status: 'openstaand' }) : s;
 
   // ── Termijnen van een prognose-item, met wat al gefactureerd is (overzicht uit /geld/tijdlijn → prognose.posten) ──
   // vast = er is al (deels) gefactureerd: niet meer te wijzigen, wel te tonen.
@@ -361,13 +364,17 @@
     return { zichtbaar: zicht, verborgen, uitgesloten };
   };
   // Alle offertes met de drie statussen uit Moneybird (alleen lezen): haalPagina(filter, pagina) → lijst. Per status gepagineerd.
+  // Afgewezen offertes (rejected) komen er optioneel bij (filter Afgewezen, standaard uit): hooguit 10 pagina's, en een fout of plafond daar breekt de
+  // rest niet en telt niet als afgekapt van de hoofdlijst (afgewezenAfgekapt / afgewezenFout).
   F.haalOffertes = async function (haalPagina, o) {
-    const lijst = [], gezien = new Set(); let afgekapt = false;
+    const lijst = [], gezien = new Set(); let afgekapt = false, afgewezenAfgekapt = false, afgewezenFout = false;
+    const voeg = r => { for (const e of r.lijst) if (e && !gezien.has(String(e.id))) { gezien.add(String(e.id)); lijst.push(e); } };
     for (const filter of ['accepted', 'open|late', 'draft']) {
-      const r = await F.pagineer(p => haalPagina(filter, p), o); afgekapt = afgekapt || r.afgekapt;
-      for (const e of r.lijst) if (e && !gezien.has(String(e.id))) { gezien.add(String(e.id)); lijst.push(e); }
+      const r = await F.pagineer(p => haalPagina(filter, p), o); afgekapt = afgekapt || r.afgekapt; voeg(r);
     }
-    return { lijst, afgekapt };
+    try { const r = await F.pagineer(p => haalPagina('rejected', p), Object.assign({}, o, { max: Math.min((o && o.max) || 50, 10) })); afgewezenAfgekapt = r.afgekapt; voeg(r); }
+    catch (e) { afgewezenFout = true; }
+    return { lijst, afgekapt, afgewezenAfgekapt, afgewezenFout };
   };
 
   // ── Uit beeld zetten (opschonen van de lijst; alleen verbergen, Moneybird blijft alleen-lezen) ──────────
@@ -1173,7 +1180,7 @@ th.num .mtf-sortknop .mtf-sortpijl{position:absolute;left:-9px;top:50%;margin:-5
       else throw new Error(fsR.error || 'de factuurschema’s zijn niet te lezen');
       if (!d || d.error) throw new Error(d && d.error || 'geen antwoord van Financiën');
       if (!p || p.error) throw new Error(p && p.error || 'prognose niet te lezen');
-      if (s) { st.schatten = (Array.isArray(s) ? s : s.lijst || []).map(F.schatNorm).filter(x => x && x.status !== 'overig'); st.afgekapt = !Array.isArray(s) && !!s.afgekapt; st.schattenT = Date.now(); }
+      if (s) { st.schatten = (Array.isArray(s) ? s : s.lijst || []).map(F.schatNorm).map(F.voorUitgebreid).filter(Boolean); st.afgekapt = !Array.isArray(s) && !!s.afgekapt; st.schattenT = Date.now(); }
       if (stil && (st.bezig || st.nWijzig || (st.wijzigN || 0) !== n0 || invoerOpen())) { plantStil(); return; }
       st.data = d; st.dataT = Date.now(); st.lokaal = false; st.onzeker = false; clearTimeout(st.bgT); st.items = p.items || {}; st.verouderd = false; st.onvolledig = p.compleet === false; if (st.onvolledig) st.verouderd = true;   // lijst niet compleet: nooit wijzigen op halve gegevens
       if (!st.selGelezen) { st.selGelezen = true; st.sel = F.selLees(ls.get('mtg:fc:per:' + st.wie), d.vandaag.slice(0, 7)); }

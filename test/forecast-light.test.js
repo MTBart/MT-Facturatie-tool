@@ -30,7 +30,7 @@ test('rijen: offertes uit Moneybird plus losse schets-records met bedragen; uit 
   assert.strictEqual(rijen[1].zeker, true); assert.strictEqual(rijen[1].uitbeeld, true);
   assert.strictEqual(rijen[2].status, 'los'); assert.strictEqual(rijen[2].naam, 'Weg — oud');
   assert.deepStrictEqual(L.filter(rijen, ['geaccepteerd', 'los']).map(r => r.id), ['300000000001', '300000000009']);
-  assert.deepStrictEqual(L.tel(rijen), { geaccepteerd: 1, openstaand: 0, concept: 0, los: 1, gefactureerd: 0, afgerond: 0, uitbeeld: 1 });
+  assert.deepStrictEqual(L.tel(rijen), { geaccepteerd: 1, openstaand: 0, verlopen: 0, concept: 0, afgewezen: 0, los: 1, gefactureerd: 0, afgerond: 0, uitbeeld: 1 });
 });
 const fx = (o) => L.factuurNorm(Object.assign({ id: 400000000001, invoice_id: '2026-0100', contact_id: 500000000001, contact: { company_name: 'A' }, invoice_date: '2026-10-15', state: 'open', total_price_incl_tax: '60.50', total_price_excl_tax: '50' }, o));
 test('facturen: normaliseren; concept en zonder datum tellen niet', () => {
@@ -343,5 +343,28 @@ test('orderbevestiging in de offertelijst telt niet en blijft zichtbaar als er s
   const zonder = L.rijen(sch, {}, {}, null); assert.strictEqual(zonder.length, 1, 'zonder schets: weg uit de lijst');
   const met = L.rijen(sch, { '300000000051': { cellen: { '2026-11': 5000 }, naam: 'A \u2014 Kast', nummer: '2026-5051' } }, {}, null);
   assert.strictEqual(met.length, 2); const los = met.find(r => r.id === '300000000051'); assert.ok(los.los); assert.strictEqual(los.status, 'los'); assert.strictEqual(L.cel(los, '2026-11'), 5000, 'schets blijft meetellen');
+});
+test('verlopen en afgewezen: statussen, filters, standaard en eenmalige migratie van opgeslagen filters', () => {
+  const norm = (state, o) => F.schatNorm(Object.assign({ id: 300000000060, estimate_id: '2026-6060', contact_id: 500000000001, contact: { company_name: 'A' }, total_price_incl_tax: '121', state }, o));
+  assert.strictEqual(norm('late').status, 'verlopen'); assert.strictEqual(norm('rejected').status, 'afgewezen'); assert.strictEqual(norm('open').status, 'openstaand');
+  assert.deepStrictEqual(['verlopen', 'afgewezen'].map(s => L.FILTERS.includes(s)), [true, true]);
+  // de uitgebreide forecast: verlopen telt als openstaand (gedrag gelijk), afgewezen en onbekend niet
+  assert.strictEqual(F.voorUitgebreid(norm('late')).status, 'openstaand'); assert.strictEqual(F.voorUitgebreid(norm('rejected')), null); assert.strictEqual(F.voorUitgebreid(norm('billed')), null); assert.strictEqual(F.voorUitgebreid(norm('accepted')).status, 'geaccepteerd');
+  assert.ok(norm('late').id === F.voorUitgebreid(norm('late')).id);
+  const rijen = L.rijen(['accepted', 'open', 'late', 'draft', 'rejected'].map((s, i) => norm(s, { id: 300000000070 + i })), {}, {}, null);
+  const tel = L.tel(rijen); assert.deepStrictEqual([tel.geaccepteerd, tel.openstaand, tel.verlopen, tel.concept, tel.afgewezen], [1, 1, 1, 1, 1]);
+  const std = L.filterStart(null, null); assert.ok(std.includes('verlopen') && !std.includes('afgewezen'), 'standaard: verlopen aan, afgewezen uit');
+  assert.deepStrictEqual(L.filter(rijen, std).map(r => r.status).sort(), ['geaccepteerd', 'openstaand', 'verlopen'].sort());
+  assert.deepStrictEqual(L.filter(rijen, ['afgewezen']).map(r => r.status), ['afgewezen']);
+  // migratie: wie openstaand aan had krijgt eenmalig ook verlopen; wie het bewust uit zette (fv 3) niet; openstaand uit blijft uit
+  assert.ok(L.filterStart(['geaccepteerd', 'openstaand', 'gefactureerd'], '2').includes('verlopen'));
+  assert.ok(!L.filterStart(['geaccepteerd', 'openstaand', 'gefactureerd'], '3').includes('verlopen'), 'na de migratie blijft een keuze staan');
+  assert.ok(!L.filterStart(['geaccepteerd', 'gefactureerd'], '2').includes('verlopen'));
+  assert.ok(L.filterStart(['geaccepteerd', 'openstaand'], null).includes('gefactureerd') && L.filterStart(['geaccepteerd', 'openstaand'], null).includes('verlopen'), 'oude opslag: beide migraties');
+  assert.ok(!L.filterStart(['geaccepteerd', 'openstaand', 'bestaatniet'], '2').includes('bestaatniet'));
+  // een afgewezen rij telt nergens als te factureren; verlopen telt als open offerte
+  const afw = rijen.find(r => r.status === 'afgewezen'); afw.zeker = true; afw.cellen = { '2026-10': 5000 };
+  assert.strictEqual(L.nuFactureren([afw], '2026-10', 'incl').length, 0);
+  assert.strictEqual(L.offertesMet(rijen, '2026-10', 'openstaand', 'incl').length, 2, 'openstaand en verlopen');
 });
 console.log(`\n${n} tests geslaagd${process.exitCode ? ' (met fouten)' : ''}`);

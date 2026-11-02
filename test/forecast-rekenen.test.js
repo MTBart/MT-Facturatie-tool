@@ -541,9 +541,9 @@ test('statusfilter: een niet-geaccepteerde offerte met een prognose die aan staa
   it = F.zetAan(it, true).item;
   const aan = F.totalen({ rijen: F.bouwRijen({ schatten: [s], items: { 'p:q': it }, posten: [], projecten: [], vandaag: V, maanden: 3 }), events: [], vandaag: V, maanden: 3 }); assert.deepStrictEqual(aan.gepland, [0, 200000, 0]);
 });
-test('schatNorm: status uit de Moneybird-state; afgewezen of gefactureerde offertes vallen buiten de drie statussen', () => {
+test('schatNorm: status uit de Moneybird-state; verlopen en afgewezen apart, gefactureerde offertes vallen erbuiten', () => {
   const norm = state => F.schatNorm({ id: 1234567, estimate_id: 'x', total_price_incl_tax_base: '100', state }).status;
-  assert.deepStrictEqual(['accepted', 'open', 'late', 'draft', 'rejected', 'billed', 'archived', undefined].map(norm), ['geaccepteerd', 'openstaand', 'openstaand', 'concept', 'overig', 'overig', 'overig', 'geaccepteerd']);
+  assert.deepStrictEqual(['accepted', 'open', 'late', 'draft', 'rejected', 'billed', 'archived', undefined].map(norm), ['geaccepteerd', 'openstaand', 'verlopen', 'concept', 'afgewezen', 'overig', 'overig', 'geaccepteerd']);
 });
 
 // ── uit beeld zetten ──
@@ -692,6 +692,11 @@ atest('haalOffertes: drie statussen apart gepagineerd, samengevoegd zonder dubbe
   const r = await F.haalOffertes(haal, { max: 50, per: 100 });
   assert.strictEqual(r.lijst.length, 293); assert.strictEqual(r.afgekapt, false); assert.strictEqual(new Set(r.lijst.map(e => e.id)).size, 293);
   assert.deepStrictEqual(gezien.filter(x => x.startsWith('accepted')), ['accepted#1', 'accepted#2', 'accepted#3']); assert.ok(gezien.includes('draft#1') && gezien.includes('open|late#1'));
+  assert.ok(gezien.includes('rejected#1'), 'afgewezen offertes worden ook opgehaald'); assert.strictEqual(r.afgewezenAfgekapt, false); assert.strictEqual(r.afgewezenFout, false);
+  const vol = await F.haalOffertes((f, p) => Promise.resolve(f === 'rejected' ? Array.from({ length: 100 }, (_, i) => ({ id: 'r' + p + '_' + i })) : []), { max: 50, per: 100 });
+  assert.strictEqual(vol.afgekapt, false, 'plafond bij afgewezen telt niet als afgekapt van de hoofdlijst'); assert.strictEqual(vol.afgewezenAfgekapt, true); assert.strictEqual(vol.lijst.length, 1000, 'hooguit 10 pagina\'s afgewezen');
+  const stuk = await F.haalOffertes((f, p) => f === 'rejected' ? Promise.reject(new Error('x')) : Promise.resolve(f === 'draft' ? [{ id: 'd1' }] : []), { max: 5, per: 100 });
+  assert.deepStrictEqual(stuk.lijst.map(e => e.id), ['d1']); assert.strictEqual(stuk.afgewezenFout, true, 'een fout bij afgewezen breekt de rest niet');
   const dubbel = await F.haalOffertes(() => Promise.resolve([{ id: 7 }, { id: 8 }]), { max: 5, per: 100 }); assert.deepStrictEqual(dubbel.lijst.map(e => e.id), [7, 8]);   // dezelfde offerte in meerdere lijsten telt één keer
   const afgekapt = await F.haalOffertes((f, p) => Promise.resolve(f === 'draft' ? Array.from({ length: 100 }, (_, i) => ({ id: 'd' + p + '_' + i })) : []), { max: 2, per: 100 }); assert.strictEqual(afgekapt.afgekapt, true);
 });async_.then(() => console.log(`\n${n} tests geslaagd${process.exitCode ? ' — er zijn fouten' : ''}`));
