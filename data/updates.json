@@ -1,5 +1,18 @@
 [
   {
+    "versie": "2.32.0",
+    "datum": "2026-11-02",
+    "titel": "Opname (beta, alleen beheer): ruimte opmeten met foto's en maatlijnen op de telefoon",
+    "voor": "beheer",
+    "punten": [
+      "Nieuwe opname-module als afgeschermde beta: alleen zichtbaar voor beheer met de beta-schakelaar aan. Gebruik voorlopig alleen testprojecten, geen echte klanten.",
+      "Fotoronde per wand zonder vast aantal wanden; uitsprongen en nissen geef je aan op de wandfoto. Je ziet een eenvoudig 3D-lijnenmodel van de kamer.",
+      "Maten invullen op de foto met lijnen: de actieve lijn is rood, met volgende en vorige door alle maten. De plintmaat vul je één keer per kamer in.",
+      "Passen de hoeken niet, dan meldt de app dat met de sluitfout en de volgende stap. Gemeten waarden blijven altijd staan.",
+      "Alles wordt alleen op dit toestel bewaard. Met de volledige export (zip met foto's) maak je een reservekopie en zet je die terug.",
+      "Twee tabbladen tegelijk overschrijven elkaar niet stil: de app meldt het en houdt je invoer vast."
+    ]
+  },{
     "versie": "2.31.0",
     "datum": "2026-10-31",
     "titel": "Telefoon-app: timerknop, zoeken in de bovenrij en ons logo als app-icoon",

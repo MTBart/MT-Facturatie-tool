@@ -931,6 +931,9 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
   <div class="geld-laag-body" id="forecastLaagBody" style="padding:8px 8px 12px"></div>
 </div>
 
+<!-- ── OPNAME-LAAG (beta, alleen beheer; mt-opname*.js + mt-opname.css, pas geladen bij het openen) ── -->
+<div id="opnameLaag" role="dialog" aria-modal="true" aria-label="Opname (beta)" hidden></div>
+
 <div class="snack" id="snack" role="status" hidden></div>
 
 <!-- ── LOPENDE TIMER BAR ── -->
@@ -1408,6 +1411,8 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
       <button class="sheet-action-btn meer-item meer-extra" id="mx-melden" type="button" onclick="sluitMeer();MTVandaag.menu()"><span class="sheet-action-icon">＋</span><span class="sheet-action-label"><span class="sheet-action-title">Melden</span><span class="sheet-action-sub"></span></span><span class="sheet-action-arrow">›</span></button>
       <button class="sheet-action-btn meer-item meer-extra" id="mx-verhuis" type="button" onclick="sluitMeer();verhuisOpen()"><span class="sheet-action-icon">⇄</span><span class="sheet-action-label"><span class="sheet-action-title">Verhuizen</span><span class="sheet-action-sub"></span></span><span class="sheet-action-arrow">›</span></button>
       <button class="sheet-action-btn meer-item meer-extra" id="mx-uit" type="button" onclick="sluitMeer();msLogout()"><span class="sheet-action-icon">⎋</span><span class="sheet-action-label"><span class="sheet-action-title">Uitloggen</span><span class="sheet-action-sub"></span></span><span class="sheet-action-arrow">›</span></button>
+      <button class="sheet-action-btn meer-item" id="mx-opname" type="button" style="display:none" onclick="sluitMeer();opnameLaagOpen()"><span class="sheet-action-icon">📐</span><span class="sheet-action-label"><span class="sheet-action-title">Opname (beta)</span><span class="sheet-action-sub">draadmodel, foto per wand</span></span><span class="sheet-action-arrow">›</span></button>
+      <button class="sheet-action-btn meer-item" id="mx-opname-beta" type="button" style="display:none" aria-pressed="false" onclick="opnameBetaWissel()"><span class="sheet-action-icon">🧪</span><span class="sheet-action-label"><span class="sheet-action-title">Nieuwe opname testen</span><span class="sheet-action-sub" id="mx-opname-beta-sub">Uit</span></span><span class="sheet-action-arrow">›</span></button>
       <button class="sheet-action-btn meer-item" id="stijlKnop" type="button" aria-pressed="false">
         <span class="sheet-action-icon">🎨</span><span class="sheet-action-label"><span class="sheet-action-title" id="stijlTitel">Oude stijl</span><span class="sheet-action-sub" id="stijlSub">Uit</span></span><span class="sheet-action-arrow" id="stijlPijl">›</span>
       </button>
@@ -3575,7 +3580,7 @@ document.addEventListener("DOMContentLoaded", () => {
 // Stap 2e: Capture, Rapportage, Voorraad en Feedback staan in het Meer-menu; dezelfde tabs en functies, alleen via een sheet.
 // Is een van die tabs open, dan is "Meer" de actieve knop in de onderbalk (en het item in het menu).
 const MEER_TABS = ["capture", "oplevering", "voorraad", "feedback"];
-function openMeer() { try { meerExtraBijwerken(); } catch (e) {} const s = document.getElementById("meerSheet"); if (s) s.classList.add("visible"); }
+function openMeer() { try { meerExtraBijwerken(); } catch (e) {} try { opnameBetaBijwerken(); } catch (e) {} const s = document.getElementById("meerSheet"); if (s) s.classList.add("visible"); }
 function sluitMeer() { const s = document.getElementById("meerSheet"); if (s) s.classList.remove("visible"); }
 function switchTab(name, btn) {
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
@@ -7187,6 +7192,96 @@ function forecastLaagInit() {
 }
 forecastLaagInit();
 window.forecastLaagOpen = window.forecastLaagOpen || function () {};
+
+/* =====================================================================
+   OPNAME-LAAG (beta) — de nieuwe opname-module (draadmodel, foto per wand met lijnenoverlay). Alleen voor eigenaar/beheer en alleen als de schakelaar
+   "Nieuwe opname testen" in Meer aan staat (localStorage mt_opname_beta). De bestaande Opname/Capture/Rapportage blijven ongemoeid en standaard.
+   Pas laden bij het openen (zelfde patroon als de Forecast-laag), eigen opslag alleen lokaal in IndexedDB (mt-opname), geen upload, geen taken, geen worker.
+   ===================================================================== */
+const OPNAME_CSS = "mt-opname.css?v=2026-11-01e";
+const OPNAME_SCRIPTS = ["mt-opname-kern.js?v=2026-11-01e","mt-opname-export.js?v=2026-11-01e","mt-opname-geo.js?v=2026-11-01e","mt-opname-opslag.js?v=2026-11-01e","mt-opname.js?v=2026-11-01e","mt-opname-model.js?v=2026-11-01e"];
+let _opnameScripts = null;
+function opnameBetaMag() { try { return !!(window.MTRol && MTRol.me && MTRol.isBeheer()); } catch (e) { return false; } }
+function opnameBetaAan() { try { return localStorage.getItem("mt_opname_beta") === "1"; } catch (e) { return false; } }
+function opnameBetaBijwerken() {
+  const mag = opnameBetaMag(), aan = opnameBetaAan();
+  const w = document.getElementById("mx-opname-beta"), o = document.getElementById("mx-opname"), s = document.getElementById("mx-opname-beta-sub");
+  if (w) { w.style.display = mag ? "" : "none"; w.setAttribute("aria-pressed", aan ? "true" : "false"); }
+  if (s) s.textContent = aan ? "Aan, alleen op dit toestel" : "Uit";
+  if (o) o.style.display = mag && aan ? "" : "none";
+}
+function opnameBetaWissel() {
+  if (!opnameBetaMag()) return;
+  try { if (opnameBetaAan()) localStorage.removeItem("mt_opname_beta"); else localStorage.setItem("mt_opname_beta", "1"); } catch (e) { showToast("Dit toestel kan de keuze niet bewaren."); }
+  opnameBetaBijwerken();
+}
+window.addEventListener("mt-rol", () => { try { opnameBetaBijwerken(); } catch (e) {} });
+function opnameLaadScripts() {
+  if (window.MTOpname && window.MTOpname.X && window.MTOpname.X.schermen && window.MTOpname.X.schermen.model) return Promise.resolve();
+  if (_opnameScripts) return _opnameScripts;
+  const een = src => new Promise((ok, fail) => { const sc = document.createElement("script"); sc.src = src; sc.onload = ok; sc.onerror = () => fail(new Error("kon " + src.split("?")[0] + " niet laden")); document.head.appendChild(sc); });
+  const css = new Promise((ok, fail) => { if (document.getElementById("mt-opname-css")) { ok(); return; } const l = document.createElement("link"); l.id = "mt-opname-css"; l.rel = "stylesheet"; l.href = OPNAME_CSS; l.onload = ok; l.onerror = () => fail(new Error("kon mt-opname.css niet laden")); document.head.appendChild(l); });
+  _opnameScripts = (async () => { await css; for (const src of OPNAME_SCRIPTS) await een(src); })().catch(e => { _opnameScripts = null; throw e; });
+  return _opnameScripts;
+}
+function opnameProjecten() { return allProjects().map(p => ({ code: p.code, naam: mProjNaam(p), nr: mProjNr(p) })); }
+function opnameLaagInit() {
+  const laag = document.getElementById("opnameLaag"); if (!laag || laag._init) return;
+  laag._init = true;
+  let geblokkeerd = [], histActief = false, negeerPop = false, vorigeFocus = null, bezig = false;
+  async function open() {
+    if (!laag.hidden || bezig) return;
+    if (!opnameBetaMag() || !opnameBetaAan()) { showToast("De nieuwe opname is een testversie voor beheer. Zet hem eerst aan via Meer."); return; }
+    bezig = true;
+    try { await opnameLaadScripts(); } catch (e) { bezig = false; showToast("Opname kon niet geladen worden (" + (e.message || e) + ")."); return; }
+    vorigeFocus = document.activeElement; laag.hidden = false;
+    geblokkeerd = [...document.body.children].filter(el => el !== laag && el.tagName !== "SCRIPT" && !el.inert);
+    geblokkeerd.forEach(el => { el.inert = true; });
+    try { history.pushState({ opnameLaag: 1 }, ""); histActief = true; } catch (e) { histActief = false; }
+    bezig = false;
+    try { await MTOpname.start(laag, { projecten: opnameProjecten, door: () => String((window.MTRol && MTRol.me && MTRol.me.naam) || ""), sluit: () => sluit() }); }
+    catch (e) { showToast("Opname starten mislukt: " + (e.message || e)); sluit(); }
+  }
+  function dicht() {
+    try { if (window.MTOpname && MTOpname.stop) MTOpname.stop(); } catch (e) {}
+    laag.hidden = true; geblokkeerd.forEach(el => { el.inert = false; }); geblokkeerd = [];
+    if (vorigeFocus && vorigeFocus.focus) { try { vorigeFocus.focus(); } catch (e) {} }
+  }
+  function sluit() {
+    if (laag.hidden) return;
+    dicht();
+    if (histActief) { histActief = false; negeerPop = true; try { history.back(); } catch (e) { negeerPop = false; } }
+  }
+  window.addEventListener("popstate", () => {
+    if (negeerPop) { negeerPop = false; return; }
+    if (laag.hidden || !histActief) return;
+    // de Android-terugknop gaat eerst een stap terug binnen de opname; pas op het beginscherm sluit de laag
+    let intern = false; try { intern = !!(window.MTOpname && MTOpname.terug && MTOpname.terug()); } catch (e) { intern = false; }
+    if (intern) { try { history.pushState({ opnameLaag: 1 }, ""); } catch (e) { histActief = false; } return; }
+    histActief = false; dicht();
+  });
+  // Het recht en de schakelaar gelden niet alleen bij het openen: wordt de beheer-rol ingetrokken (mt-rol-event na een nieuwe /me) of de schakelaar uitgezet (ander tabblad), dan sluit een
+  // geopende laag zich. Niet zomaar: eerst wachten tot alles wat al ingevoerd is is weggeschreven (MTOpname.bewaarAlles). Staat er nog iets onbewaards op het scherm, dan blijft de laag open
+  // (met zijn foutbalk) en volgt een melding; niets wordt weggegooid.
+  let bewaakt = false;
+  async function bewaakToegang() {
+    if (laag.hidden || bewaakt || (opnameBetaMag() && opnameBetaAan())) return;
+    bewaakt = true;
+    try {
+      let veilig = true;
+      try { veilig = !(window.MTOpname && MTOpname.bewaarAlles) || await MTOpname.bewaarAlles(); } catch (e) { veilig = false; }
+      if (laag.hidden || (opnameBetaMag() && opnameBetaAan())) return;                           // intussen al dicht, of het recht is terug
+      if (veilig) { sluit(); showToast("De opname (beta) is voor jou uitgezet. Wat je al had ingevoerd is opgeslagen."); }
+      else showToast("De opname (beta) is voor jou uitgezet, maar niet alles is opgeslagen. De laag blijft open; los eerst de opslagmelding op.");
+    } finally { bewaakt = false; }
+  }
+  window.addEventListener("mt-rol", () => bewaakToegang());
+  window.addEventListener("storage", ev => (!ev || ev.key === null || ev.key === "mt_opname_beta") ? bewaakToegang() : undefined);
+  window.opnameLaagOpen = open; window.opnameLaagSluit = sluit;
+}
+opnameLaagInit();
+window.opnameLaagOpen = window.opnameLaagOpen || function () {};
+
 
 /* =====================================================================
    TAKEN PER PROJECT (punt 2) — in project-detail-sheet

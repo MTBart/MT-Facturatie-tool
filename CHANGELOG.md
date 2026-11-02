@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-11-02 — Backup = v2.31.0
+- Commit: `67ccf50` | Auteur: Bart Witte
+
 ## 2026-10-31 — Release v2.31.0: telefoon-app bovenrij met zoeken en timerknop (start lokaal, één POST na projectkeuze, Codex go na 5 rondes), kop zonder groene knoppen, logo als app-icoon, kostenindeling per maand; backup = v2.30.0
 - Commit: `b6dd09a` | Auteur: Bart Witte
 
