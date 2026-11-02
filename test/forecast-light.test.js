@@ -296,4 +296,39 @@ test('schets afboeken met wat al gefactureerd is: laatste maanden blijven, vroeg
   assert.deepStrictEqual(L.nuFactureren([d, a], '2026-12', 'incl').map(x => x.r.id), ['e1'], 'alleen a (met resterende schets); d is klaar');
   assert.strictEqual(L.offertesMet([r({ status: 'openstaand', inclC: 1000000, cellen: { '2026-10': 100000, '2026-12': 100000 }, gef: gef({ '2026-05': 950000 }), fstatus: 'deels' })], '2026-10', 'openstaand', 'incl')[0].eerstvolgende, '2026-12');
 });
+test('facturen koppelen op exacte referentie (vóór de deelfactuur-functie van Moneybird)', () => {
+  const off = (id, o) => F.schatNorm(Object.assign({ id, estimate_id: '2026-' + id, contact_id: 500000000001, contact: { company_name: 'A' }, total_price_incl_tax: '1210', total_price_excl_tax: '1000', state: 'accepted', reference: 'Keuken Voorbeeldlaan 1' }, o));
+  const sch = [off(300000000001), off(300000000002, { contact_id: 500000000002, reference: 'Keuken Voorbeeldlaan 1' })];
+  // (a) geen original_estimate_id, zelfde contact, referentie gelijk (trim, hoofdletters negeren)
+  const a = L.koppelFacturen([fx({ reference: '  keuken voorbeeldlaan 1 ' })], sch, null);
+  assert.deepStrictEqual(Object.keys(a.perEid), ['300000000001']); assert.strictEqual(a.los.length, 0); assert.strictEqual(a.perEid['300000000001'].facturen[0].via, 'referentie');
+  assert.strictEqual(L.rijen(sch, {}, {}, a)[0].fstatus, 'deels');
+  // ander contact of andere referentie: niet koppelen
+  assert.strictEqual(L.koppelFacturen([fx({ contact_id: 500000000009, reference: 'Keuken Voorbeeldlaan 1' })], sch, null).los.length, 1);
+  assert.strictEqual(L.koppelFacturen([fx({ reference: 'Keuken Voorbeeldlaan 12' })], sch, null).los.length, 1, 'alleen exact gelijk');
+  assert.strictEqual(L.koppelFacturen([fx({ reference: '' })], sch, null).los.length, 1, 'lege referentie koppelt nooit');
+  // (b) hangt aan een kopie-offerte die niet in de lijst staat: toch aan de lijst-offerte, geen eigen gefactureerd-rij
+  const b = L.koppelFacturen([fx({ original_estimate_id: 300000000099, reference: 'Keuken Voorbeeldlaan 1' })], sch, null);
+  assert.deepStrictEqual(Object.keys(b.perEid), ['300000000001']); assert.strictEqual(L.rijen(sch, {}, {}, b).length, 2, 'geen extra rij');
+  // een factuur van een offerte die wél in de lijst staat blijft daar, ook al past de referentie op een andere
+  const c = L.koppelFacturen([fx({ original_estimate_id: 300000000002, contact_id: 500000000001, reference: 'Keuken Voorbeeldlaan 1' })], sch, null);
+  assert.deepStrictEqual(Object.keys(c.perEid), ['300000000002']); assert.strictEqual(c.perEid['300000000002'].facturen[0].via, undefined);
+  // niet in de lijst en geen passende referentie: eigen gefactureerd-rij zoals voorheen
+  const d = L.koppelFacturen([fx({ original_estimate_id: 300000000099, reference: 'iets anders' })], sch, null);
+  assert.deepStrictEqual(Object.keys(d.perEid), ['300000000099']);
+  // dubbelzinnig: twee offertes met dezelfde referentie bij hetzelfde contact: niet koppelen
+  const dub = sch.concat([off(300000000003)]);
+  const e = L.koppelFacturen([fx({ reference: 'Keuken Voorbeeldlaan 1' }), fx({ id: 400000000002, original_estimate_id: 300000000099, reference: 'Keuken Voorbeeldlaan 1' })], dub, null);
+  assert.strictEqual(e.los.length, 1, 'zonder original_estimate_id blijft zonder offerte'); assert.deepStrictEqual(Object.keys(e.perEid), ['300000000099'], 'met een eigen offerte-id valt hij terug op die');
+  // een concept telt niet mee voor de uitkomst (en een concept met dezelfde referentie maakt het niet dubbelzinnig)
+  const f = L.koppelFacturen([fx({ reference: 'Keuken Voorbeeldlaan 1' })], sch.concat([off(300000000004, { state: 'draft' })]), null);
+  assert.deepStrictEqual(Object.keys(f.perEid), ['300000000001']);
+  // bevestigd/uitgesloten uit de prognose gaat voor; creditnota volgt zijn factuur
+  const g = L.koppelFacturen([fx({ reference: 'Keuken Voorbeeldlaan 1' })], sch, { 'p:x': { estimate_id: '300000000002', k: ['400000000001'], x: [] } });
+  assert.deepStrictEqual(Object.keys(g.perEid), ['300000000002']);
+  const h = L.koppelFacturen([fx({ reference: 'Keuken Voorbeeldlaan 1' })], sch, { 'p:x': { estimate_id: '300000000001', k: [], x: ['400000000001'] } });
+  assert.strictEqual(h.los.length, 1, 'uitgesloten: ook niet op referentie');
+  const cn = L.koppelFacturen([fx({ reference: 'Keuken Voorbeeldlaan 1' }), fx({ id: 400000000005, original_sales_invoice_id: 400000000001, total_price_incl_tax: '-10', reference: 'Creditnota' })], sch, null);
+  assert.strictEqual(cn.perEid['300000000001'].facturen.length, 2, 'creditnota volgt zijn factuur'); assert.strictEqual(cn.los.length, 0);
+});
 console.log(`\n${n} tests geslaagd${process.exitCode ? ' (met fouten)' : ''}`);

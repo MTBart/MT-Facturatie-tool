@@ -61,6 +61,9 @@
   // Welke factuur hoort bij welke offerte: door de eigenaar bevestigd of uitgesloten in de uitgebreide forecast (prognose k/x), aangemaakt
   // vanuit de offerte (original_estimate_id), een creditnota volgt zijn factuur, anders hetzelfde contact met het offertenummer in de
   // referentie (alleen als dat precies één offerte is). De rest is "zonder offerte".
+  // Facturen van vóór de deelfactuur-functie van Moneybird (Bart 2-11) hebben geen original_estimate_id of hangen aan een kopie-offerte die alleen
+  // gemaakt is om een deel te factureren (niet in de lijst): die koppelen op een exact gelijke referentie (trim, hoofdletters negeren) + hetzelfde
+  // contact, alleen als dat precies één open of geaccepteerde offerte in de lijst is (f.via = 'referentie'; twee offertes met dezelfde referentie = niet koppelen).
   L.koppelFacturen = function (facturen, schatten, prognose) {
     const perEid = {}, los = [], perId = new Map(), bevestigd = new Map(), nee = new Map();
     for (const it of Object.values(prognose || {})) {
@@ -68,17 +71,23 @@
       for (const k of it.k || []) bevestigd.set(String(k), e);
       for (const k of it.x || []) { const s = nee.get(String(k)) || new Set(); s.add(e); nee.set(String(k), s); }
     }
-    const offertes = (schatten || []).filter(s => s && s.nummer && s.nummer.length >= 4 && s.contact_id);
+    const offertes = (schatten || []).filter(s => s && s.nummer && s.nummer.length >= 4 && s.contact_id), inLijst = new Set((schatten || []).filter(Boolean).map(s => s.id));
+    const refKey = t => String(t || '').trim().toLowerCase(), refOffertes = (schatten || []).filter(s => s && s.contact_id && refKey(s.ref) && s.status !== 'concept' && s.status !== 'afgewezen');
     for (const f of (facturen || []).filter(Boolean).slice().sort((a, b) => (a.orig ? 1 : 0) - (b.orig ? 1 : 0))) {
       const niet = nee.get(f.id) || new Set();
       let eid = bevestigd.get(f.id) || null; if (eid && niet.has(eid)) eid = null;   // uitgesloten wint van bevestigd (tegenstrijdige prognose)
-      if (!eid && f.eid && !niet.has(f.eid)) eid = f.eid;
+      let via = null;
+      if (!eid && f.eid && !niet.has(f.eid) && inLijst.has(f.eid)) eid = f.eid;
       if (!eid && f.orig && perId.has(f.orig)) eid = perId.get(f.orig);
+      if (!eid && f.contact_id && refKey(f.ref)) { const kand = refOffertes.filter(s => s.contact_id === f.contact_id && !niet.has(s.id) && refKey(s.ref) === refKey(f.ref)); if (kand.length === 1) { eid = kand[0].id; via = 'referentie'; } }
       if (!eid) { const ref = f.ref.toLowerCase(), kand = offertes.filter(s => s.contact_id === f.contact_id && !niet.has(s.id) && ref.includes(s.nummer.toLowerCase())); if (kand.length === 1) eid = kand[0].id; }
+      if (!eid && f.eid && !niet.has(f.eid)) eid = f.eid;   // een offerte die niet (meer) in de lijst staat: eigen "gefactureerd"-rij
       if (!eid) { los.push(f); continue; }
+      let g0 = f;
+      if (via) g0 = Object.assign({}, f, { via });
       perId.set(f.id, eid);
       const g = perEid[eid] = perEid[eid] || { inclC: 0, exclC: 0, maand: {}, facturen: [], klant: f.klant };
-      g.inclC += f.inclC; g.exclC += f.exclC == null ? 0 : f.exclC; g.maand[f.ym] = (g.maand[f.ym] || 0) + f.inclC; g.facturen.push(f);
+      g.inclC += f.inclC; g.exclC += f.exclC == null ? 0 : f.exclC; g.maand[f.ym] = (g.maand[f.ym] || 0) + f.inclC; g.facturen.push(g0);
     }
     return { perEid, los };
   };
@@ -1022,7 +1031,7 @@
           ms.map(m => { const v = r.cellen[m], sl = r.id + '|' + m;
             if (L.vast(r, m)) {                                         // gefactureerd in deze maand: vast, in de statuskleur; de schets blijft bewaard
               const fs = r.gef.facturen.filter(f => f.ym === m), u = fs.length === 1 ? fUrl(fs[0].id) : null;
-              const titel = 'Gefactureerd in Moneybird (incl. btw):\n' + fs.map(f => (f.nummer || 'factuur') + ' van ' + f.datum.split('-').reverse().join('-') + '   ' + L.fmt(f.inclC)).join('\n') + (v != null ? `\nJe schetsbedrag hier (${L.fmt(v)}) blijft bewaard maar telt niet.` : '');
+              const titel = 'Gefactureerd in Moneybird (incl. btw):\n' + fs.map(f => (f.nummer || 'factuur') + ' van ' + f.datum.split('-').reverse().join('-') + '   ' + L.fmt(f.inclC) + (f.via === 'referentie' ? '  (gekoppeld op referentie)' : '')).join('\n') + (v != null ? `\nJe schetsbedrag hier (${L.fmt(v)}) blijft bewaard maar telt niet.` : '');
               return h('td', { class: 'num gef' + (m === dezeMaand ? ' nu' : ''), title: titel }, u ? h('a', { class: 'mtl-gefcel', href: u, target: '_blank', rel: 'noopener', 'aria-label': r.naam + ', ' + maandTekst(m) + ': gefactureerd ' + L.fmt(r.gef.maand[m]) }, dtxt(r.gef.maand[m])) : h('span', { class: 'mtl-gefcel' }, dtxt(r.gef.maand[m])));
             }
             return h('td', { class: 'num' + (m === dezeMaand ? ' nu' : '') }, h('input', { class: 'mtl-in' + (st.mislukt.has(sl) ? ' fout' : '') + (st.bewaren.has(sl) ? ' bewaren' : '') + (L.dekking(r, m) ? ' gedekt' : ''), type: 'text', inputmode: 'decimal', autocomplete: 'off', placeholder: st.mag ? '\u2013' : '',
