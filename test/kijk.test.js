@@ -366,6 +366,21 @@ const maakWin = (opt = {}) => {
     assert.ok(/redir\.account\) \{ try \{ _msal\.setActiveAccount\(redir\.account\)/.test(mob), 'redirect-pad zet het actieve account');
   });
 
+  await test('tv.html: de login-knop voert de uitkomst ook door tvKiesAccount: gast of ander domein = melding + uitloggen, nooit tvToon; teamaccount = actief + tvToon', async () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'tv.html'), 'utf8').replace(/\r\n/g, '\n');
+    const kies = vm.runInNewContext('(' + /function tvKiesAccount\(lijst\) \{[\s\S]*?\n\}/.exec(src)[0].replace(/^function tvKiesAccount/, 'function') + ')', {});
+    const h = /getElementById\('tv-login-knop'\)\.addEventListener\('click', (async \(\) => \{[\s\S]*?\n\})\);/.exec(src); assert.ok(h, 'klik-handler gevonden');
+    assert.ok(/async function tvToon\(account\) \{\n  if \(!tvKiesAccount\(\[account\]\)\)/.test(src), 'tvToon heeft het vangnet');
+    const run = async gekozen => {
+      const log = { actief: null, melding: null, toon: null, uit: 0 };
+      const ctx = { tvKiesAccount: kies, tvMelding: t => { log.melding = t; }, tvToon: async a => { log.toon = a; }, _msal: { loginPopup: async () => ({ account: gekozen }), getAllAccounts: () => [], setActiveAccount: a => { log.actief = a; }, logoutPopup: async () => { log.uit++; } } };
+      await vm.runInNewContext('(' + h[1] + ')()', ctx); return log;
+    };
+    let l = await run({ username: 'coach_example.org#EXT#@mortiseandtenon.nl' }); assert.strictEqual(l.toon, null); assert.strictEqual(l.actief, null); assert.strictEqual(l.melding, 'Log in met een Mortise & Tenon-account'); assert.strictEqual(l.uit, 1);
+    l = await run({ username: 'iemand@example.com' }); assert.strictEqual(l.toon, null); assert.strictEqual(l.uit, 1);
+    const T = { username: 'collega@mortiseandtenon.nl' }; l = await run(T); assert.strictEqual(l.toon, T); assert.strictEqual(l.actief, T); assert.strictEqual(l.melding, null); assert.strictEqual(l.uit, 0);
+  });
+
   await test('geen losse tokenaanvragen buiten mt-core: pagina\'s en scripts van de app gebruiken getGraphToken/getAuthToken; mt-kijk.js staat vóór de inline stijlcode', () => {
     const root = path.join(__dirname, '..'), bron = f => fs.readFileSync(path.join(root, f), 'utf8');
     for (const f of fs.readdirSync(root).filter(x => /\.(html|js)$/.test(x) && x !== 'mt-core.js' && x !== 'sw.js')) {
