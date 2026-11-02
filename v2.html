@@ -18313,7 +18313,7 @@ async function msLogout() {
 
 async function initMsal() {
   // Wis stale interactievlaggen van vorige sessies
-  Object.keys(sessionStorage).filter(k => k.includes('interaction')).forEach(k => sessionStorage.removeItem(k));
+  try { Object.keys(sessionStorage).filter(k => k.includes('interaction')).forEach(k => sessionStorage.removeItem(k)); } catch(e) {}   // sessionStorage kan geblokkeerd zijn
   try {
     try { if (window.MTKijk) MTKijk.msalBegin(); } catch(e) {}   // kijkmodus: MSAL pakt de ECHTE opslag voor zijn tokencache (daarna weer de lege opslag)
     window._msal = new msal.PublicClientApplication({

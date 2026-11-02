@@ -121,17 +121,24 @@
   // als de opslagmodus niet bij dit account past: gast/meekijker terwijl de pagina niet streng is geladen, of een ander account dan het vorige.
   // Er wordt dan niets geladen in dit tabblad. Na het herladen volgt geen login meer (record klopt), dus geen lus; sessionStorage-grendel als extra vangnet.
   // → true als er herladen wordt (de aanroeper stopt dan).
+  // Kan de herlaad-grendel (sessionStorage) gebruikt worden? Zo niet (geblokkeerd): een gast/meekijker gaat fail-closed, een teamlid werkt gewoon door.
+  K._grendelKan = function () {
+    try { const ss = root.sessionStorage; ss.setItem('mtkijk.test', '1'); const ok = ss.getItem('mtkijk.test') === '1'; ss.removeItem('mtkijk.test'); return ok; } catch (e) { return false; }
+  };
+  const HERLAAD_TEKST = 'Herlaad de pagina om verder te gaan. Lukt dat niet, neem dan contact op met de eigenaar.';
   K.naLogin = function (account) {
     if (!account) return false;
     const nu = recVan(account, false), vorig = K.leesActief(), zelfde = !!vorig && vorig.h === nu.h;
     if (zelfde) nu.m = !!vorig.m;
     schrijfActief(nu);
-    const wissel = (!K._vroeg && (nu.ext || nu.m)) || (!!vorig && !zelfde);
+    const gastNiet = !K._vroeg && (nu.ext || nu.m), anders = !!vorig && !zelfde, wissel = gastNiet || anders;
+    const kan = K._grendelKan(), opgeslagen = (K.leesActief() || {}).h === nu.h;       // herladen heeft alleen zin als het record echt is bewaard
+    if (!wissel) { if (kan) { try { root.sessionStorage.removeItem(WISSEL); } catch (e) { } } return false; }
+    if (gastNiet && (!kan || !opgeslagen)) { K.weiger(null, HERLAAD_TEKST); return true; }   // gast/meekijker zonder strenge start en zonder grendel: app niet starten
+    if (!opgeslagen) return false;                                                      // teamlid zonder bruikbare opslag: geen herlaadronde (geen lus), app gewoon starten
     try {
-      const ss = root.sessionStorage;
-      if (!wissel) { ss.removeItem(WISSEL); return false; }
-      if (ss.getItem(WISSEL) === nu.h) return false;                                    // al eens herladen voor dit account: nooit een lus
-      ss.setItem(WISSEL, nu.h); root.location.reload(); return true;
+      if (kan) { const ss = root.sessionStorage; if (ss.getItem(WISSEL) === nu.h) return false; ss.setItem(WISSEL, nu.h); }   // al eens herladen voor dit account: nooit een lus
+      root.location.reload(); return true;
     } catch (e) { return false; }
   };
   // Uitloggen: record weg en herladen, zodat het volgende account met schone opslagmodus begint.
@@ -231,11 +238,11 @@
     const el = doc.getElementById('mt-kijk-laden'); if (el && el.parentNode) el.parentNode.removeChild(el);
   };
   // /me bevestigde GEEN meekijker (of is onbereikbaar): alles blijft dicht en de app blijft verborgen.
-  K.weiger = function (me) {
-    K.modus = 'streng'; K.installeerGuards();
+  K.weiger = function (me, eigenTekst) {
+    K.modus = 'streng'; K.installeerGuards(); K.installeerOpslag();                    // ook als de strenge start niet vroeg was: geheugenopslag en geen indexedDB
     if (doc) { stijl(); doc.documentElement.setAttribute('data-kijk-laden', '1'); }
     const reden = me && me.reden;
-    const tekst = !me ? 'Kon je account niet controleren. Herlaad de pagina; lukt dat niet, neem dan contact op met de eigenaar.'
+    const tekst = eigenTekst ? eigenTekst : !me ? 'Kon je account niet controleren. Herlaad de pagina; lukt dat niet, neem dan contact op met de eigenaar.'
       : me.error === 'client-te-oud' ? 'Deze versie van de tool is verouderd. Herlaad de pagina met Ctrl+F5.'
       : reden === 'verlopen' ? 'Je toegang is verlopen. Neem contact op met de eigenaar als je langer wilt meekijken.'
       : reden === 'wacht-op-goedkeuring' ? 'Je bent uitgenodigd. De eigenaar moet je toegang nog goedkeuren; daarna kun je opnieuw inloggen.'
@@ -251,6 +258,7 @@
   // De pagina is zonder vroege kijkmodus geladen terwijl dit een meekijker blijkt te zijn: onthoud het en laad één keer opnieuw, zodat de volgende
   // keer de lege opslag er al is vóór de app-scripts. → true als er opnieuw geladen wordt.
   K.herstart = function (account) {
+    if (!K._grendelKan()) { schrijfActief(recVan(account, true)); K.weiger(null, HERLAAD_TEKST); return true; }   // geen grendel: fail-closed, de app start niet
     try {
       if (root.sessionStorage.getItem(HERSTART)) return false;
       root.sessionStorage.setItem(HERSTART, '1');

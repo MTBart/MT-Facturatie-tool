@@ -133,10 +133,10 @@
   }
   root._tokenExp = tokenExp;
   // Het account waarmee deze pagina werkt: het ACTIEVE account van MSAL (gezet bij het inloggen), anders het eerste. Met meerdere accounts in
-  // dezelfde browser (bv. een teamlid en een externe gast) mag nooit het verkeerde account een token krijgen.
+  // dezelfde browser (bv. een teamlid en een externe gast) mag nooit het verkeerde account een token krijgen. Eén account = dat account.
   function actiefAccount(m) {
     try { const a = m.getActiveAccount && m.getActiveAccount(); if (a) return a; } catch (e) { }
-    const l = m.getAllAccounts(); return l.length ? l[0] : null;
+    const l = m.getAllAccounts(); return l.length === 1 ? l[0] : null;     // meerdere accounts en geen actief: geen keuze (geen token, inlogscherm), nooit zomaar het eerste
   }
   root._actiefAccount = () => (root._msal ? actiefAccount(root._msal) : null);
   function installAuth(config) {
@@ -184,7 +184,12 @@
         return result.accessToken;
       } catch (e) {
         try {
-          const result = await m.acquireTokenPopup({ scopes: GRAPH_SCOPES });
+          const result = await m.acquireTokenPopup({ scopes: GRAPH_SCOPES, account: acc, loginHint: acc.username });
+          // De popup mag niet met een ander account eindigen dan het actieve: token weggooien en melden.
+          if (!result || !result.account || result.account.homeAccountId !== acc.homeAccountId) {
+            if (typeof config.onTokenFail === 'function') config.onTokenFail(new Error('Andere Microsoft-account gekozen dan waarmee je bent ingelogd. Log opnieuw in.'));
+            return null;
+          }
           if (typeof config.onTokenOk === 'function') config.onTokenOk();
           return result.accessToken;
         } catch (e2) {

@@ -10,6 +10,7 @@ const maakWin = (opt = {}) => {
   const aanroepen = [];
   const win = { setTimeout, clearTimeout, console, JSON, Date, Promise, URL, Response: class { constructor(b, i) { this.body = b; this.status = (i && i.status) || 200; this.ok = this.status < 300; } async json() { return JSON.parse(this.body); } }, location: { href: 'https://app.test/v2.html' } };
   win.window = win;
+  { const ss = new Map(); win.sessionStorage = { getItem: k => (ss.has(k) ? ss.get(k) : null), setItem: (k, v) => { ss.set(k, String(v)); }, removeItem: k => { ss.delete(k); } }; }
   win.fetch = async (u, i) => { aanroepen.push({ u: String(u), m: (i && i.method) || 'GET' }); return { ok: true, status: 200, json: async () => ({}) }; };
   win._msal = { getAllAccounts: () => [{ username: opt.gebruiker || 'collega@mortiseandtenon.nl' }] };
   win.authHeader = async () => ({ 'X-Auth-Token': 't' });
@@ -141,7 +142,8 @@ const maakWin = (opt = {}) => {
     const echt = spyOpslag(opt.ls), sess = spyOpslag(opt.sess), doc = fakeDoc(opt.pagina === undefined ? 'v2' : opt.pagina), aanroepen = [], herladen = [];
     const win = { setTimeout, clearTimeout, console, JSON, Date, Promise, URL, Map, Proxy, Object, Array, String, Number, Math,
       Response: class { constructor(b, i) { this.body = b; this.status = (i && i.status) || 200; this.ok = this.status < 300; } async json() { return JSON.parse(this.body); } },
-      location: { href: 'https://app.test/v2.html', reload() { herladen.push(1); } }, document: doc, localStorage: echt.api, sessionStorage: sess.api, indexedDB: { open() { } } };
+      location: { href: 'https://app.test/v2.html', reload() { herladen.push(1); } }, document: doc, localStorage: echt.api, indexedDB: { open() { } },
+      sessionStorage: opt.sessGeblokkeerd ? { getItem() { throw new Error('SecurityError'); }, setItem() { throw new Error('SecurityError'); }, removeItem() { throw new Error('SecurityError'); } } : sess.api };
     win.window = win;
     win.fetch = async (u, i) => { aanroepen.push({ u: String(u), m: (i && i.method) || 'GET', h: i && i.headers }); return { ok: true, status: 200, json: async () => ({}) }; };
     win._msal = { getAllAccounts: () => [{ username: opt.gebruiker || 'collega@mortiseandtenon.nl' }] };
@@ -308,6 +310,48 @@ const maakWin = (opt = {}) => {
     const w = maakVroeg({ ls: { 'o.t-login.microsoftonline.com-t': JSON.stringify({ homeAccountId: 'o.t', username: 'coach@example.org' }), 'mtkijk.actief': ACT('o.t', 'coach@example.org', false, true) } });
     assert.strictEqual(w.K.modus, 'streng'); w.win.fetch = async () => ({ ok: true, status: 200, json: async () => ({ rol: 'kantoor' }) });
     return w.K.voorStart({ username: 'coach@example.org', homeAccountId: 'o.t' }, 'https://w.test').then(() => { assert.strictEqual(JSON.parse(w.echt.m.get('mtkijk.actief')).m, false); assert.strictEqual(maakVroeg({ ls: Object.fromEntries(w.echt.m) }).K.modus, null); });
+  });
+
+  await test('sessionStorage geblokkeerd: teamlid werkt gewoon (geen lus, geen blokkade); gast/meekijker zonder strenge start = fail-closed met melding en lege opslag', async () => {
+    const A = { homeAccountId: 'a.t', username: 'bart@mortiseandtenon.nl' }, B = { homeAccountId: 'b.t', username: 'collega@mortiseandtenon.nl' }, G = { homeAccountId: 'g.t', username: 'coach_example.org#EXT#@example.net' };
+    // teamlid, eerste login en zelfde account: niets
+    let t = maakVroeg({ ls: planten, sessGeblokkeerd: true }); assert.strictEqual(t.K._grendelKan(), false);
+    assert.strictEqual(t.K.naLogin(A), false); assert.strictEqual(t.K.naLogin(A), false); assert.strictEqual(t.herladen.length, 0); assert.strictEqual(t.K.modus, null); assert.strictEqual(t.win.localStorage, t.echt.api);
+    // teamlid wisselt van account: record is bewaard, dus herladen is veilig (na het herladen is er geen verschil meer)
+    assert.strictEqual(t.K.naLogin(B), true); assert.strictEqual(t.herladen.length, 1); assert.strictEqual(t.K.modus, null);
+    // gast, niet streng gestart: de app start niet; geheugenopslag, indexedDB weg, melding
+    t = maakVroeg({ ls: planten, sessGeblokkeerd: true, pagina: 'v2' });
+    assert.strictEqual(t.K.naLogin(G), true); assert.strictEqual(t.herladen.length, 0, 'niet herladen zonder grendel'); assert.strictEqual(t.K.modus, 'streng');
+    assert.notStrictEqual(t.win.localStorage, t.echt.api); assert.strictEqual(t.win.indexedDB, undefined); assert.ok(/Herlaad de pagina/.test(t.doc.elementen['mt-kijk-laden'].textContent));
+    assert.strictEqual(t.doc.attrs['data-kijk-laden'], '1'); assert.strictEqual(t.echt.m.get('mt_projecten'), planten.mt_projecten);
+    // voorStart: een meekijker zonder #EXT# en zonder grendel: ook fail-closed
+    t = maakVroeg({ ls: planten, sessGeblokkeerd: true }); t.win.fetch = async () => ({ ok: true, status: 200, json: async () => ({ rol: 'meekijker', altijdAfdwingen: true }) });
+    await t.K.voorStart({ username: 'coach@example.org', homeAccountId: 'o.t' }, 'https://w.test', true).catch(() => 0);
+    assert.strictEqual(t.K.aan, false); assert.strictEqual(t.K.modus, 'streng'); assert.strictEqual(t.win.indexedDB, undefined);
+    // teamlid in voorStart zonder grendel: geen blokkade
+    t = maakVroeg({ ls: planten, sessGeblokkeerd: true }); t.win.fetch = async () => ({ ok: true, status: 200, json: async () => ({ rol: 'kantoor' }) });
+    await t.K.voorStart({ username: 'collega@mortiseandtenon.nl', homeAccountId: 'b.t' }, 'https://w.test'); assert.strictEqual(t.K.modus, null); assert.strictEqual(t.win.localStorage, t.echt.api);
+  });
+
+  await test('weiger zonder vroege start: geheugenopslag en geen indexedDB (ook als de pagina al zonder strenge modus begon)', () => {
+    const t = maakVroeg({ ls: planten }); assert.strictEqual(t.K.modus, null); t.K.weiger({ rol: 'lezen' });
+    assert.notStrictEqual(t.win.localStorage, t.echt.api); assert.strictEqual(t.win.indexedDB, undefined); assert.strictEqual(t.win.localStorage.getItem('mt_projecten'), null); assert.strictEqual(t.echt.m.get('mt_projecten'), planten.mt_projecten);
+  });
+
+  await test('mt-core: meerdere accounts zonder actief = geen token (geen terugval op het eerste); één account = dat account; popup met ander account wordt weggegooid', async () => {
+    const win = { setTimeout, clearTimeout, console, JSON, Date, Promise, atob: s => Buffer.from(s, 'base64').toString('binary') }; win.window = win;
+    vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'mt-core.js'), 'utf8'), win);
+    const A = { homeAccountId: 'a.t', username: 'bart@mortiseandtenon.nl' }, G = { homeAccountId: 'g.t', username: 'coach_example.org#EXT#@example.net' };
+    const gevraagd = [], fouten = []; let popupAls = G;
+    const maakM = (lijst, actief) => ({ getAllAccounts: () => lijst, getActiveAccount: () => actief, acquireTokenSilent: async r => { gevraagd.push(['silent', r.account && r.account.username]); if (r.scopes[0].startsWith('https://graph')) throw new Error('interactie nodig'); return { idToken: 'e30.' + Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64') + '.s', accessToken: 'AT', account: r.account }; },
+      acquireTokenPopup: async r => { gevraagd.push(['popup', r.account && r.account.username, r.loginHint]); return { accessToken: 'POPUPTOKEN', account: popupAls }; } });
+    win.MTCore.installAuth({ onTokenFail: e => fouten.push(String(e.message)) });
+    win._msal = maakM([A, G], null); assert.strictEqual(await win.getAuthToken(), null); assert.strictEqual(await win.getGraphToken(), null); assert.strictEqual(gevraagd.length, 0, 'geen enkele tokenaanvraag'); assert.strictEqual(win._actiefAccount(), null);
+    win._msal = maakM([A], null); assert.ok(await win.getAuthToken()); assert.strictEqual(win._actiefAccount().username, A.username);
+    win._msal = maakM([A, G], A); gevraagd.length = 0; assert.ok(await win.getAuthToken()); assert.strictEqual(gevraagd[0][1], A.username);
+    // Graph: silent faalt, popup krijgt account + loginHint van het actieve account; geeft de popup een ander account terug: token weg + melding
+    gevraagd.length = 0; popupAls = G; assert.strictEqual(await win.getGraphToken(), null); assert.strictEqual(gevraagd[1][0], 'popup'); assert.strictEqual(gevraagd[1][1], A.username); assert.strictEqual(gevraagd[1][2], A.username); assert.ok(fouten.length === 1 && /Andere Microsoft-account/.test(fouten[0]));
+    popupAls = A; assert.strictEqual(await win.getGraphToken(), 'POPUPTOKEN');
   });
 
   await test('MSAL-opslag: msalBegin geeft MSAL de echte opslag, msalEinde zet de lege weer terug', () => {
