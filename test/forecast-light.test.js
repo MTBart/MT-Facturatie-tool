@@ -570,4 +570,29 @@ atest('factuur koppelen: keten met terugdraaien en melding', async () => {
     haal: async (pad, opt) => { const b = opt.body; if (b.sleutel === 'p:e300000000802') return { error: 'opslaan mislukt' }; const nw = Object.assign({}, b.item, { ts: 500 }); m.winkel[b.sleutel] = nw; return { ok: true, item: nw }; } });
   await assert.rejects(nieuw, e => e.teruggedraaid === 1 && /teruggezet/.test(e.message)); assert.deepStrictEqual(m.winkel['p:C'].k, [], 'eerste actie teruggezet');
 });
+atest('factuur koppelen: rollback wist een zelf aangemaakt item alleen als het ongewijzigd is', async () => {
+  const FID = '400000000901', EID = '300000000901', EID2 = '300000000902';
+  const schat = id => ({ id, naam: 'Jansen', ref: 'Kast', nummer: '2026-' + id.slice(-3), contact_id: '500000000001', totaalC: 121000, status: 'geaccepteerd' });
+  const run = async (collegaWijzigt) => {
+    const winkel = {}, log = []; let ts = 100;
+    const haal = async (pad, opt) => {
+      const b = opt.body; log.push(b.sleutel + (b.item === null ? ':wis' : ''));
+      if (b.sleutel === 'p:e' + EID2) return { error: 'opslaan mislukt' };                                         // de tweede actie faalt: rollback van de eerste
+      const huidig = winkel[b.sleutel] || null;
+      if (b.item === null && collegaWijzigt && huidig) { winkel[b.sleutel] = Object.assign({}, huidig, { naam: 'Aangepast door collega', ts: ++ts }); return { error: 'deze prognose is intussen aangepast \u2014 herlaad' }; }
+      if ((huidig ? huidig.ts : null) !== b.vorige_ts) return { error: 'deze prognose is intussen aangepast \u2014 herlaad' };
+      if (b.item === null) { delete winkel[b.sleutel]; return { ok: true, item: null }; }
+      const nw = Object.assign({}, b.item, { ts: ++ts }); winkel[b.sleutel] = nw; return { ok: true, item: nw };
+    };
+    let fout = null;
+    try { await L.koppelKeten({ acties: [{ soort: 'k', eid: EID, fid: FID }, { soort: 'x', eid: EID2, fid: FID }], fid: FID, schatVan: schat2 => schat(schat2), vandaag: '2026-11-02', lees: async () => JSON.parse(JSON.stringify(winkel)), haal }); } catch (e) { fout = e; }
+    return { fout, winkel, log };
+  };
+  // ongewijzigd: het zelf aangemaakte item wordt gewist
+  let r = await run(false); assert.ok(r.fout); assert.ok(!('p:e' + EID in r.winkel), 'gewist'); assert.ok(r.log.includes('p:e' + EID + ':wis')); assert.deepStrictEqual(r.fout.bleef, []);
+  // een collega past het item aan tussen schrijven en terugdraaien (409): niet wissen, alleen de factuur eruit
+  r = await run(true); assert.ok(r.winkel['p:e' + EID], 'item blijft staan'); assert.strictEqual(r.winkel['p:e' + EID].naam, 'Aangepast door collega', 'het werk van de collega is intact');
+  assert.deepStrictEqual(r.winkel['p:e' + EID].k, [], 'alleen de factuurkoppeling is teruggezet'); assert.deepStrictEqual(r.fout.bleef, ['p:e' + EID]); assert.deepStrictEqual(r.fout.mislukt, []);
+  assert.ok(/bleef staan omdat het intussen gewijzigd is; alleen de factuurkoppeling is teruggezet/.test(r.fout.message), r.fout.message); assert.strictEqual(r.log.filter(x => x === 'p:e' + EID + ':wis').length, 1, 'maar een wisverzoek');
+});
 kette.then(() => console.log(`\n${n} tests geslaagd${process.exitCode ? ' (met fouten)' : ''}`));

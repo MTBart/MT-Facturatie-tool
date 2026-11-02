@@ -338,18 +338,19 @@
       } catch (e) { stop = e.message || String(e); break; }
     }
     if (!stop) return gelukt;
-    const mislukt = [], fid = String(o.fid);
+    const mislukt = [], bleef = [], fid = String(o.fid);
     for (const g of gelukt.slice().reverse()) {
       let ok = false, cur = g.item;
       try {
         for (let poging = 0; poging < 2 && !ok; poging++) {
-          let item = null;
-          if (g.voor) {
+          // Een door de keten zelf aangemaakt item wordt alleen gewist als het nog precies is zoals wij het schreven (zelfde ts); is het intussen gewijzigd, dan blijft het staan en gaat alleen de factuur eruit.
+          const wis = !g.voor && cur.ts === g.item.ts; let item = null;
+          if (!wis) {
             item = JSON.parse(JSON.stringify(cur)); delete item.ts; delete item.door;
-            for (const lijst of ['k', 'x']) { item[lijst] = (item[lijst] || []).filter(x => String(x) !== fid); if ((g.voor[lijst] || []).map(String).includes(fid)) item[lijst].push(fid); }
+            for (const lijst of ['k', 'x']) { item[lijst] = (item[lijst] || []).filter(x => String(x) !== fid); if (g.voor && (g.voor[lijst] || []).map(String).includes(fid)) item[lijst].push(fid); }
           }
           const r = await o.haal('/geld/prognose', { method: 'POST', body: { sleutel: g.sleutel, item, vorige_ts: cur.ts } });
-          if (!kapot(r)) { ok = true; if (o.noteer) o.noteer(r, g.sleutel); break; }
+          if (!kapot(r)) { ok = true; if (!g.voor && !wis) bleef.push(g.sleutel); if (o.noteer) o.noteer(r, g.sleutel); break; }
           if (poging === 0 && is409(r)) { const vers = await o.lees(); if (!vers[g.sleutel]) { ok = !g.voor; break; } cur = vers[g.sleutel]; continue; }
           break;
         }
@@ -359,7 +360,8 @@
     const teruggedraaid = gelukt.length - mislukt.length, eids = [...new Set(o.acties.map(a => a.eid))].join(', ');
     const err = new Error(`Koppelen is niet gelukt (${stop}). ` + (!gelukt.length ? 'Er is niets gewijzigd.' : !mislukt.length ? `Wat al was opgeslagen (${gelukt.length} ${gelukt.length === 1 ? 'item' : 'items'}) is teruggezet.`
       : `Teruggezet: ${teruggedraaid} van ${gelukt.length}. Niet teruggezet (nakijken in de uitgebreide forecast, bij Bevestigd en Uitgesloten van de factuur): offerte ${eids}, ${mislukt.length === 1 ? 'item' : 'items'} ${mislukt.join(', ')}.`));
-    err.mislukt = mislukt; err.teruggedraaid = teruggedraaid; throw err;
+    if (bleef.length) err.message += ` Let op: ${bleef.length === 1 ? 'item' : 'items'} ${bleef.join(', ')} ${bleef.length === 1 ? 'bleef' : 'bleven'} staan omdat ${bleef.length === 1 ? 'het' : 'ze'} intussen gewijzigd ${bleef.length === 1 ? 'is' : 'zijn'}; alleen de factuurkoppeling is teruggezet.`;
+    err.mislukt = mislukt; err.bleef = bleef; err.teruggedraaid = teruggedraaid; throw err;
   };
   L.FILTERS = ['geaccepteerd', 'openstaand', 'verlopen', 'concept', 'afgewezen', 'los', 'gefactureerd', 'afgerond', 'uitbeeld'];
   // Met maanden: helemaal gefactureerd en in die maanden niets meer dat telt = Afgerond (eigen filter, standaard uit).
