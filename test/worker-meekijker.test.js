@@ -6,10 +6,10 @@ const { pathToFileURL } = require('url');
 
 (async () => {
   const bron = fs.readFileSync(path.join(__dirname, '..', 'worker.js'), 'utf8')
-    + '\nexport { requirePermission, effectieveModus, bepaalRol, handleBeheer, handleGeld, handleSignalen, handleKlanten, meAntwoord, toegangTotNorm, tokenAdressen, RECHTEN, ROLLEN, MB_ADMIN, eindeDagAmsterdam, kijkerRapportBody, mbMagerDoc, kijkerNamen, externToken, handleToegang, kijkOpruimen, bouwTijdlijn, kijkLabel };\n';
+    + '\nexport { requirePermission, effectieveModus, bepaalRol, handleBeheer, handleGeld, handleSignalen, handleKlanten, meAntwoord, toegangTotNorm, tokenAdressen, RECHTEN, ROLLEN, MB_ADMIN, eindeDagAmsterdam, kijkerRapportBody, mbMagerDoc, kijkerNamen, externToken, handleToegang, kijkOpruimen, bouwTijdlijn, kijkLabel, handleSpiegel, SPIEGEL_STORES };\n';
   const tmp = path.join(os.tmpdir(), `mt-worker-meekijker-${process.pid}.mjs`); fs.writeFileSync(tmp, bron, 'utf8');
   let W; try { W = await import(pathToFileURL(tmp).href); } finally { try { fs.unlinkSync(tmp); } catch { } }
-  const { requirePermission: rp, effectieveModus, bepaalRol, handleBeheer, handleGeld, handleSignalen, handleKlanten, meAntwoord, toegangTotNorm, tokenAdressen, RECHTEN, ROLLEN, MB_ADMIN, eindeDagAmsterdam, kijkerRapportBody, mbMagerDoc, kijkerNamen, externToken, handleToegang, kijkOpruimen, bouwTijdlijn, kijkLabel } = W;
+  const { requirePermission: rp, effectieveModus, bepaalRol, handleBeheer, handleGeld, handleSignalen, handleKlanten, meAntwoord, toegangTotNorm, tokenAdressen, RECHTEN, ROLLEN, MB_ADMIN, eindeDagAmsterdam, kijkerRapportBody, mbMagerDoc, kijkerNamen, externToken, handleToegang, kijkOpruimen, bouwTijdlijn, kijkLabel, handleSpiegel, SPIEGEL_STORES } = W;
 
   const kv = () => { const m = new Map(); return { m, async get(k) { return m.has(k) ? m.get(k).v : null; }, async put(k, v, o) { m.set(k, { v, meta: (o && o.metadata) || null }); }, async delete(k) { m.delete(k); },
     async list({ prefix }) { return { keys: [...m.keys()].filter(k => k.startsWith(prefix || '')).sort().map(name => ({ name, metadata: m.get(name).meta })), list_complete: true }; } }; };
@@ -548,6 +548,103 @@ const { pathToFileURL } = require('url');
   await test('Moneybird: contact is een allowlist (id, bedrijfsnaam, voor-/achternaam); een nieuw veld lekt niet', () => {
     const c = mbMagerDoc({ contact: { id: '1', company_name: 'X BV', nieuw_veld: 'lek', address1: 'a', bank_account: 'b' } }).contact;
     assert.deepStrictEqual(c, { id: '1', company_name: 'X BV' });
+  });
+
+  // ── Spiegel (worker) ───────────────────────────────────────────────────────────────────────────────────────────────────────
+  const sp = (env, rol, pad, methode, body, headers) => handleSpiegel(pad, { method: methode, url: `https://x.test${pad}`, headers: { get: k => (headers || {})[k.toLowerCase()] || null }, text: async () => (typeof body === 'string' ? body : JSON.stringify(body || {})), json: async () => body || {} },
+    env, { rol, oid: `oid-${rol}`, email: `${rol}@example.com`, rec: { naam: rol } }, json0);
+  const kopie = (extra) => ({ ts: Date.now(), etag: '"e1"', data: { P1: { naam: 'Voorbeeld' } }, ...(extra || {}) });
+
+  await test('spiegel: rechten per store en rol (schrijven alleen met schrijfrecht; meekijker nooit); onbekende stores bestaan niet', async () => {
+    const env = { MT_ROLLEN: kv() };
+    // schrijven
+    assert.strictEqual((await sp(env, 'kantoor', '/spiegel/mt_projecten', 'POST', kopie())).status, 200);
+    assert.strictEqual((await sp(env, 'eigenaar', '/spiegel/mt_calc_offertes', 'POST', kopie())).status, 200);
+    assert.strictEqual((await sp(env, 'kantoor', '/spiegel/mt_uurtarieven', 'POST', kopie())).status, 403, 'tarieven: alleen wie geld mag wijzigen');
+    assert.strictEqual((await sp(env, 'eigenaar', '/spiegel/mt_uurtarieven', 'POST', kopie())).status, 200);
+    assert.strictEqual((await sp(env, 'werkplaats', '/spiegel/mt_projecten', 'POST', kopie())).status, 403, 'werkplaats: projecten alleen lezen');
+    assert.strictEqual((await sp(env, 'werkplaats', '/spiegel/mt_calc_offertes', 'POST', kopie())).status, 403);
+    assert.strictEqual((await sp(env, 'werkplaats', '/spiegel/mt_verbeterpunten', 'POST', kopie())).status, 200, 'werkplaats maakt verbeterpunten');
+    assert.strictEqual((await sp(env, 'lezen', '/spiegel/mt_verbeterpunten', 'POST', kopie({ ts: Date.now() + 1 }))).status, 403);
+    for (const store of Object.keys(SPIEGEL_STORES)) for (const v of ['log', 'uit', 'afdwingen'])
+      assert.strictEqual((await sp({ MT_ROLLEN: kv(), ROLLEN_MODUS: v }, 'meekijker', `/spiegel/${store}`, 'POST', kopie())).status, 403, `meekijker schrijft ${store}`);
+    assert.strictEqual((await sp(env, null, '/spiegel/mt_projecten', 'POST', kopie())).status, 403);
+    // lezen
+    assert.strictEqual((await sp(env, 'meekijker', '/spiegel/mt_projecten', 'GET')).status, 200);
+    assert.strictEqual((await sp(env, 'meekijker', '/spiegel/mt_calc_offertes', 'GET')).status, 200);
+    assert.strictEqual((await sp(env, 'meekijker', '/spiegel/mt_uurtarieven', 'GET')).status, 200, 'geld kijken');
+    assert.strictEqual((await sp(env, 'kantoor', '/spiegel/mt_projecten', 'GET')).status, 200);
+    assert.strictEqual((await sp(env, 'werkplaats', '/spiegel/mt_calc_offertes', 'GET')).status, 403);
+    assert.strictEqual((await sp(env, 'administratie', '/spiegel/mt_projecten', 'GET')).status, 403);
+    assert.strictEqual((await sp(env, 'administratie', '/spiegel/mt_uurtarieven', 'GET')).status, 200);
+    assert.strictEqual((await sp(env, null, '/spiegel/mt_projecten', 'GET')).status, 403);
+    // alleen laag 1: mail, contacten, beheer, voorraad bestaan niet
+    for (const store of ['mt_mail_links', 'mt_mail_oppak', 'mt_contacten', 'mt_adminconfig', 'mt_auditlog', 'mt_notificaties', 'mt_voorraad', 'mt_bestellijst_v2', 'mt_todo_sync', '..%2Fx', 'a/b', ''])
+      for (const m of ['GET', 'POST']) assert.strictEqual((await sp(env, 'eigenaar', `/spiegel/${store}`, m, kopie())).status, 404, `${m} ${store}`);
+    assert.strictEqual((await sp(env, 'eigenaar', '/spiegel/mt_projecten', 'DELETE')).status, 405);
+    assert.strictEqual((await sp({}, 'eigenaar', '/spiegel/mt_projecten', 'GET')).status, 503);
+  });
+
+  await test('spiegel: versie (ts), zelfde etag, grootte, vorm; oude en kapotte kopieën', async () => {
+    const env = { MT_ROLLEN: kv() }, nu = Date.now();
+    let r = await sp(env, 'kantoor', '/spiegel/mt_planning', 'POST', kopie({ ts: nu, etag: '"a"', data: { A: 1 } })); assert.strictEqual(r.status, 200);
+    const meta = () => env.MT_ROLLEN.m.get('spiegel:mt_planning').meta;
+    assert.strictEqual(meta().ts, nu); assert.strictEqual(meta().etag, '"a"');
+    r = await sp(env, 'kantoor', '/spiegel/mt_planning', 'POST', kopie({ ts: nu - 1000, etag: '"old"', data: { A: 'oud' } })); assert.strictEqual(r.status, 409); assert.strictEqual(r.body.ts, nu);
+    r = await sp(env, 'kantoor', '/spiegel/mt_planning', 'POST', kopie({ ts: nu, etag: '"b"', data: { A: 'zelfde ts' } })); assert.strictEqual(r.status, 409, 'gelijke ts is niet nieuwer');
+    assert.deepStrictEqual((await sp(env, 'meekijker', '/spiegel/mt_planning', 'GET')).body.data, { A: 1 }, 'niets overschreven');
+    r = await sp(env, 'kantoor', '/spiegel/mt_planning', 'POST', kopie({ ts: nu + 1000, etag: '"a"', data: { A: 'zelfde etag' } })); assert.strictEqual(r.body.ongewijzigd, true);
+    assert.deepStrictEqual((await sp(env, 'meekijker', '/spiegel/mt_planning', 'GET')).body.data, { A: 1 }, 'zelfde etag = geen schrijfactie');
+    r = await sp(env, 'kantoor', '/spiegel/mt_planning', 'POST', kopie({ ts: nu + 2000, etag: '"c"', data: [1, 2] })); assert.strictEqual(r.status, 200);
+    const g = (await sp(env, 'meekijker', '/spiegel/mt_planning', 'GET')).body; assert.deepStrictEqual(g.data, [1, 2]); assert.strictEqual(g.etag, '"c"'); assert.ok(g.bron && g.bron.length === 10);
+    // vorm en grenzen
+    for (const slecht of [{ ts: nu + 3000, data: null }, { ts: nu + 3000, data: 'tekst' }, { ts: nu + 3000, data: 5 }, { ts: nu + 3000 }, { ts: 'nu', data: {} }, { ts: nu + 3000, data: {}, extra: 1 }, { ts: nu + 3000, data: {}, etag: 5 }, { ts: -1, data: {} }, { ts: nu + 3600e3, data: {} }])
+      assert.strictEqual((await sp(env, 'kantoor', '/spiegel/mt_planning', 'POST', slecht)).status, 400, JSON.stringify(slecht).slice(0, 60));
+    assert.strictEqual((await sp(env, 'kantoor', '/spiegel/mt_planning', 'POST', '{kapot')).status, 400);
+    assert.strictEqual((await sp(env, 'kantoor', '/spiegel/mt_planning', 'POST', '[]')).status, 400);
+    assert.strictEqual((await sp(env, 'kantoor', '/spiegel/mt_planning', 'POST', kopie({ ts: nu + 4000 }), { 'content-length': String(9 * 1024 * 1024) })).status, 413);
+    const groot = { ts: nu + 4000, etag: 'g', data: { x: 'a'.repeat(8 * 1024 * 1024 + 10) } };
+    assert.strictEqual((await sp(env, 'kantoor', '/spiegel/mt_planning', 'POST', JSON.stringify(groot))).status, 413);
+    assert.strictEqual(meta().ts, nu + 2000, 'afgewezen zendingen veranderen niets');
+    // kapotte kopie in de opslag: lezen = 404 "nog geen gegevens", een nieuwe zending herstelt hem
+    await env.MT_ROLLEN.put('spiegel:mt_klant_codes', 'dit is geen json{');
+    assert.strictEqual((await sp(env, 'meekijker', '/spiegel/mt_klant_codes', 'GET')).status, 404);
+    await env.MT_ROLLEN.put('spiegel:mt_klant_codes', JSON.stringify({ ts: 5, etag: 'x' }));
+    assert.strictEqual((await sp(env, 'meekijker', '/spiegel/mt_klant_codes', 'GET')).status, 404, 'zonder data');
+    assert.strictEqual((await sp(env, 'kantoor', '/spiegel/mt_klant_codes', 'POST', kopie())).status, 200);
+    assert.strictEqual((await sp(env, 'meekijker', '/spiegel/mt_klant_codes', 'GET')).status, 200);
+    await env.MT_ROLLEN.put('spiegel:mt_vrijedagen', JSON.stringify({ ts: 'kapot', data: [] }));   // oude vorm: ts geen getal -> overschrijfbaar
+    assert.strictEqual((await sp(env, 'kantoor', '/spiegel/mt_vrijedagen', 'POST', kopie())).status, 200);
+  });
+
+  await test('spiegel: /_index geeft per rol alleen de leesbare stores, uit de metadata', async () => {
+    const env = { MT_ROLLEN: kv() };
+    await sp(env, 'kantoor', '/spiegel/mt_projecten', 'POST', kopie({ etag: '"p"' })); await sp(env, 'eigenaar', '/spiegel/mt_calc_offertes', 'POST', kopie({ etag: '"o"' })); await sp(env, 'eigenaar', '/spiegel/mt_uurtarieven', 'POST', kopie({ etag: '"u"' }));
+    await env.MT_ROLLEN.put('spiegel:onbekende_store', JSON.stringify({ ts: 1 }), { metadata: { ts: 1 } });
+    const idx = rol => sp(env, rol, '/spiegel/_index', 'GET');
+    assert.deepStrictEqual(Object.keys((await idx('meekijker')).body.stores).sort(), ['mt_calc_offertes', 'mt_projecten', 'mt_uurtarieven']);
+    assert.deepStrictEqual(Object.keys((await idx('werkplaats')).body.stores), ['mt_projecten']);
+    assert.deepStrictEqual(Object.keys((await idx('administratie')).body.stores), ['mt_uurtarieven']);
+    assert.strictEqual((await idx('meekijker')).body.stores.mt_projecten.etag, '"p"');
+    assert.strictEqual((await idx(null)).status, 403);
+    assert.strictEqual((await sp(env, 'meekijker', '/spiegel/_index', 'POST', {})).status, 404);
+  });
+
+  await test('spiegel via de echte handler: meekijker leest (log-modus), schrijft niet; verlopen meekijker niets; kijklog noteert de route', async () => {
+    const db = d1(), env = envMet({ TRACK_DB: db }), oid = OID_K(40); await zetMeekijker(env, oid);
+    await sp(env, 'kantoor', '/spiegel/mt_projecten', 'POST', kopie());
+    const tok = await maakToken({ oid, preferred_username: 'coach@example.org' });
+    let r = await roepFetch(env, tok, '/spiegel/mt_projecten'); assert.strictEqual(r.status, 200); assert.deepStrictEqual(r.body.data, { P1: { naam: 'Voorbeeld' } });
+    r = await roepFetch(env, tok, '/spiegel/mt_projecten', { method: 'POST', body: JSON.stringify(kopie({ ts: Date.now() + 5, data: { P1: 'gewijzigd' } })) }); assert.strictEqual(r.status, 403);
+    r = await roepFetch(env, tok, '/spiegel/mt_projecten'); assert.deepStrictEqual(r.body.data, { P1: { naam: 'Voorbeeld' } });
+    assert.ok(db.kijklog.some(x => x.route === '/spiegel/mt_projecten' && x.status === 200) && db.kijklog.some(x => x.methode === 'POST'));
+    assert.strictEqual(kijkLabel({ route: '/spiegel/mt_projecten' }), 'Gegevens: mt_projecten');
+    const o2 = OID_K(41); await zetMeekijker(env, o2, { toegangTot: Date.now() - 1000 });
+    const t2 = await maakToken({ oid: o2, preferred_username: 'coach@example.org' });
+    assert.strictEqual((await roepFetch(env, t2, '/spiegel/mt_projecten')).status, 403);
+    assert.strictEqual((await roepFetch(env, t2, '/spiegel/_index')).status, 403);
+    const gast = await maakToken({ oid: OID_K(42), preferred_username: 'x@example.org' });
+    assert.strictEqual((await roepFetch(env, gast, '/spiegel/mt_projecten')).status, 403);
   });
 
   globalThis.fetch = echteFetch;

@@ -36,6 +36,7 @@
      voor cockpit én app (audit-actie S2). Moet vóór de code laden die het gebruikt;
      ?v= = cachebuster (bump bij elke wijziging), zelfde patroon als calc-engine.js. -->
 <script src="mt-core.js?v=2026-10-13a"></script>
+<script src="mt-spiegel.js?v=2026-11-02a"></script>
 <script src="mt-project.js?v=2026-10-15b"></script>
 <script src="mt-lead.js?v=2026-10-13b"></script>
 <script src="mt-vw.js?v=2026-10-13b"></script>
@@ -14022,7 +14023,10 @@ async function openFactuurInControle(factuurId){
 // en de project-drive-helpers (PROJ_DRIVE/listChildren/rename/ensureFolder).
 // De kern levert SITE/FOLDER/_driveBase/read/write/_resolveConflict/_mergeById +
 // S1 ETag/412-merge. lastSync + updateSyncStatus zijn v2-only → via config aan.
+// Spiegel (zendkant): na een geslaagde SharePoint-save een kopie naar de worker, alleen met schrijfrecht en nooit als meekijker (mt-spiegel.js).
+window.MTSpiegelInst = window.MTSpiegel ? window.MTSpiegel.start({ worker: WORKER }) : null;
 const _SP = Object.assign(window.MTCore.makeSP({
+  naGeslaagd: (f, t, e) => { try { if (window.MTSpiegelInst) window.MTSpiegelInst.zend(f, t, e); } catch(x) {} },
   toast: (m) => { if (typeof planToast === 'function') planToast(m); },
   onSyncStatus: () => { if (typeof window.updateSyncStatus === 'function') window.updateSyncStatus(); },
   trackLastSync: true,
@@ -15667,6 +15671,7 @@ window.initStorage = async function() {
   await Promise.all(taken);
   try{ setTimeout(takenOudVangnetMelding,1500); setTimeout(blOudVangnetMelding,2500); }catch(e){}
   _SP.ready = true;   // hydrate klaar → auto-sync vanaf hier toegestaan (behalve blockedKeys)
+  try { if (window.MTSpiegelInst) window.MTSpiegelInst.onthoudHydrate(pref, _SP._etags, async f => { const { base, token } = await _SP._driveBase(); const r = await fetch(`/root://:/content`, { headers: { 'Authorization': `Bearer ` } }); return r.ok ? { data: await r.json(), etag: r.headers.get('ETag') } : null; }); } catch(e) {}   // spiegel bijvullen (eigen read: raakt de etags van de app niet)
   _ptTimeout = false; _ptHertekenen();   // een openstaand projectdetail toonde "Taken laden…": nu opnieuw tekenen
   try { _vrdWegToepassen(); } catch(e) {}   // K-7: een verwijderde inkoopregel die mt_voorraad (SharePoint wint) teruggaf, weer opschonen
   _blTimeout = false; try{ _blNaWijziging(); }catch(e){ }

@@ -6148,6 +6148,71 @@ async function handlePush(p, request, env, ik, json, R) {
 
 // CORS: het oude adres (GitHub Pages) én het nieuwe (Cloudflare Pages + eigen domein), exact — geen '*', en niets voor een onbekende herkomst.
 const CORS_HERKOMST = ['https://mtbart.github.io', 'https://tool.mortiseandtenon.nl', 'https://mt-tool.pages.dev'];
+// ══ SPIEGEL (alleen-lezen kopie van SharePoint-bestanden voor de meekijker) ═══════════════════════════════════════════════════
+// De worker heeft GEEN Graph-toegang. Na een geslaagde SharePoint-save stuurt een teamclient met schrijfrecht een kopie van dat bestand:
+// POST /spiegel/<store> {data, etag, ts}. De meekijker (en teamrollen met leesrecht) leest GET /spiegel/<store> en /spiegel/_index.
+// De kopie wordt nooit teruggeschreven naar SharePoint en overschrijft nooit een bestaande store: dit is een aparte KV-sleutel.
+// Opslag: KV MT_ROLLEN `spiegel:<store>` = {ts, etag, bron (oid-hash), bytes, data}, met {ts, etag, bytes, bron} als KV-metadata (voor /_index
+// zonder de data te lezen). Alleen laag 1 (hieronder); een onbekende naam = 404. Rechten gelden in élke ROLLEN_MODUS.
+//   lees:    de matrixkolom (projecten | offertes | geld | verbeterpunten) moet truthy zijn
+//   schrijf: projecten/offertes/geld = 'wijzigen'; verbeterpunten = 'maken' | 'beheren' | 'alles'; een meekijker nooit
+const SPIEGEL_STORES = {
+  mt_projecten: 'projecten', mt_planning: 'projecten', mt_planblokken: 'projecten', mt_planinrichting: 'projecten', mt_project_taken_v2: 'projecten',
+  mt_project_afhank: 'projecten', mt_project_controle: 'projecten', mt_project_sjablonen: 'projecten', mt_klant_codes: 'projecten', 'klanten-registry-vol': 'projecten',
+  mt_verlof: 'projecten', mt_vrijedagen: 'projecten', mt_opleveringen: 'projecten', mt_attentie: 'projecten',
+  mt_calc_offertes: 'offertes', mt_calc_defaults: 'offertes', mt_offerte_keuze: 'offertes', mt_toeslag_lak: 'offertes', mt_toeslag_spuit: 'offertes',
+  mt_uurtarieven: 'geld',
+  mt_verbeterpunten: 'verbeterpunten', mt_feedback: 'verbeterpunten',
+};
+const SPIEGEL_MAX_BYTES = 8 * 1024 * 1024, SPIEGEL_TS_VOORUIT_MS = 10 * 60 * 1000, SPIEGEL_STORE_RE = /^[a-z0-9_-]{1,60}$/;
+function spiegelMagLezen(R, store) { const k = SPIEGEL_STORES[store]; return !!(R && k && R[k]); }
+function spiegelMagSchrijven(rol, R, store) {
+  const k = SPIEGEL_STORES[store]; if (!R || !k || ALTIJD_AFDWINGEN.has(rol)) return false;   // een meekijker schrijft nooit, wat zijn matrix ook zegt
+  return k === 'verbeterpunten' ? ['maken', 'beheren', 'alles'].includes(R[k]) : R[k] === 'wijzigen';
+}
+async function handleSpiegel(p, request, env, ik, json) {
+  const R = ik.rol ? RECHTEN[ik.rol] : null, m = request.method.toUpperCase();
+  if (!R) return json({ error: 'geen-toegang', reden: ik.reden || 'geen-rol' }, 403);
+  if (!env.MT_ROLLEN) return json({ error: 'geen-opslag' }, 503);
+  const naam = p.replace(/^\/spiegel\/?/, '');
+  if (naam === '_index' && m === 'GET') {
+    const stores = {}; let cursor;
+    do {
+      const r = await env.MT_ROLLEN.list({ prefix: 'spiegel:', cursor, limit: 1000 });
+      for (const k of r.keys) { const s = k.name.slice('spiegel:'.length); if (spiegelMagLezen(R, s) && k.metadata) stores[s] = { ts: k.metadata.ts, etag: k.metadata.etag || null, bytes: k.metadata.bytes || null }; }
+      cursor = r.list_complete ? null : r.cursor;
+    } while (cursor);
+    return json({ stores });
+  }
+  if (!SPIEGEL_STORE_RE.test(naam) || !SPIEGEL_STORES[naam]) return json({ error: 'onbekende-store' }, 404);
+  if (m === 'GET') {
+    if (!spiegelMagLezen(R, naam)) return json({ error: 'geen-toegang', reden: SPIEGEL_STORES[naam] }, 403);
+    const rec = await kvJson(env, 'spiegel:' + naam);
+    if (!rec || typeof rec !== 'object' || !('data' in rec)) return json({ error: 'geen-spiegel', store: naam }, 404);   // nog niet gevuld (of onleesbaar): de client toont "nog geen gegevens"
+    return json({ store: naam, ts: rec.ts, etag: rec.etag || null, bron: rec.bron || null, data: rec.data });
+  }
+  if (m !== 'POST') return json({ error: 'methode' }, 405);
+  if (!spiegelMagSchrijven(ik.rol, R, naam)) return json({ error: 'geen-toegang', reden: 'spiegel-schrijven' }, 403);
+  const cl = Number(request.headers && request.headers.get ? request.headers.get('content-length') : NaN);
+  if (Number.isFinite(cl) && cl > SPIEGEL_MAX_BYTES + 1024) return json({ error: 'te-groot', max: SPIEGEL_MAX_BYTES }, 413);
+  const tekst = await request.text();
+  if (tekst.length > SPIEGEL_MAX_BYTES + 1024) return json({ error: 'te-groot', max: SPIEGEL_MAX_BYTES }, 413);
+  let b; try { b = JSON.parse(tekst); } catch { return json({ error: 'ongeldige-json' }, 400); }
+  if (!b || typeof b !== 'object' || Array.isArray(b) || Object.keys(b).some(k => !['data', 'etag', 'ts'].includes(k))) return json({ error: 'ongeldig', uitleg: 'object met data, etag, ts' }, 400);
+  if (!b.data || typeof b.data !== 'object') return json({ error: 'ongeldig', uitleg: 'data: object of lijst' }, 400);   // geen null, tekst of getal: een kapotte upload bederft de kopie niet
+  if (!Number.isInteger(b.ts) || b.ts <= 0 || b.ts > Date.now() + SPIEGEL_TS_VOORUIT_MS) return json({ error: 'ongeldige-ts' }, 400);   // niet ver in de toekomst: dat zou latere kopieën blokkeren
+  if (b.etag != null && (typeof b.etag !== 'string' || b.etag.length > 200)) return json({ error: 'ongeldige-etag' }, 400);
+  const data = JSON.stringify(b.data); if (data.length > SPIEGEL_MAX_BYTES) return json({ error: 'te-groot', max: SPIEGEL_MAX_BYTES }, 413);
+  const huidig = await kvJson(env, 'spiegel:' + naam);
+  if (huidig && Number.isInteger(huidig.ts)) {
+    if (b.ts <= huidig.ts) return json({ error: 'verouderd', ts: huidig.ts }, 409);   // een nieuwere kopie ging voor: nooit terug in de tijd
+    if (b.etag && huidig.etag === b.etag) return json({ ok: true, ongewijzigd: true, ts: huidig.ts });   // zelfde SharePoint-versie: geen KV-schrijfactie
+  }
+  const bron = await oidHash(ik.oid), meta = { ts: b.ts, etag: b.etag || null, bytes: data.length, bron };
+  await env.MT_ROLLEN.put('spiegel:' + naam, JSON.stringify({ ...meta, data: b.data }), { metadata: meta });
+  return json({ ok: true, ts: b.ts, bytes: data.length });
+}
+
 // ══ KIJKLOG (meekijker) ══════════════════════════════════════════════════════
 // Server-side, niet te vervalsen: elk geauthenticeerd verzoek van een meekijker (ook geweigerde pogingen, ook van een verlopen account)
 // wordt vastgelegd in D1 `kijklog` (migratie 0002): tijd, oid, tokenadres, methode, route (alleen pad), target, actie (resourcetype,
@@ -6304,6 +6369,8 @@ const werkerHandler = {
       if (url.pathname === '/zoek/moneybird') return await handleZoekMb(request, env, ik, json, ctx, modus);
       // Signalen (L3): de gedeelde actiewachtrij. Zien = recht offertes of projecten, wijzigen = offertes 'wijzigen' (in élke modus).
       if (url.pathname === '/signalen' || url.pathname.startsWith('/signalen/') || url.pathname.startsWith('/push/')) return await handleSignalen(url.pathname, request, env, ik, json);
+      // Spiegel: alleen-lezen kopie van SharePoint-bestanden voor de meekijker; rechten per store, in élke modus (zie handleSpiegel).
+      if (url.pathname === '/spiegel' || url.pathname.startsWith('/spiegel/')) return await handleSpiegel(url.pathname, request, env, ik, json);
       // Geldtijdlijn en het financiële dashboard: recht `geld`, in élke ROLLEN_MODUS (zie handleGeld).
       if (url.pathname.startsWith('/geld/')) return await handleGeld(url.pathname, request, env, ik, json);
       if (url.pathname.startsWith('/dashboard/')) {

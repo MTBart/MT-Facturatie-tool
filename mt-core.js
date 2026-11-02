@@ -206,6 +206,10 @@
     const toast = typeof config.toast === 'function' ? config.toast : function () {};
     const syncStatus = typeof config.onSyncStatus === 'function' ? config.onSyncStatus : function () {};
     const trackLastSync = !!config.trackLastSync;
+    // naGeslaagd(bestandsnaam, jsonTekst, etag): optionele hook, alleen NA een geslaagde PUT naar SharePoint (write, maakAan, 412-merge).
+    // Gebruikt voor de alleen-lezen spiegel (mt-spiegel.js). Faalt of ontbreekt de hook, dan verandert er niets aan het opslaan.
+    const naGeslaagd = typeof config.naGeslaagd === 'function' ? config.naGeslaagd : null;
+    function meld(filename, tekst, etag) { if (!naGeslaagd) return; try { naGeslaagd(filename, typeof tekst === 'string' ? tekst : JSON.stringify(tekst), etag || null); } catch (e) { } }
 
     const SP = {
       SITE: 'mortisetenon.sharepoint.com:/sites/MortiseTenon',
@@ -270,7 +274,7 @@
           // S1: 412 = SP-versie nieuwer dan onze ETag → re-read, mergen, herschrijven.
           // (ook bij aanmaken: 412 = iemand was ons voor)
           if (r.status === 412 && (useEtag || maakAan)) return await this._resolveConflict(filename, data, conflictMerge);
-          if (r.ok) { const et = r.headers.get('ETag'); if (et) this._etags[filename] = et; delete this._ontbreekt[filename]; }
+          if (r.ok) { const et = r.headers.get('ETag'); if (et) this._etags[filename] = et; delete this._ontbreekt[filename]; meld(filename, body, this._etags[filename]); }
           if (trackLastSync) this.lastSync = { ts: Date.now(), ok: r.ok, key: filename, error: r.ok ? null : `HTTP ${r.status}` };
           if (!r.ok) console.warn('SP write faalde:', filename, 'HTTP', r.status);
           syncStatus();
@@ -292,7 +296,7 @@
           const r = await fetch(`${base}/root:/${this.FOLDER}/${filename}:/content?@microsoft.graph.conflictBehavior=fail`,
             { method: 'PUT', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'If-None-Match': '*' }, body: typeof data === 'string' ? data : JSON.stringify(data) });
           if (r.status === 412 || r.status === 409) return 'bestaat';
-          if (r.ok) { const et = r.headers.get('ETag'); if (et) this._etags[filename] = et; delete this._ontbreekt[filename]; if (trackLastSync) this.lastSync = { ts: Date.now(), ok: true, key: filename, error: null }; syncStatus(); return 'aangemaakt'; }
+          if (r.ok) { const et = r.headers.get('ETag'); if (et) this._etags[filename] = et; delete this._ontbreekt[filename]; meld(filename, data, this._etags[filename]); if (trackLastSync) this.lastSync = { ts: Date.now(), ok: true, key: filename, error: null }; syncStatus(); return 'aangemaakt'; }
           console.warn('SP aanmaken faalde:', filename, 'HTTP', r.status);
           return false;
         } catch (e) { console.warn('SP aanmaken fout:', filename, e.message); return false; }
@@ -342,6 +346,7 @@
         if (r.ok) {
           const et = r.headers.get('ETag'); if (et) this._etags[filename] = et;
           delete this._ontbreekt[filename];
+          meld(filename, merged, this._etags[filename]);   // de samengevoegde stand is wat nu in SharePoint staat
           if (trackLastSync) this.lastSync = { ts: Date.now(), ok: true, key: filename, error: null };
         } else {
           console.warn('SP 412-merge herschrijf faalde:', filename, 'HTTP', r.status);
