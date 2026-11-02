@@ -4848,6 +4848,7 @@ function meAntwoord(env, ik, payload) {
     rol: ik.rol, rolNaam: ik.rol ? ROL_NAAM[ik.rol] : null, actief: !!ik.rol, reden: ik.rol ? null : (ik.reden || 'onbekend'),
     modus: effectieveModus(env, ik.rol, ik.rec), altijdAfdwingen: !!(ik.rol && ALTIJD_AFDWINGEN.has(ik.rol)) || undefined,
     toegangTot: (ik.rec && ik.rec.toegangTot) || undefined, rechten: ik.rol ? RECHTEN[ik.rol] : null,
+    extern: externToken(payload) || undefined,   // gast of ander e-maildomein: de front-end toont zonder rol een nette 'geen toegang'-pagina, ook in log-modus
     // Vaste eigenaar via e-mail: zet deze oid (bovenaan) later in OWNER_OIDS.
     vasteEigenaar: ik.vast || undefined,
     ownerOidNogZetten: ik.vast === 'email' ? true : undefined,

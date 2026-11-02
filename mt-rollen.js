@@ -81,18 +81,21 @@
     }
   };
   // Alleen in 'afdwingen': onbekende/gedeactiveerde gebruiker krijgt een nette pagina.
-  R.geenToegangNodig = () => R.afdwingen() && !R.me.actief;
+  // Ook buiten 'afdwingen': een verlopen of nog niet goedgekeurde (uitgenodigde) toegang en een externe gast zonder rol (de worker weigert die altijd).
+  R.geenToegangNodig = () => !!(R.me && !R.me.actief && (R.afdwingen() || R.me.reden === 'verlopen' || R.me.reden === 'wacht-op-goedkeuring' || R.me.extern));
   R.toonGeenToegang = function (worker) {
     if (!doc || doc.getElementById('mt-rol-scherm')) return;
-    const gedeac = R.me && R.me.reden === 'gedeactiveerd';
+    const gedeac = R.me && R.me.reden === 'gedeactiveerd', verlopen = R.me && R.me.reden === 'verlopen', wacht = R.me && R.me.reden === 'wacht-op-goedkeuring';
+    const geenKnop = verlopen || wacht;   // verlopen: de eigenaar verlengt; wachtend: de aanvraag staat al klaar bij de eigenaar
     const s = doc.createElement('div'); s.id = 'mt-rol-scherm'; s.className = 'mt-rol-scherm';
     s.setAttribute('role', 'dialog'); s.setAttribute('aria-modal', 'true'); s.setAttribute('aria-labelledby', 'mt-rol-titel');
-    s.innerHTML = '<div class="mt-rol-kaart"><h2 id="mt-rol-titel">' + (gedeac ? 'Je account is gedeactiveerd' : 'Je account heeft nog geen toegang') + '</h2>'
-      + '<p>' + (gedeac ? 'Een beheerder heeft je toegang uitgezet. Vraag het opnieuw aan als dat niet klopt.' : 'Je bent ingelogd, maar er is nog geen rol voor je ingesteld.') + '</p>'
-      + '<label for="mt-rol-bericht" style="font-size:13px">Bericht (optioneel)</label><textarea id="mt-rol-bericht" maxlength="300" placeholder="Bijv. waarvoor je de tool gebruikt"></textarea>'
-      + '<button type="button" id="mt-rol-vraag">Vraag toegang aan</button><div class="mt-rol-st" id="mt-rol-st" aria-live="polite"></div></div>';
+    s.innerHTML = '<div class="mt-rol-kaart"><h2 id="mt-rol-titel">' + (verlopen ? 'Je toegang is verlopen' : wacht ? 'Je toegang wacht op goedkeuring' : gedeac ? 'Je account is gedeactiveerd' : 'Je account heeft nog geen toegang') + '</h2>'
+      + '<p>' + (verlopen ? 'Je toegang was tijdelijk en is afgelopen. Neem contact op met de eigenaar als je langer wilt meekijken.' : wacht ? 'Je bent uitgenodigd. De eigenaar moet je toegang nog goedkeuren; daarna kun je opnieuw inloggen.' : gedeac ? 'Een beheerder heeft je toegang uitgezet. Vraag het opnieuw aan als dat niet klopt.' : 'Je bent ingelogd, maar er is nog geen rol voor je ingesteld.') + '</p>'
+      + (geenKnop ? '' : '<label for="mt-rol-bericht" style="font-size:13px">Bericht (optioneel)</label><textarea id="mt-rol-bericht" maxlength="300" placeholder="Bijv. waarvoor je de tool gebruikt"></textarea>'
+      + '<button type="button" id="mt-rol-vraag">Vraag toegang aan</button><div class="mt-rol-st" id="mt-rol-st" aria-live="polite"></div>') + '</div>';
     doc.body.appendChild(s);
     const knop = doc.getElementById('mt-rol-vraag'), st = doc.getElementById('mt-rol-st');
+    if (!knop) return;   // verlopen of wachtend: geen aanvraagknop
     knop.focus();
     knop.onclick = async function () {
       knop.disabled = true; st.textContent = 'Versturen…';
@@ -101,6 +104,7 @@
         const r = await root.fetch(basis(worker) + '/toegang', { method: 'POST', headers: Object.assign({}, h, { 'Content-Type': 'application/json' }),
           body: JSON.stringify({ bericht: doc.getElementById('mt-rol-bericht').value || '' }) });
         const j = await r.json().catch(() => ({}));
+        if (r.status === 403) { st.textContent = 'Aanvragen is voor dit account niet mogelijk. Neem contact op met de eigenaar.'; return; }
         st.textContent = r.ok ? (j.alAangevraagd ? 'Je aanvraag staat al klaar bij de beheerder.' : 'Aanvraag verstuurd — de beheerder ziet hem in Instellingen → Beheer.') : 'Versturen lukte niet (' + r.status + '). Probeer het later opnieuw.';
         if (!r.ok) knop.disabled = false;
       } catch (e) { st.textContent = 'Versturen lukte niet. Probeer het later opnieuw.'; knop.disabled = false; }

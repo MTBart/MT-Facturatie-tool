@@ -647,6 +647,12 @@ const { pathToFileURL } = require('url');
     assert.strictEqual((await roepFetch(env, gast, '/spiegel/mt_projecten')).status, 403);
   });
 
+  await test('/me: extern-vlag voor een gast, niet voor een eigen medewerker', () => {
+    const me = (rol, pl) => meAntwoord({ ROLLEN_MODUS: 'log' }, { rol, rec: null, email: 'x' }, pl);
+    assert.strictEqual(me(null, { oid: 'o', preferred_username: 'jan_example.org#EXT#@example.net' }).extern, true);
+    assert.strictEqual(me(null, { oid: 'o', preferred_username: 'jan@mortiseandtenon.nl' }).extern, undefined);
+    assert.strictEqual(me('meekijker', { oid: 'o', preferred_username: 'coach@example.org' }).extern, true);
+  });
   globalThis.fetch = echteFetch;
 
   console.log(`\n${n} tests geslaagd`);

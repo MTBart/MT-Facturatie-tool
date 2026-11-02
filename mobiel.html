@@ -41,6 +41,7 @@
      één bron voor cockpit én app (audit-actie S2). Moet vóór de code laden die het
      gebruikt; ?v= = cachebuster, zelfde patroon als in v2.html. -->
 <script src="mt-core.js?v=2026-10-13a"></script>
+<script src="mt-kijk.js?v=2026-11-02a"></script>
 <script src="mt-iconen.js?v=2026-11-01a" defer></script>
 <script src="mt-project.js?v=2026-10-15b"></script>
 <script src="mt-rollen.js?v=2026-10-09a"></script>
@@ -2244,6 +2245,7 @@ const GRAPH_SCOPES = [
   'https://graph.microsoft.com/Sites.ReadWrite.All'
 ];
 window.MTCore.installAuth({ graphScopes: GRAPH_SCOPES });
+try { if (window.MTKijk) MTKijk.bewaakGraph(); } catch (e) {}   // gast (#EXT#) of meekijker: nooit een Graph-token of popup (mt-kijk.js)
 
 /* ── Track v9 via Worker ── */
 async function tgTrack(path, method='GET', body=null) {
@@ -2738,6 +2740,13 @@ async function pvIndienenMobiel() {
 }
 
 async function toonApp(account) {
+  // Meekijker (externe coach): alleen de desktopversie. Geen gegevens, geen Graph, geen uitlog (de sessie blijft voor v2).
+  if (window.MTKijk && (MTKijk.extern(account) || await MTKijk.isMeekijker(WORKER))) {
+    const errEl = document.getElementById('login-error');
+    errEl.textContent = 'Meekijken kan alleen in de desktopversie. Gebruik de desktopversie (v2.html) op je computer.';
+    errEl.style.display = 'block';
+    return;
+  }
   // Valideer domein — alleen @mortiseandtenon.nl
   const email = account.username || '';
   if (!email.toLowerCase().endsWith('@mortiseandtenon.nl')) {

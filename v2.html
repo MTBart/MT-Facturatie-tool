@@ -37,6 +37,7 @@
      ?v= = cachebuster (bump bij elke wijziging), zelfde patroon als calc-engine.js. -->
 <script src="mt-core.js?v=2026-10-13a"></script>
 <script src="mt-spiegel.js?v=2026-11-02a"></script>
+<script src="mt-kijk.js?v=2026-11-02a"></script>
 <script src="mt-project.js?v=2026-10-15b"></script>
 <script src="mt-lead.js?v=2026-10-13b"></script>
 <script src="mt-vw.js?v=2026-10-13b"></script>
@@ -17020,6 +17021,7 @@ window.MTCore.installAuth({
   onTokenOk: () => { if (_sesBannerActief) _wisSessieBanner(); if (typeof rolLaadAlsNodig === 'function') rolLaadAlsNodig(); },
   onTokenFail: () => { toonSessieVerlopen(); },
 });
+try { if (window.MTKijk) MTKijk.bewaakGraph(); } catch(e) {}   // meekijker en #EXT#-gasten: nooit een Graph-token, nooit een popup (mt-kijk.js)
 
 async function toonApp(account) {
   document.getElementById('login-screen').style.display = 'none';
@@ -17027,6 +17029,8 @@ async function toonApp(account) {
   const naam = account.name || account.username;
   document.getElementById('user-name').textContent = naam;
   document.getElementById('user-avatar').textContent = naam.charAt(0).toUpperCase();
+  // Meekijker: eerst weten wie je bent (/me), dan pas gegevens laden — uit de spiegel in plaats van SharePoint, zonder Graph (mt-kijk.js).
+  if (window.MTKijk) { try { MTKijk.koppelSP(_SP, { worker: WORKER }); await MTKijk.voorStart(account, WORKER); } catch(e) { console.warn('kijkmodus voorstart:', e); } }
   if (window.initStorage) await window.initStorage();
   updateApiStatus();
   loadLedgers();
@@ -17118,6 +17122,7 @@ function rolToepassen(me){
   // zelf gekozen is. De router opent alleen zichtbare, toegestane knoppen.
   try{ const st=mtRoute.parse(mtRoute._start||location.hash||''); const te=st.tab&&document.getElementById('tab-'+st.tab);
     if(!_tabWissels&&te&&!te.classList.contains('active')) mtRoute.toepassen(st); }catch(e){}
+  try { if (window.MTKijk && MTKijk.aan) MTKijk.pasToe(); } catch(e) {}   // meekijker: tabs die niet voor de coach zijn blijven dicht (ook na geldTabZet e.d.)
   startTabZet();
   _verborgenTabTerugval();   // ook na een deeplink of een late rol: nooit blijven staan op een verborgen of niet-toegestane tab
   return me;
@@ -17208,7 +17213,7 @@ function rapportOpen(){
   if(!geldNieuw()||!MTRol.magGeld()){ el.innerHTML='<div class="card">Rapporten zijn alleen voor eigenaren en de administratie.</div>'; return; }
   if(el.dataset.gestart){ MTRapport.laad(); return; }
   el.dataset.gestart='1';
-  MTRapport.start(el,{bron:{haal:geldHaal},magWijzigen:MTRol.magGeld('wijzigen'),magVragen:true,wie:(typeof mtMijEmail==='function'&&mtMijEmail())||'',opBadge:rapportBadge});
+  MTRapport.start(el,{bron:{haal:geldHaal},magWijzigen:MTRol.magGeld('wijzigen'),magVragen:!(window.MTKijk&&MTKijk.aan),wie:(typeof mtMijEmail==='function'&&mtMijEmail())||'',opBadge:rapportBadge});
 }
 async function geldHaal(pad,opt){
   opt=opt||{};
@@ -17499,7 +17504,14 @@ function pvTeken(){
 }
 const _BH_FOUT={'alleen-eigenaar':'Alleen de eigenaar kan dit wijzigen.','alleen-eigenaar-mag-eigenaar':'Alleen de eigenaar kan iemand eigenaar maken of een eigenaar wijzigen.','niet-jezelf':'Je eigen account wijzig je hier niet.',
   'eigenaar-beschermd':'De vaste eigenaar is hier niet te wijzigen.','bestaat-al':'Er is al een gebruiker met dit e-mailadres.','ongeldig-email':'Dat is geen geldig e-mailadres.',
-  'onbekende-rol':'Onbekende rol.','laatste-eigenaar':'Dit is de laatste Eigenaar — maak eerst iemand anders Eigenaar.','geen-rollen-opslag':'De rollen-opslag (KV MT_ROLLEN) is nog niet ingesteld in Cloudflare.','geen-toegang':'Je hebt geen beheerrecht.','niet-gevonden':'Niet (meer) gevonden.'};
+  'onbekende-rol':'Onbekende rol.','laatste-eigenaar':'Dit is de laatste Eigenaar — maak eerst iemand anders Eigenaar.','geen-rollen-opslag':'De rollen-opslag (KV MT_ROLLEN) is nog niet ingesteld in Cloudflare.','geen-toegang':'Je hebt geen beheerrecht.','niet-gevonden':'Niet (meer) gevonden.',
+  'alleen-eigenaar-mag-meekijker':'Alleen de eigenaar kan een meekijker aanmaken of wijzigen.','einddatum-verplicht':'Een meekijker heeft altijd een einddatum (Toegang tot).','ongeldige-einddatum':'Dat is geen geldige datum.',
+  'einddatum-in-het-verleden':'De einddatum ligt in het verleden.','einddatum-te-ver':'De einddatum mag hooguit 400 dagen vooruit liggen.','uitnodiging-ongeldig':'De uitnodiging is ingetrokken, verlopen of vervangen; nodig opnieuw uit.',
+  'geen-trackopslag':'Het kijkoverzicht is nog niet ingericht (D1-migratie 0002 draaien).'};
+const veiligeHtml=window.MTCore.veiligeHtml;   // een zelf opgebouwd HTML-fragment (met esc() voor alle gegevens) mag ruw door een sjabloon; zie mt-core.js
+const _bhDag=ms=>ms?new Date(ms).toLocaleDateString('nl-NL',{timeZone:'Europe/Amsterdam',day:'numeric',month:'short',year:'numeric'}):'—';
+const _bhDagIso=ms=>ms?new Date(ms).toLocaleDateString('sv-SE',{timeZone:'Europe/Amsterdam'}):'';
+const _bhDuur=ms=>ms>=60000?Math.round(ms/60000)+' min':Math.max(1,Math.round(ms/1000))+' sec';
 async function beheerApi(pad,body){
   const h=await authHeader(); if(!h['X-Auth-Token']) throw new Error('Niet ingelogd bij Microsoft');
   const r=await fetch(WORKER+pad,body===undefined?{headers:h}:{method:'POST',headers:{...h,'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -17523,7 +17535,7 @@ function beheerTeken(){
   const el=document.getElementById('beheer-inhoud'); if(!el||!_bh) return;
   setTimeout(()=>{ try{ takenOverzetBlok(); takenOudVangnet(); }catch(e){} try{ blOverzetBlok(); blOudVangnet(); }catch(e){} },0);
   const {g,log,au}=_bh, ikEig=g.ikRol==='eigenaar';
-  const rolOpt=(huidig,uit)=>g.rollen.filter(r=>ikEig||r.id!=='eigenaar'||r.id===huidig).map(r=>`<option value="${esc(r.id)}"${r.id===huidig?' selected':''}${uit&&r.id!==huidig?' disabled':''}>${esc(r.naam)}</option>`).join('');
+  const rolOpt=(huidig,uit,metKijker)=>g.rollen.filter(r=>((ikEig||r.id!=='eigenaar')&&(r.id!=='meekijker'||(metKijker&&ikEig)))||r.id===huidig).map(r=>`<option value="${esc(r.id)}"${r.id===huidig?' selected':''}${uit&&r.id!==huidig?' disabled':''}>${esc(r.naam)}</option>`).join('');
   const modusTekst=g.modus==='afdwingen'?'<b>Modus: afdwingen</b> — de worker weigert wat een rol niet mag.'
     :g.modus==='uit'?'<b>Modus: uit</b> — rollen worden niet gecontroleerd.'
     :`<b>Modus: log</b> — alles werkt zoals altijd; de worker telt wat geweigerd zóu worden.${log?` Afgelopen ${esc(log.dagen)} dagen: <b>${esc(log.geweigerd)}</b> van ${esc(log.totaal)} verzoeken zouden geweigerd zijn.`:''}`;
@@ -17533,12 +17545,12 @@ function beheerTeken(){
     const vastTxt=u.vast==='oid'?' <span class="dos-meta">· vast</span>':u.vast==='email'?` <span class="dos-meta">· vaste eigenaar (via e-mail)${u.oid?' — oid: '+esc(u.oid):''}</span>`:'';
     return `<tr class="${uit?'bh-uit':''}"><td>${esc(u.naam||'—')}${u.oid===g.ik?' <span class="dos-meta">(jij)</span>':''}</td><td class="bh-opt">${esc(u.email||'')}</td>
       <td>${vast?esc(u.rolNaam||u.role)+vastTxt:`<select aria-label="Rol van ${esc(u.naam||u.email||'')}" onchange="beheerRol(${jsArg(u.oid)},this.value,this)">${rolOpt(u.role)}</select>`}</td>
-      <td>${uit?'gedeactiveerd':'actief'}</td><td class="bh-opt">${esc(_bhDatum(u.lastSeen))}</td>
-      <td>${vast?'':`<button class="btn btn-xs ${uit?'btn-secondary':'btn-danger'}" onclick="beheerActief(${jsArg(u.oid)},${esc(uit)})">${uit?'Reactiveren':'Deactiveren'}</button>`}</td></tr>`;
+      <td>${esc(uit?'gedeactiveerd':(u.toegangTot&&u.toegangTot<=Date.now()?'verlopen':'actief'))}${u.toegangTot?`<div class="dos-meta">Toegang tot <b>${esc(_bhDag(u.toegangTot))}</b></div>`:''}</td><td class="bh-opt">${esc(_bhDatum(u.lastSeen))}</td>
+      <td>${vast?'':veiligeHtml((u.role==='meekijker'&&ikEig?`<input type="date" id="bh-tot-${esc(u.oid)}" value="${esc(_bhDagIso(u.toegangTot))}" aria-label="Toegang tot" style="width:140px"> <button class="btn btn-xs btn-secondary" onclick="beheerEinddatum(${jsArg(u.oid)})">Verlengen</button> <button class="btn btn-xs btn-secondary" onclick="beheerKijkoverzicht(${jsArg(u.oid)})">Kijkoverzicht</button> `:'')+`<button class="btn btn-xs ${uit?'btn-secondary':'btn-danger'}" onclick="beheerActief(${jsArg(u.oid)},${esc(uit)})">${esc(uit?'Reactiveren':(u.role==='meekijker'?'Intrekken':'Deactiveren'))}</button>`)}</td></tr>`;
   }).join('');
-  const inv=(g.uitnodigingen||[]).map(i=>`<tr><td>${esc(i.naam||'—')}</td><td>${esc(i.email)}</td><td>${esc((g.rollen.find(r=>r.id===i.role)||{}).naam||i.role)}</td><td class="bh-opt">verloopt ${esc(_bhDatum(i.verloopt))}</td><td>${!ikEig&&i.role==='eigenaar'?'':`<button class="btn btn-xs btn-secondary" onclick="beheerIntrekken(${jsArg(i.email)})">Intrekken</button>`}</td></tr>`).join('');
-  const aanv=(g.aanvragen||[]).map(a=>`<tr><td>${esc(a.naam||'—')}</td><td>${esc(a.email||'')}</td><td class="bh-opt">${esc(a.bericht||'')}</td><td class="bh-opt">${esc(_bhDatum(a.ts))}</td>
-    <td><select id="bh-aanv-${esc(a.oid)}" aria-label="Rol voor ${esc(a.naam||'')}">${rolOpt('werkplaats')}</select> <button class="btn btn-xs btn-primary" onclick="beheerAanvraag(${jsArg(a.oid)},false)">Toekennen</button> <button class="btn btn-xs btn-secondary" onclick="beheerAanvraag(${jsArg(a.oid)},true)">Weigeren</button></td></tr>`).join('');
+  const inv=(g.uitnodigingen||[]).map(i=>`<tr><td>${esc(i.naam||'—')}</td><td>${esc(i.email)}</td><td>${esc((g.rollen.find(r=>r.id===i.role)||{}).naam||i.role)}</td><td class="bh-opt">verloopt ${esc(_bhDatum(i.verloopt))}${i.toegangTot?`<div>toegang tot <b>${esc(_bhDag(i.toegangTot))}</b></div>`:''}</td><td>${!ikEig&&i.role==='eigenaar'?'':`<button class="btn btn-xs btn-secondary" onclick="beheerIntrekken(${jsArg(i.email)})">Intrekken</button>`}</td></tr>`).join('');
+  const aanv=(g.aanvragen||[]).map(a=>`<tr><td>${esc(a.naam||'—')}${a.uitgenodigdAls==='meekijker'?' <span class="dos-meta">· uitgenodigd als meekijker</span>':''}</td><td>${esc(a.email||'')}</td><td class="bh-opt">${esc(a.bericht||'')}</td><td class="bh-opt">${esc(_bhDatum(a.ts))}</td>
+    <td>${a.uitgenodigdAls==='meekijker'?`Meekijker, toegang tot <input type="date" id="bh-aanv-tot-${esc(a.oid)}" value="${esc(_bhDagIso(a.toegangTot))}" aria-label="Toegang tot" style="width:140px">`:`<select id="bh-aanv-${esc(a.oid)}" aria-label="Rol voor ${esc(a.naam||'')}">${rolOpt('werkplaats')}</select>`} <button class="btn btn-xs btn-primary" onclick="beheerAanvraag(${jsArg(a.oid)},false)">Toekennen</button> <button class="btn btn-xs btn-secondary" onclick="beheerAanvraag(${jsArg(a.oid)},true)">Weigeren</button></td></tr>`).join('');
   const AUDIT={'uitgenodigd':'uitgenodigd','uitnodiging-gekoppeld':'uitnodiging gebruikt (eerste login)','uitnodiging-ingetrokken':'uitnodiging ingetrokken','rol-gewijzigd':'rol gewijzigd',
     'gedeactiveerd':'gedeactiveerd','gereactiveerd':'gereactiveerd','toegang-aangevraagd':'toegang aangevraagd','aanvraag-toegekend':'aanvraag toegekend','aanvraag-geweigerd':'aanvraag geweigerd',
     'eigenaar-gekoppeld':'eigenaar gekoppeld','eigenaar-vastgelegd':'eigenaar vastgelegd',
@@ -17551,9 +17563,12 @@ function beheerTeken(){
     <div class="bh-blok"><h4>Uitnodigen</h4><div class="bh-form">
       <input id="bh-inv-email" type="email" placeholder="e-mailadres" aria-label="E-mailadres" style="flex:1;min-width:200px">
       <input id="bh-inv-naam" type="text" placeholder="naam (optioneel)" aria-label="Naam" style="width:150px">
-      <select id="bh-inv-rol" aria-label="Rol">${rolOpt('werkplaats')}</select>
+      <select id="bh-inv-rol" aria-label="Rol">${rolOpt('werkplaats',false,true)}</select>
+      ${ikEig?`<label class="dos-meta" style="display:flex;gap:4px;align-items:center">Toegang tot <input id="bh-inv-tot" type="date" aria-label="Toegang tot (verplicht voor Meekijker)" style="width:140px"></label>`:''}
       <button class="btn btn-sm btn-primary" onclick="beheerUitnodigen()">Uitnodigen</button></div>
-      <div class="dos-meta" style="margin-top:4px">Bij de eerste login met dit adres krijgt die persoon de rol (uitnodiging 30 dagen geldig).</div></div>
+      <div class="dos-meta" style="margin-top:4px">Bij de eerste login met dit adres krijgt die persoon de rol (uitnodiging 30 dagen geldig).
+        ${ikEig?'<br><b>Meekijker</b> (externe coach, gastaccount in Microsoft 365): alleen inzien, geen mail, AI of beheer; de einddatum is verplicht. De eerste login komt eerst bij Toegangsaanvragen; pas na jouw goedkeuring heeft de coach toegang. <b>Intrekken werkt binnen een minuut; voor direct: verwijder ook het gastaccount in Microsoft 365.</b>':''}</div></div>
+    <div id="bh-kijk"></div>
     ${inv?`<div class="bh-blok"><h4>Openstaande uitnodigingen</h4><table class="bh-tabel"><tbody>${inv}</tbody></table></div>`:''}
     ${aanv?`<div class="bh-blok"><h4>Toegangsaanvragen</h4><table class="bh-tabel"><tbody>${aanv}</tbody></table></div>`:''}
     ${top}
@@ -17570,7 +17585,8 @@ function beheerTeken(){
 // Beheer: korte uitleg per rol (de worker beslist; dit is alleen de samenvatting).
 const _ROL_UITLEG={eigenaar:'alles, ook geld (geldtijdlijn) wijzigen en Moneybird-facturen verwijderen',
   beheerder:'alles behalve geld; gebruikers en rollen beheren',kantoor:'projecten, inbox, offertes, Moneybird-concepten en team-uren; geen geld',
-  werkplaats:'projecten bekijken, taken en bestellijst, eigen uren',lezen:'projecten en offertes bekijken',administratie:'alleen geld en Moneybird bekijken'};
+  werkplaats:'projecten bekijken, taken en bestellijst, eigen uren',lezen:'projecten en offertes bekijken',administratie:'alleen geld en Moneybird bekijken',
+  meekijker:'externe coach: projecten, planning, taken, offertes, financiën, forecast en teamuren alleen inzien (uit een kopie); geen mail, AI, beheer of SharePoint; met einddatum'};
 function _bhRolUitleg(g){
   const rollen=(g&&g.rollen)||[];
   return `<details class="bh-blok"><summary style="cursor:pointer;font-size:12px;color:var(--text-dim)">Wat mag elke rol?</summary>
@@ -18205,8 +18221,37 @@ async function beheerActief(oid,aan){
 }
 async function beheerUitnodigen(){
   const email=(document.getElementById('bh-inv-email').value||'').trim(), naam=(document.getElementById('bh-inv-naam').value||'').trim(), rol=document.getElementById('bh-inv-rol').value;
-  try{ await beheerApi('/beheer/uitnodigen',{email,naam,rol}); }catch(e){ return mtDialog.alert({title:'Uitnodigen',message:e.message}); }
+  const totEl=document.getElementById('bh-inv-tot'), toegangTot=(totEl&&totEl.value)||undefined;
+  if(rol==='meekijker'&&!toegangTot) return mtDialog.alert({title:'Uitnodigen',message:'Kies een einddatum (Toegang tot) voor een meekijker.'});
+  try{ await beheerApi('/beheer/uitnodigen',{email,naam,rol,toegangTot}); }catch(e){ return mtDialog.alert({title:'Uitnodigen',message:e.message}); }
   beheerLaad();
+}
+// Meekijker: einddatum verlengen (of verkorten; intrekken = de knop Intrekken = deactiveren). Werkt binnen een minuut door.
+async function beheerEinddatum(oid){
+  const el=document.getElementById('bh-tot-'+oid), toegangTot=el&&el.value;
+  if(!toegangTot) return mtDialog.alert({title:'Toegang tot',message:'Kies eerst een datum.'});
+  try{ await beheerApi('/beheer/gebruiker',{oid,toegangTot}); }catch(e){ await mtDialog.alert({title:'Toegang tot',message:e.message}); }
+  beheerLaad();
+}
+// Kijkoverzicht van een meekijker (alleen de eigenaar): per dag welke onderdelen zijn opgevraagd en welke tabbladen/projecten bekeken. Alles via esc().
+async function beheerKijkoverzicht(oid){
+  const el=document.getElementById('bh-kijk'); if(!el) return;
+  const u=_bh&&_bh.g.gebruikers.find(x=>x.oid===oid), naam=(u&&(u.naam||u.email))||'meekijker';
+  el.innerHTML='<div class="dos-meta">Kijkoverzicht laden…</div>';
+  try{ const j=await beheerApi(`/beheer/kijklog?oid=${encodeURIComponent(oid)}`); el.innerHTML=_bhKijkHtml(j,naam); }
+  catch(e){ el.innerHTML=`<div class="bh-modus">${esc(e.message)}</div>`; }
+}
+function _bhKijkHtml(j,naam){
+  const tijd=ts=>new Date(ts).toLocaleTimeString('nl-NL',{timeZone:'Europe/Amsterdam',hour:'2-digit',minute:'2-digit'});
+  const regel=i=>{
+    if(i.bron==='server') return `<tr><td class="bh-opt">${esc(tijd(i.ts))}</td><td>${esc(i.label)}</td><td class="bh-opt">${esc(i.n)} verzoek${i.n===1?'':'en'}${i.geweigerd?', '+esc(i.geweigerd)+' geweigerd':''}</td></tr>`;
+    const soort=i.bron==='project'?'Project':i.bron==='klant'?'Klant':'Tabblad';
+    return `<tr><td class="bh-opt">${esc(tijd(i.ts))}</td><td>${esc(soort)} ${esc(i.label)}</td><td class="bh-opt">${i.duur_ms?esc(_bhDuur(i.duur_ms)):''}</td></tr>`;
+  };
+  const dagen=(j.dagen||[]).slice().reverse().map(d=>`<h5 style="margin:10px 0 2px">${esc(d.dag)}</h5><table class="bh-tabel"><tbody>${d.items.map(regel).join('')}</tbody></table>`).join('');
+  return `<div class="bh-blok"><h4>Kijkoverzicht — ${esc(naam)} <button class="btn btn-xs btn-secondary" onclick="document.getElementById('bh-kijk').innerHTML=''">Sluiten</button></h4>
+    <div class="dos-meta">Laatste 30 dagen; bewaard ${esc(j.bewaartermijn_dagen||180)} dagen. De serverregels (opgevraagde onderdelen) zijn leidend; tabblad, project en duur komen uit de browser van de coach.${j.afgekapt?' <b>Let op: de lijst is afgekapt.</b>':''}</div>
+    ${veiligeHtml(dagen||'<div class="dos-meta">Nog niets bekeken.</div>')}</div>`;
 }
 async function beheerIntrekken(email){
   if(!await mtDialog.confirm({title:'Uitnodiging intrekken',message:`Uitnodiging voor ${email} intrekken?`,okLabel:'Intrekken'})) return;
@@ -18214,8 +18259,9 @@ async function beheerIntrekken(email){
   beheerLaad();
 }
 async function beheerAanvraag(oid,weigeren){
-  const sel=document.getElementById('bh-aanv-'+oid);
-  try{ await beheerApi('/beheer/aanvraag',weigeren?{oid,weigeren:true}:{oid,rol:sel?sel.value:'werkplaats'}); }catch(e){ await mtDialog.alert({title:'Beheer',message:e.message}); }
+  const sel=document.getElementById('bh-aanv-'+oid), tot=document.getElementById('bh-aanv-tot-'+oid);   // tot = alleen bij 'uitgenodigd als meekijker' (de rol staat dan vast)
+  const body=weigeren?{oid,weigeren:true}:(tot?Object.assign({oid},tot.value?{toegangTot:tot.value}:{}):{oid,rol:sel?sel.value:'werkplaats'});
+  try{ await beheerApi('/beheer/aanvraag',body); }catch(e){ await mtDialog.alert({title:'Beheer',message:e.message}); }
   beheerLaad();
 }
 
