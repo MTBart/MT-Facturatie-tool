@@ -5,6 +5,48 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-11-02 — Merge branch forecast-deel: deelfacturen, orderbevestigingen, filters Verlopen/Afgewezen, vragenpaneel Te controleren
+- Commit: `3f70b2b` | Auteur: Bart Witte
+
+## 2026-11-02 — Backup = v2.32.0
+- Commit: `bb30b93` | Auteur: Bart Witte
+
+## 2026-11-02 — Forecast light: melding uit-beeld-rollback klopt bij alleen gewijzigde items
+- Commit: `a4957d7` | Auteur: Bart Witte
+
+## 2026-11-02 — Forecast light: uit-beeld-rollback overschrijft geen intussen gewijzigd item
+- Commit: `0e5fc45` | Auteur: Bart Witte
+
+## 2026-11-02 — Forecast light: rollback wist een zelf aangemaakt item alleen als het ongewijzigd is
+- Commit: `2807af0` | Auteur: Bart Witte
+
+## 2026-11-02 — Forecast light: Codex ronde 2 (koppelen als keten, echte kalenderdatums)
+- Commit: `8567654` | Auteur: Bart Witte
+
+## 2026-11-02 — Forecast light: Codex-must-fixes (datum, k-conflict, uit beeld transactioneel)
+- Commit: `5845ed4` | Auteur: Bart Witte
+
+## 2026-11-02 — Forecast light: vragenpaneel zoekt eerst bestaand prognose-item, info apart
+- Commit: `baf5698` | Auteur: Bart Witte
+
+## 2026-11-02 — Forecast light: vragenscan aangescherpt (minder ruis)
+- Commit: `4e1e647` | Auteur: Bart Witte
+
+## 2026-11-02 — Forecast light: vragenpaneel "Te controleren"
+- Commit: `a25295e` | Auteur: Bart Witte
+
+## 2026-11-02 — Forecast: filters Verlopen en Afgewezen
+- Commit: `497483a` | Auteur: Bart Witte
+
+## 2026-11-02 — Forecast: orderbevestigingen uit de offertelijst
+- Commit: `6ecfd19` | Auteur: Bart Witte
+
+## 2026-11-02 — Forecast light: facturen van voor de deelfactuur-functie koppelen op referentie
+- Commit: `2d40478` | Auteur: Bart Witte
+
+## 2026-11-02 — Forecast light: schets afboeken met wat al gefactureerd is
+- Commit: `d823437` | Auteur: Bart Witte
+
 ## 2026-11-02 — Release v2.32.0: opname-module als afgeschermde beta (alleen beheer + schakelaar) voor de Android-proef met testgegevens; fotoronde, maatlijnen op de foto, 3D-lijnenmodel, hoekmeldingen, export met foto's; Codex-bundelronde verwerkt (tab-conflicten, atomaire import, manifestcontrole); backup = v2.31.0
 - Commit: `984c74b` | Auteur: Bart Witte
 

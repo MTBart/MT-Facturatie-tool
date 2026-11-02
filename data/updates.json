@@ -1,5 +1,18 @@
 [
   {
+    "versie": "2.33.0",
+    "datum": "2026-11-02",
+    "titel": "Forecast: deelfacturen tellen mee, orderbevestigingen eruit en een lijst om te controleren",
+    "voor": "beheer",
+    "punten": [
+      "Deelfacturen tellen nu mee: staat er bij een offerte al een deel gefactureerd, dan telt de Forecast alleen nog het restant. Een geplande maand die al gedekt is, zie je doorgestreept met de uitleg erbij.",
+      "Facturen die met dezelfde referentie bij dezelfde klant horen, worden aan de juiste offerte gekoppeld.",
+      "Orderbevestigingen staan niet meer tussen de openstaande offertes.",
+      "Nieuwe filters Verlopen (standaard aan) en Afgewezen (standaard uit).",
+      "Nieuwe knop Te controleren (met uitroepteken) naast de filters: de tool zoekt zelf facturen en offertes die waarschijnlijk bij elkaar horen en vraagt of dat klopt. Met één klik koppel je ze of laat je ze los; mislukt opslaan, dan wordt alles teruggezet.",
+      "Incl./excl. btw geldt alleen voor de kolom Bedrag; dat staat nu in de uitleg bij de knop."
+    ]
+  },{
     "versie": "2.32.0",
     "datum": "2026-11-02",
     "titel": "Opname (beta, alleen beheer): ruimte opmeten met foto's en maatlijnen op de telefoon",
