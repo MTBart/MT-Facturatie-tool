@@ -2345,9 +2345,10 @@ async function initMsal() {
       const redir = await _msal.handleRedirectPromise();
       if (redir && redir.account) { await toonApp(redir.account); return; }
     } catch(eR) { console.warn('MSAL redirect-afhandeling:', eR); }
-    const accounts = _msal.getAllAccounts();
-    if (accounts.length > 0) {
-      await toonApp(accounts[0]);
+    // Het ACTIEVE account (niet zomaar het eerste); meerdere accounts zonder keuze = inlogscherm
+    const acc0 = window.MTKijk ? MTKijk.kiesAccount(_msal) : (_msal.getAllAccounts()[0] || null);
+    if (acc0) {
+      await toonApp(acc0);
     }
     // Anders: login-screen blijft zichtbaar
   } catch(e) {
@@ -2370,7 +2371,7 @@ async function msLogin() {
   try {
     const result = await _msal.loginPopup({scopes: ['openid','profile','email']});
     const account = (result && result.account) || _msal.getAllAccounts()[0];
-    if (account) await toonApp(account);
+    if (account) { try { _msal.setActiveAccount(account); } catch(e0) {} await toonApp(account); }
   } catch(e) {
     if (e.errorCode === 'popup_window_error' || e.errorCode === 'block_nested_popups' || e.errorCode === 'empty_window_error') {
       // Popup kan niet → redirect-login (vereist mobiel.html als SPA redirect-URI in Azure)

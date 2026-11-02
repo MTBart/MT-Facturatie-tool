@@ -17000,6 +17000,7 @@ const GRAPH_SCOPES = [
 let _sesBannerActief = false;
 function toonSessieVerlopen() {
   if (_sesBannerActief || !document.body) return;
+  if (window.MTKijk && MTKijk.graphDicht()) return;   // gast/meekijker: nooit een Graph-sessie, dus ook geen banner
   _sesBannerActief = true;
   const b = document.createElement('div');
   b.id = 'sessie-verlopen-banner';
@@ -17007,8 +17008,9 @@ function toonSessieVerlopen() {
   b.textContent = '⚠ Sessie verlopen — klik hier om opnieuw in te loggen';
   b.onclick = async () => {
     try {
-      const result = await window._msal.acquireTokenPopup({ scopes: GRAPH_SCOPES });
-      if (result && result.accessToken) _wisSessieBanner();
+      // Centrale route (mt-core): token voor het ACTIEVE account, met accountcontrole en MTKijk.bewaakGraph; geen eigen popup hier.
+      const t = await window.getGraphToken();
+      if (t) _wisSessieBanner();
     } catch(e) { /* popup weer mislukt of geannuleerd — banner blijft staan */ }
   };
   document.body.appendChild(b);
@@ -21253,8 +21255,7 @@ let _vbLarrySamenvatting = ''; // laatste tekst van Larry — kan worden overgen
 // ── hulp ──
 function _vbIndiener() {
   try {
-    const a = _msal && _msal.getAllAccounts();
-    const acc = a && a[0];
+    const acc = window._actiefAccount && _actiefAccount();
     return {email: (acc && acc.username || '').toLowerCase(), naam: acc && acc.name || acc && acc.username || '?'};
   } catch(e) { return {email: '?', naam: '?'}; }
 }

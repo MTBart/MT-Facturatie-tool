@@ -354,6 +354,15 @@ const maakWin = (opt = {}) => {
     popupAls = A; assert.strictEqual(await win.getGraphToken(), 'POPUPTOKEN');
   });
 
+  await test('geen losse tokenaanvragen buiten mt-core: pagina\'s en scripts van de app gebruiken getGraphToken/getAuthToken; mt-kijk.js staat vóór de inline stijlcode', () => {
+    const root = path.join(__dirname, '..'), bron = f => fs.readFileSync(path.join(root, f), 'utf8');
+    for (const f of fs.readdirSync(root).filter(x => /\.(html|js)$/.test(x) && x !== 'mt-core.js' && x !== 'sw.js')) {
+      assert.ok(!/acquireToken(Popup|Silent|Redirect)|ssoSilent/.test(bron(f)), 'losse tokenaanvraag in ' + f);
+    }
+    const v2 = bron('v2.html'); assert.ok(v2.indexOf('src="mt-kijk.js') > 0 && v2.indexOf('src="mt-kijk.js') < v2.indexOf('mt-stijl-keuze'), 'mt-kijk.js eerst');
+    assert.ok(!/getAllAccounts\(\)\s*\[0\]/.test(v2.replace(/\(window\._msal\.getAllAccounts\(\)\[0\] \|\| null\)|_msal\.getAllAccounts\(\)\[0\];/g, '')), 'v2: geen [0]-terugval meer behalve de bewuste fallbacks');
+  });
+
   await test('MSAL-opslag: msalBegin geeft MSAL de echte opslag, msalEinde zet de lege weer terug', () => {
     const t = maakVroeg({ ls: gastCache() });
     const leeg = t.win.localStorage; t.K.msalBegin(); assert.strictEqual(t.win.localStorage, t.echt.api, 'tijdens het aanmaken van MSAL: echt'); t.K.msalEinde(); assert.strictEqual(t.win.localStorage, leeg);

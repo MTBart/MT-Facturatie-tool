@@ -202,6 +202,7 @@ const v2 = await scenario('v2 meekijker', 'v2.html', {
     s.zichtLokaal = await ev("(document.body.innerText + ' ' + [...Object.keys(localStorage)].map(k => localStorage.getItem(k)).join(' ')).includes('LOKAAL')");
     s.uurtarieven = await ev("String(localStorage.getItem('mt_uurtarieven'))");
     s.echteOpslagOnveranderd = await ev("(()=>{const f=document.createElement('iframe'); document.body.appendChild(f); const l=f.contentWindow.localStorage; const nu=JSON.stringify(Object.keys(l).sort().map(k=>[k,l.getItem(k)])); f.remove(); return nu===window.__geplant;})()");
+    s.stijl = await ev("document.documentElement.getAttribute('data-stijl')");   // 'oud' staat in de echte opslag; de inline stijlcode ziet alleen de lege opslag
     s.opslagIsGeheugen = await ev("localStorage !== undefined && !('mt_zelf_gezet' in localStorage) && (localStorage.setItem('mt_zelf_gezet','1'), localStorage.getItem('mt_zelf_gezet')==='1')");
     s.echtNaSchrijven = await ev("(()=>{const f=document.createElement('iframe'); document.body.appendChild(f); const l=f.contentWindow.localStorage; const x=l.getItem('mt_zelf_gezet'); f.remove(); return x;})()");
     s.indexedDB = await ev('String(window.indexedDB)');
@@ -216,6 +217,7 @@ const v2 = await scenario('v2 meekijker', 'v2.html', {
 const post = v2.netwerk.filter(n => n.methode !== 'GET' && n.methode !== 'OPTIONS' && n.host === 'mt-claude-proxy.bart-a12.workers.dev');
 toets('v2: geen uitzonderingen in de pagina', v2.exc.length === 0, v2.exc.join(' | '));
 toets('v2: kijkmodus actief + banner', v2.staat.kijk === true && /Meekijken/.test(v2.staat.banner), JSON.stringify([v2.staat.kijk, v2.staat.banner]));
+toets('v2: de inline stijlcode leest de echte opslag niet (geplante keuze "oud" telt niet)', v2.staat.stijl === 'nieuw', String(v2.staat.stijl));
 toets('v2: banner toont de stand van de spiegel', /stand van/.test(v2.staat.banner), v2.staat.banner);
 toets('v2: gegevens komen uit de spiegel (projecten lokaal gevuld)', /Voorbeeldproject/.test(v2.staat.projectData), v2.staat.projectData.slice(0, 80));
 toets('v2: tijdens het wachten op /me: neutraal laadscherm, app verborgen, streng, geen worker-verzoek behalve /me, lege opslag', v2.tussen && v2.tussen.laden === '1' && v2.tussen.overlay === true && v2.tussen.appZichtbaar === false && v2.tussen.streng === 'streng' && v2.tussen.klanten === 403 && v2.tussen.moneybird === 403 && v2.tussen.opslagLeeg === true, JSON.stringify(v2.tussen));
