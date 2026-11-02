@@ -257,4 +257,43 @@ test('indeling per maand: het totaal is gelijk aan Kosten in de voet; per regel 
   assert.strictEqual(nov.totaal, -550000, 'alles aan: inkoop plus vast');
   const som = [...nov.per.values()].reduce((a, b) => a + b, 0); assert.strictEqual(som, nov.totaal, 'zonder uitgezette groepen is de som van de regels het totaal');
 });
+test('schets afboeken met wat al gefactureerd is: laatste maanden blijven, vroegste vallen weg', () => {
+  const gef = (maand) => { const inclC = Object.values(maand).reduce((a, b) => a + b, 0); return { inclC, exclC: Math.round(inclC / 1.21), maand, facturen: [] }; };
+  const r = (o) => Object.assign({ id: 'e1', naam: 'Oefen', status: 'geaccepteerd', zeker: true, inclC: 12273668, exclC: 10143, cellen: {}, gef: null, fstatus: null, uitbeeld: false, los: false }, o);
+  const ms = ['2026-04', '2026-05', '2026-11', '2026-12'];
+  // de praktijk: 122.736,68 offerte, 110.463,01 gefactureerd in april/mei, schets nog in nov/dec
+  const a = r({ cellen: { '2026-04': 5000000, '2026-11': 900000, '2026-12': 900000 }, gef: gef({ '2026-04': 5000000, '2026-05': 6046301 }), fstatus: 'deels' });
+  assert.strictEqual(L.cel(a, '2026-04'), 5000000, 'factuurmaand blijft de factuur');
+  assert.strictEqual(L.cel(a, '2026-12') + L.cel(a, '2026-11'), 12273668 - 11046301, 'rest = offerte min gefactureerd');
+  assert.strictEqual(L.cel(a, '2026-12'), 900000, 'laatste vakje blijft helemaal'); assert.strictEqual(L.cel(a, '2026-11'), 327367, 'vroegste vakje valt eerst (deels) weg');
+  assert.strictEqual(a.cellen['2026-11'], 900000, 'opgeslagen schets blijft bewaard');
+  assert.deepStrictEqual(L.dekking(a, '2026-11'), { schets: 900000, gedekt: 572633 }); assert.strictEqual(L.dekking(a, '2026-04'), null);
+  assert.strictEqual(L.rijTotaal(a, ms), L.effectief(a)['2026-04'] + L.effectief(a)['2026-05'] + L.effectief(a)['2026-11'] + L.effectief(a)['2026-12']);
+  const t = L.totalen([a], ms); assert.strictEqual(t.som, L.rijTotaal(a, ms));
+  // deels afgeboekt: de rest is kleiner dan het laatste vakje
+  const b = r({ inclC: 1000000, cellen: { '2026-11': 300000, '2026-12': 400000 }, gef: gef({ '2026-05': 750000 }), fstatus: 'deels' });
+  assert.strictEqual(L.cel(b, '2026-12'), 250000); assert.strictEqual(L.cel(b, '2026-11'), 0); assert.deepStrictEqual(L.dekking(b, '2026-12'), { schets: 400000, gedekt: 150000 });
+  // rest groter dan de schets: niets valt weg
+  const c = r({ inclC: 1000000, cellen: { '2026-11': 100000, '2026-12': 200000 }, gef: gef({ '2026-05': 500000 }), fstatus: 'deels' });
+  assert.strictEqual(L.cel(c, '2026-11'), 100000); assert.strictEqual(L.cel(c, '2026-12'), 200000); assert.strictEqual(L.dekking(c, '2026-12'), null);
+  // helemaal gefactureerd: alle schets weg, valt onder afgerond
+  const d = r({ inclC: 1000000, cellen: { '2026-11': 100000 }, gef: gef({ '2026-05': 1000000 }), fstatus: 'gefactureerd' });
+  assert.strictEqual(L.cel(d, '2026-11'), 0); assert.strictEqual(L.inBeeld(d, ['2026-11']), false, 'niets meer dat telt: afgerond');
+  // meer gefactureerd dan de offerte: rest nooit onder nul
+  const e = r({ inclC: 1000000, cellen: { '2026-11': 100000 }, gef: gef({ '2026-05': 1200000 }), fstatus: 'gefactureerd' }); assert.strictEqual(L.cel(e, '2026-11'), 0);
+  // schets zonder offertebedrag (los) of zonder facturen: ongewijzigd
+  const f = r({ inclC: null, exclC: null, cellen: { '2026-11': 100000 }, gef: gef({ '2026-05': 5000000 }), los: true }); assert.strictEqual(L.cel(f, '2026-11'), 100000);
+  const g = r({ cellen: { '2026-11': 100000, '2026-12': 99999999 } }); assert.strictEqual(L.cel(g, '2026-12'), 99999999, 'zonder facturen telt alles');
+  // factuur in dezelfde maand als de schets: de factuur wint, die maand wordt nooit afgeboekt
+  const h = r({ inclC: 1000000, cellen: { '2026-05': 400000, '2026-11': 400000 }, gef: gef({ '2026-05': 700000 }), fstatus: 'deels' });
+  assert.strictEqual(L.cel(h, '2026-05'), 700000); assert.strictEqual(L.cel(h, '2026-11'), 300000, 'rest 3.000 begrenst het latere vakje');
+  // creditnota: negatieve vakjes blijven en tellen niet mee in de begrenzing
+  const k = r({ inclC: 1000000, cellen: { '2026-10': -50000, '2026-11': 200000, '2026-12': 200000 }, gef: gef({ '2026-05': 900000 }), fstatus: 'deels' });
+  assert.strictEqual(L.cel(k, '2026-10'), -50000); assert.strictEqual(L.cel(k, '2026-12'), 100000); assert.strictEqual(L.cel(k, '2026-11'), 0);
+  assert.strictEqual(L.dekking(k, '2026-10'), null);
+  const cn = r({ inclC: 1000000, cellen: { '2026-12': 200000 }, gef: gef({ '2026-05': 1000000, '2026-06': -200000 }), fstatus: 'deels' }); assert.strictEqual(L.cel(cn, '2026-12'), 200000, 'creditnota maakt weer ruimte');
+  // nu factureren en offertes met: gebruiken wat echt telt
+  assert.deepStrictEqual(L.nuFactureren([d, a], '2026-12', 'incl').map(x => x.r.id), ['e1'], 'alleen a (met resterende schets); d is klaar');
+  assert.strictEqual(L.offertesMet([r({ status: 'openstaand', inclC: 1000000, cellen: { '2026-10': 100000, '2026-12': 100000 }, gef: gef({ '2026-05': 950000 }), fstatus: 'deels' })], '2026-10', 'openstaand', 'incl')[0].eerstvolgende, '2026-12');
+});
 console.log(`\n${n} tests geslaagd${process.exitCode ? ' (met fouten)' : ''}`);

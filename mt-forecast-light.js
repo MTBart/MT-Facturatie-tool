@@ -118,7 +118,26 @@
   L.bedrag = (r, btw) => btw === 'excl' ? r.exclC : r.inclC;
   // Wat telt in een maand: het gefactureerde bedrag als er in die maand een factuur is (het vakje staat dan vast), anders de schets.
   L.vast = (r, ym) => !!(r.gef && ym in r.gef.maand);
-  L.cel = (r, ym) => L.vast(r, ym) ? r.gef.maand[ym] : (r.cellen[ym] || 0);
+  // Wat telt er echt (Bart 2-11): bij een offerte met bekend bedrag en facturen is het gefactureerde totaal al "weg" uit de schets. Rest = offertebedrag
+  // min gefactureerd (incl. btw, nooit onder nul). De positieve schetsvakjes in maanden zonder factuur tellen samen hooguit mee tot die rest, waarbij de
+  // LAATSTE maanden blijven staan en de vroegste het eerst wegvallen (de eerste termijnen zijn al gefactureerd, de laatste = oplevering blijft over).
+  // Negatieve vakjes (creditnota) blijven onaangeroerd en tellen niet mee in de begrenzing. Het opgeslagen schetsbedrag verandert nooit; alleen wat meetelt.
+  // Zonder offertebedrag of zonder facturen is het de schets zoals ingevuld. Resultaat: { 'JJJJ-MM': centen } voor elke maand met een factuur of schetsbedrag.
+  L.effectief = function (r) {
+    const uit = {}, c = (r && r.cellen) || {}, gm = (r && r.gef && r.gef.maand) || {};
+    for (const m of Object.keys(gm)) uit[m] = gm[m];
+    let over = r && r.gef && r.inclC != null ? Math.max(0, r.inclC - r.gef.inclC) : Infinity;
+    const vrij = Object.keys(c).filter(m => !(m in gm)).sort();
+    for (const m of vrij.slice().reverse()) { if (!(c[m] > 0)) continue; const keep = Math.min(c[m], over); over -= keep; uit[m] = keep; }
+    for (const m of vrij) if (!(c[m] > 0)) uit[m] = c[m] || 0;
+    return uit;
+  };
+  // Schetsvakje dat deels of geheel buiten beeld valt door eerdere facturen: { schets, gedekt } of null.
+  L.dekking = function (r, ym) {
+    if (L.vast(r, ym)) return null; const s = r.cellen && r.cellen[ym]; if (!(s > 0)) return null;
+    const e = L.effectief(r)[ym]; return e < s ? { schets: s, gedekt: s - e } : null;
+  };
+  L.cel = (r, ym) => L.vast(r, ym) ? r.gef.maand[ym] : (L.effectief(r)[ym] || 0);
   // Nog te factureren: het offertebedrag min wat er al gefactureerd is (in dezelfde weergave incl./excl.), nooit onder nul.
   L.nog = (r, btw) => { const b = L.bedrag(r, btw); if (b == null || !r.gef) return null; return Math.max(0, b - (btw === 'excl' ? r.gef.exclC : r.gef.inclC)); };
   // Helemaal gefactureerd (afgerond): alleen in de lijst als er in de getoonde maanden iets van meetelt. Deels gefactureerd blijft altijd staan.
@@ -296,11 +315,11 @@
   // Nu factureren: geaccepteerd of zeker, nog niet helemaal gefactureerd, en een bedrag gepland in deze of een eerdere maand dat nog niet gefactureerd is. Bedrag = wat er nog openstaat (L.nog), anders de geplande som.
   // Per maand telt het geplande bedrag min wat er in die maand al gefactureerd is (deels gefactureerd in dezelfde maand blijft dus staan); ontbreekt het offertebedrag, dan geldt de som van die restanten.
   L.nuFactureren = (rijen, nuYm, btw) => rijen.filter(r => !r.uitbeeld && !r.los && (r.status === 'geaccepteerd' || r.zeker) && r.fstatus !== 'gefactureerd').map(r => {
-    const rest = m => (r.cellen[m] || 0) - (r.gef && r.gef.maand[m] ? r.gef.maand[m] : 0), gepland = Object.keys(r.cellen).filter(m => m <= nuYm && rest(m) > 0).sort(); if (!gepland.length) return null;
+    const eff = L.effectief(r), rest = m => (r.gef && r.gef.maand[m] ? (r.cellen[m] || 0) - r.gef.maand[m] : (eff[m] || 0)), gepland = Object.keys(r.cellen).filter(m => m <= nuYm && rest(m) > 0).sort(); if (!gepland.length) return null;
     const nog = L.nog(r, btw), bedrag = nog != null ? nog : gepland.reduce((a, m) => a + rest(m), 0); return bedrag > 0 ? { r, bedrag, gepland } : null;
   }).filter(Boolean).sort((a, b) => b.bedrag - a.bedrag);
   // Offertes met een bepaalde status (openstaand, concept): bedrag en de eerstvolgende geplande maand (vanaf nuYm); helemaal gefactureerde offertes niet.
-  L.offertesMet = (rijen, nuYm, status, btw) => rijen.filter(r => !r.uitbeeld && !r.los && r.status === status && r.fstatus !== 'gefactureerd').map(r => ({ r, bedrag: L.bedrag(r, btw), eerstvolgende: Object.keys(r.cellen).filter(m => r.cellen[m] > 0 && m >= nuYm).sort()[0] || null }))
+  L.offertesMet = (rijen, nuYm, status, btw) => rijen.filter(r => !r.uitbeeld && !r.los && r.status === status && r.fstatus !== 'gefactureerd').map(r => ({ r, bedrag: L.bedrag(r, btw), eerstvolgende: (e => Object.keys(e).filter(m => e[m] > 0 && m >= nuYm).sort()[0] || null)(L.effectief(r)) }))
     .sort((a, b) => (b.bedrag || 0) - (a.bedrag || 0));
   // Geaccepteerd maar nog nergens ingepland (en niet helemaal gefactureerd): mag niet uit beeld verdwijnen.
   L.nietIngepland = (rijen, btw) => rijen.filter(r => !r.uitbeeld && !r.los && r.status === 'geaccepteerd' && r.fstatus !== 'gefactureerd' && !Object.values(r.cellen).some(v => v)).map(r => ({ r, bedrag: L.bedrag(r, btw), eerstvolgende: null, nietIngepland: true }))
@@ -324,6 +343,7 @@
   const telefoon = () => !!(window.matchMedia && window.matchMedia('(max-width:700px)').matches);
   const kort = cc => { const e = Math.round(Math.abs(cc) / 100); return (cc < 0 && e ? '−' : '') + duizend(e); };
   const dtxt = cc => cc == null ? '' : telefoon() ? kort(cc) : L.fmt(cc);
+  const dekTitel = (r, m) => { const d = L.dekking(r, m); return d ? `Schets ${L.fmt(d.schets)}, al gedekt door eerdere facturen ${L.fmt(d.gedekt)}` + (d.schets - d.gedekt ? `; telt mee ${L.fmt(d.schets - d.gedekt)}` : '; telt niet mee') + '. Het schetsbedrag blijft bewaard.' : ''; };
   const nu = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
   const st = L._st = { el: null, opt: null, mag: false, schatten: null, schattenT: 0, afgekapt: false, schets: null, uitbeeld: {}, start: nu(), btw: 'incl', filter: null, sort: null,
     bezig: false, fout: null, bewaren: new Map(), keten: new Map(), mislukt: new Map(), zekerBezig: new Set(), sessie: Math.random().toString(36).slice(2), laadNr: 0,
@@ -375,7 +395,7 @@
 .mtl-sw input:checked+span{background:var(--l-primary)}.mtl-sw input:checked+span::after{transform:translateX(14px)}.mtl-sw input:focus-visible+span{outline:2px solid var(--l-primary);outline-offset:2px}.mtl-sw input:disabled{cursor:not-allowed}.mtl-sw input:disabled+span{opacity:.45}
 .mtl-in{width:96px;height:28px;box-sizing:border-box;text-align:right;border:1px solid var(--l-soft);border-radius:var(--l-r);padding:0 6px;background:var(--l-surface);color:var(--l-ink);font:inherit;font-family:var(--l-mono);font-variant-numeric:tabular-nums}
 .mtl-in::placeholder{color:var(--l-ink3);opacity:.6}.mtl-in:hover:not(:disabled){border-color:var(--l-strong)}.mtl-in:focus{outline:2px solid var(--l-primary);outline-offset:1px;border-color:var(--l-strong)}
-.mtl-in.bewaren{color:var(--l-ink3)}.mtl-in.fout{border-color:var(--l-err);background:var(--l-errbg)}.mtl-in:disabled{background:transparent;border-color:transparent;cursor:default}
+.mtl-in.bewaren{color:var(--l-ink3)}.mtl-in.gedekt{color:var(--l-ink3);text-decoration:line-through;text-decoration-color:var(--l-strong)}.mtl-in.fout{border-color:var(--l-err);background:var(--l-errbg)}.mtl-in:disabled{background:transparent;border-color:transparent;cursor:default}
 .mtl-sortknop{border:0;background:none;font:inherit;color:inherit;cursor:pointer;padding:2px 4px;border-radius:var(--l-r);white-space:nowrap}.mtl-sortknop:hover{background:var(--l-surface2);color:var(--l-ink)}.mtl-sortknop.actief{color:var(--l-ink);font-weight:600}
 .mtl-sortrij{display:flex;gap:2px;align-items:center;flex-wrap:wrap}.mtl-0{color:var(--l-ink3);font-weight:400}
 .mtl-melding{padding:24px;color:var(--l-ink2)}.mtl-fout{padding:10px 14px;border:1px solid var(--l-err);background:var(--l-errbg);color:var(--l-err);border-radius:var(--l-rp);font-size:13px;flex:none}
@@ -829,12 +849,12 @@
     const ms = maanden(), rijen = zichtbareRijen(), perId = new Map(rijen.map(r => [r.id, r]));
     t.querySelectorAll('input.mtl-in').forEach(inp => {
       const r = perId.get(inp.dataset.id); if (!r) return; const sl = inp.dataset.id + '|' + inp.dataset.ym;
-      inp.classList.toggle('fout', st.mislukt.has(sl)); inp.classList.toggle('bewaren', st.bewaren.has(sl));
+      inp.classList.toggle('fout', st.mislukt.has(sl)); inp.classList.toggle('bewaren', st.bewaren.has(sl)); inp.classList.toggle('gedekt', !!L.dekking(r, inp.dataset.ym));
       const v = r.cellen[inp.dataset.ym]; inp.dataset.oud = v == null ? '' : String(v);              // altijd de laatst bekende stand van de server
       if ((document.activeElement === inp && sl !== forceer) || st.bewaren.has(sl)) return;   // niet door iemands getyp heen schrijven
       const m = st.mislukt.get(sl), toon = m ? m.nieuw : v;                                    // rood vakje: jouw niet-opgeslagen bedrag blijft staan
       inp.value = m && m.tekst != null ? m.tekst : toon == null ? '' : dtxt(toon);
-      inp.title = telefoon() && toon != null && toon % 100 ? L.fmt(toon) : '';
+      inp.title = dekTitel(r, inp.dataset.ym) || (telefoon() && toon != null && toon % 100 ? L.fmt(toon) : '');
     });
     t.querySelectorAll('td.tot[data-id]').forEach(td => { const r = perId.get(td.dataset.id); if (r) { zetGetal(td, L.rijTotaal(r, ms)); td.title = td.dataset.ex || ''; } });
     t.querySelectorAll('input.mtl-zk').forEach(cb => { const r = perId.get(cb.dataset.id); if (r) cb.checked = r.zeker; });
@@ -1005,8 +1025,8 @@
               const titel = 'Gefactureerd in Moneybird (incl. btw):\n' + fs.map(f => (f.nummer || 'factuur') + ' van ' + f.datum.split('-').reverse().join('-') + '   ' + L.fmt(f.inclC)).join('\n') + (v != null ? `\nJe schetsbedrag hier (${L.fmt(v)}) blijft bewaard maar telt niet.` : '');
               return h('td', { class: 'num gef' + (m === dezeMaand ? ' nu' : ''), title: titel }, u ? h('a', { class: 'mtl-gefcel', href: u, target: '_blank', rel: 'noopener', 'aria-label': r.naam + ', ' + maandTekst(m) + ': gefactureerd ' + L.fmt(r.gef.maand[m]) }, dtxt(r.gef.maand[m])) : h('span', { class: 'mtl-gefcel' }, dtxt(r.gef.maand[m])));
             }
-            return h('td', { class: 'num' + (m === dezeMaand ? ' nu' : '') }, h('input', { class: 'mtl-in' + (st.mislukt.has(sl) ? ' fout' : '') + (st.bewaren.has(sl) ? ' bewaren' : ''), type: 'text', inputmode: 'decimal', autocomplete: 'off', placeholder: st.mag ? '\u2013' : '',
-              'aria-label': r.naam + ', ' + maandTekst(m), disabled: !st.mag, data: { id: r.id, ym: m, oud: v == null ? '' : String(v) }, value: st.mislukt.has(sl) ? (st.mislukt.get(sl).tekst != null ? st.mislukt.get(sl).tekst : L.fmt(st.mislukt.get(sl).nieuw)) : v == null ? '' : dtxt(v), title: telefoon() && v != null && v % 100 ? L.fmt(v) : null })); }),
+            return h('td', { class: 'num' + (m === dezeMaand ? ' nu' : '') }, h('input', { class: 'mtl-in' + (st.mislukt.has(sl) ? ' fout' : '') + (st.bewaren.has(sl) ? ' bewaren' : '') + (L.dekking(r, m) ? ' gedekt' : ''), type: 'text', inputmode: 'decimal', autocomplete: 'off', placeholder: st.mag ? '\u2013' : '',
+              'aria-label': r.naam + ', ' + maandTekst(m), disabled: !st.mag, data: { id: r.id, ym: m, oud: v == null ? '' : String(v) }, value: st.mislukt.has(sl) ? (st.mislukt.get(sl).tekst != null ? st.mislukt.get(sl).tekst : L.fmt(st.mislukt.get(sl).nieuw)) : v == null ? '' : dtxt(v), title: dekTitel(r, m) || (telefoon() && v != null && v % 100 ? L.fmt(v) : null) })); }),
           h('td', { class: 'tot num', data: { id: r.id } }));
       }) : h('tr', null, h('td', { class: 's', colspan: String(ms.length + 4), style: 'text-align:left;color:var(--l-ink3)' }, 'Geen offertes met dit filter.')),
         // vulrij: neemt de rest van de hoogte, zodat de totalen ook bij weinig offertes tegen de onderrand staan
@@ -1246,7 +1266,7 @@
     const maandRij = m => {
       const v = r.cellen[m], sl = r.id + '|' + m;
       if (L.vast(r, m)) return h('div', { class: 'mtl-os-rij vast' }, h('span', null, maandTekst(m)), h('span', { class: 'mtl-os-gf', title: 'Gefactureerd in Moneybird; je schetsbedrag' + (v != null ? ' (' + L.fmt(v) + ')' : '') + ' blijft bewaard maar telt niet' }, L.fmt(r.gef.maand[m]), h('small', null, 'gefactureerd')));
-      return h('label', { class: 'mtl-os-rij' }, h('span', null, maandTekst(m)), h('input', { class: 'mtl-in' + (st.mislukt.has(sl) ? ' fout' : '') + (st.bewaren.has(sl) ? ' bewaren' : ''), type: 'text', inputmode: 'decimal', autocomplete: 'off', placeholder: st.mag ? '–' : '', 'aria-label': r.naam + ', ' + maandTekst(m),
+      return h('label', { class: 'mtl-os-rij', title: dekTitel(r, m) || null }, h('span', null, maandTekst(m)), h('input', { class: 'mtl-in' + (st.mislukt.has(sl) ? ' fout' : '') + (st.bewaren.has(sl) ? ' bewaren' : '') + (L.dekking(r, m) ? ' gedekt' : ''), type: 'text', inputmode: 'decimal', autocomplete: 'off', placeholder: st.mag ? '–' : '', 'aria-label': r.naam + ', ' + maandTekst(m),
         disabled: !st.mag, data: { id: r.id, ym: m, oud: v == null ? '' : String(v) }, value: st.mislukt.has(sl) ? (st.mislukt.get(sl).tekst != null ? st.mislukt.get(sl).tekst : L.fmt(st.mislukt.get(sl).nieuw)) : v == null ? '' : L.fmt(v),
         onfocus: ev => ev.target.select(), onchange: ev => verwerk(ev.target), oninput: ev => getypt(ev.target), onkeydown: toets }));
     };
