@@ -2,7 +2,9 @@
 'use strict';
 const assert = require('assert');
 const F = require('../mt-forecast.js'); require('../mt-forecast-light.js');
-const L = globalThis.MTForecastLight;
+const L = globalThis.MTForecastLight; globalThis.MTForecast = globalThis.MTForecast || F;   // in de browser is dit het globale object; L.koppelPlan gebruikt het
+let kette = Promise.resolve();
+const atest = (naam, fn) => { kette = kette.then(async () => { try { await fn(); n++; console.log('ok  - ' + naam); } catch (e) { console.log('FOUT - ' + naam + '\n' + (e.stack || e)); process.exitCode = 1; } }); };
 let n = 0; const test = (naam, fn) => { try { fn(); n++; console.log('ok  - ' + naam); } catch (e) { console.log('FOUT - ' + naam + '\n' + (e.stack || e)); process.exitCode = 1; } };
 
 test('invoer: Nederlandse notatie, minteken, leeg, percentage', () => {
@@ -30,7 +32,7 @@ test('rijen: offertes uit Moneybird plus losse schets-records met bedragen; uit 
   assert.strictEqual(rijen[1].zeker, true); assert.strictEqual(rijen[1].uitbeeld, true);
   assert.strictEqual(rijen[2].status, 'los'); assert.strictEqual(rijen[2].naam, 'Weg — oud');
   assert.deepStrictEqual(L.filter(rijen, ['geaccepteerd', 'los']).map(r => r.id), ['300000000001', '300000000009']);
-  assert.deepStrictEqual(L.tel(rijen), { geaccepteerd: 1, openstaand: 0, concept: 0, los: 1, gefactureerd: 0, afgerond: 0, uitbeeld: 1 });
+  assert.deepStrictEqual(L.tel(rijen), { geaccepteerd: 1, openstaand: 0, verlopen: 0, concept: 0, afgewezen: 0, los: 1, gefactureerd: 0, afgerond: 0, uitbeeld: 1 });
 });
 const fx = (o) => L.factuurNorm(Object.assign({ id: 400000000001, invoice_id: '2026-0100', contact_id: 500000000001, contact: { company_name: 'A' }, invoice_date: '2026-10-15', state: 'open', total_price_incl_tax: '60.50', total_price_excl_tax: '50' }, o));
 test('facturen: normaliseren; concept en zonder datum tellen niet', () => {
@@ -257,4 +259,359 @@ test('indeling per maand: het totaal is gelijk aan Kosten in de voet; per regel 
   assert.strictEqual(nov.totaal, -550000, 'alles aan: inkoop plus vast');
   const som = [...nov.per.values()].reduce((a, b) => a + b, 0); assert.strictEqual(som, nov.totaal, 'zonder uitgezette groepen is de som van de regels het totaal');
 });
-console.log(`\n${n} tests geslaagd${process.exitCode ? ' (met fouten)' : ''}`);
+test('schets afboeken met wat al gefactureerd is: laatste maanden blijven, vroegste vallen weg', () => {
+  const gef = (maand) => { const inclC = Object.values(maand).reduce((a, b) => a + b, 0); return { inclC, exclC: Math.round(inclC / 1.21), maand, facturen: [] }; };
+  const r = (o) => Object.assign({ id: 'e1', naam: 'Oefen', status: 'geaccepteerd', zeker: true, inclC: 12273668, exclC: 10143, cellen: {}, gef: null, fstatus: null, uitbeeld: false, los: false }, o);
+  const ms = ['2026-04', '2026-05', '2026-11', '2026-12'];
+  // de praktijk: 122.736,68 offerte, 110.463,01 gefactureerd in april/mei, schets nog in nov/dec
+  const a = r({ cellen: { '2026-04': 5000000, '2026-11': 900000, '2026-12': 900000 }, gef: gef({ '2026-04': 5000000, '2026-05': 6046301 }), fstatus: 'deels' });
+  assert.strictEqual(L.cel(a, '2026-04'), 5000000, 'factuurmaand blijft de factuur');
+  assert.strictEqual(L.cel(a, '2026-12') + L.cel(a, '2026-11'), 12273668 - 11046301, 'rest = offerte min gefactureerd');
+  assert.strictEqual(L.cel(a, '2026-12'), 900000, 'laatste vakje blijft helemaal'); assert.strictEqual(L.cel(a, '2026-11'), 327367, 'vroegste vakje valt eerst (deels) weg');
+  assert.strictEqual(a.cellen['2026-11'], 900000, 'opgeslagen schets blijft bewaard');
+  assert.deepStrictEqual(L.dekking(a, '2026-11'), { schets: 900000, gedekt: 572633 }); assert.strictEqual(L.dekking(a, '2026-04'), null);
+  assert.strictEqual(L.rijTotaal(a, ms), L.effectief(a)['2026-04'] + L.effectief(a)['2026-05'] + L.effectief(a)['2026-11'] + L.effectief(a)['2026-12']);
+  const t = L.totalen([a], ms); assert.strictEqual(t.som, L.rijTotaal(a, ms));
+  // deels afgeboekt: de rest is kleiner dan het laatste vakje
+  const b = r({ inclC: 1000000, cellen: { '2026-11': 300000, '2026-12': 400000 }, gef: gef({ '2026-05': 750000 }), fstatus: 'deels' });
+  assert.strictEqual(L.cel(b, '2026-12'), 250000); assert.strictEqual(L.cel(b, '2026-11'), 0); assert.deepStrictEqual(L.dekking(b, '2026-12'), { schets: 400000, gedekt: 150000 });
+  // rest groter dan de schets: niets valt weg
+  const c = r({ inclC: 1000000, cellen: { '2026-11': 100000, '2026-12': 200000 }, gef: gef({ '2026-05': 500000 }), fstatus: 'deels' });
+  assert.strictEqual(L.cel(c, '2026-11'), 100000); assert.strictEqual(L.cel(c, '2026-12'), 200000); assert.strictEqual(L.dekking(c, '2026-12'), null);
+  // helemaal gefactureerd: alle schets weg, valt onder afgerond
+  const d = r({ inclC: 1000000, cellen: { '2026-11': 100000 }, gef: gef({ '2026-05': 1000000 }), fstatus: 'gefactureerd' });
+  assert.strictEqual(L.cel(d, '2026-11'), 0); assert.strictEqual(L.inBeeld(d, ['2026-11']), false, 'niets meer dat telt: afgerond');
+  // meer gefactureerd dan de offerte: rest nooit onder nul
+  const e = r({ inclC: 1000000, cellen: { '2026-11': 100000 }, gef: gef({ '2026-05': 1200000 }), fstatus: 'gefactureerd' }); assert.strictEqual(L.cel(e, '2026-11'), 0);
+  // schets zonder offertebedrag (los) of zonder facturen: ongewijzigd
+  const f = r({ inclC: null, exclC: null, cellen: { '2026-11': 100000 }, gef: gef({ '2026-05': 5000000 }), los: true }); assert.strictEqual(L.cel(f, '2026-11'), 100000);
+  const g = r({ cellen: { '2026-11': 100000, '2026-12': 99999999 } }); assert.strictEqual(L.cel(g, '2026-12'), 99999999, 'zonder facturen telt alles');
+  // factuur in dezelfde maand als de schets: de factuur wint, die maand wordt nooit afgeboekt
+  const h = r({ inclC: 1000000, cellen: { '2026-05': 400000, '2026-11': 400000 }, gef: gef({ '2026-05': 700000 }), fstatus: 'deels' });
+  assert.strictEqual(L.cel(h, '2026-05'), 700000); assert.strictEqual(L.cel(h, '2026-11'), 300000, 'rest 3.000 begrenst het latere vakje');
+  // creditnota: negatieve vakjes blijven en tellen niet mee in de begrenzing
+  const k = r({ inclC: 1000000, cellen: { '2026-10': -50000, '2026-11': 200000, '2026-12': 200000 }, gef: gef({ '2026-05': 900000 }), fstatus: 'deels' });
+  assert.strictEqual(L.cel(k, '2026-10'), -50000); assert.strictEqual(L.cel(k, '2026-12'), 100000); assert.strictEqual(L.cel(k, '2026-11'), 0);
+  assert.strictEqual(L.dekking(k, '2026-10'), null);
+  const cn = r({ inclC: 1000000, cellen: { '2026-12': 200000 }, gef: gef({ '2026-05': 1000000, '2026-06': -200000 }), fstatus: 'deels' }); assert.strictEqual(L.cel(cn, '2026-12'), 200000, 'creditnota maakt weer ruimte');
+  // nu factureren en offertes met: gebruiken wat echt telt
+  assert.deepStrictEqual(L.nuFactureren([d, a], '2026-12', 'incl').map(x => x.r.id), ['e1'], 'alleen a (met resterende schets); d is klaar');
+  assert.strictEqual(L.offertesMet([r({ status: 'openstaand', inclC: 1000000, cellen: { '2026-10': 100000, '2026-12': 100000 }, gef: gef({ '2026-05': 950000 }), fstatus: 'deels' })], '2026-10', 'openstaand', 'incl')[0].eerstvolgende, '2026-12');
+});
+test('facturen koppelen op exacte referentie (vóór de deelfactuur-functie van Moneybird)', () => {
+  const off = (id, o) => F.schatNorm(Object.assign({ id, estimate_id: '2026-' + id, contact_id: 500000000001, contact: { company_name: 'A' }, total_price_incl_tax: '1210', total_price_excl_tax: '1000', state: 'accepted', reference: 'Keuken Voorbeeldlaan 1', estimate_date: '2026-06-01' }, o));
+  const sch = [off(300000000001), off(300000000002, { contact_id: 500000000002, reference: 'Keuken Voorbeeldlaan 1' })];
+  // (a) geen original_estimate_id, zelfde contact, referentie gelijk (trim, hoofdletters negeren)
+  const a = L.koppelFacturen([fx({ reference: '  keuken voorbeeldlaan 1 ' })], sch, null);
+  assert.deepStrictEqual(Object.keys(a.perEid), ['300000000001']); assert.strictEqual(a.los.length, 0); assert.strictEqual(a.perEid['300000000001'].facturen[0].via, 'referentie');
+  assert.strictEqual(L.rijen(sch, {}, {}, a)[0].fstatus, 'deels');
+  // ander contact of andere referentie: niet koppelen
+  assert.strictEqual(L.koppelFacturen([fx({ contact_id: 500000000009, reference: 'Keuken Voorbeeldlaan 1' })], sch, null).los.length, 1);
+  assert.strictEqual(L.koppelFacturen([fx({ reference: 'Keuken Voorbeeldlaan 12' })], sch, null).los.length, 1, 'alleen exact gelijk');
+  assert.strictEqual(L.koppelFacturen([fx({ reference: '' })], sch, null).los.length, 1, 'lege referentie koppelt nooit');
+  // (b) hangt aan een kopie-offerte die niet in de lijst staat: toch aan de lijst-offerte, geen eigen gefactureerd-rij
+  const b = L.koppelFacturen([fx({ original_estimate_id: 300000000099, reference: 'Keuken Voorbeeldlaan 1' })], sch, null);
+  assert.deepStrictEqual(Object.keys(b.perEid), ['300000000001']); assert.strictEqual(L.rijen(sch, {}, {}, b).length, 2, 'geen extra rij');
+  // een factuur van een offerte die wél in de lijst staat blijft daar, ook al past de referentie op een andere
+  const c = L.koppelFacturen([fx({ original_estimate_id: 300000000002, contact_id: 500000000001, reference: 'Keuken Voorbeeldlaan 1' })], sch, null);
+  assert.deepStrictEqual(Object.keys(c.perEid), ['300000000002']); assert.strictEqual(c.perEid['300000000002'].facturen[0].via, undefined);
+  // niet in de lijst en geen passende referentie: eigen gefactureerd-rij zoals voorheen
+  const d = L.koppelFacturen([fx({ original_estimate_id: 300000000099, reference: 'iets anders' })], sch, null);
+  assert.deepStrictEqual(Object.keys(d.perEid), ['300000000099']);
+  // dubbelzinnig: twee offertes met dezelfde referentie bij hetzelfde contact: niet koppelen
+  const dub = sch.concat([off(300000000003)]);
+  const e = L.koppelFacturen([fx({ reference: 'Keuken Voorbeeldlaan 1' }), fx({ id: 400000000002, original_estimate_id: 300000000099, reference: 'Keuken Voorbeeldlaan 1' })], dub, null);
+  assert.strictEqual(e.los.length, 1, 'zonder original_estimate_id blijft zonder offerte'); assert.deepStrictEqual(Object.keys(e.perEid), ['300000000099'], 'met een eigen offerte-id valt hij terug op die');
+  // een concept telt niet mee voor de uitkomst (en een concept met dezelfde referentie maakt het niet dubbelzinnig)
+  const f = L.koppelFacturen([fx({ reference: 'Keuken Voorbeeldlaan 1' })], sch.concat([off(300000000004, { state: 'draft' })]), null);
+  assert.deepStrictEqual(Object.keys(f.perEid), ['300000000001']);
+  // bevestigd/uitgesloten uit de prognose gaat voor; creditnota volgt zijn factuur
+  const g = L.koppelFacturen([fx({ reference: 'Keuken Voorbeeldlaan 1' })], sch, { 'p:x': { estimate_id: '300000000002', k: ['400000000001'], x: [] } });
+  assert.deepStrictEqual(Object.keys(g.perEid), ['300000000002']);
+  const h = L.koppelFacturen([fx({ reference: 'Keuken Voorbeeldlaan 1' })], sch, { 'p:x': { estimate_id: '300000000001', k: [], x: ['400000000001'] } });
+  assert.strictEqual(h.los.length, 1, 'uitgesloten: ook niet op referentie');
+  const cn = L.koppelFacturen([fx({ reference: 'Keuken Voorbeeldlaan 1' }), fx({ id: 400000000005, original_sales_invoice_id: 400000000001, total_price_incl_tax: '-10', reference: 'Creditnota' })], sch, null);
+  assert.strictEqual(cn.perEid['300000000001'].facturen.length, 2, 'creditnota volgt zijn factuur'); assert.strictEqual(cn.los.length, 0);
+});
+test('orderbevestiging in de offertelijst telt niet en blijft zichtbaar als er schets bij staat', () => {
+  const ruw = (o) => Object.assign({ id: 300000000050, estimate_id: '2026-5050', contact_id: 500000000001, contact: { company_name: 'A' }, total_price_incl_tax: '1210', total_price_excl_tax: '1000', state: 'accepted', reference: 'Kast', pre_text: '', title: '' }, o);
+  assert.ok(F.schatNorm(ruw({})), 'gewone offerte telt');
+  assert.strictEqual(F.schatNorm(ruw({ pre_text: 'ORDERBEVESTIGING keuken' })), null);
+  assert.strictEqual(F.schatNorm(ruw({ title: 'Orderbevestiging' })), null);
+  assert.strictEqual(F.schatNorm(ruw({ reference: 'kast orderBevestiging 2' })), null);
+  assert.ok(F.schatNorm(ruw({ pre_text: 'Offerte voor een orderkast' })), 'alleen het woord orderbevestiging');
+  const sch = [ruw({}), ruw({ id: 300000000051, pre_text: 'Orderbevestiging' })].map(F.schatNorm).filter(Boolean);
+  assert.deepStrictEqual(sch.map(s => s.id), ['300000000050']);
+  const zonder = L.rijen(sch, {}, {}, null); assert.strictEqual(zonder.length, 1, 'zonder schets: weg uit de lijst');
+  const met = L.rijen(sch, { '300000000051': { cellen: { '2026-11': 5000 }, naam: 'A \u2014 Kast', nummer: '2026-5051' } }, {}, null);
+  assert.strictEqual(met.length, 2); const los = met.find(r => r.id === '300000000051'); assert.ok(los.los); assert.strictEqual(los.status, 'los'); assert.strictEqual(L.cel(los, '2026-11'), 5000, 'schets blijft meetellen');
+});
+test('verlopen en afgewezen: statussen, filters, standaard en eenmalige migratie van opgeslagen filters', () => {
+  const norm = (state, o) => F.schatNorm(Object.assign({ id: 300000000060, estimate_id: '2026-6060', contact_id: 500000000001, contact: { company_name: 'A' }, total_price_incl_tax: '121', state }, o));
+  assert.strictEqual(norm('late').status, 'verlopen'); assert.strictEqual(norm('rejected').status, 'afgewezen'); assert.strictEqual(norm('open').status, 'openstaand');
+  assert.deepStrictEqual(['verlopen', 'afgewezen'].map(s => L.FILTERS.includes(s)), [true, true]);
+  // de uitgebreide forecast: verlopen telt als openstaand (gedrag gelijk), afgewezen en onbekend niet
+  assert.strictEqual(F.voorUitgebreid(norm('late')).status, 'openstaand'); assert.strictEqual(F.voorUitgebreid(norm('rejected')), null); assert.strictEqual(F.voorUitgebreid(norm('billed')), null); assert.strictEqual(F.voorUitgebreid(norm('accepted')).status, 'geaccepteerd');
+  assert.ok(norm('late').id === F.voorUitgebreid(norm('late')).id);
+  const rijen = L.rijen(['accepted', 'open', 'late', 'draft', 'rejected'].map((s, i) => norm(s, { id: 300000000070 + i })), {}, {}, null);
+  const tel = L.tel(rijen); assert.deepStrictEqual([tel.geaccepteerd, tel.openstaand, tel.verlopen, tel.concept, tel.afgewezen], [1, 1, 1, 1, 1]);
+  const std = L.filterStart(null, null); assert.ok(std.includes('verlopen') && !std.includes('afgewezen'), 'standaard: verlopen aan, afgewezen uit');
+  assert.deepStrictEqual(L.filter(rijen, std).map(r => r.status).sort(), ['geaccepteerd', 'openstaand', 'verlopen'].sort());
+  assert.deepStrictEqual(L.filter(rijen, ['afgewezen']).map(r => r.status), ['afgewezen']);
+  // migratie: wie openstaand aan had krijgt eenmalig ook verlopen; wie het bewust uit zette (fv 3) niet; openstaand uit blijft uit
+  assert.ok(L.filterStart(['geaccepteerd', 'openstaand', 'gefactureerd'], '2').includes('verlopen'));
+  assert.ok(!L.filterStart(['geaccepteerd', 'openstaand', 'gefactureerd'], '3').includes('verlopen'), 'na de migratie blijft een keuze staan');
+  assert.ok(!L.filterStart(['geaccepteerd', 'gefactureerd'], '2').includes('verlopen'));
+  assert.ok(L.filterStart(['geaccepteerd', 'openstaand'], null).includes('gefactureerd') && L.filterStart(['geaccepteerd', 'openstaand'], null).includes('verlopen'), 'oude opslag: beide migraties');
+  assert.ok(!L.filterStart(['geaccepteerd', 'openstaand', 'bestaatniet'], '2').includes('bestaatniet'));
+  // een afgewezen rij telt nergens als te factureren; verlopen telt als open offerte
+  const afw = rijen.find(r => r.status === 'afgewezen'); afw.zeker = true; afw.cellen = { '2026-10': 5000 };
+  assert.strictEqual(L.nuFactureren([afw], '2026-10', 'incl').length, 0);
+  assert.strictEqual(L.offertesMet(rijen, '2026-10', 'openstaand', 'incl').length, 2, 'openstaand en verlopen');
+});
+test('vragen: losse factuur bij een offerte (zelfde contact, onderscheidend naamwoord, datumvenster), referentie-koppeling, prognose k/x', () => {
+  const off = (id, o) => F.schatNorm(Object.assign({ id, estimate_id: '2026-' + id, contact_id: 500000000001, contact: { company_name: 'Jansen Voorbeeld' }, total_price_incl_tax: '10000', state: 'accepted', reference: 'Wandkast Zeeland', estimate_date: '2026-06-01' }, o));
+  const sch = [off(300000000101)];
+  const V = (facs, o, prog, schatten) => { const s = schatten || sch, fk = L.koppelFacturen(facs, s, prog); return L.vragen(L.rijen(s, {}, {}, fk), facs, fk, s, Object.assign({ vandaag: '2026-11-02', ok: {}, prog: prog || {} }, o)); };
+  const fac = o => fx(Object.assign({ contact_id: 500000000001, invoice_date: '2026-09-10', reference: 'Aanbetaling wandkast zeeland', total_price_incl_tax: '1234' }, o));
+  const van = (f, s) => V([f], {}, null, s).filter(q => q.soort === 'factuur').length;
+  const a = V([fac({})]).filter(q => q.soort === 'factuur'); assert.strictEqual(a.length, 1, 'zelfde contact, gedeeld woord, binnen een jaar');
+  assert.deepStrictEqual(a[0].opties.map(o => o.actie.soort), ['k', 'x']); assert.strictEqual(a[0].opties[0].actie.eid, '300000000101'); assert.strictEqual(a[0].opties[0].actie.fid, '400000000001'); assert.deepStrictEqual(a[0].refs.offerte, { id: '300000000101', nummer: '2026-300000000101' });
+  assert.ok(/Hoort/.test(a[0].tekst) && /Wandkast Zeeland/.test(a[0].tekst));
+  // zelfde contact: geaccepteerd en binnen 120 dagen na de offerte telt ook zonder woord; daarna alleen met woord
+  assert.strictEqual(van(fac({ reference: 'Iets anders', invoice_date: '2026-08-01' })), 1, 'geaccepteerd, 61 dagen na de offerte');
+  assert.strictEqual(van(fac({ reference: 'Iets anders', invoice_date: '2026-11-01' })), 0, 'te laat voor het 120-dagenvenster, geen woord');
+  assert.strictEqual(van(fac({ invoice_date: '2026-11-01' })), 1, 'wel een woord: binnen een jaar volstaat');
+  assert.strictEqual(van(fac({ reference: 'Iets anders', invoice_date: '2026-08-01' }), [off(300000000101, { state: 'open' })]), 0, 'niet geaccepteerd: woord nodig');
+  assert.strictEqual(van(fac({ invoice_date: '2027-07-01' })), 0, 'meer dan een jaar na de offerte');
+  assert.strictEqual(van(fac({ invoice_date: '2026-05-01' })), 0, 'factuur van vóór de offerte');
+  assert.strictEqual(van(fac({ reference: 'Nieuwe keuken renovatie 2026', invoice_date: '2026-11-01' })), 0, 'alleen algemene woorden telt niet');
+  assert.strictEqual(van(fac({ total_price_incl_tax: '-100' })), 0, 'creditnota nooit');
+  assert.strictEqual(van(fac({}), [off(300000000101, { state: 'draft' })]), 0, 'concept-offerte telt niet');
+  // een rond percentage is alleen extra tekst, nooit de reden
+  assert.ok(/\(30% van de offerte\)/.test(V([fac({ total_price_incl_tax: '3000' })])[0].tekst)); assert.ok(!/% van de offerte/.test(a[0].tekst));
+  assert.strictEqual(van(fac({ reference: 'Iets anders', invoice_date: '2026-11-01', total_price_incl_tax: '3000' })), 0, '3.000 is 30% maar zonder woord of venster geen vraag');
+  // niet helemaal gefactureerde offertes alleen
+  assert.strictEqual(V([fac({ original_estimate_id: 300000000101, total_price_incl_tax: '10000' }), fac({ id: 400000000002, reference: 'Aanbetaling wandkast' })]).filter(q => q.soort === 'factuur').length, 0, 'offerte is al helemaal gefactureerd');
+  // ander contact: onderscheidend naamwoord in beide namen + woord in de referentie; koepelnaam (in 3+ namen) en rechtsvormen tellen niet
+  const andere = (naam, ref) => fac({ contact_id: 500000000009, contact: { company_name: naam }, reference: ref || 'Aanbetaling wandkast' });
+  assert.strictEqual(van(andere('Jansen Interieurs')), 1, 'ander contact, gedeeld onderscheidend naamwoord en woord in de referentie');
+  assert.strictEqual(van(andere('Jansen Interieurs', 'Iets anders')), 0, 'zonder woord in de referentie niet');
+  assert.strictEqual(van(andere('Heel Anders B.V.')), 0, 'geen gedeeld naamwoord');
+  const koepel = [off(300000000101, { contact: { company_name: 'Koepelgroep Nederland B.V.' } }), off(300000000102, { contact_id: 500000000002, contact: { company_name: 'Koepelgroep HQ' }, reference: 'Andere opdracht' }), off(300000000103, { contact_id: 500000000003, contact: { company_name: 'Koepelgroep Utrecht' }, reference: 'Nog een' })];
+  assert.strictEqual(van(andere('Koepelgroep Zwolle'), koepel), 0, 'koepelnaam komt in 3 contactnamen voor: telt niet als onderscheidend');
+  // facturen die aan een offerte buiten de lijst hangen zijn aparte opdrachten
+  assert.strictEqual(van(fac({ original_estimate_id: 300000000999, reference: 'Aanbetaling wandkast' })), 0);
+  // al beantwoord: uitgesloten (x) of bevestigd (k) in de prognose
+  assert.strictEqual(V([fac({})], {}, { 'p:e1': { estimate_id: '300000000101', k: [], x: ['400000000001'] } }).filter(q => q.soort === 'factuur').length, 0);
+  assert.strictEqual(V([fac({})], {}, { 'p:e1': { estimate_id: '300000000101', k: ['400000000001'], x: [] } }).length, 0);
+  assert.strictEqual(V([fac({})], { ok: { ['f:400000000001:300000000101']: '2026-10-30' } }).filter(q => q.soort === 'factuur').length, 0, 'recent beantwoord onthouden');
+  // automatisch op referentie gekoppeld (met of zonder offerte-id buiten de lijst): andere toon, k bevestigt, x draait terug
+  const refFac = o => fac(Object.assign({ reference: 'wandkast zeeland ' }, o));
+  const b = V([refFac({})]); assert.deepStrictEqual(b.map(q => q.soort), ['referentie']); assert.ok(/^Gekoppeld op referentie, klopt dat/.test(b[0].tekst)); assert.deepStrictEqual(b[0].opties.map(o => o.actie.soort), ['k', 'x']);
+  assert.strictEqual(L.koppelFacturen([refFac({})], sch, null).perEid['300000000101'].facturen[0].via, 'referentie', 'patroon a: via gezet');
+  assert.strictEqual(L.koppelFacturen([refFac({ original_estimate_id: 300000000999 })], sch, null).perEid['300000000101'].facturen[0].via, 'referentie', 'patroon b: via gezet');
+  assert.strictEqual(V([refFac({})], {}, { 'p:e1': { estimate_id: '300000000101', k: ['400000000001'], x: [] } }).length, 0, 'bevestigd: geen vraag meer');
+  // referentie-koppeling alleen als de factuur niet meer dan 7 dagen vóór de offerte ligt
+  assert.strictEqual(L.koppelFacturen([refFac({ invoice_date: '2025-12-10' })], sch, null).los.length, 1, 'factuur van ver vóór de offerte: niet koppelen');
+  assert.strictEqual(L.koppelFacturen([refFac({ invoice_date: '2026-05-26' })], sch, null).los.length, 0, '6 dagen vóór de offerte mag nog');
+  assert.strictEqual(L.koppelFacturen([refFac({ invoice_date: '2026-05-24' })], sch, null).los.length, 1, '8 dagen ervoor niet');
+});
+test('vragen: geaccepteerd maar weinig of niets gefactureerd, en schets die wegvalt', () => {
+  const off = (id, o) => F.schatNorm(Object.assign({ id, estimate_id: '2026-' + id, contact_id: 500000000001, contact: { company_name: 'Jansen Voorbeeld' }, total_price_incl_tax: '10000', state: 'accepted', reference: 'Wandkast', estimate_date: '2026-05-01' }, o));
+  const gef = (inclC, datum) => { const f = fx({ invoice_date: datum, total_price_incl_tax: String(inclC / 100), original_estimate_id: 300000000201 }); return L.koppelFacturen([f], [off(300000000201)], null); };
+  const vr = (fk, o, extra) => { const s = [off(300000000201, o)]; return L.vragen(L.rijen(s, {}, {}, fk), [], fk || { perEid: {}, los: [] }, s, Object.assign({ vandaag: '2026-11-02', ok: {}, prog: {} }, extra)); };
+  let q = vr(null); assert.deepStrictEqual(q.map(x => x.soort), ['oud']); assert.ok(/staat sinds 01-05-2026 op geaccepteerd, gefactureerd \u20ac 0\/\u20ac 10.000\. Nog te factureren\?/.test(q[0].tekst), q[0].tekst);
+  assert.deepStrictEqual(q[0].opties.map(o => o.actie.soort), ['ok', 'uitbeeld']); assert.ok(/afgewezen/.test(q[0].opties[1].tip));
+  assert.strictEqual(vr(null, { estimate_date: '2026-10-01' }).length, 0, 'jonger dan 60 dagen');
+  assert.strictEqual(vr(null, { state: 'open' }).length, 0, 'alleen geaccepteerd');
+  assert.strictEqual(vr(gef(50000, '2026-09-01')).length, 1, 'minder dan 10% gefactureerd');
+  assert.strictEqual(vr(gef(500000, '2026-10-20')).length, 0, 'deels, recente factuur');
+  assert.strictEqual(vr(gef(500000, '2026-07-01')).length, 1, 'deels, 90 dagen geen factuur');
+  assert.strictEqual(vr(gef(1000000, '2026-07-01')).length, 0, 'helemaal gefactureerd');
+  assert.strictEqual(vr(null, {}, { ok: { 'o:300000000201': '2026-10-01' } }).length, 0, '"komt nog" onthouden');
+  assert.strictEqual(vr(null, {}, { ok: { 'o:300000000201': '2026-08-01' } }).length, 1, 'na 60 dagen komt de vraag terug');
+  assert.strictEqual(L.vragen([], [], null, [], {}).length, 0, 'zonder datum geen vragen');
+  // schets die wegvalt: alleen ter info, "gezien" onthouden
+  const s = [off(300000000201, { estimate_date: '2026-10-20' })], fk = gef(1000000 - 200000, '2026-10-25');
+  const rijen = L.rijen(s, { '300000000201': { cellen: { '2026-12': 500000 } } }, {}, fk);
+  const z = L.vragen(rijen, [], fk, s, { vandaag: '2026-11-02', ok: {}, prog: {} }); assert.deepStrictEqual(z.map(x => x.soort), ['schets']); assert.deepStrictEqual(z[0].opties.map(o => o.actie.soort), ['gezien']);
+  assert.strictEqual(L.vragen(rijen, [], fk, s, { vandaag: '2026-11-02', ok: { [z[0].id]: '2026-01-01' }, prog: {} }).length, 0, 'gezien blijft onthouden');
+});
+test('vragen beantwoorden: bestaand prognose-item (ook projectitem) gaat voor, nooit twee items per offerte', () => {
+  const s = F.schatNorm({ id: 300000000301, estimate_id: '2026-301', contact_id: 500000000001, contact: { company_name: 'Jansen Voorbeeld' }, total_price_incl_tax: '1210', state: 'accepted', reference: 'Wandkast' });
+  const termijn = [{ id: 't1', label: 'rest', bedrag: 1210, factuurdatum: '2026-11-01', aan: true }];
+  const item = o => Object.assign({ soort: 'project', naam: 'Wandkast', estimate_id: '300000000301', totaal: 1210, termijnen: termijn, aan: true, k: [], x: [], ts: 5, door: 'X' }, o);
+  // projectitem onder een andere sleutel
+  let p = L.koppelPlan({ 'p:PRJ1': item({}) }, { soort: 'k', eid: '300000000301', fid: '400000000001' }, s, '2026-11-02');
+  assert.strictEqual(p.sleutel, 'p:PRJ1'); assert.deepStrictEqual(p.item.k, ['400000000001']); assert.strictEqual(p.vorige_ts, 5); assert.ok(!('ts' in p.item) && !('door' in p.item)); assert.strictEqual(p.item.aan, true, 'bestaand item blijft zoals het is');
+  // x haalt hem uit k en omgekeerd
+  p = L.koppelPlan({ 'p:PRJ1': item({ k: ['400000000001'] }) }, { soort: 'x', eid: '300000000301', fid: '400000000001' }, s, '2026-11-02'); assert.deepStrictEqual([p.item.k, p.item.x], [[], ['400000000001']]);
+  // meerdere items voor dezelfde offerte: het actieve gaat voor, geen nieuw item
+  p = L.koppelPlan({ 'p:A': item({ aan: false }), 'p:B': item({}), 'h:z': { soort: 'post' } }, { soort: 'k', eid: '300000000301', fid: '400000000002' }, s, '2026-11-02'); assert.strictEqual(p.sleutel, 'p:B');
+  p = L.koppelPlan({ 'p:A': item({ aan: false }) }, { soort: 'k', eid: '300000000301', fid: '400000000002' }, s, '2026-11-02'); assert.strictEqual(p.sleutel, 'p:A', 'ook een uitgezet item');
+  // pas zonder item: nieuw uit-item p:e<id> in de vorm van F.nieuwItem
+  p = L.koppelPlan({ 'p:ANDERS': item({ estimate_id: '300000000999' }) }, { soort: 'k', eid: '300000000301', fid: '400000000001' }, s, '2026-11-02');
+  assert.strictEqual(p.sleutel, 'p:e300000000301'); assert.strictEqual(p.vorige_ts, null); assert.strictEqual(p.item.aan, false); assert.strictEqual(p.item.estimate_id, '300000000301'); assert.strictEqual(p.item.totaal, 1210); assert.deepStrictEqual(p.item.termijnen.map(t => [t.id, t.bedrag, t.aan]), [['t1', 1210, false]]); assert.deepStrictEqual(p.item.k, ['400000000001']);
+  assert.ok(L.koppelPlan({}, { soort: 'k', eid: '300000000301', fid: '1' }, null, '2026-11-02').fout, 'offerte niet meer in de lijst');
+  // grenzen van de worker: hooguit 10 bevestigd, 20 uitgesloten
+  assert.ok(L.koppelPlan({ 'p:A': item({ k: Array.from({ length: 10 }, (_, i) => 'f' + i) }) }, { soort: 'k', eid: '300000000301', fid: 'nieuw' }, s, '2026-11-02').fout);
+  assert.ok(L.koppelPlan({ 'p:A': item({ x: Array.from({ length: 20 }, (_, i) => 'f' + i) }) }, { soort: 'x', eid: '300000000301', fid: 'nieuw' }, s, '2026-11-02').fout);
+  assert.ok(F.UITBEELD_REDENEN.verkeerd, 'de reden bij uit beeld bestaat in de uitgebreide forecast');
+});
+test('koppelen op referentie: zonder geldige offertedatum nooit automatisch', () => {
+  const off = o => F.schatNorm(Object.assign({ id: 300000000401, estimate_id: '2026-401', contact_id: 500000000001, contact: { company_name: 'A' }, total_price_incl_tax: '1210', state: 'accepted', reference: 'Kast Voorbeeld' }, o));
+  const f = fx({ reference: 'kast voorbeeld', invoice_date: '2026-10-15' });
+  assert.strictEqual(off({}).datum, '', 'geen offertedatum'); assert.strictEqual(L.koppelFacturen([f], [off({})], null).los.length, 1, 'geen datum: niet koppelen');
+  assert.strictEqual(L.koppelFacturen([f], [off({ estimate_date: 'morgen' })], null).los.length, 1, 'ongeldige datum: niet koppelen');
+  assert.strictEqual(L.koppelFacturen([f], [off({ estimate_date: '2026-10-01' })], null).los.length, 0, 'geldige datum: wel');
+});
+test('bevestigd bij meerdere offertes is een conflict: factuur blijft los en er komt een vraag', () => {
+  const off = (id, o) => F.schatNorm(Object.assign({ id, estimate_id: '2026-' + id, contact_id: 500000000001, contact: { company_name: 'Jansen Voorbeeld' }, total_price_incl_tax: '1210', state: 'accepted', reference: 'Kast ' + id, estimate_date: '2026-06-01' }, o));
+  const sch = [off(300000000501), off(300000000502)], f = fx({ original_estimate_id: 300000000501 });
+  const item = (eid, o) => Object.assign({ soort: 'project', estimate_id: eid, k: [], x: [] }, o);
+  const prog = { 'p:A': item('300000000501', { k: [f.id] }), 'p:B': item('300000000502', { k: [f.id] }) };
+  const fk = L.koppelFacturen([f], sch, prog);
+  assert.strictEqual(fk.los.length, 1, 'niet gekoppeld, ook niet op zijn eigen offerte-id'); assert.deepStrictEqual(Object.keys(fk.perEid), []); assert.deepStrictEqual(fk.conflicten[f.id], ['300000000501', '300000000502']);
+  const q = L.vragen(L.rijen(sch, {}, {}, fk), [f], fk, sch, { vandaag: '2026-11-02', ok: {}, prog });
+  const c = q.filter(x => x.soort === 'conflict'); assert.strictEqual(c.length, 1); assert.ok(/staat bevestigd bij twee offertes: welke\?/.test(c[0].tekst), c[0].tekst);
+  assert.deepStrictEqual(c[0].opties.map(o => [o.actie.soort, o.actie.eid, o.actie.andere]), [['kies', '300000000501', ['300000000502']], ['kies', '300000000502', ['300000000501']]]);
+  // twee items van dezelfde offerte met k: geen conflict
+  const prog2 = { 'p:A': item('300000000501', { k: [f.id] }), 'p:C': item('300000000501', { k: [f.id] }) };
+  const fk2 = L.koppelFacturen([f], sch, prog2); assert.deepStrictEqual(fk2.conflicten, {}); assert.deepStrictEqual(Object.keys(fk2.perEid), ['300000000501']);
+  // antwoord: k bij de gekozen offerte, x bij de andere (ook in een tweede item van die offerte dat de factuur nog als k heeft)
+  const prog3 = { 'p:A': item('300000000501', { k: [f.id] }), 'p:B': item('300000000502', { k: [f.id] }), 'p:C': item('300000000502', { k: [f.id], ts: 3 }) };
+  const pl = L.koppelPlannen(prog3, { soort: 'x', eid: '300000000502', fid: f.id }, sch[1], '2026-11-02').plannen;
+  assert.deepStrictEqual(pl.map(x => [x.sleutel, x.item.x, x.item.k]), [['p:B', [f.id], []], ['p:C', [], []]], 'ook het andere item van die offerte verliest k');
+  const uit = L.koppelFacturen([f], sch, { 'p:A': pl.length ? item('300000000501', { k: [f.id] }) : null, 'p:B': Object.assign(item('300000000502'), { x: [f.id] }) });
+  assert.deepStrictEqual(Object.keys(uit.perEid), ['300000000501'], 'na het antwoord is hij gekoppeld aan de gekozen offerte');
+});
+atest('uit beeld: keten met 409-nieuwe-poging, terugdraaien en melding', async () => {
+  const termijn = [{ id: 't1', label: 'rest', bedrag: 1210, factuurdatum: '2026-12-01', aan: true }];
+  const nieuwItem = (o) => Object.assign({ soort: 'project', naam: 'Wandkast', estimate_id: '300000000601', totaal: 1210, termijnen: termijn, betaaltermijn: 14, aan: true, k: [], x: [], ts: 10, door: 'X' }, o);
+  const maak = (opties) => {
+    const o = Object.assign({ falen: {}, conflictEenmaal: new Set() }, opties), winkel = { 'p:A': nieuwItem({}), 'p:B': nieuwItem({ ts: 20 }) }, log = [];
+    let ts = 100;
+    const haal = async (pad, opt) => {
+      const body = opt && opt.body; log.push([pad, body && (body.sleutel || (body.controle ? 'controle' : 'markering'))]);
+      if (pad === '/geld/uitbeeld') { if (body.controle) return { ok: true }; if (o.markeringFout) return { error: 'kv kapot' }; return { ok: true, items: { [body.ids[0]]: { reden: body.reden } } }; }
+      const huidig = winkel[body.sleutel], uitDoel = body.item.aan === false;
+      if (o.conflictEenmaal.has(body.sleutel) && uitDoel) { o.conflictEenmaal.delete(body.sleutel); winkel[body.sleutel] = Object.assign({}, huidig, { ts: ++ts }); return { error: 'deze prognose is intussen aangepast \u2014 herlaad en probeer opnieuw' }; }
+      if (body.vorige_ts !== huidig.ts) return { error: 'deze prognose is intussen aangepast \u2014 herlaad en probeer opnieuw' };
+      if (o.falen[body.sleutel] && (uitDoel ? o.falen[body.sleutel] === 'uit' : o.falen[body.sleutel] === 'terug' || o.falen[body.sleutel] === 'beide')) return { error: 'opslaan mislukt' };
+      const nw = Object.assign({}, body.item, { ts: ++ts }); winkel[body.sleutel] = nw; return { ok: true, item: nw };
+    };
+    return { o, winkel, log, run: () => L.uitBeeldKeten({ F, eid: '300000000601', reden: 'verkeerd', lees: async () => JSON.parse(JSON.stringify(winkel)), haal }) };
+  };
+  // gelukt: eerst alle items uit, pas daarna de markering
+  let m = maak({}); const res = await m.run(); assert.ok(res.items['300000000601']);
+  assert.deepStrictEqual(m.log.map(x => x[1]), ['controle', 'p:A', 'p:B', 'markering']); assert.ok(m.winkel['p:A'].aan === false && m.winkel['p:B'].aan === false);
+  // 409 bij een item: opnieuw lezen en één keer opnieuw proberen
+  m = maak({ conflictEenmaal: new Set(['p:B']) }); await m.run(); assert.strictEqual(m.winkel['p:B'].aan, false); assert.strictEqual(m.log.filter(x => x[1] === 'p:B').length, 2, 'precies één nieuwe poging');
+  // tweede item mislukt: eerste wordt teruggezet, markering komt er niet
+  m = maak({ falen: { 'p:B': 'uit' } });
+  await assert.rejects(m.run(), e => /niet gelukt/.test(e.message) && /teruggezet/.test(e.message) && e.teruggedraaid === 1 && e.mislukt.length === 0);
+  assert.strictEqual(m.winkel['p:A'].aan, true, 'al uitgezet item staat weer aan'); assert.ok(!m.log.some(x => x[1] === 'markering'), 'markering pas als alles gelukt is');
+  // terugdraaien lukt zelf niet: melding noemt offerte en item
+  m = maak({ falen: { 'p:A': 'terug', 'p:B': 'uit' } });
+  await assert.rejects(m.run(), e => /offerte 300000000601/.test(e.message) && /p:A/.test(e.message) && /nakijken/.test(e.message) && e.mislukt.join() === 'p:A');
+  // markering faalt na geslaagde items: items worden teruggezet
+  m = maak({ markeringFout: true }); await assert.rejects(m.run(), e => /markering/.test(e.message) && e.teruggedraaid === 2);
+  assert.ok(m.winkel['p:A'].aan === true && m.winkel['p:B'].aan === true);
+  assert.strictEqual(m.log.filter(x => x[1] === 'markering').length, 2, 'markering twee keer geprobeerd');
+});
+test('datums uit Moneybird worden echt op de kalender gecontroleerd; ongeldig = niet rekenen en nooit een fout', () => {
+  for (const d of ['2026-99-99', '2026-02-30', '2026-13-01', '2026-00-10', '2026-04-31', '2025-02-29', '2026-1-1', 'morgen', '', null, undefined, 20261102]) assert.strictEqual(L.geldigeDatum(d), false, String(d));
+  for (const d of ['2026-02-28', '2024-02-29', '2026-12-31', '2026-01-01']) assert.strictEqual(L.geldigeDatum(d), true, d);
+  assert.strictEqual(L.dagPlus('2026-12-30', 3), '2027-01-02'); assert.strictEqual(L.dagPlus('2026-03-01', -1), '2026-02-28'); assert.strictEqual(L.dagPlus('2026-99-99', 5), null); assert.strictEqual(L.dagPlus('2026-01-01', NaN), null);
+  assert.strictEqual(L.dagenTussen('2026-01-01', '2026-03-01'), 59); assert.strictEqual(L.dagenTussen('2026-99-99', '2026-03-01'), null);
+  assert.strictEqual(fx({ invoice_date: '2026-99-99' }), null, 'factuur met onmogelijke datum telt niet');
+  const off = o => F.schatNorm(Object.assign({ id: 300000000701, estimate_id: '2026-701', contact_id: 500000000001, contact: { company_name: 'Jansen Voorbeeld' }, total_price_incl_tax: '1210', state: 'accepted', reference: 'Kast Voorbeeld', estimate_date: '2026-99-99' }, o));
+  const f = fx({ reference: 'kast voorbeeld', invoice_date: '2026-10-15' });
+  assert.doesNotThrow(() => L.koppelFacturen([f], [off({})], null)); assert.strictEqual(L.koppelFacturen([f], [off({})], null).los.length, 1, 'onmogelijke offertedatum: niet koppelen op referentie');
+  const sch = [off({ estimate_date: '2026-02-30' })], fk = L.koppelFacturen([f], sch, null);
+  assert.doesNotThrow(() => L.vragen(L.rijen(sch, {}, {}, fk), [f], fk, sch, { vandaag: '2026-11-02', ok: {}, prog: {} })); assert.deepStrictEqual(L.vragen(L.rijen(sch, {}, {}, fk), [f], fk, sch, { vandaag: '2026-11-02', ok: {}, prog: {} }), [], 'ongeldige offertedatum: geen factuur- en geen oud-vraag');
+  assert.deepStrictEqual(L.vragen(L.rijen([off({ estimate_date: '2026-01-01' })], {}, {}, null), [], null, [off({ estimate_date: '2026-01-01' })], { vandaag: '2026-99-99', ok: {}, prog: {} }), [], 'ongeldige vandaag: geen vragen en geen fout');
+  const ok = L.vragen(L.rijen([off({ estimate_date: '2026-01-01' })], {}, {}, null), [], null, [off({ estimate_date: '2026-01-01' })], { vandaag: '2026-11-02', ok: { 'o:300000000701': '2026-99-99' }, prog: {} });
+  assert.strictEqual(ok.length, 1, 'een onleesbare "komt nog"-datum onthouden we niet');
+});
+atest('factuur koppelen: keten met terugdraaien en melding', async () => {
+  const termijn = [{ id: 't1', label: 'rest', bedrag: 1210, factuurdatum: '2026-12-01', aan: true }], FID = '400000000801', EID = '300000000801';
+  const it = o => Object.assign({ soort: 'project', naam: 'Wandkast', estimate_id: EID, totaal: 1210, termijnen: termijn, betaaltermijn: 14, aan: true, k: [], x: [], ts: 10, door: 'X' }, o);
+  const schat = { id: EID, naam: 'Jansen', ref: 'Kast', nummer: '2026-801', contact_id: '500000000001', totaalC: 121000, status: 'geaccepteerd' };
+  const maak = (opties, start) => {
+    const o = Object.assign({ falen: {}, eenmaal409: new Set() }, opties), winkel = start || { 'p:A': it({ x: [FID] }), 'p:C': it({ x: [FID], ts: 20 }) }, log = []; let ts = 100;
+    const haal = async (pad, opt) => {
+      const b = opt.body; log.push(b.sleutel + (b.item === null ? ':wis' : ''));
+      const huidig = winkel[b.sleutel];
+      if (o.eenmaal409.has(b.sleutel)) { o.eenmaal409.delete(b.sleutel); winkel[b.sleutel] = Object.assign({}, huidig, { ts: ++ts }); return { error: 'deze prognose is intussen aangepast \u2014 herlaad' }; }
+      if ((huidig ? huidig.ts : null) !== b.vorige_ts) return { error: 'deze prognose is intussen aangepast \u2014 herlaad' };
+      if (o.falen[b.sleutel] === 'altijd' || (o.falen[b.sleutel] === 'terug' && log.filter(x => x === b.sleutel).length > 1)) return { error: 'opslaan mislukt' };
+      if (b.item === null) { delete winkel[b.sleutel]; return { ok: true, item: null }; }
+      const nw = Object.assign({}, b.item, { ts: ++ts }); winkel[b.sleutel] = nw; return { ok: true, item: nw };
+    };
+    return { winkel, log, run: () => L.koppelKeten({ acties: [{ soort: 'k', eid: EID, fid: FID }], fid: FID, schatVan: () => schat, vandaag: '2026-11-02', lees: async () => JSON.parse(JSON.stringify(winkel)), haal }) };
+  };
+  // alles gelukt: beide items bijgewerkt (k erbij, x eraf)
+  let m = maak({}); const gel = await m.run(); assert.strictEqual(gel.length, 2); assert.deepStrictEqual(m.log, ['p:A', 'p:C']);
+  assert.deepStrictEqual([m.winkel['p:A'].k, m.winkel['p:A'].x, m.winkel['p:C'].x], [[FID], [], []]);
+  // 409 bij het tweede item: opnieuw lezen en een keer opnieuw
+  m = maak({ eenmaal409: new Set(['p:C']) }); await m.run(); assert.deepStrictEqual(m.log, ['p:A', 'p:C', 'p:C']); assert.deepStrictEqual(m.winkel['p:C'].x, []);
+  // tweede item mislukt: eerste krijgt zijn vorige k/x terug (met verse ts), melding zegt het
+  m = maak({ falen: { 'p:C': 'altijd' } });
+  await assert.rejects(m.run(), e => /niet gelukt/.test(e.message) && /teruggezet/.test(e.message) && e.teruggedraaid === 1 && e.mislukt.length === 0);
+  assert.deepStrictEqual([m.winkel['p:A'].k, m.winkel['p:A'].x], [[], [FID]], 'vorige stand terug'); assert.ok(m.winkel['p:A'].ts > 100, 'met een verse ts');
+  // terugzetten mislukt ook: offerte en item staan in de melding
+  m = maak({ falen: { 'p:C': 'altijd', 'p:A': 'terug' } });
+  await assert.rejects(m.run(), e => /nakijken/.test(e.message) && new RegExp('offerte ' + EID).test(e.message) && /p:A/.test(e.message) && e.mislukt.join() === 'p:A' && e.teruggedraaid === 0);
+  // nieuw aangemaakt item wordt bij een fout weer gewist
+  m = maak({ falen: { 'p:C': 'altijd' } }, { 'p:C': it({ ts: 20 }) }); m.winkel['p:C'].estimate_id = EID;
+  const nieuw = L.koppelKeten({ acties: [{ soort: 'k', eid: EID, fid: FID }, { soort: 'x', eid: '300000000802', fid: FID }], fid: FID, schatVan: id => id === EID ? schat : Object.assign({}, schat, { id }), vandaag: '2026-11-02', lees: async () => JSON.parse(JSON.stringify(m.winkel)),
+    haal: async (pad, opt) => { const b = opt.body; if (b.sleutel === 'p:e300000000802') return { error: 'opslaan mislukt' }; const nw = Object.assign({}, b.item, { ts: 500 }); m.winkel[b.sleutel] = nw; return { ok: true, item: nw }; } });
+  await assert.rejects(nieuw, e => e.teruggedraaid === 1 && /teruggezet/.test(e.message)); assert.deepStrictEqual(m.winkel['p:C'].k, [], 'eerste actie teruggezet');
+});
+atest('factuur koppelen: rollback wist een zelf aangemaakt item alleen als het ongewijzigd is', async () => {
+  const FID = '400000000901', EID = '300000000901', EID2 = '300000000902';
+  const schat = id => ({ id, naam: 'Jansen', ref: 'Kast', nummer: '2026-' + id.slice(-3), contact_id: '500000000001', totaalC: 121000, status: 'geaccepteerd' });
+  const run = async (collegaWijzigt) => {
+    const winkel = {}, log = []; let ts = 100;
+    const haal = async (pad, opt) => {
+      const b = opt.body; log.push(b.sleutel + (b.item === null ? ':wis' : ''));
+      if (b.sleutel === 'p:e' + EID2) return { error: 'opslaan mislukt' };                                         // de tweede actie faalt: rollback van de eerste
+      const huidig = winkel[b.sleutel] || null;
+      if (b.item === null && collegaWijzigt && huidig) { winkel[b.sleutel] = Object.assign({}, huidig, { naam: 'Aangepast door collega', ts: ++ts }); return { error: 'deze prognose is intussen aangepast \u2014 herlaad' }; }
+      if ((huidig ? huidig.ts : null) !== b.vorige_ts) return { error: 'deze prognose is intussen aangepast \u2014 herlaad' };
+      if (b.item === null) { delete winkel[b.sleutel]; return { ok: true, item: null }; }
+      const nw = Object.assign({}, b.item, { ts: ++ts }); winkel[b.sleutel] = nw; return { ok: true, item: nw };
+    };
+    let fout = null;
+    try { await L.koppelKeten({ acties: [{ soort: 'k', eid: EID, fid: FID }, { soort: 'x', eid: EID2, fid: FID }], fid: FID, schatVan: schat2 => schat(schat2), vandaag: '2026-11-02', lees: async () => JSON.parse(JSON.stringify(winkel)), haal }); } catch (e) { fout = e; }
+    return { fout, winkel, log };
+  };
+  // ongewijzigd: het zelf aangemaakte item wordt gewist
+  let r = await run(false); assert.ok(r.fout); assert.ok(!('p:e' + EID in r.winkel), 'gewist'); assert.ok(r.log.includes('p:e' + EID + ':wis')); assert.deepStrictEqual(r.fout.bleef, []);
+  // een collega past het item aan tussen schrijven en terugdraaien (409): niet wissen, alleen de factuur eruit
+  r = await run(true); assert.ok(r.winkel['p:e' + EID], 'item blijft staan'); assert.strictEqual(r.winkel['p:e' + EID].naam, 'Aangepast door collega', 'het werk van de collega is intact');
+  assert.deepStrictEqual(r.winkel['p:e' + EID].k, [], 'alleen de factuurkoppeling is teruggezet'); assert.deepStrictEqual(r.fout.bleef, ['p:e' + EID]); assert.deepStrictEqual(r.fout.mislukt, []);
+  assert.ok(/bleef staan omdat het intussen gewijzigd is; alleen de factuurkoppeling is teruggezet/.test(r.fout.message), r.fout.message); assert.strictEqual(r.log.filter(x => x === 'p:e' + EID + ':wis').length, 1, 'maar een wisverzoek');
+});
+atest('uit beeld: rollback schrijft niet over een item dat een collega intussen wijzigde', async () => {
+  const termijn = [{ id: 't1', label: 'rest', bedrag: 1210, factuurdatum: '2026-12-01', aan: true }];
+  const item = o => Object.assign({ soort: 'project', naam: 'Wandkast', estimate_id: '300000000951', totaal: 1210, termijnen: termijn, betaaltermijn: 14, aan: true, k: [], x: [], ts: 10, door: 'X' }, o);
+  const winkel = { 'p:A': item({}), 'p:B': item({ ts: 20 }) }, log = []; let ts = 100;
+  const haal = async (pad, opt) => {
+    const b = opt.body; log.push(pad === '/geld/uitbeeld' ? (b.controle ? 'controle' : 'markering') : b.sleutel + ':' + (b.item.aan === false ? 'uit' : 'aan'));
+    if (pad === '/geld/uitbeeld') return b.controle ? { ok: true } : { error: 'kv kapot' };                       // de markering faalt: rollback
+    const huidig = winkel[b.sleutel];
+    if (b.item.aan === true && b.sleutel === 'p:A') { winkel['p:A'] = Object.assign({}, huidig, { ts: ++ts, door: 'Collega Voorbeeld', aan: false, naam: 'Collega zette dit uit' }); return { error: 'deze prognose is intussen aangepast \u2014 herlaad' }; }   // collega is ons voor
+    if (huidig.ts !== b.vorige_ts) return { error: 'deze prognose is intussen aangepast \u2014 herlaad' };
+    const nw = Object.assign({}, b.item, { ts: ++ts }); winkel[b.sleutel] = nw; return { ok: true, item: nw };
+  };
+  let fout = null; try { await L.uitBeeldKeten({ F, eid: '300000000951', reden: 'verkeerd', lees: async () => JSON.parse(JSON.stringify(winkel)), haal }); } catch (e) { fout = e; }
+  assert.ok(fout, 'keten faalt'); assert.strictEqual(winkel['p:A'].naam, 'Collega zette dit uit', 'wat de collega schreef is intact'); assert.strictEqual(winkel['p:A'].aan, false, 'niet teruggedraaid naar aan');
+  assert.strictEqual(log.filter(x => x === 'p:A:aan').length, 1, 'geen tweede schrijfpoging na de 409'); assert.strictEqual(winkel['p:B'].aan, true, 'het andere item (nog onze versie) is wel teruggezet');
+  assert.deepStrictEqual(fout.gewijzigd, ['p:A']); assert.deepStrictEqual(fout.mislukt, []); assert.strictEqual(fout.teruggedraaid, 1);
+  assert.ok(/Niet teruggezet: intussen gewijzigd door Collega Voorbeeld: offerte 300000000951, item p:A/.test(fout.message), fout.message);
+  assert.ok(/Teruggezet: 1 van 2\./.test(fout.message) && !/al uitgezette prognose-items zijn teruggezet/.test(fout.message), 'zin noemt alleen wat echt teruggezet is: ' + fout.message);
+});
+kette.then(() => console.log(`\n${n} tests geslaagd${process.exitCode ? ' (met fouten)' : ''}`));
