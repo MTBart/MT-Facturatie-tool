@@ -66,22 +66,25 @@
   // gemaakt is om een deel te factureren (niet in de lijst): die koppelen op een exact gelijke referentie (trim, hoofdletters negeren) + hetzelfde
   // contact, alleen als dat precies één open of geaccepteerde offerte in de lijst is (f.via = 'referentie'; twee offertes met dezelfde referentie = niet koppelen).
   L.koppelFacturen = function (facturen, schatten, prognose) {
-    const perEid = {}, los = [], perId = new Map(), bevestigd = new Map(), nee = new Map();
+    const perEid = {}, los = [], perId = new Map(), bevestigd = new Map(), nee = new Map(), bevAlle = new Map(), conflicten = {};
     for (const it of Object.values(prognose || {})) {
       if (!it || !it.estimate_id) continue; const e = String(it.estimate_id);
-      for (const k of it.k || []) bevestigd.set(String(k), e);
+      for (const k of it.k || []) { const s = bevAlle.get(String(k)) || new Set(); s.add(e); bevAlle.set(String(k), s); }
       for (const k of it.x || []) { const s = nee.get(String(k)) || new Set(); s.add(e); nee.set(String(k), s); }
     }
+    // Staat een factuur bevestigd bij twee of meer verschillende offertes, dan is dat een conflict: niet koppelen (blijft los) en een vraag in het paneel. Twee items van dezelfde offerte met k is geen conflict.
+    for (const [k, s] of bevAlle) { if (s.size === 1) bevestigd.set(k, [...s][0]); else conflicten[k] = [...s].sort(); }
     const offertes = (schatten || []).filter(s => s && s.nummer && s.nummer.length >= 4 && s.contact_id), inLijst = new Set((schatten || []).filter(Boolean).map(s => s.id));
     const dagPlus = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10);
-    const refKey = t => String(t || '').trim().toLowerCase(), refOffertes = (schatten || []).filter(s => s && s.contact_id && refKey(s.ref) && s.status !== 'concept' && s.status !== 'afgewezen');
+    const refKey = t => String(t || '').trim().toLowerCase(), refOffertes = (schatten || []).filter(s => s && s.contact_id && refKey(s.ref) && /^\d{4}-\d{2}-\d{2}$/.test(String(s.datum || '')) && s.status !== 'concept' && s.status !== 'afgewezen');   // zonder geldige offertedatum nooit automatisch koppelen
     for (const f of (facturen || []).filter(Boolean).slice().sort((a, b) => (a.orig ? 1 : 0) - (b.orig ? 1 : 0))) {
+      if (conflicten[f.id]) { los.push(f); continue; }
       const niet = nee.get(f.id) || new Set();
       let eid = bevestigd.get(f.id) || null; if (eid && niet.has(eid)) eid = null;   // uitgesloten wint van bevestigd (tegenstrijdige prognose)
       let via = null;
       if (!eid && f.eid && !niet.has(f.eid) && inLijst.has(f.eid)) eid = f.eid;
       if (!eid && f.orig && perId.has(f.orig)) eid = perId.get(f.orig);
-      if (!eid && f.contact_id && refKey(f.ref)) { const kand = refOffertes.filter(s => s.contact_id === f.contact_id && !niet.has(s.id) && refKey(s.ref) === refKey(f.ref) && (!s.datum || f.datum >= dagPlus(s.datum, -7))); if (kand.length === 1) { eid = kand[0].id; via = 'referentie'; } }
+      if (!eid && f.contact_id && refKey(f.ref)) { const kand = refOffertes.filter(s => s.contact_id === f.contact_id && !niet.has(s.id) && refKey(s.ref) === refKey(f.ref) && f.datum >= dagPlus(s.datum, -7)); if (kand.length === 1) { eid = kand[0].id; via = 'referentie'; } }
       if (!eid) { const ref = f.ref.toLowerCase(), kand = offertes.filter(s => s.contact_id === f.contact_id && !niet.has(s.id) && ref.includes(s.nummer.toLowerCase())); if (kand.length === 1) eid = kand[0].id; }
       if (!eid && f.eid && !niet.has(f.eid)) eid = f.eid;   // een offerte die niet (meer) in de lijst staat: eigen "gefactureerd"-rij
       if (!eid) { los.push(f); continue; }
@@ -91,7 +94,7 @@
       const g = perEid[eid] = perEid[eid] || { inclC: 0, exclC: 0, maand: {}, facturen: [], klant: f.klant };
       g.inclC += f.inclC; g.exclC += f.exclC == null ? 0 : f.exclC; g.maand[f.ym] = (g.maand[f.ym] || 0) + f.inclC; g.facturen.push(g0);
     }
-    return { perEid, los };
+    return { perEid, los, conflicten };
   };
 
   // Rijen: elke offerte uit Moneybird (genormaliseerd met MTForecast.schatNorm), plus schets-records van offertes die niet (meer) in de
@@ -195,6 +198,14 @@
           opties: opties('Klopt', 'Klopt niet').map(o => Object.assign(o, { actie: Object.assign(o.actie, { eid, fid: f.id }) })), refs: { factuur: { id: f.id, nummer: f.nummer }, offerte: { id: eid, nummer: s.nummer } } });
       }
     }
+    // 1c. bevestigd bij meerdere offertes: welke?
+    for (const [fid, eids] of Object.entries((fk && fk.conflicten) || {})) {
+      const f = (fact || []).find(x => x && x.id === fid); if (!f) continue;
+      const id = 'c:' + fid + ':' + eids.join(','); if (beantwoord(id)) continue;
+      uit.push({ id, soort: 'conflict', tekst: `${fTekst(f).replace(/^f/, 'F')} staat bevestigd bij ${eids.length === 2 ? 'twee' : eids.length} offertes: welke?`,
+        opties: eids.map(eid => { const s = perId.get(eid); return { id: 'kies-' + eid, tekst: s ? `${s.nummer ? 'Offerte ' + s.nummer : 'Offerte'} ${[s.naam, s.ref].filter(Boolean).join(' \u2014 ')}`.trim() : 'Offerte ' + eid, actie: { soort: 'kies', eid, fid, andere: eids.filter(x => x !== eid) } }; }),
+        refs: { factuur: { id: f.id, nummer: f.nummer } } });
+    }
     // 2. geaccepteerd maar weinig of niets gefactureerd
     for (const r of rijen || []) {
       if (!r || r.uitbeeld || r.los || r.status !== 'geaccepteerd' || r.fstatus === 'gefactureerd' || !(r.inclC > 0) || !r.datum) continue;
@@ -238,6 +249,65 @@
     item[doel] = lijst;
     if (F.itemGrootte(item) > 1000) return { fout: 'het prognose-item van deze offerte is te groot om er nog een factuur bij te zetten' };
     return { sleutel, item, vorige_ts: huidig ? huidig.ts : null };
+  };
+  // Alle plannen voor één antwoord: het item van L.koppelPlan, plus andere items van dezelfde offerte waar de factuur nog in de tegenovergestelde lijst staat (anders blijft hij daar bevestigd of uitgesloten).
+  L.koppelPlannen = function (items, a, schat, vandaag) {
+    const p = L.koppelPlan(items, a, schat, vandaag); if (p.fout) return p;
+    const plannen = [p], tegen = a.soort === 'k' ? 'x' : 'k';
+    for (const k of Object.keys(items || {}).sort()) {
+      const it = items[k]; if (k === p.sleutel || !it || it.soort === 'post' || String(it.estimate_id || '') !== String(a.eid) || !(it[tegen] || []).map(String).includes(String(a.fid))) continue;
+      const item = JSON.parse(JSON.stringify(it)); delete item.ts; delete item.door; item[tegen] = item[tegen].filter(x => String(x) !== String(a.fid)); plannen.push({ sleutel: k, item, vorige_ts: it.ts });
+    }
+    return { plannen };
+  };
+  // Offerte uit beeld zetten als keten met terugdraaien (alle prognose-items uit, daarna pas de markering). o = { haal(pad, opties), lees() → verse prognose-items, F, eid, reden, noteer?(antwoord, sleutel) }.
+  // Per item bij een 409: opnieuw lezen en één keer opnieuw proberen. Mislukt er iets, dan worden de al geslaagde items teruggezet (aan: true); lukt dat niet, dan staat in de fout welke offerte en welke
+  // items handmatig nagekeken moeten worden. Geeft het antwoord van /geld/uitbeeld, of gooit een Error met .mislukt (items die niet terug zijn) en .teruggedraaid.
+  L.uitBeeldKeten = async function (o) {
+    const F = o.F, items = await o.lees(), plan = F.bulkUitBeeld([{ estimateId: o.eid, sleutel: 'p:e' + o.eid }], items, o.reden);
+    if (plan.fout) throw new Error(plan.fout); if (!plan.ids.length) throw new Error('deze offerte heeft geen geldig offerte-id');
+    const kapot = r => !r || r.error, is409 = r => /intussen aangepast|HTTP 409/.test(String(r && (r.error || r.message) || ''));
+    const ub = async body => { const r = await o.haal('/geld/uitbeeld', { method: 'POST', body }); if (kapot(r)) throw new Error(r && r.error || 'opslaan mislukt'); return r; };
+    await ub({ ids: plan.ids, reden: o.reden, controle: true });
+    const gelukt = []; let stop = null, res = null;
+    for (const u of plan.updates) {
+      try {
+        let w = null, bron = items;
+        for (let poging = 0; poging < 2 && !w; poging++) {
+          const huidig = bron[u.sleutel]; if (!huidig) throw new Error('het prognose-item ' + u.sleutel + ' bestaat niet meer');
+          const nieuw = poging ? F.uitBeeldItem(huidig) : u.item;
+          if (!nieuw) { w = { overslaan: true }; break; }
+          const r = await o.haal('/geld/prognose', { method: 'POST', body: { sleutel: u.sleutel, item: nieuw, vorige_ts: huidig.ts } });
+          if (!kapot(r)) { w = r; break; }
+          if (poging === 0 && is409(r)) { bron = await o.lees(); continue; }
+          throw new Error(r && r.error || 'opslaan mislukt');
+        }
+        if (w && !w.overslaan) { gelukt.push({ sleutel: u.sleutel, item: w.item }); if (o.noteer) o.noteer(w, u.sleutel); }
+      } catch (e) { stop = e.message || String(e); break; }
+    }
+    if (!stop) {
+      let laatste = null; for (let poging = 0; poging < 2 && !res; poging++) { try { res = await ub({ ids: plan.ids, reden: o.reden }); } catch (e) { laatste = e; } }
+      if (!res) stop = 'de markering uit beeld: ' + ((laatste && laatste.message) || 'opslaan mislukt');
+    }
+    if (!stop) return res;
+    const mislukt = [];
+    for (const g of gelukt.slice().reverse()) {
+      let ok = false, cur = g.item;
+      try {
+        for (let poging = 0; poging < 2 && !ok; poging++) {
+          const terug = JSON.parse(JSON.stringify(cur)); delete terug.ts; delete terug.door; terug.aan = true;
+          const r = await o.haal('/geld/prognose', { method: 'POST', body: { sleutel: g.sleutel, item: terug, vorige_ts: cur.ts } });
+          if (!kapot(r)) { ok = true; if (o.noteer) o.noteer(r, g.sleutel); break; }
+          if (poging === 0 && is409(r)) { const vers = await o.lees(); if (!vers[g.sleutel]) break; cur = vers[g.sleutel]; if (cur.aan !== false) { ok = true; break; } continue; }
+          break;
+        }
+      } catch (e) { ok = false; }
+      if (!ok) mislukt.push(g.sleutel);
+    }
+    const teruggedraaid = gelukt.length - mislukt.length;
+    const err = new Error(`Uit beeld zetten is niet gelukt (${stop}). ` + (!gelukt.length ? 'Er is niets gewijzigd.' : !mislukt.length ? `De ${gelukt.length === 1 ? 'al uitgezette prognose-item is' : gelukt.length + ' al uitgezette prognose-items zijn'} teruggezet.`
+      : `Teruggezet: ${teruggedraaid} van ${gelukt.length}. Niet teruggezet (nakijken in de uitgebreide forecast, Gaat zeker door staat uit): offerte ${o.eid}, ${mislukt.length === 1 ? 'item' : 'items'} ${mislukt.join(', ')}.`));
+    err.mislukt = mislukt; err.teruggedraaid = teruggedraaid; throw err;
   };
   L.FILTERS = ['geaccepteerd', 'openstaand', 'verlopen', 'concept', 'afgewezen', 'los', 'gefactureerd', 'afgerond', 'uitbeeld'];
   // Met maanden: helemaal gefactureerd en in die maanden niets meer dat telt = Afgerond (eigen filter, standaard uit).
@@ -813,30 +883,22 @@
   // Factuur bevestigen (k) of uitsluiten (x) via L.koppelPlan (eerst een bestaand item met die estimate_id, anders een uit-item).
   // Bij een 409 (intussen aangepast): opnieuw lezen en één keer opnieuw proberen.
   async function zetKoppeling(a) {
-    const F = root.MTForecast;
     for (let poging = 0; poging < 2; poging++) {
-      const items = await prognoseLezen(), plan = L.koppelPlan(items, a, (st.schatten || []).find(x => x.id === a.eid), dagVandaag());
-      if (plan.fout) throw new Error(plan.fout);
-      const { sleutel, item } = plan;
-      const w = await st.opt.bron.haal('/geld/prognose', { method: 'POST', body: { sleutel, item, vorige_ts: plan.vorige_ts } });
-      if (w && !w.error) { noteerPrognose(w, sleutel); return w; }
-      if (poging === 0 && verouderd409(w)) continue;
-      throw new Error(w && w.error || 'opslaan mislukt');
+      const items = await prognoseLezen(), pl = L.koppelPlannen(items, a, (st.schatten || []).find(x => x.id === a.eid), dagVandaag());
+      if (pl.fout) throw new Error(pl.fout);
+      let again = false;
+      for (const plan of pl.plannen) {
+        const w = await st.opt.bron.haal('/geld/prognose', { method: 'POST', body: { sleutel: plan.sleutel, item: plan.item, vorige_ts: plan.vorige_ts } });
+        if (w && !w.error) { noteerPrognose(w, plan.sleutel); continue; }
+        if (poging === 0 && verouderd409(w)) { again = true; break; }
+        throw new Error(w && w.error || 'opslaan mislukt');
+      }
+      if (!again) return;
     }
   }
-  // Offerte uit beeld zetten, zoals in de uitgebreide forecast: eerst controleren, dan de prognose-items uit (Gaat zeker door uit), dan de markering (2 pogingen).
+  // Offerte uit beeld zetten: L.uitBeeldKeten (met terugdraaien); bij succes de markering lokaal bijhouden.
   async function zetUitBeeld(eid) {
-    const F = root.MTForecast, reden = 'verkeerd' /* bestaande reden: "Verkeerd of vervallen"; de worker kent geen vrije notitie */, items = await prognoseLezen(), plan = F.bulkUitBeeld([{ estimateId: eid, sleutel: 'p:e' + eid }], items, reden);
-    if (plan.fout) throw new Error(plan.fout); if (!plan.ids.length) throw new Error('deze offerte heeft geen geldig offerte-id');
-    const ub = async body => { const r = await st.opt.bron.haal('/geld/uitbeeld', { method: 'POST', body }); if (!r || r.error) throw new Error(r && r.error || 'opslaan mislukt'); return r; };
-    await ub({ ids: plan.ids, reden, controle: true });
-    for (const u of plan.updates) {
-      const w = await st.opt.bron.haal('/geld/prognose', { method: 'POST', body: { sleutel: u.sleutel, item: u.item, vorige_ts: items[u.sleutel].ts } });
-      if (!w || w.error) throw new Error(w && w.error || 'opslaan mislukt'); noteerPrognose(w, u.sleutel);
-    }
-    let res = null, laatste = null;
-    for (let poging = 0; poging < 2 && !res; poging++) { try { res = await ub({ ids: plan.ids, reden }); } catch (e) { laatste = e; } }
-    if (!res) throw laatste || new Error('opslaan mislukt');
+    const res = await L.uitBeeldKeten({ F: root.MTForecast, eid, reden: 'verkeerd' /* bestaande reden: "Verkeerd of vervallen"; de worker kent geen vrije notitie */, lees: prognoseLezen, noteer: noteerPrognose, haal: (pad, opt) => st.opt.bron.haal(pad, opt) });
     for (const [id, rec] of Object.entries(res.items || {})) { st.uitbeeld[id] = rec; st.ubVers[id] = { rec, t: Date.now() }; }
   }
   async function beantwoordVraag(v, o) {
@@ -844,10 +906,11 @@
     const a = o.actie; st.vragenBezig = true; vulVragenSheet();
     try {
       if (a.soort === 'k' || a.soort === 'x') await zetKoppeling(a);
+      else if (a.soort === 'kies') { await zetKoppeling({ soort: 'k', eid: a.eid, fid: a.fid }); for (const e of a.andere) await zetKoppeling({ soort: 'x', eid: e, fid: a.fid }); }
       else if (a.soort === 'uitbeeld') await zetUitBeeld(a.eid);
       else okZet(v.id);
-      toast(a.soort === 'k' ? 'Factuur bij de offerte gezet.' : a.soort === 'x' ? 'Factuur staat los van deze offerte.' : a.soort === 'uitbeeld' ? 'Offerte uit beeld gezet. Zet hem in Moneybird ook op afgewezen.' : 'Onthouden.');
-      if (a.soort === 'k' || a.soort === 'x' || a.soort === 'uitbeeld') await L.laad({ vers: true });
+      toast(a.soort === 'k' || a.soort === 'kies' ? 'Factuur bij de offerte gezet.' : a.soort === 'x' ? 'Factuur staat los van deze offerte.' : a.soort === 'uitbeeld' ? 'Offerte uit beeld gezet. Zet hem in Moneybird ook op afgewezen.' : 'Onthouden.');
+      if (a.soort === 'k' || a.soort === 'x' || a.soort === 'kies' || a.soort === 'uitbeeld') await L.laad({ vers: true });
     } catch (e) { toast('Niet opgeslagen: ' + (e.message || e) + (verouderd409(e) ? ' \u2014 vernieuw en probeer opnieuw' : '')); }
     st.vragenBezig = false; teken(); vulVragenSheet();
   }
@@ -1176,7 +1239,7 @@
     return h('div', { class: 'mtl-kop' },
       h('div', { class: 'mtl-titelblok' }, h('h1', { class: 'mtl-titel' }, 'Forecast'), h('p', { class: 'mtl-sub' }, 'Schets van de facturatie per maand. De bedragen tellen alleen hier op.')),
       h('div', { class: 'mtl-acties' },
-        h('div', { class: 'mtl-seg', role: 'group', 'aria-label': 'Offertebedrag' }, ['incl', 'excl'].map(b => knop(b + '. btw', { class: 'ui-knop' + (st.btw === b ? ' ui-knop--primair' : ''), 'aria-pressed': String(st.btw === b), title: 'Alleen de kolom Bedrag (offertetotaal uit Moneybird)',
+        h('div', { class: 'mtl-seg', role: 'group', 'aria-label': 'Offertebedrag' }, ['incl', 'excl'].map(b => knop(b + '. btw', { class: 'ui-knop' + (st.btw === b ? ' ui-knop--primair' : ''), 'aria-pressed': String(st.btw === b), title: 'Alleen de kolom Bedrag (offertetotaal uit Moneybird). Maandbedragen en totalen zijn altijd incl. btw.',
           onclick: () => { st.btw = b; ls.set('mtl:btw', b); teken(); } }))),
         st.mob ? h('button', { type: 'button', class: 'ui-knop mtl-m-filter', 'aria-label': 'Filter' + (filterActief() ? ', ' + st.filter.length + ' aan' : ''), 'aria-haspopup': 'dialog', onclick: () => openFilterSheet() }, lijnIcoon(PAD_FILTER), 'Filter', filterActief() ? h('span', { class: 'mtl-m-fn' }, String(st.filter.length)) : null) : null,
         st.mob ? h('button', { type: 'button', class: 'ui-knop mtl-m-kal', 'aria-label': 'Maanden kiezen', 'aria-haspopup': 'dialog', title: 'Maanden kiezen', onclick: () => openMaandSheet() }, lijnIcoon(PAD_KAL)) : null,

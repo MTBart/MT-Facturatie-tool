@@ -3,6 +3,8 @@
 const assert = require('assert');
 const F = require('../mt-forecast.js'); require('../mt-forecast-light.js');
 const L = globalThis.MTForecastLight; globalThis.MTForecast = globalThis.MTForecast || F;   // in de browser is dit het globale object; L.koppelPlan gebruikt het
+let kette = Promise.resolve();
+const atest = (naam, fn) => { kette = kette.then(async () => { try { await fn(); n++; console.log('ok  - ' + naam); } catch (e) { console.log('FOUT - ' + naam + '\n' + (e.stack || e)); process.exitCode = 1; } }); };
 let n = 0; const test = (naam, fn) => { try { fn(); n++; console.log('ok  - ' + naam); } catch (e) { console.log('FOUT - ' + naam + '\n' + (e.stack || e)); process.exitCode = 1; } };
 
 test('invoer: Nederlandse notatie, minteken, leeg, percentage', () => {
@@ -297,7 +299,7 @@ test('schets afboeken met wat al gefactureerd is: laatste maanden blijven, vroeg
   assert.strictEqual(L.offertesMet([r({ status: 'openstaand', inclC: 1000000, cellen: { '2026-10': 100000, '2026-12': 100000 }, gef: gef({ '2026-05': 950000 }), fstatus: 'deels' })], '2026-10', 'openstaand', 'incl')[0].eerstvolgende, '2026-12');
 });
 test('facturen koppelen op exacte referentie (vóór de deelfactuur-functie van Moneybird)', () => {
-  const off = (id, o) => F.schatNorm(Object.assign({ id, estimate_id: '2026-' + id, contact_id: 500000000001, contact: { company_name: 'A' }, total_price_incl_tax: '1210', total_price_excl_tax: '1000', state: 'accepted', reference: 'Keuken Voorbeeldlaan 1' }, o));
+  const off = (id, o) => F.schatNorm(Object.assign({ id, estimate_id: '2026-' + id, contact_id: 500000000001, contact: { company_name: 'A' }, total_price_incl_tax: '1210', total_price_excl_tax: '1000', state: 'accepted', reference: 'Keuken Voorbeeldlaan 1', estimate_date: '2026-06-01' }, o));
   const sch = [off(300000000001), off(300000000002, { contact_id: 500000000002, reference: 'Keuken Voorbeeldlaan 1' })];
   // (a) geen original_estimate_id, zelfde contact, referentie gelijk (trim, hoofdletters negeren)
   const a = L.koppelFacturen([fx({ reference: '  keuken voorbeeldlaan 1 ' })], sch, null);
@@ -457,4 +459,65 @@ test('vragen beantwoorden: bestaand prognose-item (ook projectitem) gaat voor, n
   assert.ok(L.koppelPlan({ 'p:A': item({ x: Array.from({ length: 20 }, (_, i) => 'f' + i) }) }, { soort: 'x', eid: '300000000301', fid: 'nieuw' }, s, '2026-11-02').fout);
   assert.ok(F.UITBEELD_REDENEN.verkeerd, 'de reden bij uit beeld bestaat in de uitgebreide forecast');
 });
-console.log(`\n${n} tests geslaagd${process.exitCode ? ' (met fouten)' : ''}`);
+test('koppelen op referentie: zonder geldige offertedatum nooit automatisch', () => {
+  const off = o => F.schatNorm(Object.assign({ id: 300000000401, estimate_id: '2026-401', contact_id: 500000000001, contact: { company_name: 'A' }, total_price_incl_tax: '1210', state: 'accepted', reference: 'Kast Voorbeeld' }, o));
+  const f = fx({ reference: 'kast voorbeeld', invoice_date: '2026-10-15' });
+  assert.strictEqual(off({}).datum, '', 'geen offertedatum'); assert.strictEqual(L.koppelFacturen([f], [off({})], null).los.length, 1, 'geen datum: niet koppelen');
+  assert.strictEqual(L.koppelFacturen([f], [off({ estimate_date: 'morgen' })], null).los.length, 1, 'ongeldige datum: niet koppelen');
+  assert.strictEqual(L.koppelFacturen([f], [off({ estimate_date: '2026-10-01' })], null).los.length, 0, 'geldige datum: wel');
+});
+test('bevestigd bij meerdere offertes is een conflict: factuur blijft los en er komt een vraag', () => {
+  const off = (id, o) => F.schatNorm(Object.assign({ id, estimate_id: '2026-' + id, contact_id: 500000000001, contact: { company_name: 'Jansen Voorbeeld' }, total_price_incl_tax: '1210', state: 'accepted', reference: 'Kast ' + id, estimate_date: '2026-06-01' }, o));
+  const sch = [off(300000000501), off(300000000502)], f = fx({ original_estimate_id: 300000000501 });
+  const item = (eid, o) => Object.assign({ soort: 'project', estimate_id: eid, k: [], x: [] }, o);
+  const prog = { 'p:A': item('300000000501', { k: [f.id] }), 'p:B': item('300000000502', { k: [f.id] }) };
+  const fk = L.koppelFacturen([f], sch, prog);
+  assert.strictEqual(fk.los.length, 1, 'niet gekoppeld, ook niet op zijn eigen offerte-id'); assert.deepStrictEqual(Object.keys(fk.perEid), []); assert.deepStrictEqual(fk.conflicten[f.id], ['300000000501', '300000000502']);
+  const q = L.vragen(L.rijen(sch, {}, {}, fk), [f], fk, sch, { vandaag: '2026-11-02', ok: {}, prog });
+  const c = q.filter(x => x.soort === 'conflict'); assert.strictEqual(c.length, 1); assert.ok(/staat bevestigd bij twee offertes: welke\?/.test(c[0].tekst), c[0].tekst);
+  assert.deepStrictEqual(c[0].opties.map(o => [o.actie.soort, o.actie.eid, o.actie.andere]), [['kies', '300000000501', ['300000000502']], ['kies', '300000000502', ['300000000501']]]);
+  // twee items van dezelfde offerte met k: geen conflict
+  const prog2 = { 'p:A': item('300000000501', { k: [f.id] }), 'p:C': item('300000000501', { k: [f.id] }) };
+  const fk2 = L.koppelFacturen([f], sch, prog2); assert.deepStrictEqual(fk2.conflicten, {}); assert.deepStrictEqual(Object.keys(fk2.perEid), ['300000000501']);
+  // antwoord: k bij de gekozen offerte, x bij de andere (ook in een tweede item van die offerte dat de factuur nog als k heeft)
+  const prog3 = { 'p:A': item('300000000501', { k: [f.id] }), 'p:B': item('300000000502', { k: [f.id] }), 'p:C': item('300000000502', { k: [f.id], ts: 3 }) };
+  const pl = L.koppelPlannen(prog3, { soort: 'x', eid: '300000000502', fid: f.id }, sch[1], '2026-11-02').plannen;
+  assert.deepStrictEqual(pl.map(x => [x.sleutel, x.item.x, x.item.k]), [['p:B', [f.id], []], ['p:C', [], []]], 'ook het andere item van die offerte verliest k');
+  const uit = L.koppelFacturen([f], sch, { 'p:A': pl.length ? item('300000000501', { k: [f.id] }) : null, 'p:B': Object.assign(item('300000000502'), { x: [f.id] }) });
+  assert.deepStrictEqual(Object.keys(uit.perEid), ['300000000501'], 'na het antwoord is hij gekoppeld aan de gekozen offerte');
+});
+atest('uit beeld: keten met 409-nieuwe-poging, terugdraaien en melding', async () => {
+  const termijn = [{ id: 't1', label: 'rest', bedrag: 1210, factuurdatum: '2026-12-01', aan: true }];
+  const nieuwItem = (o) => Object.assign({ soort: 'project', naam: 'Wandkast', estimate_id: '300000000601', totaal: 1210, termijnen: termijn, betaaltermijn: 14, aan: true, k: [], x: [], ts: 10, door: 'X' }, o);
+  const maak = (opties) => {
+    const o = Object.assign({ falen: {}, conflictEenmaal: new Set() }, opties), winkel = { 'p:A': nieuwItem({}), 'p:B': nieuwItem({ ts: 20 }) }, log = [];
+    let ts = 100;
+    const haal = async (pad, opt) => {
+      const body = opt && opt.body; log.push([pad, body && (body.sleutel || (body.controle ? 'controle' : 'markering'))]);
+      if (pad === '/geld/uitbeeld') { if (body.controle) return { ok: true }; if (o.markeringFout) return { error: 'kv kapot' }; return { ok: true, items: { [body.ids[0]]: { reden: body.reden } } }; }
+      const huidig = winkel[body.sleutel], uitDoel = body.item.aan === false;
+      if (o.conflictEenmaal.has(body.sleutel) && uitDoel) { o.conflictEenmaal.delete(body.sleutel); winkel[body.sleutel] = Object.assign({}, huidig, { ts: ++ts }); return { error: 'deze prognose is intussen aangepast \u2014 herlaad en probeer opnieuw' }; }
+      if (body.vorige_ts !== huidig.ts) return { error: 'deze prognose is intussen aangepast \u2014 herlaad en probeer opnieuw' };
+      if (o.falen[body.sleutel] && (uitDoel ? o.falen[body.sleutel] === 'uit' : o.falen[body.sleutel] === 'terug' || o.falen[body.sleutel] === 'beide')) return { error: 'opslaan mislukt' };
+      const nw = Object.assign({}, body.item, { ts: ++ts }); winkel[body.sleutel] = nw; return { ok: true, item: nw };
+    };
+    return { o, winkel, log, run: () => L.uitBeeldKeten({ F, eid: '300000000601', reden: 'verkeerd', lees: async () => JSON.parse(JSON.stringify(winkel)), haal }) };
+  };
+  // gelukt: eerst alle items uit, pas daarna de markering
+  let m = maak({}); const res = await m.run(); assert.ok(res.items['300000000601']);
+  assert.deepStrictEqual(m.log.map(x => x[1]), ['controle', 'p:A', 'p:B', 'markering']); assert.ok(m.winkel['p:A'].aan === false && m.winkel['p:B'].aan === false);
+  // 409 bij een item: opnieuw lezen en één keer opnieuw proberen
+  m = maak({ conflictEenmaal: new Set(['p:B']) }); await m.run(); assert.strictEqual(m.winkel['p:B'].aan, false); assert.strictEqual(m.log.filter(x => x[1] === 'p:B').length, 2, 'precies één nieuwe poging');
+  // tweede item mislukt: eerste wordt teruggezet, markering komt er niet
+  m = maak({ falen: { 'p:B': 'uit' } });
+  await assert.rejects(m.run(), e => /niet gelukt/.test(e.message) && /teruggezet/.test(e.message) && e.teruggedraaid === 1 && e.mislukt.length === 0);
+  assert.strictEqual(m.winkel['p:A'].aan, true, 'al uitgezet item staat weer aan'); assert.ok(!m.log.some(x => x[1] === 'markering'), 'markering pas als alles gelukt is');
+  // terugdraaien lukt zelf niet: melding noemt offerte en item
+  m = maak({ falen: { 'p:A': 'terug', 'p:B': 'uit' } });
+  await assert.rejects(m.run(), e => /offerte 300000000601/.test(e.message) && /p:A/.test(e.message) && /nakijken/.test(e.message) && e.mislukt.join() === 'p:A');
+  // markering faalt na geslaagde items: items worden teruggezet
+  m = maak({ markeringFout: true }); await assert.rejects(m.run(), e => /markering/.test(e.message) && e.teruggedraaid === 2);
+  assert.ok(m.winkel['p:A'].aan === true && m.winkel['p:B'].aan === true);
+  assert.strictEqual(m.log.filter(x => x[1] === 'markering').length, 2, 'markering twee keer geprobeerd');
+});
+kette.then(() => console.log(`\n${n} tests geslaagd${process.exitCode ? ' (met fouten)' : ''}`));
