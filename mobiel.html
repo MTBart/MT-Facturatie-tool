@@ -2343,7 +2343,7 @@ async function initMsal() {
     // Terugkeer uit redirect-login afhandelen (fallback-route als popup niet kan)
     try {
       const redir = await _msal.handleRedirectPromise();
-      if (redir && redir.account) { await toonApp(redir.account); return; }
+      if (redir && redir.account) { try { _msal.setActiveAccount(redir.account); } catch(e0) {} await toonApp(redir.account); return; }
     } catch(eR) { console.warn('MSAL redirect-afhandeling:', eR); }
     // Het ACTIEVE account (niet zomaar het eerste); meerdere accounts zonder keuze = inlogscherm
     const acc0 = window.MTKijk ? MTKijk.kiesAccount(_msal) : (_msal.getAllAccounts()[0] || null);

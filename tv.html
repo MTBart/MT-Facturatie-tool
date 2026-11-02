@@ -150,9 +150,13 @@ async function tvStart() {
     await _msal.initialize();
     const accounts = _msal.getAllAccounts();
     // Het teamaccount (nooit een externe gast) actief zetten: de tokenhelpers in mt-core gebruiken alleen het actieve account.
-    const eigen = accounts.find(a => !/#ext#/i.test(a.username || ') && /@mortiseandtenon\.nl$/i.test(a.username || '));
+    const eigen = tvKiesAccount(accounts);
     if (eigen) { try { _msal.setActiveAccount(eigen); } catch (e) {} await tvToon(eigen); }
   } catch (e) { tvMelding('Microsoft-login niet beschikbaar: ' + e.message); }
+}
+// Welk account mag de tv starten: alleen een intern teamaccount (nooit een externe gast of een ander domein); anders niets (inlogscherm).
+function tvKiesAccount(lijst) {
+  return (lijst || []).find(a => { const u = String((a && a.username) || ''); return !/#ext#/i.test(u) && /@mortiseandtenon\.nl$/i.test(u); }) || null;
 }
 document.getElementById('tv-login-knop').addEventListener('click', async () => {
   try { const r = await _msal.loginPopup({ scopes: ['openid', 'profile', 'email'] }); const acc = (r && r.account) || _msal.getAllAccounts()[0]; if (acc) { try { _msal.setActiveAccount(acc); } catch (e) {} await tvToon(acc); } }

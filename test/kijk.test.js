@@ -354,6 +354,18 @@ const maakWin = (opt = {}) => {
     popupAls = A; assert.strictEqual(await win.getGraphToken(), 'POPUPTOKEN');
   });
 
+  await test('tv.html: de accountkeuze wordt echt uitgevoerd (gast, teamaccount, ander domein); mobiel: ook na redirect-login wordt het account actief', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'tv.html'), 'utf8');
+    const m = /function tvKiesAccount\(lijst\) \{[\s\S]*?\n\}/.exec(src); assert.ok(m, 'functie gevonden');
+    const f = vm.runInNewContext('(' + m[0].replace(/^function tvKiesAccount/, 'function') + ')', {});
+    const G = { username: 'coach_example.org#EXT#@example.net' }, T = { username: 'Collega@MortiseAndTenon.nl' }, X = { username: 'iemand@example.com' };
+    assert.strictEqual(f([G, T, X]), T, 'teamaccount wordt gekozen, ook als de gast eerst staat'); assert.strictEqual(f([G]), null); assert.strictEqual(f([X]), null, 'ander domein'); assert.strictEqual(f([]), null); assert.strictEqual(f(null), null);
+    assert.strictEqual(f([{ username: 'x#EXT#@mortiseandtenon.nl' }]), null, 'extern met ons domein in de naam');
+    assert.ok(/const eigen = tvKiesAccount\(accounts\);/.test(src));
+    const mob = fs.readFileSync(path.join(__dirname, '..', 'mobiel.html'), 'utf8');
+    assert.ok(/redir\.account\) \{ try \{ _msal\.setActiveAccount\(redir\.account\)/.test(mob), 'redirect-pad zet het actieve account');
+  });
+
   await test('geen losse tokenaanvragen buiten mt-core: pagina\'s en scripts van de app gebruiken getGraphToken/getAuthToken; mt-kijk.js staat vóór de inline stijlcode', () => {
     const root = path.join(__dirname, '..'), bron = f => fs.readFileSync(path.join(root, f), 'utf8');
     for (const f of fs.readdirSync(root).filter(x => /\.(html|js)$/.test(x) && x !== 'mt-core.js' && x !== 'sw.js')) {
