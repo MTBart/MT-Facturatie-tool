@@ -299,7 +299,8 @@
       if (!res) stop = 'de markering uit beeld: ' + ((laatste && laatste.message) || 'opslaan mislukt');
     }
     if (!stop) return res;
-    const mislukt = [];
+    // Terugzetten alleen als het item nog precies de versie is die wij schreven (zelfde ts): is het intussen door iemand anders gewijzigd (409), dan schrijven we niets en laten we het staan.
+    const mislukt = [], gewijzigd = [];
     for (const g of gelukt.slice().reverse()) {
       let ok = false, cur = g.item;
       try {
@@ -307,16 +308,21 @@
           const terug = JSON.parse(JSON.stringify(cur)); delete terug.ts; delete terug.door; terug.aan = true;
           const r = await o.haal('/geld/prognose', { method: 'POST', body: { sleutel: g.sleutel, item: terug, vorige_ts: cur.ts } });
           if (!kapot(r)) { ok = true; if (o.noteer) o.noteer(r, g.sleutel); break; }
-          if (poging === 0 && is409(r)) { const vers = await o.lees(); if (!vers[g.sleutel]) break; cur = vers[g.sleutel]; if (cur.aan !== false) { ok = true; break; } continue; }
+          if (poging === 0 && is409(r)) {
+            const vers = (await o.lees())[g.sleutel];
+            if (vers && vers.ts === g.item.ts) { cur = vers; continue; }                                     // nog onze eigen versie: een keer opnieuw
+            gewijzigd.push({ sleutel: g.sleutel, door: vers && vers.door ? String(vers.door) : null }); ok = true; break;   // iemand anders was ons voor: niet overschrijven
+          }
           break;
         }
       } catch (e) { ok = false; }
       if (!ok) mislukt.push(g.sleutel);
     }
-    const teruggedraaid = gelukt.length - mislukt.length;
+    const teruggedraaid = gelukt.length - mislukt.length - gewijzigd.length;
     const err = new Error(`Uit beeld zetten is niet gelukt (${stop}). ` + (!gelukt.length ? 'Er is niets gewijzigd.' : !mislukt.length ? `De ${gelukt.length === 1 ? 'al uitgezette prognose-item is' : gelukt.length + ' al uitgezette prognose-items zijn'} teruggezet.`
       : `Teruggezet: ${teruggedraaid} van ${gelukt.length}. Niet teruggezet (nakijken in de uitgebreide forecast, Gaat zeker door staat uit): offerte ${o.eid}, ${mislukt.length === 1 ? 'item' : 'items'} ${mislukt.join(', ')}.`));
-    err.mislukt = mislukt; err.teruggedraaid = teruggedraaid; throw err;
+    if (gewijzigd.length) err.message += ` Niet teruggezet: intussen gewijzigd door ${[...new Set(gewijzigd.map(x => x.door || 'een collega'))].join(', ')}: offerte ${o.eid}, ${gewijzigd.length === 1 ? 'item' : 'items'} ${gewijzigd.map(x => x.sleutel).join(', ')} (laten staan; kijk na in de uitgebreide forecast).`;
+    err.mislukt = mislukt; err.gewijzigd = gewijzigd.map(x => x.sleutel); err.teruggedraaid = teruggedraaid; throw err;
   };
   // Factuur bevestigen/uitsluiten als keten met terugdraaien (zoals L.uitBeeldKeten). o = { acties: [{ soort: 'k'|'x', eid, fid }], fid, schatVan(eid), vandaag, haal, lees, noteer? }.
   // Per item bij een 409: opnieuw lezen en een keer opnieuw proberen. Mislukt er een, dan krijgen de al geslaagde items hun vorige k/x voor deze factuur terug (een nieuw aangemaakt item wordt weer gewist);

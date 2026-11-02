@@ -595,4 +595,22 @@ atest('factuur koppelen: rollback wist een zelf aangemaakt item alleen als het o
   assert.deepStrictEqual(r.winkel['p:e' + EID].k, [], 'alleen de factuurkoppeling is teruggezet'); assert.deepStrictEqual(r.fout.bleef, ['p:e' + EID]); assert.deepStrictEqual(r.fout.mislukt, []);
   assert.ok(/bleef staan omdat het intussen gewijzigd is; alleen de factuurkoppeling is teruggezet/.test(r.fout.message), r.fout.message); assert.strictEqual(r.log.filter(x => x === 'p:e' + EID + ':wis').length, 1, 'maar een wisverzoek');
 });
+atest('uit beeld: rollback schrijft niet over een item dat een collega intussen wijzigde', async () => {
+  const termijn = [{ id: 't1', label: 'rest', bedrag: 1210, factuurdatum: '2026-12-01', aan: true }];
+  const item = o => Object.assign({ soort: 'project', naam: 'Wandkast', estimate_id: '300000000951', totaal: 1210, termijnen: termijn, betaaltermijn: 14, aan: true, k: [], x: [], ts: 10, door: 'X' }, o);
+  const winkel = { 'p:A': item({}), 'p:B': item({ ts: 20 }) }, log = []; let ts = 100;
+  const haal = async (pad, opt) => {
+    const b = opt.body; log.push(pad === '/geld/uitbeeld' ? (b.controle ? 'controle' : 'markering') : b.sleutel + ':' + (b.item.aan === false ? 'uit' : 'aan'));
+    if (pad === '/geld/uitbeeld') return b.controle ? { ok: true } : { error: 'kv kapot' };                       // de markering faalt: rollback
+    const huidig = winkel[b.sleutel];
+    if (b.item.aan === true && b.sleutel === 'p:A') { winkel['p:A'] = Object.assign({}, huidig, { ts: ++ts, door: 'Collega Voorbeeld', aan: false, naam: 'Collega zette dit uit' }); return { error: 'deze prognose is intussen aangepast \u2014 herlaad' }; }   // collega is ons voor
+    if (huidig.ts !== b.vorige_ts) return { error: 'deze prognose is intussen aangepast \u2014 herlaad' };
+    const nw = Object.assign({}, b.item, { ts: ++ts }); winkel[b.sleutel] = nw; return { ok: true, item: nw };
+  };
+  let fout = null; try { await L.uitBeeldKeten({ F, eid: '300000000951', reden: 'verkeerd', lees: async () => JSON.parse(JSON.stringify(winkel)), haal }); } catch (e) { fout = e; }
+  assert.ok(fout, 'keten faalt'); assert.strictEqual(winkel['p:A'].naam, 'Collega zette dit uit', 'wat de collega schreef is intact'); assert.strictEqual(winkel['p:A'].aan, false, 'niet teruggedraaid naar aan');
+  assert.strictEqual(log.filter(x => x === 'p:A:aan').length, 1, 'geen tweede schrijfpoging na de 409'); assert.strictEqual(winkel['p:B'].aan, true, 'het andere item (nog onze versie) is wel teruggezet');
+  assert.deepStrictEqual(fout.gewijzigd, ['p:A']); assert.deepStrictEqual(fout.mislukt, []); assert.strictEqual(fout.teruggedraaid, 1);
+  assert.ok(/Niet teruggezet: intussen gewijzigd door Collega Voorbeeld: offerte 300000000951, item p:A/.test(fout.message), fout.message);
+});
 kette.then(() => console.log(`\n${n} tests geslaagd${process.exitCode ? ' (met fouten)' : ''}`));
