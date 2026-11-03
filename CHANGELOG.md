@@ -5,6 +5,54 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-11-03 — Merge branch meekijker: rol meekijker voor externe coach (alleen inkijken via spiegel, kijklog, toegang tot einddatum, intrekken)
+- Commit: `d9659ab` | Auteur: Bart Witte
+
+## 2026-11-03 — Backup = v2.33.0
+- Commit: `6c8a70c` | Auteur: Bart Witte
+
+## 2026-11-02 — Meekijker brok 6f: tv-login-knop gaat ook door tvKiesAccount
+- Commit: `7e9f99c` | Auteur: Bart Witte
+
+## 2026-11-02 — Meekijker brok 6e: tv-accountkeuze (typfout) en actief account na redirect-login
+- Commit: `30ab4d3` | Auteur: Bart Witte
+
+## 2026-11-02 — Meekijker brok 6d: sessie-banner via centrale tokenroute, actief account in mobiel/tv
+- Commit: `1faf3c0` | Auteur: Bart Witte
+
+## 2026-11-02 — Meekijker brok 6c: geen terugval op eerste account, popup-account controle, sessionStorage fail-closed
+- Commit: `1844d46` | Auteur: Bart Witte
+
+## 2026-11-02 — Meekijker brok 6b: actief account, accountwissel, strenge modus eerst, winst/verlies-allowlist
+- Commit: `41f4852` | Auteur: Bart Witte
+
+## 2026-11-02 — Meekijker, brok 6: Codex-eindronde (calculatie via spiegel, toeslag, Moneybird-allowlist, veilig uitrollen, lege opslag)
+- Commit: `911aead` | Auteur: Bart Witte
+
+## 2026-11-02 — Meekijker, brok 4b: spiegel veilig en geprojecteerd (Codex-ronde 3)
+- Commit: `f2c6c0f` | Auteur: Bart Witte
+
+## 2026-11-02 — Meekijker, brok 5: kijkmodus (mt-kijk.js), Beheer-UI, mobiel-melding, harnas
+- Commit: `278f1e3` | Auteur: Bart Witte
+
+## 2026-11-02 — Meekijker, brok 4: spiegel (worker-routes /spiegel/*, zendkant mt-spiegel.js, hook naGeslaagd in makeSP)
+- Commit: `54eb3ca` | Auteur: Bart Witte
+
+## 2026-11-02 — Meekijker, brok 4: laatst gezien los van user-record, aanvraag gekoppeld aan uitnodigings-id (Codex-ronde 2)
+- Commit: `8250039` | Auteur: Bart Witte
+
+## 2026-11-02 — Meekijker, brok 3: kijklog (D1-migratie 0002, serverregel per verzoek, project_open, /beheer/kijklog)
+- Commit: `dc49601` | Auteur: Bart Witte
+
+## 2026-11-02 — Meekijker, brok 2b: Codex-bevindingen verwerkt (fail-closed, Toggl/Moneybird-whitelist, uitnodiging via Aanvragen)
+- Commit: `6b968aa` | Auteur: Bart Witte
+
+## 2026-11-02 — Merge main (v2.33.0) in meekijker
+- Commit: `394463c` | Auteur: Bart Witte
+
+## 2026-11-02 — Meekijker, brok 2: worker-rol met altijd-afdwingen, einddatum en dichtgezette routes
+- Commit: `d70702e` | Auteur: Bart Witte
+
 ## 2026-11-02 — Release v2.33.0: Forecast telt deelfacturen mee (schets afboeken op restant, koppelen op referentie), orderbevestigingen eruit, filters Verlopen/Afgewezen, vragenpaneel Te controleren met transactioneel koppelen/uit beeld; Codex 5 rondes (GO); backup = v2.32.0
 - Commit: `3036664` | Auteur: Bart Witte
 

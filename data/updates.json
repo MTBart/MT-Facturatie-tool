@@ -1,5 +1,17 @@
 [
   {
+    "versie": "2.34.0",
+    "datum": "2026-11-03",
+    "titel": "Meekijker: een externe coach kan alles inzien maar niets wijzigen",
+    "voor": "beheer",
+    "punten": [
+      "Nieuwe rol Meekijker voor een externe coach (gastaccount in Microsoft 365). Die ziet projecten, planning, taken, calculatie en offertes, de Forecast, de uren van het team, de uurtarieven en de verbeterpunten.",
+      "De meekijker kan niets wijzigen en ziet geen mail, AI, instellingen of beheer. Toegang tot SharePoint krijgt de meekijker nooit: de tool laat een alleen-lezen kopie zien die de worker bewaart.",
+      "In Beheer kies je bij het uitnodigen een einddatum. De toegang verleng je of trek je in met één klik. Intrekken werkt binnen een minuut.",
+      "Kijkoverzicht in Beheer: je ziet wat de meekijker heeft bekeken en wanneer. Dit wordt 180 dagen bewaard.",
+      "Voor het eigen team verandert er niets. Heb je meerdere Microsoft-accounts in dezelfde browser, dan vraagt de tool één keer met welk account je verder wilt."
+    ]
+  },{
     "versie": "2.33.0",
     "datum": "2026-11-02",
     "titel": "Forecast: deelfacturen tellen mee, orderbevestigingen eruit en een lijst om te controleren",
