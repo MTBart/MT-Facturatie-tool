@@ -1288,7 +1288,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
             <div class="nieuw-lijst" role="menu" onclick="document.getElementById('proj-nieuw-menu').open=false">
               <button type="button" role="menuitem" data-recht="projecten:wijzigen" onclick="openModal()" title="Project zonder lead of offerte (bv. vaste klant of regiewerk); begint in Werkvoorbereiding">Direct project</button>
               <button type="button" role="menuitem" data-recht="projecten:wijzigen" onclick="openLeadModal()" title="Een nieuwe aanvraag: lead met een volgende actie">Lead</button>
-              <button type="button" role="menuitem" data-recht="offertes:wijzigen" onclick="nieuweOfferte()" title="Losse offerte-calculatie (voorcalculatie)">Offerte</button>
+              <button type="button" role="menuitem" data-recht="offertes:wijzigen" onclick="nieuweOfferte(null)" title="Losse offerte-calculatie, nog zonder project (koppelen of een project aanmaken kan later vanuit de offerte)">Offerte</button>
               <button type="button" role="menuitem" data-recht="projecten:wijzigen" onclick="tgOvernemenOpen()" title="Een Toggl-project dat nog bij geen project hoort in de tool zetten">Uit Toggl overnemen</button>
             </div>
           </details>
