@@ -20590,6 +20590,9 @@ function activiteitOpen(force){
       _calcProjKeuze[projectCode]=key;
       saveCalc('off',{key:key});
       if(typeof renderProjectDetail==='function' && typeof huidigProject!=='undefined' && huidigProject && huidigProject.code===projectCode){
+        // Het calculatiepaneel blijft na de eerste keer bewaard (_PROJ_BLIJVEND) en zou anders het oude "Nog geen calculatie"
+        // blijven tonen: er gebeurde dan niets tot het project opnieuw getekend werd, bv. na een fasewissel (Mathijs, 3-11).
+        const oudPan=document.querySelector('#proj-sectie-inhoud .proj-paneel[data-sectie="calculatie"]'); if(oudPan) delete oudPan.dataset.klaar;
         if(typeof projSectieKies==='function') projSectieKies('calculatie'); else renderProjectDetail(huidigProject);
         setTimeout(()=>{const el=document.getElementById('offerte-calc-'+cid(key))||document.getElementById('offerte-calc-'+cid(projectCode)); if(el) el.scrollIntoView({behavior:'smooth',block:'start'});},200);
       } else { openStandalone(key); }
