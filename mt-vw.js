@@ -6,7 +6,8 @@
  *                                 > CUSTOMER {CUSTOMER_ID, COMPANY, SALUTATION, FIRSTNAME, LASTNAME, STREET, POSTAL_CODE, CITY}
  *              > PROJECT_ITEM_LIST > PROJECT_ITEM {LINE_ITEM_ID, QUANTITY, DESCRIPTION}
  * PROJECT_ID = projectnummer (of code), COMMISSION = projectnaam (gaat ook naar HHOS "Commission"), BUILDING = projectonderdeel,
- * SALESREP = projectleider, DELIVERY_DATE = de leverdatum als tekst (JJJJ-MM-DD), week en jaar volgens ISO 8601.
+ * SALESREP = projectleider, DELIVERY_DATE = de leverdatum als tekst ("23 november"; jaar staat al in DELIVERY_YEAR),
+ * week en jaar volgens ISO 8601. BUILDING blijft leeg als het onderdeel gelijk is aan de projectnaam (Bart, 3-11).
  * ========================================================================== */
 (function (root) {
   'use strict';
@@ -27,6 +28,13 @@
     const jaar = d.getUTCFullYear(), jan1 = new Date(Date.UTC(jaar, 0, 1));
     return { week: Math.ceil(((d - jan1) / 86400000 + 1) / 7), jaar };
   }
+  // Leverdatum voor interiorcad: "23 november" (week en jaar staan er in eigen velden onder).
+  const MAANDEN = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli', 'augustus', 'september', 'oktober', 'november', 'december'];
+  function datumTekst(ymd) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ymd || ''));
+    return m && isoWeek(ymd) ? (+m[3]) + ' ' + MAANDEN[+m[2] - 1] : '';
+  }
+  const zelfde = (a, b) => String(a == null ? '' : a).trim().toLowerCase() === String(b == null ? '' : b).trim().toLowerCase();
   // g = {projectnummer, naam, onderdeel, leider, leverdatum, klantnummer, bedrijf, aanhef, voornaam, achternaam,
   //      straat, postcode, plaats, items:[{aantal, omschrijving}]}
   function projectgegevensXml(g) {
@@ -34,8 +42,8 @@
     const w = isoWeek(g.leverdatum);
     const e = (tag, v, ind) => ind + '<' + tag + '>' + xmlEsc(v) + '</' + tag + '>';   // XML, geen HTML: xmlEsc rond elke waarde
     const r = ['<?xml version="1.0" encoding="UTF-8"?>', '<PROJECT_INFO version="1.0">', '  <PROJECT_HEADER>', '    <PROJECT_INFO>',
-      e('PROJECT_ID', g.projectnummer, '      '), e('COMMISSION', g.naam, '      '), e('BUILDING', g.onderdeel, '      '), e('SALESREP', g.leider, '      '),
-      '      <DELIVERY_DATE>', e('DELIVERY_DATE', w ? g.leverdatum : '', '        '), e('DELIVERY_WEEK', w ? w.week : '', '        '), e('DELIVERY_YEAR', w ? w.jaar : '', '        '), '      </DELIVERY_DATE>',
+      e('PROJECT_ID', g.projectnummer, '      '), e('COMMISSION', g.naam, '      '), e('BUILDING', zelfde(g.onderdeel, g.naam) ? '' : g.onderdeel, '      '), e('SALESREP', g.leider, '      '),
+      '      <DELIVERY_DATE>', e('DELIVERY_DATE', datumTekst(g.leverdatum), '        '), e('DELIVERY_WEEK', w ? w.week : '', '        '), e('DELIVERY_YEAR', w ? w.jaar : '', '        '), '      </DELIVERY_DATE>',
       '    </PROJECT_INFO>', '    <CUSTOMER>',
       e('CUSTOMER_ID', g.klantnummer, '      '), e('COMPANY', g.bedrijf, '      '), e('SALUTATION', g.aanhef, '      '), e('FIRSTNAME', g.voornaam, '      '),
       e('LASTNAME', g.achternaam, '      '), e('STREET', g.straat, '      '), e('POSTAL_CODE', g.postcode, '      '), e('CITY', g.plaats, '      '),
@@ -51,5 +59,5 @@
   }
   // Bestandsnaam "260812-projectgegevens.xml" (bewust NIET de naam van een .vwx: de automatische Corpora-route komt later).
   const bestandsnaam = nr => (String(nr == null ? '' : nr).replace(/[^A-Za-z0-9-]/g, '') || 'project') + '-projectgegevens.xml';
-  root.MTVW = { xmlEsc, isoWeek, projectgegevensXml, bestandsnaam };
+  root.MTVW = { xmlEsc, isoWeek, datumTekst, projectgegevensXml, bestandsnaam };
 })(typeof window !== 'undefined' ? window : globalThis);

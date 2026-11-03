@@ -12449,7 +12449,8 @@ function projGegevensVoorstel(proj){
     // Contactpersoon: de naam op de kaart, anders de eerste contactpersoon van het bedrijf in Moneybird (contact_people).
     const cp=(!mb.firstname&&!mb.lastname&&Array.isArray(mb.contact_people))?mb.contact_people.find(x=>x&&(x.firstname||x.lastname)):null, bron=cp||mb;
     if(bron.firstname) uit.voornaam=String(bron.firstname).trim(); if(bron.lastname) uit.achternaam=String(bron.lastname).trim(); }
-  if(proj.product_naam) uit.projectonderdeel=String(proj.product_naam).trim();
+  // Onderdeel = product, maar niet als dat precies de projectnaam is (dan staat in interiorcad twee keer hetzelfde; Bart, 3-11).
+  if(proj.product_naam&&String(proj.product_naam).trim().toLowerCase()!==String(projNaamKort(proj)||'').trim().toLowerCase()) uit.projectonderdeel=String(proj.product_naam).trim();
   const plan=(typeof planVoor==='function')?planVoor(proj.code):null;
   const lev=plan&&Array.isArray(plan.fases)?plan.fases.find(f=>f&&['levering','montage','oplevering'].includes(f.key)&&/^\d{4}-\d{2}-\d{2}$/.test(String(f.eind||''))):null;
   if(lev) uit.leverdatum=lev.eind;
