@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-11-02 — Release v2.33.0: Forecast telt deelfacturen mee (schets afboeken op restant, koppelen op referentie), orderbevestigingen eruit, filters Verlopen/Afgewezen, vragenpaneel Te controleren met transactioneel koppelen/uit beeld; Codex 5 rondes (GO); backup = v2.32.0
+- Commit: `3036664` | Auteur: Bart Witte
+
 ## 2026-11-02 — Merge branch forecast-deel: deelfacturen, orderbevestigingen, filters Verlopen/Afgewezen, vragenpaneel Te controleren
 - Commit: `3f70b2b` | Auteur: Bart Witte
 
