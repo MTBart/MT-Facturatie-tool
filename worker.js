@@ -98,6 +98,7 @@ function clip(v, n) {
 // ?target=-routes hierboven. Het MSAL-token is al gevalideerd vóór dit punt.
 // Schrijfroutes: alle ingelogde gebruikers. Leesroutes: rollen met beheerrecht (isAdmin).
 // Faalt nooit hard op ontbrekende bindings — tracking mag de tool niet ophouden.
+const TRACK_BODY_MAX = 256 * 1024;
 async function handleTrack(pathname, request, env, msPayload, cors, isAdmin) {
   const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
     status, headers: { 'Content-Type': 'application/json', ...cors }
@@ -108,7 +109,10 @@ async function handleTrack(pathname, request, env, msPayload, cors, isAdmin) {
   if (pathname === '/track' && request.method === 'POST') {
     if (!env.TRACK_DB) return json({ ok: false, skipped: 'no-d1' });
     let payload;
-    try { payload = await request.json(); } catch { return json({ ok: false, error: 'bad-json' }, 400); }
+    // Body begrensd (200 events × velden): groter = 413. /track blijft ook voor de meekijker open (nodig voor het kijkoverzicht).
+    const cl = Number(request.headers && request.headers.get ? request.headers.get('content-length') : NaN);
+    if (Number.isFinite(cl) && cl > TRACK_BODY_MAX) return json({ ok: false, error: 'te-groot' }, 413);
+    try { const t = await request.text(); if (t.length > TRACK_BODY_MAX) return json({ ok: false, error: 'te-groot' }, 413); payload = JSON.parse(t); } catch { return json({ ok: false, error: 'bad-json' }, 400); }
     const events = Array.isArray(payload?.events) ? payload.events : [];
     if (!events.length) return json({ ok: true, written: 0 });
     const recv = Date.now();
@@ -623,7 +627,8 @@ async function handleDashboard(pathname, request, env, msPayload, cors) {
 // wat geweigerd zóu worden) | 'afdwingen'. /beheer/* en de admin-leesroutes van
 // /track zijn in élke modus beperkt (die waren al beperkt of zijn nieuw).
 // KV-schema:
-//   user:{oid}     {oid, role, active, email, naam, createdBy, createdAt, updatedAt, lastSeen}
+//   user:{oid}     {oid, role, active, email, naam, createdBy, createdAt, updatedAt, toegangTot?}   (alleen door Beheer-acties/koppelen geschreven)
+//   seen:{oid}     {oid, ts}   laatst gezien (blind overschreven, hooguit eens per uur; raakt user:{oid} nooit)
 //   invite:{email} {email, role, naam, createdBy, createdAt, verloopt}   (TTL 30 dagen)
 //   aanvraag:{oid} {oid, email, naam, bericht, ts}                       (TTL 30 dagen)
 //   audit:{omgekeerde ts}:{rand}  één wijziging, nieuwste eerst          (TTL 400 dagen)
@@ -634,8 +639,15 @@ async function handleDashboard(pathname, request, env, msPayload, cors) {
 //     token-e-mail (zelfde tenant) → Eigenaar; bij eerste login user:{oid} met bron 'owner_email'
 //     (alleen lezen + idempotente put, geen race). Beheer toont de oid om naar OWNER_OIDS te verplaatsen.
 // Gewone eigenaren (via Beheer) zijn wél te wijzigen, maar nooit de laatste Eigenaar.
-const ROLLEN = ['eigenaar', 'beheerder', 'kantoor', 'werkplaats', 'lezen', 'administratie'];
-const ROL_NAAM = { eigenaar: 'Eigenaar', beheerder: 'Beheerder', kantoor: 'Kantoor', werkplaats: 'Werkplaats', lezen: 'Alleen lezen', administratie: 'Administratie' };
+const ROLLEN = ['eigenaar', 'beheerder', 'kantoor', 'werkplaats', 'lezen', 'administratie', 'meekijker'];
+const ROL_NAAM = { eigenaar: 'Eigenaar', beheerder: 'Beheerder', kantoor: 'Kantoor', werkplaats: 'Werkplaats', lezen: 'Alleen lezen', administratie: 'Administratie', meekijker: 'Meekijker' };
+// Externe meekijker (bv. bedrijfscoach): mag alles inzien behalve mail/Inbox, AI en Beheer, en wijzigt niets. Deze rol wordt in
+// ELKE ROLLEN_MODUS afgedwongen (ook bij 'log' of 'uit'): zie effectieveModus. Toegang heeft een einddatum (user.toegangTot).
+//   uren 'team-lezen' = alleen team-rapporten lezen (geen eigen timer/tijdregels); geld/moneybird 'kijken' = lezen zonder de
+//   schrijf-uitzonderingen (vraag stellen, afvinken) en voor Moneybird zonder contacten en bijlage-downloads.
+const ALTIJD_AFDWINGEN = new Set(['meekijker']);
+const TOEGANG_MAX_DAGEN = 400;
+const KIJK_CLIENT_MIN = 1;   // minimale X-MT-Kijk-versie van een meekijker-client (mt-kijk.js VERSIE); hoger zetten sluit oudere clients buiten
 // De matrix (ontwerp F1 + besluiten Bart 7-10). Ook naar de front-end via /me (alleen UI-gemak; de worker beslist).
 //   taken: 'status-nieuw' = taakstatus wijzigen + nieuwe taak/opdracht aanmaken (niet hernoemen/verwijderen/toewijzen)
 //   bestellijst/opmerkingen: lopen via SharePoint → alleen UI (niet afdwingbaar in de worker)
@@ -649,21 +661,34 @@ const RECHTEN = {
   werkplaats: { projecten: 'lezen',    taken: 'status-nieuw', bestellijst: 'toevoegen', opmerkingen: 'toevoegen', inbox: null,        offertes: null,       moneybird: null,        mb_verwijderen: null, uren: 'eigen',       verbeterpunten: 'maken',   ai: 'beperkt', beheer: null, geld: null },
   administratie: { projecten: null, taken: null, bestellijst: null, opmerkingen: null, inbox: null, offertes: null, moneybird: 'lezen', mb_verwijderen: null, uren: null, verbeterpunten: null, ai: null, beheer: null, geld: 'lezen' },
   lezen:      { projecten: 'lezen',    taken: null,           bestellijst: null,        opmerkingen: null,        inbox: null,        offertes: 'lezen',    moneybird: 'lezen',     mb_verwijderen: null, uren: 'eigen-lezen', verbeterpunten: 'lezen',   ai: null,      beheer: null, geld: null },
+  meekijker:  { projecten: 'lezen',    taken: null,           bestellijst: null,        opmerkingen: null,        inbox: null,        offertes: 'lezen',    moneybird: 'kijken',    mb_verwijderen: null, uren: 'team-lezen',  verbeterpunten: 'lezen',   ai: null,      beheer: null, geld: 'kijken' },
 };
 const ROLLEN_MODI = ['uit', 'log', 'afdwingen'];
 const AI_BEPERKT_MAX_TOKENS = 1024;      // werkplaats: AI "beperkt"
 const LOG_FLUSH_MS = 5 * 60 * 1000;      // teller hooguit eens per 5 min naar KV (KV-schrijflimiet)
 const LASTSEEN_MS = 60 * 60 * 1000;      // "laatst gezien" hooguit eens per uur
 const CACHE_MS = 60 * 1000;              // gebruikersrecord per isolate 60 s in geheugen
+const KIJKER_CACHE_MS = 5 * 1000;        // idem voor rol meekijker: 5 s
 const DAG_S = 86400;
 
 function rollenModus(env) {
   const m = String((env && env.ROLLEN_MODUS) || 'log').trim().toLowerCase();
   return ROLLEN_MODI.includes(m) ? m : 'log';
 }
+// Modus voor déze gebruiker: rollen in ALTIJD_AFDWINGEN krijgen 'afdwingen', ongeacht ROLLEN_MODUS.
+// Ook een verlopen/gedeactiveerde meekijker (rol null, record nog bekend) wordt afgedwongen: anders liep die in 'log' door.
+function effectieveModus(env, rol, rec) {
+  return (rol && ALTIJD_AFDWINGEN.has(rol)) || (!rol && rec && ALTIJD_AFDWINGEN.has(rec.role)) ? 'afdwingen' : rollenModus(env);
+}
 async function kvJson(env, key) {
   if (!env.MT_ROLLEN) return null;
   try { const v = await env.MT_ROLLEN.get(key); return v ? JSON.parse(v) : null; } catch { return null; }
+}
+// Zoals kvJson, maar een KV-fout (of ontbrekende binding) gooit: onderscheid "fout" van "geen record" (voor fail-closed bij externen).
+async function kvJsonStrikt(env, key) {
+  if (!env.MT_ROLLEN) return null;   // geen binding: zoals kvJson (bepaalRol meldt dan 'geen-rollen-opslag')
+  const v = await env.MT_ROLLEN.get(key);
+  return v ? JSON.parse(v) : null;
 }
 async function kvZet(env, key, val, opts) {
   if (!env.MT_ROLLEN) return;
@@ -696,10 +721,21 @@ function vasteEigenaar(env, oid, email) {
 const _gebruikerCache = new Map();   // oid -> {rec, t}
 async function leesGebruiker(env, oid) {
   const c = _gebruikerCache.get(oid);
-  if (c && Date.now() - c.t < CACHE_MS) return c.rec;
-  const rec = await kvJson(env, 'user:' + oid);
+  // Externe meekijker: korte cache (5 s), zodat intrekken/deactiveren/verlopen snel doorwerkt (KV zelf is eventually consistent).
+  if (c && Date.now() - c.t < (c.rec && ALTIJD_AFDWINGEN.has(c.rec.role) ? KIJKER_CACHE_MS : CACHE_MS)) return c.rec;
+  const rec = await kvJsonStrikt(env, 'user:' + oid);   // een KV-fout gooit (rollen-fout), 'geen record' is null
   _gebruikerCache.set(oid, { rec, t: Date.now() });
   return rec;
+}
+// "Laatst gezien" staat in een eigen record `seen:{oid}` ({oid, ts}) en wordt blind overschreven (nooit gelezen-en-teruggeschreven):
+// zo schrijft het verkeer nooit autorisatievelden van `user:{oid}` (rol, active, toegangTot). `user:{oid}` wordt alleen door Beheer-acties,
+// het koppelen van een uitnodiging en de vaste-eigenaar-registratie geschreven. Beheer leest de tijd uit `seen:` (zie /beheer/gebruikers).
+const _seenGeschreven = new Map();   // oid -> ts (per isolate: hooguit eens per LASTSEEN_MS naar KV)
+async function seenBijwerken(env, oid) {
+  const nu = Date.now(), vorige = _seenGeschreven.get(oid) || 0;
+  if (nu - vorige < LASTSEEN_MS || !env.MT_ROLLEN) return;
+  _seenGeschreven.set(oid, nu);
+  try { await kvZet(env, 'seen:' + oid, { oid, ts: nu }); } catch { _seenGeschreven.delete(oid); }
 }
 async function schrijfGebruiker(env, rec) {
   await kvZet(env, 'user:' + rec.oid, rec);
@@ -711,15 +747,71 @@ function nieuweGebruiker(oid, role, email, naam, door) {
 }
 const waitUntil = (ctx, p) => { try { if (ctx && ctx.waitUntil) ctx.waitUntil(p); else p.catch(() => {}); } catch {} };
 
+// De uitnodiging waar een aanvraag bij hoort: moet nog bestaan, hetzelfde id hebben (elke uitnodiging krijgt een eigen id), niet verlopen zijn
+// en de meekijker-rol dragen. Anders null (de aanvraag is dan ongeldig).
+// Verwijdert de uitnodiging van deze aanvraag, maar alleen als invite:<mail> nog dezelfde uitnodiging is (id): vlak voor het verwijderen opnieuw gelezen,
+// zodat een intussen aangemaakte nieuwere uitnodiging voor hetzelfde adres blijft staan (twee eigenaren tegelijk is zeldzaam; dit volstaat).
+async function inviteOpruimen(env, a) {
+  if (!a || !a.uitgenodigdAls || !a.inviteEmail || !a.inviteId) return;
+  const key = 'invite:' + String(a.inviteEmail).toLowerCase(), nu = await kvJson(env, key);
+  if (nu && nu.id === a.inviteId) { try { await env.MT_ROLLEN.delete(key); } catch {} }
+}
+async function inviteBijAanvraag(env, a) {
+  if (!a || !a.uitgenodigdAls || !a.inviteEmail || !a.inviteId) return null;
+  const inv = await kvJson(env, 'invite:' + String(a.inviteEmail).toLowerCase());
+  return inv && inv.id === a.inviteId && inv.role === a.uitgenodigdAls && (!inv.verloopt || inv.verloopt > Date.now()) ? inv : null;
+}
+// Eindtijd van de toegang (epoch ms, optioneel op user-record en uitnodiging). Verlopen = geen rol, ook niet voor 'lezen' enz.
+function toegangVerlopen(rec, nu = Date.now()) {
+  return !!(rec && rec.toegangTot != null && Number(rec.toegangTot) <= nu);
+}
+// Kandidaat-adressen uit het token voor de uitnodiging: preferred_username/upn/email (zoals tokenEmail) + het echte adres achter
+// een gast-UPN (UPN met "#EXT#": voor het laatste "_" staat de lokale naam, erna het domein van het echte adres). Kleine letters, uniek, in deze volgorde.
+function tokenAdressen(payload) {
+  const lijst = [], voeg = a => { a = String(a || '').trim().toLowerCase(); if (a && !lijst.includes(a)) lijst.push(a); };
+  const p = payload || {};
+  for (const a of [p.preferred_username, p.upn, p.email]) {
+    voeg(a);
+    const m = /^(.+)_([^_@#]+)#ext#@/i.exec(String(a || ''));
+    if (m) voeg(m[1] + '@' + m[2]);
+  }
+  return lijst;
+}
+// "JJJJ-MM-DD" → laatste milliseconde van die dag in Europe/Amsterdam (zomer-/wintertijd correct) als epoch ms; NaN bij een ongeldige datum.
+function eindeDagAmsterdam(ymd) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ymd || '')); if (!m) return NaN;
+  const y = +m[1], mo = +m[2], d = +m[3], chk = new Date(Date.UTC(y, mo - 1, d));
+  if (chk.getUTCFullYear() !== y || chk.getUTCMonth() !== mo - 1 || chk.getUTCDate() !== d) return NaN;
+  const fmt = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Amsterdam', hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric' });
+  const offset = t => { const p = Object.fromEntries(fmt.formatToParts(new Date(t)).map(x => [x.type, +x.value])); return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - Math.floor(t / 1000) * 1000; };
+  const lokaal = Date.UTC(y, mo - 1, d + 1, 0, 0, 0);                  // middernacht erna als "wandkloktijd"
+  let t = lokaal - offset(lokaal - 3600e3);                            // schatting; één verfijning voor de overgangsdagen
+  t = lokaal - offset(t - 1);
+  return t - 1;
+}
+// Einddatum uit een Beheer-verzoek → {ok, waarde} (waarde null = geen einddatum) of {fout}.
+function toegangTotNorm(v, nu = Date.now()) {
+  if (v === null || v === '' || v === undefined) return { ok: true, waarde: null };
+  const n = typeof v === 'number' ? v : (typeof v === 'string' ? eindeDagAmsterdam(v) : NaN);
+  if (!Number.isFinite(n) || !Number.isInteger(n)) return { fout: 'ongeldige-einddatum' };
+  if (n <= nu) return { fout: 'einddatum-in-het-verleden' };
+  if (n > nu + TOEGANG_MAX_DAGEN * DAG_S * 1000) return { fout: 'einddatum-te-ver' };
+  return { ok: true, waarde: n };
+}
+// Is dit token van buiten het eigen bedrijf (gast met #EXT#-UPN, ander e-maildomein, of zonder bruikbaar adres)? Voor fail-closed bij externen.
+function externToken(payload) {
+  const ad = tokenAdressen(payload);
+  if (!ad.length) return true;
+  return ad.some(a => a.includes('#ext#') || a.split('@').pop() !== 'mortiseandtenon.nl');
+}
+const datumTekst = ms => ms ? new Date(ms).toISOString().slice(0, 10) : 'geen';
 // Rol van de ingelogde gebruiker → {rol, rec, reden}. Koppelt bij eerste login een
 // uitnodiging (invite:{email}) of een vaste eigenaar via e-mail (OWNER_EMAILS) aan de oid.
 async function bepaalRol(env, payload, ctx) {
-  const oid = payload.oid, email = tokenEmail(payload), naam = payload.name || '';
+  const oid = payload.oid, naam = payload.name || '';
+  let email = tokenEmail(payload);
   let rec = await leesGebruiker(env, oid);
-  if (rec && Date.now() - (rec.lastSeen || 0) > LASTSEEN_MS) {
-    rec = { ...rec, lastSeen: Date.now() };
-    waitUntil(ctx, schrijfGebruiker(env, rec).catch(() => {}));
-  }
+  if (rec) waitUntil(ctx, seenBijwerken(env, oid));
   const vast = vasteEigenaar(env, oid, email);
   if (vast) {
     // Record vastleggen/bijwerken (idempotent); bij 'email' is dit hoe we de oid leren.
@@ -734,12 +826,26 @@ async function bepaalRol(env, payload, ctx) {
   }
   if (rec) {
     if (rec.active === false) return { rol: null, rec, reden: 'gedeactiveerd' };
+    if (toegangVerlopen(rec)) return { rol: null, rec, reden: 'verlopen' };
     return ROLLEN.includes(rec.role) ? { rol: rec.role, rec } : { rol: null, rec, reden: 'onbekende-rol' };
   }
   if (!env.MT_ROLLEN) return { rol: null, rec: null, reden: 'geen-rollen-opslag' };
-  const inv = email ? await kvJson(env, 'invite:' + email) : null;
-  if (inv && ROLLEN.includes(inv.role) && (!inv.verloopt || inv.verloopt > Date.now())) {
+  // Uitnodiging zoeken op het token-adres, daarna op het mail-claim en het adres achter een gast-UPN (#EXT#); lukt dat niet, dan kan de gebruiker toegang aanvragen.
+  let inv = null;
+  for (const adres of tokenAdressen(payload)) { inv = await kvJson(env, 'invite:' + adres); if (inv) { email = adres; break; } }
+  if (inv && ROLLEN.includes(inv.role) && (!inv.verloopt || inv.verloopt > Date.now()) && !(inv.toegangTot && inv.toegangTot <= Date.now())) {
+    // Externe rol (meekijker): een uitnodiging activeert NIET zelf. De eerste login zet de persoon in Aanvragen (met oid, naam, adres en de
+    // vlag "uitgenodigd als meekijker"); pas na goedkeuring door de eigenaar ontstaat het account (met de einddatum uit de uitnodiging).
+    if (ALTIJD_AFDWINGEN.has(inv.role)) {
+      const bestaandeAanvraag = await kvJson(env, 'aanvraag:' + oid);
+      if (!bestaandeAanvraag || (bestaandeAanvraag.inviteId || null) !== (inv.id || null)) {   // ook bij een nieuwere uitnodiging (nieuw id) na een ingetrokken of verlopen vorige
+        await kvZet(env, 'aanvraag:' + oid, { oid, email, naam: clip(naam, 80) || email, bericht: '', ts: Date.now(), uitgenodigdAls: inv.role, toegangTot: inv.toegangTot || null, inviteEmail: email, inviteId: inv.id || null }, { expirationTtl: 30 * DAG_S });
+        await audit(env, { actie: 'toegang-aangevraagd', door: oid, doorNaam: clip(naam, 80) || email, doel: oid, doelNaam: clip(naam, 80) || email, nieuw: 'uitgenodigd als ' + inv.role });
+      }
+      return { rol: null, rec: null, reden: 'wacht-op-goedkeuring' };
+    }
     rec = nieuweGebruiker(oid, inv.role, email, inv.naam || naam, inv.createdBy);
+    if (inv.toegangTot) rec.toegangTot = inv.toegangTot;
     await schrijfGebruiker(env, rec);
     try { await env.MT_ROLLEN.delete('invite:' + email); } catch {}
     try { await env.MT_ROLLEN.delete('aanvraag:' + oid); } catch {}
@@ -764,6 +870,31 @@ const MB_CONCEPT = [
   ['POST',   /^estimates$/],
   ['PATCH',  /^estimates\/\d+\/bill_estimate$/],
 ];
+// Wat een meekijker (moneybird 'kijken') mag lezen: facturen/offertes/rapporten/grootboek, niet de contacten.
+const MB_KIJKEN_RE = /^(documents\/(purchase|sales)_invoices(\/\d+)?|sales_invoices(\/\d+)?|estimates(\/\d+)?|ledger_accounts|reports\/profit_loss)$/;   // rapporten per contact (creditors, debtors, *_aging, expenses_by_contact) bewust niet
+
+// Toggl-gebruikerslijst voor een meekijker: alleen id's en namen (Track: array; Focus: array of {data:[…]}). Onleesbaar → leeg.
+const NAMEN_BLIJFT = new Set(['id', 'uid', 'user_id', 'user_account_id', 'name', 'fullname', 'full_name']);
+function kijkerNamen(tekst) {
+  let j; try { j = JSON.parse(tekst); } catch { return '[]'; }
+  const mager = l => Array.isArray(l) ? l.map(u => Object.fromEntries(Object.entries(u && typeof u === 'object' ? u : {}).filter(([k]) => NAMEN_BLIJFT.has(k)))) : [];
+  return JSON.stringify(Array.isArray(j) ? mager(j) : (j && typeof j === 'object' ? { data: mager(j.data || j.users) } : []));
+}
+// Moneybird-antwoord voor een meekijker = STRIKTE recursieve allowlist per documenttype (specs bij de spiegel-bouwstenen: MB_NODES). Alleen
+// genoemde velden komen door, ook in details[], tax_totals[] en contact; geen vrije velden, notities, bijlagen, events, betalingen of
+// publieke links; strings worden geschoond (e-mail, IBAN, telefoon). Soort: 'doc' (facturen/offertes), 'grootboek', 'rapport' (winst/verlies).
+function mbSoort(pad) {
+  const p = mbRest(pad) || '';
+  if (/^(documents\/(purchase|sales)_invoices|sales_invoices|estimates)(\/\d+)?$/.test(p)) return 'doc';
+  if (p === 'ledger_accounts') return 'grootboek';
+  if (p === 'reports/profit_loss') return 'rapport';
+  return null;
+}
+function mbMagerDoc(d, soort) {
+  const node = MB_NODES[soort || 'doc']; if (!node) return null;
+  const uit = Array.isArray(d) ? spSchoon(spL(node), d, 0) : spSchoon(node, d, 0);
+  return uit === undefined ? null : uit;
+}
 function mbRest(pad) {
   const m = /^(\d+)\/([^?#]*)$/.exec(String(pad || '').split(/[?#]/)[0]);
   return m && m[1] === MB_ADMIN ? m[2].replace(/\.json$/, '').replace(/\/$/, '') : null;
@@ -799,6 +930,47 @@ function togglKlasse(target, pad) {
   if (['me', 'workspaces', 'organizations', 'users', ''].includes(s)) return 'meta';
   return 'planning';
 }
+// Meekijker en Toggl: ALLEEN deze routes (exact wat de tool voor planning en teamuren leest). Geen me/organisatie/werkruimte-meta,
+// geen eigen tijdregels of timer, geen schrijven. Reports (POST leest hier) hebben daarbovenop een bodycontrole (kijkerRapportBody).
+const KIJKER_TOGGL = {
+  toggl: [['GET', /^workspaces\/\d+\/(projects|workspace_users|users)$/]],
+  toggl_admin_projects: [['GET', /^workspaces\/\d+\/projects$/]],
+  toggl_reports: [['POST', /^workspace\/\d+\/search\/time_entries$/]],
+  toggl_focus: [
+    ['GET', /^(tasks|tasks\/stream|tasks\/\d+|projects|projects\/\d+|statuses|clients|capacities\/users|users)$/],
+    ['POST', /^reports\/workspaces\/\d+\/query$/],
+  ],
+};
+function kijkerToggl(target, m, pad) {
+  const lijst = KIJKER_TOGGL[target]; if (!lijst) return { ok: false, reden: 'uren-team-lezen' };
+  const p = target === 'toggl_focus' ? focusRest(pad) : String(pad || '').split(/[?#]/)[0].replace(/^\/+/, '').replace(/\/$/, '');
+  return lijst.some(([mm, re]) => mm === m && re.test(p)) ? { ok: true } : { ok: false, reden: 'uren-team-lezen' };
+}
+const KIJKER_PERIODE_MAX_MS = 400 * 86400e3, KIJKER_BODY_MAX = 4096;
+// Bodycontrole voor de twee Reports-aanroepen van een meekijker → null (oké) of een reden. Beperkt periode (≤ 400 dagen), paginagrootte en bodygrootte.
+function kijkerRapportBody(target, pad, tekst) {
+  if (typeof tekst !== 'string' || tekst.length > KIJKER_BODY_MAX) return 'rapport-body-te-groot';
+  let b; try { b = JSON.parse(tekst); } catch { return 'rapport-body-ongeldig'; }
+  if (!b || typeof b !== 'object' || Array.isArray(b)) return 'rapport-body-ongeldig';
+  const dag = /^\d{4}-\d{2}-\d{2}$/;
+  if (target === 'toggl_reports') {   // Track Reports v3: search/time_entries
+    const toegestaan = new Set(['start_date', 'end_date', 'page_size', 'first_row_number']);
+    if (Object.keys(b).some(k => !toegestaan.has(k))) return 'rapport-veld';
+    if (!dag.test(String(b.start_date || '')) || !dag.test(String(b.end_date || ''))) return 'rapport-periode';
+    const span = Date.parse(b.end_date) - Date.parse(b.start_date);
+    if (!(span >= 0 && span <= KIJKER_PERIODE_MAX_MS)) return 'rapport-periode';
+    if (b.page_size != null && !(Number.isInteger(b.page_size) && b.page_size >= 1 && b.page_size <= 1000)) return 'rapport-pagina';
+    if (b.first_row_number != null && !(Number.isInteger(b.first_row_number) && b.first_row_number >= 1 && b.first_row_number <= 100000)) return 'rapport-pagina';
+    return null;
+  }
+  // Focus reports/…/query: groupings + aggregations + filters, met verplicht een periodefilter op `start` van ≤ 400 dagen.
+  if (Object.keys(b).some(k => !['groupings', 'aggregations', 'filters'].includes(k))) return 'rapport-veld';
+  const f = Array.isArray(b.filters) ? b.filters.find(x => x && x.property === 'start' && x.operator === 'between' && Array.isArray(x.value) && x.value.length === 2) : null;
+  if (!f) return 'rapport-periode';
+  const a = Date.parse(f.value[0]), e = Date.parse(f.value[1]);
+  if (!(Number.isFinite(a) && Number.isFinite(e) && e >= a && e - a <= KIJKER_PERIODE_MAX_MS)) return 'rapport-periode';
+  return null;
+}
 // Centrale toets: mag `rol` deze actie? → {ok, reden?, beperkt?}
 // `velden` = top-level sleutels van de JSON-body (alleen nodig voor Toggl-taak-PATCH van Werkplaats).
 function requirePermission(rol, target, methode, pad, velden) {
@@ -810,10 +982,16 @@ function requirePermission(rol, target, methode, pad, velden) {
     case 'claude':
       return R.ai === 'ja' ? ja() : R.ai === 'beperkt' ? ja({ beperkt: true }) : nee('ai');
     case 'moneybird_download':
+      if (R.moneybird === 'kijken') return nee('moneybird-kijken-geen-download');
       return R.moneybird ? ja() : nee('moneybird');
     case 'moneybird':
     case 'moneybird_upload': {
       if (!R.moneybird) return nee('moneybird');
+      if (R.moneybird === 'kijken') {   // alleen lezen van cijfer- en documentpaden; geen contacten, geen uploads
+        if (target !== 'moneybird' || !lees) return nee('moneybird-kijken-alleen-lezen');
+        const rest = mbRest(pad);
+        return rest != null && MB_KIJKEN_RE.test(rest) ? ja() : nee('moneybird-kijken-pad');
+      }
       if (target === 'moneybird' && lees) return ja();
       if (R.moneybird !== 'concepten') return nee('moneybird-schrijven');
       const soort = mbConcept(target === 'moneybird_upload' ? 'POST' : m, pad);
@@ -824,6 +1002,8 @@ function requirePermission(rol, target, methode, pad, velden) {
     case 'toggl_focus':
     case 'toggl_reports':
     case 'toggl_admin_projects': {
+      // team-lezen (meekijker): vaste lijst van exact de leesroutes die de tool gebruikt (zie kijkerToggl); al het andere dicht.
+      if (R.uren === 'team-lezen') return kijkerToggl(target, m, pad);
       const k = togglKlasse(target, pad);
       if (k === 'uren-team') return ['alles', 'team'].includes(R.uren) ? ja() : nee('uren-team');
       if (k === 'uren') return lees ? (R.uren ? ja() : nee('uren')) : (['alles', 'team', 'eigen'].includes(R.uren) ? ja() : nee('uren-schrijven'));
@@ -846,6 +1026,7 @@ function requirePermission(rol, target, methode, pad, velden) {
       return ja();
     case 'mijn':        // eigen instellingen (Toggl koppelen) — alleen wie met uren of projecten werkt
     case 'aanwezig':    // aanwezigheidsbord (met projecten/taken) — idem; niet voor bv. administratie
+      if (rol === 'meekijker') return nee(target === 'mijn' ? 'mijn-toggl' : 'aanwezig');   // extern: geen eigen Toggl-koppeling, geen live aanwezigheid
       return (R.uren || R.projecten) ? ja() : nee(target === 'mijn' ? 'mijn-toggl' : 'aanwezig');
     case 'track_admin':
     case 'beheer':
@@ -4220,6 +4401,8 @@ async function handleGeld(p, request, env, ik, json0) {
   // Recht `geld`, in élke ROLLEN_MODUS: lezen (eigenaar, administratie), wijzigen alleen de eigenaar.
   const R = RECHTEN[ik.rol], m = request.method, url = new URL(request.url);
   if (!R || !R.geld) return json({ error: 'geen-toegang', reden: 'geld' }, 403);
+  // 'kijken' (meekijker): alleen lezen, dus ook geen vraag bij een rapport en geen "gelezen"-markering (die schrijven in KV).
+  if (R.geld === 'kijken' && !['GET', 'HEAD'].includes(m.toUpperCase())) return json({ error: 'geen-toegang', reden: 'geld-kijken' }, 403);
   if (p === '/geld/cijfers' || p.startsWith('/geld/cijfers/')) {
     if (m.toUpperCase() !== 'GET') return json({ error: 'alleen GET' }, 405);
     return await geldCijfersRoute(p, env, url, R, json);
@@ -4668,7 +4851,9 @@ function meAntwoord(env, ik, payload) {
   return {
     oid: payload.oid, email: ik.email, naam: (ik.rec && ik.rec.naam) || payload.name || ik.email,
     rol: ik.rol, rolNaam: ik.rol ? ROL_NAAM[ik.rol] : null, actief: !!ik.rol, reden: ik.rol ? null : (ik.reden || 'onbekend'),
-    modus: rollenModus(env), rechten: ik.rol ? RECHTEN[ik.rol] : null,
+    modus: effectieveModus(env, ik.rol, ik.rec), altijdAfdwingen: !!(ik.rol && ALTIJD_AFDWINGEN.has(ik.rol)) || undefined,
+    toegangTot: (ik.rec && ik.rec.toegangTot) || undefined, rechten: ik.rol ? RECHTEN[ik.rol] : null,
+    extern: externToken(payload) || undefined,   // gast of ander e-maildomein: de front-end toont zonder rol een nette 'geen toegang'-pagina, ook in log-modus
     // Vaste eigenaar via e-mail: zet deze oid (bovenaan) later in OWNER_OIDS.
     vasteEigenaar: ik.vast || undefined,
     ownerOidNogZetten: ik.vast === 'email' ? true : undefined,
@@ -4677,11 +4862,14 @@ function meAntwoord(env, ik, payload) {
 async function handleToegang(request, env, ik, payload, json) {
   if (request.method !== 'POST') return json({ error: 'POST verwacht' }, 405);
   if (ik.rol) return json({ ok: true, alToegang: true });
+  // Een (verlopen of ingetrokken) meekijker kan zichzelf niet opnieuw aanvragen: de eigenaar verlengt of maakt een nieuwe uitnodiging.
+  if (ik.rec && ALTIJD_AFDWINGEN.has(ik.rec.role)) return json({ error: 'geen-toegang', reden: 'toegang-ingetrokken' }, 403);
   if (!env.MT_ROLLEN) return json({ ok: false, error: 'geen-rollen-opslag' }, 503);
   let body = {}; try { body = await request.json(); } catch {}
   const bestaand = await kvJson(env, 'aanvraag:' + payload.oid);
   if (bestaand && Date.now() - bestaand.ts < 3600 * 1000) return json({ ok: true, alAangevraagd: true });
   const a = { oid: payload.oid, email: ik.email, naam: clip(payload.name, 80) || ik.email, bericht: clip(body && body.bericht, 300) || '', ts: Date.now() };
+  if (bestaand && bestaand.uitgenodigdAls) Object.assign(a, { uitgenodigdAls: bestaand.uitgenodigdAls, toegangTot: bestaand.toegangTot || null, inviteEmail: bestaand.inviteEmail || ik.email, inviteId: bestaand.inviteId || null });   // de uitnodigingsvlag blijft (komt alleen uit de server, nooit uit de body)
   await kvZet(env, 'aanvraag:' + payload.oid, a, { expirationTtl: 30 * DAG_S });
   await audit(env, { actie: 'toegang-aangevraagd', door: payload.oid, doorNaam: a.naam, doel: payload.oid, doelNaam: a.naam });
   return json({ ok: true });
@@ -4704,6 +4892,7 @@ function magBeheren(env, ik, doel, nieuweRol, alle, deactiveren) {
   if (doel && (vasteEigenaar(env, doel.oid) || (doel.bron === 'owner_email' && vasteEigenaar(env, null, doel.email)))) return 'eigenaar-beschermd';
   if (doel && doel.oid === ik.oid) return 'niet-jezelf';
   if (ik.rol !== 'eigenaar' && ((doel && doel.role === 'eigenaar') || nieuweRol === 'eigenaar')) return 'alleen-eigenaar-mag-eigenaar';
+  if (ik.rol !== 'eigenaar' && ((doel && doel.role === 'meekijker') || nieuweRol === 'meekijker')) return 'alleen-eigenaar-mag-meekijker';   // externe toegang: alleen de eigenaar
   const wegAlsEigenaar = doel && doel.role === 'eigenaar' && doel.active !== false && ((nieuweRol != null && nieuweRol !== 'eigenaar') || deactiveren);
   if (wegAlsEigenaar && alle) {
     const eig = new Set([...ownerOids(env)]);
@@ -4724,7 +4913,8 @@ async function handleBeheer(pathname, request, env, ik, json) {
   const p = pathname, m = request.method;
 
   if (p === '/beheer/gebruikers' && m === 'GET') {
-    const gebruikers = (await lijstKV(env, 'user:')).map(g => { const vast = beheerVast(env, g); return { ...g, rolNaam: ROL_NAAM[g.role] || g.role, beschermd: !!vast, vast }; });
+    const gezien = new Map((await lijstKV(env, 'seen:')).map(s => [s.oid, s.ts]));   // laatst gezien staat in eigen records (seen:{oid}), zie seenBijwerken
+    const gebruikers = (await lijstKV(env, 'user:')).map(g => { const vast = beheerVast(env, g); return { ...g, lastSeen: Math.max(g.lastSeen || 0, gezien.get(g.oid) || 0) || undefined, rolNaam: ROL_NAAM[g.role] || g.role, beschermd: !!vast, vast }; });
     for (const o of ownerOids(env)) if (!gebruikers.some(g => String(g.oid).toLowerCase() === o))
       gebruikers.push({ oid: o, role: 'eigenaar', rolNaam: 'Eigenaar', active: true, naam: '(vaste eigenaar, nog niet ingelogd)', beschermd: true, vast: 'oid' });
     for (const e of ownerEmails(env)) if (!gebruikers.some(g => (g.email || '').toLowerCase() === e))
@@ -4737,9 +4927,13 @@ async function handleBeheer(pathname, request, env, ik, json) {
     if (!EMAIL_RE.test(email)) return json({ error: 'ongeldig-email' }, 400);
     const fout = magBeheren(env, ik, null, rol); if (fout) return json({ error: fout }, fout === 'onbekende-rol' ? 400 : 403);
     if ((await lijstKV(env, 'user:')).some(g => (g.email || '').toLowerCase() === email)) return json({ error: 'bestaat-al' }, 409);
-    const inv = { email, role: rol, naam: clip(b.naam, 80) || '', createdBy: ik.oid, createdAt: Date.now(), verloopt: Date.now() + 30 * DAG_S * 1000 };
+    const tt = toegangTotNorm(b.toegangTot);
+    if (tt.fout) return json({ error: tt.fout }, 400);
+    if (rol === 'meekijker' && !tt.waarde) return json({ error: 'einddatum-verplicht' }, 400);
+    const inv = { id: randHex(8), email, role: rol, naam: clip(b.naam, 80) || '', createdBy: ik.oid, createdAt: Date.now(), verloopt: Date.now() + 30 * DAG_S * 1000 };
+    if (tt.waarde) inv.toegangTot = tt.waarde;
     await kvZet(env, 'invite:' + email, inv, { expirationTtl: 30 * DAG_S });
-    await audit(env, { ...door, actie: 'uitgenodigd', doel: email, doelNaam: inv.naam || email, nieuw: rol });
+    await audit(env, { ...door, actie: 'uitgenodigd', doel: email, doelNaam: inv.naam || email, nieuw: rol + (tt.waarde ? ' tot ' + datumTekst(tt.waarde) : '') });
     return json({ ok: true, uitnodiging: inv });
   }
   if (p === '/beheer/uitnodiging-intrekken' && m === 'POST') {
@@ -4747,6 +4941,8 @@ async function handleBeheer(pathname, request, env, ik, json) {
     const inv = await kvJson(env, 'invite:' + email); if (!inv) return json({ error: 'niet-gevonden' }, 404);
     const fout = magBeheren(env, ik, null, inv.role); if (fout) return json({ error: fout }, 403);
     await env.MT_ROLLEN.delete('invite:' + email);
+    // Een gekoppelde aanvraag (eerste login na de uitnodiging) wordt daarmee ongeldig en verdwijnt uit Aanvragen.
+    for (const a of await lijstKV(env, 'aanvraag:')) if (a.uitgenodigdAls && String(a.inviteEmail || '').toLowerCase() === email && (!inv.id || a.inviteId === inv.id)) { try { await env.MT_ROLLEN.delete('aanvraag:' + a.oid); } catch {} }
     await audit(env, { ...door, actie: 'uitnodiging-ingetrokken', doel: email, oud: inv.role });
     return json({ ok: true });
   }
@@ -4757,6 +4953,16 @@ async function handleBeheer(pathname, request, env, ik, json) {
     const fout = magBeheren(env, ik, doel, nieuweRol, await lijstKV(env, 'user:'), actief === false);
     if (fout) return json({ error: fout }, fout === 'onbekende-rol' ? 400 : fout === 'laatste-eigenaar' ? 409 : 403);
     const nieuw = { ...doel, updatedAt: Date.now() };
+    // Einddatum: ms of "JJJJ-MM-DD" instellen/verlengen, null = verwijderen (niet bij een meekijker: die heeft altijd een einddatum).
+    if ('toegangTot' in b) {
+      const tt = toegangTotNorm(b.toegangTot); if (tt.fout) return json({ error: tt.fout }, 400);
+      const rolNa = nieuweRol != null ? nieuweRol : doel.role;
+      if (rolNa === 'meekijker' && !tt.waarde) return json({ error: 'einddatum-verplicht' }, 400);
+      if ((tt.waarde || null) !== (doel.toegangTot || null)) {
+        if (tt.waarde) nieuw.toegangTot = tt.waarde; else delete nieuw.toegangTot;
+        await audit(env, { ...door, actie: 'einddatum-gewijzigd', doel: oid, doelNaam: doel.naam, oud: datumTekst(doel.toegangTot), nieuw: datumTekst(tt.waarde) });
+      }
+    } else if (nieuweRol === 'meekijker' && doel.role !== 'meekijker' && !doel.toegangTot) return json({ error: 'einddatum-verplicht' }, 400);
     if (nieuweRol != null && nieuweRol !== doel.role) { nieuw.role = nieuweRol; await audit(env, { ...door, actie: 'rol-gewijzigd', doel: oid, doelNaam: doel.naam, oud: doel.role, nieuw: nieuweRol }); }
     if (actief != null && actief !== (doel.active !== false)) { nieuw.active = actief; await audit(env, { ...door, actie: actief ? 'gereactiveerd' : 'gedeactiveerd', doel: oid, doelNaam: doel.naam }); }
     await schrijfGebruiker(env, nieuw);
@@ -4767,15 +4973,28 @@ async function handleBeheer(pathname, request, env, ik, json) {
     const a = await kvJson(env, 'aanvraag:' + oid); if (!a) return json({ error: 'niet-gevonden' }, 404);
     if (b.weigeren) {
       await env.MT_ROLLEN.delete('aanvraag:' + oid);
+      await inviteOpruimen(env, a);   // anders zet de volgende login hem opnieuw in Aanvragen (alleen de eigen uitnodiging, niet een nieuwere)
       await audit(env, { ...door, actie: 'aanvraag-geweigerd', doel: oid, doelNaam: a.naam });
       return json({ ok: true });
     }
-    const rol = String(b.rol || ''), fout = magBeheren(env, ik, { oid }, rol); if (fout) return json({ error: fout }, fout === 'onbekende-rol' ? 400 : 403);
+    // Uitgenodigd als meekijker: de uitnodiging moet nog bestaan, ongewijzigd (zelfde id) en niet verlopen zijn; anders is de aanvraag ongeldig.
+    if (a.uitgenodigdAls && ALTIJD_AFDWINGEN.has(a.uitgenodigdAls) && ik.rol !== 'eigenaar') return json({ error: 'alleen-eigenaar-mag-meekijker' }, 403);
+    if (a.uitgenodigdAls && !(await inviteBijAanvraag(env, a))) {
+      await env.MT_ROLLEN.delete('aanvraag:' + oid);
+      await audit(env, { ...door, actie: 'aanvraag-vervallen', doel: oid, doelNaam: a.naam, nieuw: 'uitnodiging ingetrokken, verlopen of vervangen' });
+      return json({ error: 'uitnodiging-ongeldig' }, 409);
+    }
+    // Uitgenodigd als meekijker: de rol staat vast (geen andere rol kiezen) en de einddatum uit de uitnodiging geldt, tenzij de eigenaar een nieuwe meegeeft.
+    const rol = a.uitgenodigdAls && ALTIJD_AFDWINGEN.has(a.uitgenodigdAls) ? a.uitgenodigdAls : String(b.rol || ''), fout = magBeheren(env, ik, { oid }, rol); if (fout) return json({ error: fout }, fout === 'onbekende-rol' ? 400 : 403);
     if (await kvJson(env, 'user:' + oid)) return json({ error: 'bestaat-al' }, 409);
+    const tt = toegangTotNorm('toegangTot' in b ? b.toegangTot : (a.toegangTot || null)); if (tt.fout) return json({ error: tt.fout }, 400);
+    if (rol === 'meekijker' && !tt.waarde) return json({ error: 'einddatum-verplicht' }, 400);
     const rec = nieuweGebruiker(oid, rol, a.email, a.naam, ik.oid); rec.lastSeen = a.ts;
+    if (tt.waarde) rec.toegangTot = tt.waarde;
     await schrijfGebruiker(env, rec);
     await env.MT_ROLLEN.delete('aanvraag:' + oid);
-    await audit(env, { ...door, actie: 'aanvraag-toegekend', doel: oid, doelNaam: a.naam, nieuw: rol });
+    await inviteOpruimen(env, a);
+    await audit(env, { ...door, actie: 'aanvraag-toegekend', doel: oid, doelNaam: a.naam, nieuw: rol + (tt.waarde ? ' tot ' + datumTekst(tt.waarde) : '') });
     return json({ ok: true, gebruiker: rec });
   }
   // Centrale instelling wijzigen (alle pc's lezen hem bij het laden via /instellingen): alleen de eigenaar.
@@ -4846,6 +5065,7 @@ async function handleBeheer(pathname, request, env, ik, json) {
     return json({ modus: rollenModus(env), proxyModus: proxyModus(env), dagen, totaal: tot.totaal, geweigerd: tot.geweigerd, perDag, top, proxyAfwijkingen: tot.proxyTotaal, proxyTop,
       cspTotaal: csp.totaal, cspAfgewezen: csp.afgewezen, cspBeschikbaar, cspTop: Object.entries(csp.sleutels).sort((a, b) => b[1] - a[1]).slice(0, 25).map(([k, n]) => { const [directive, host] = k.split('|'); return { directive, host, n }; }) });
   }
+  if (p === '/beheer/kijklog' && m === 'GET') return await beheerKijklog(request, env, ik, json);
   return json({ error: 'unknown-beheer-route' }, 404);
 }
 
@@ -4923,8 +5143,9 @@ async function handleKlanten(request, env, ik, json, ctx) {
   const revVan = klantenRevVan;
   if (m === 'GET') {
     if (!ik.rol) {
-      if (rollenModus(env) === 'afdwingen') return json({ error: 'geen-toegang', reden: ik.reden || 'geen-rol' }, 403);
-      if (rollenModus(env) === 'log') { try { await noteerBesluit(env, ctx, { ok: false, modus: 'log', rol: null, oid: ik.oid, target: 'klanten', actie: 'klanten.zonder_rol', reden: ik.reden || 'geen-rol' }); } catch {} }
+      const kModus = effectieveModus(env, ik.rol, ik.rec);
+      if (kModus === 'afdwingen') return json({ error: 'geen-toegang', reden: ik.reden || 'geen-rol' }, 403);
+      if (kModus === 'log') { try { await noteerBesluit(env, ctx, { ok: false, modus: 'log', rol: null, oid: ik.oid, target: 'klanten', actie: 'klanten.zonder_rol', reden: ik.reden || 'geen-rol' }); } catch {} }
     }
     const d = await huidig();
     if (!d || !Array.isArray(d.klanten) || !d.klanten.length) return json({ error: 'geen-klantenlijst', rev: 0 }, 404);
@@ -5555,6 +5776,7 @@ async function handleSignalen(p, request, env, ik, json) {
   const R = ik.rol ? RECHTEN[ik.rol] : null, m = request.method;
   const zien = !!(R && (R.offertes || R.projecten)), wijzigen = !!(R && R.offertes === 'wijzigen');
   if (!zien) return json({ error: 'geen-toegang', reden: R ? 'offertes' : (ik.reden || 'geen-rol') }, 403);
+  if (p.startsWith('/push/') && ik.rol === 'meekijker') return json({ error: 'geen-toegang', reden: 'push-meekijker' }, 403);   // extern: geen pushmeldingen aan een apparaat koppelen
   if (p.startsWith('/push/')) return await handlePush(p, request, env, ik, json, R);
   const doe = sigStub(env);
   if (!doe) return json({ error: 'geen-signalen-opslag', uitleg: 'Durable Object-binding MT_TELLER ontbreekt (zie wrangler.toml)' }, 503);
@@ -5932,11 +6154,296 @@ async function handlePush(p, request, env, ik, json, R) {
 
 // CORS: het oude adres (GitHub Pages) én het nieuwe (Cloudflare Pages + eigen domein), exact — geen '*', en niets voor een onbekende herkomst.
 const CORS_HERKOMST = ['https://mtbart.github.io', 'https://tool.mortiseandtenon.nl', 'https://mt-tool.pages.dev'];
-export default {
+// ══ SPIEGEL (alleen-lezen kopie van SharePoint-bestanden voor de meekijker) ═══════════════════════════════════════════════════
+// De worker heeft GEEN Graph-toegang. Na een geslaagde SharePoint-save stuurt een teamclient met schrijfrecht een kopie van dat bestand:
+// POST /spiegel/<store> {data, etag, ts}. De meekijker (en teamrollen met leesrecht) leest GET /spiegel/<store> en /spiegel/_index.
+// SharePoint blijft de bron; de spiegel is een AFGELEIDE, GEPROJECTEERDE kopie. Er wordt nooit iets teruggeschreven naar SharePoint.
+//  - Opslag: KV MT_ROLLEN `spiegel:<store>` = {ts, etag, bron (oid-hash), bytes, data}, met {ts, etag, bytes, bron} als KV-metadata.
+//  - Versie `ts` = het SharePoint-moment van de stand (lastModifiedDateTime in ms), niet de klok van de client. Alleen strikt nieuwer dan het
+//    bewaarde wordt aangenomen (anders 409); maximaal 10 minuten boven de servertijd. KV heeft geen compare-and-set: twee gelijktijdige
+//    zendingen kunnen elkaar kruisen, maar dan staat er een echte SharePoint-versie; de volgende save of het bijvullen (ETag-vergelijking) herstelt dat.
+//  - Rest-risico (bewust geaccepteerd): een teamlid met schrijfrecht kan een foute kopie sturen. Gevolg beperkt tot de kijkkopie; SharePoint blijft heel.
+//  - Privacy: de PROJECTIE gebeurt hier, bij het schrijven (allowlist per store, zie SPIEGEL_STORES): contactpersonen, e-mail, telefoon, adres,
+//    IBAN, vrije notities/opmerkingen, interne stempels en e-mailadressen van gebruikers komen nooit in KV. Strings worden daarbovenop geschoond.
+//  - Autorisatie: expliciete tabel store x rol (lees/schrijf), niet per matrixkolom. Een meekijker schrijft nooit. Per oid max 120 zendingen/uur.
+const ROLLEN_PROJ_LEES = ['eigenaar', 'beheerder', 'kantoor', 'werkplaats', 'lezen', 'meekijker'];
+const ROLLEN_OFFERTE_LEES = ['eigenaar', 'beheerder', 'kantoor', 'lezen', 'meekijker'];
+const ROLLEN_SCHRIJF_KANTOOR = ['eigenaar', 'beheerder', 'kantoor'];
+// ── projectie-bouwstenen ──
+const SP_T = { t: 'p' };                                              // primitief (tekst, getal, waar/onwaar, null)
+const SP_FLEX = { t: 'flex' };                                        // primitief, lijst van primitieven of kaart van primitieven (geen diepere nesting)
+const SP_TOMB = { t: 'tomb' };                                        // tombstone ({tijd, door}) wordt true: wie het deed hoort er niet in
+const SP_NAAM_UIT_MAIL = { t: 'naamuitmail' };                        // e-mailadres wordt een voornaam
+const SP_GETAL = { t: 'getal' };                                      // getal, of een tekst die een getal is (wordt een getal); anders weg
+
+const spL = n => ({ t: 'l', n }), spK = (n, sleutelRe) => ({ t: 'k', n, re: sleutelRe }), spO = (velden, na) => ({ t: 'o', velden, na });
+const SP_SLEUTEL_RE = /^(?!__)[^\x00-\x1f]{1,120}$/;
+const SP_MAX_ITEMS = 50000, SP_MAX_TEKST = 4000;
+const SP_MAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g;
+const SP_IBAN_RE = /\b[A-Za-z]{2}\d{2}[ ]?(?:[A-Za-z0-9]{4}[ ]?){2,7}[A-Za-z0-9]{1,4}\b/g;
+const SP_TEL_RE = /(?:(?:\+|00)\d{2}[\s.\-]?|\b0)\(?0?\)?[1-9][\s.\-]?(?:\d[\s.\-]?){7,9}\d\b/g;
+// Schoont een tekst: e-mailadressen, IBAN's en telefoonnummers worden vervangen (vangnet bovenop de allowlist).
+function spScrub(s) {
+  let t = String(s); if (t.length > SP_MAX_TEKST) t = t.slice(0, SP_MAX_TEKST);
+  return t.replace(SP_MAIL_RE, '[e-mail]').replace(SP_IBAN_RE, m => (/\d/.test(m) && /[A-Za-z]{2}\d{2}/.test(m) ? '[iban]' : m)).replace(SP_TEL_RE, '[tel]');
+}
+function spVoornaam(mail) {
+  const lokaal = String(mail || '').split('@')[0].split(/[._\-+]/)[0]; return lokaal ? lokaal.charAt(0).toUpperCase() + lokaal.slice(1, 30) : '';
+}
+function spSchoon(node, w, diep) {
+  if (diep > 8 || w === undefined) return undefined;
+  switch (node.t) {
+    case 'p': return w === null || typeof w === 'number' || typeof w === 'boolean' ? w : typeof w === 'string' ? spScrub(w) : undefined;
+    case 'tomb': return w ? true : undefined;
+    case 'naamuitmail': return typeof w === 'string' && w ? (w.includes('@') ? spVoornaam(w) : spScrub(w)) : undefined;
+    case 'getal': { const n = typeof w === 'number' ? w : (typeof w === 'string' && w.trim() !== '' ? Number(w.replace(',', '.')) : NaN); return Number.isFinite(n) && Math.abs(n) < 1e9 ? n : undefined; }
+    case 'flex': {
+      if (w === null || ['number', 'boolean', 'string'].includes(typeof w)) return spSchoon(SP_T, w, diep);
+      if (Array.isArray(w)) return w.slice(0, 500).map(x => spSchoon(SP_T, x, diep + 1)).filter(x => x !== undefined);
+      if (typeof w === 'object') { const uit = {}; for (const [k, v] of Object.entries(w).slice(0, 500)) if (SP_SLEUTEL_RE.test(k)) { const x = spSchoon(SP_T, v, diep + 1); if (x !== undefined) uit[k] = x; } return uit; }
+      return undefined;
+    }
+    case 'l': return Array.isArray(w) ? w.slice(0, SP_MAX_ITEMS).map(x => spSchoon(node.n, x, diep + 1)).filter(x => x !== undefined && x !== null) : undefined;
+    case 'k': {
+      if (!w || typeof w !== 'object' || Array.isArray(w)) return undefined;
+      const uit = {}; for (const [k, v] of Object.entries(w).slice(0, SP_MAX_ITEMS)) { if (!(node.re || SP_SLEUTEL_RE).test(k)) continue; const x = spSchoon(node.n, v, diep + 1); if (x !== undefined) uit[k] = x; }
+      return uit;
+    }
+    case 'o': {
+      if (!w || typeof w !== 'object' || Array.isArray(w)) return undefined;
+      const uit = {};
+      for (const [k, sub] of Object.entries(node.velden)) { if (!(k in w)) continue; const x = spSchoon(sub, w[k], diep + 1); if (x !== undefined) uit[k] = x; }   // alleen wat de allowlist noemt
+      return node.na ? node.na(uit, w) : uit;
+    }
+  }
+  return undefined;
+}
+// ── Moneybird (meekijker): strikte allowlists per documenttype; alleen genoemde velden, ook genest ──
+const MB_CONTACT = spO({ id: SP_T, company_name: SP_T, firstname: SP_T, lastname: SP_T }, (uit) => { if (uit.company_name) { delete uit.firstname; delete uit.lastname; } return uit; });   // bedrijfsnaam, of voor-/achternaam van een particulier
+const MB_DETAIL = spO({ id: SP_T, description: SP_T, price: SP_T, amount: SP_T, period: SP_T, row_order: SP_T, tax_rate_id: SP_T, ledger_account_id: SP_T, project_id: SP_T, product_id: SP_T,
+  total_price_excl_tax_with_discount: SP_T, total_price_excl_tax_with_discount_base: SP_T });
+const MB_DOC = spO({
+  id: SP_T, administration_id: SP_T, contact: MB_CONTACT, contact_id: SP_T, invoice_id: SP_T, estimate_id: SP_T, original_estimate_id: SP_T, entry_number: SP_T, reference: SP_T, state: SP_T,
+  date: SP_T, due_date: SP_T, created_at: SP_T, updated_at: SP_T, sent_at: SP_T, paid_at: SP_T, currency: SP_T, exchange_rate: SP_T, discount: SP_T, origin: SP_T, revenue_invoice: SP_T,
+  prices_are_incl_tax: SP_T, total_price_excl_tax: SP_T, total_price_incl_tax: SP_T, total_price_excl_tax_base: SP_T, total_price_incl_tax_base: SP_T,
+  total_paid: SP_T, total_paid_base: SP_T, total_unpaid: SP_T, total_unpaid_base: SP_T, version: SP_T,
+  tax_totals: spL(spO({ tax_rate_id: SP_T, taxable_amount: SP_T, taxable_amount_base: SP_T, tax_amount: SP_T, tax_amount_base: SP_T })), details: spL(MB_DETAIL),
+});   // niet: notes, custom_fields, attachments, events, payments, contact_person(_id), betaal-/publieke links, workflow/stijl, url, en alles wat hier niet staat
+const MB_GROOTBOEK = spO({ id: SP_T, name: SP_T, account_type: SP_T, account_id: SP_T, parent_id: SP_T, allowed_document_types: SP_FLEX, created_at: SP_T, updated_at: SP_T });
+// Winst/verlies (reports/profit_loss): expliciet schema (zoals het Moneybird-antwoord waar de tool zelf van leest): totalen en per grootboek een bedrag; geen contacten, namen of vrije velden.
+const MB_PL_GROEP = spO({ ledger_accounts: spL(spO({ ledger_account_id: SP_T, value: SP_T, name: SP_T })), total: SP_T });
+const MB_RAPPORT = spO({
+  period: SP_T, start_date: SP_T, end_date: SP_T, from: SP_T, to: SP_T, currency: SP_T,
+  total_revenue: SP_T, total_direct_costs: SP_T, gross_profit: SP_T, total_expenses: SP_T, operating_profit: SP_T, total_other_income_expenses: SP_T, net_profit: SP_T,
+  revenue_by_ledger_account: MB_PL_GROEP, direct_costs_by_ledger_account: MB_PL_GROEP, expenses_by_ledger_account: MB_PL_GROEP, other_income_expenses_by_ledger_account: MB_PL_GROEP,
+});
+const MB_NODES = { doc: MB_DOC, grootboek: MB_GROOTBOEK, rapport: MB_RAPPORT };
+// ── de stores: bouwstenen per bestand ──
+const SP_STEMPEL = { _gewijzigd: SP_T, _vervallen: SP_TOMB, _weg: SP_TOMB };                       // wel: wijzigmoment en verwijdermarkering; niet: _vs, _veldconflict, _door, _eerder, _bron
+const SP_PROJECT = spO({
+  code: SP_T, naam: SP_T, project_id: SP_T, soort: SP_T, werkcode: SP_T, projectnummer: SP_T, legacy_codes: SP_FLEX, klant: SP_T, loc: SP_T, status: SP_T, fase: SP_T,
+  volgende_actie: SP_T, kans_pct: SP_T, waarde_excl: SP_T, verwachte_beslisdatum: SP_T, verlies: SP_T, geparkeerd_tot: SP_T, gewonnen_op: SP_T, bron: SP_T, tg_project_id: SP_T,
+  created: SP_T, omschrijving: SP_T, _hernoemd_naar: SP_T,
+  offertes: spL(spO({ id: SP_T, nummer: SP_T, nr: SP_T, key: SP_T, titel: SP_T, naam: SP_T, status: SP_T, bedrag: SP_T, datum: SP_T, bron: SP_T })),
+  gegevens: spO({ projectleider: SP_T, projectonderdeel: SP_T, leverdatum: SP_T }),   // niet: aanhef, voornaam, achternaam, straat, postcode, plaats
+  ...SP_STEMPEL,
+});
+const SP_FASE = spO({ id: SP_T, k: SP_T, naam: SP_T, label: SP_T, duur: SP_T, start: SP_T, eind: SP_T, gepind: SP_T, pin: SP_T, gap: SP_T, kleur: SP_T, status: SP_T, afhankelijk_van: SP_FLEX, fase_id: SP_T });
+const SP_PLAN = spO({ fases: spL(SP_FASE), anker: spO({ type: SP_T, datum: SP_T }), titel: SP_T, project_id: SP_T, code: SP_T, start: SP_T, eind: SP_T, oplever: SP_T, ...SP_STEMPEL });
+const SP_TAAK = spO({
+  id: SP_T, project_id: SP_T, naam: SP_T, omschrijving: SP_T, duur_uur: SP_T, activiteit: SP_T, status: SP_T, toegewezen: SP_T, prioriteit: SP_T, afhankelijk_van: SP_FLEX, tg_task_id: SP_T,
+  start: SP_T, eind: SP_T, duur_dagen: SP_T, soort: SP_T, fase: SP_T, sleutel: SP_T, klaar_op: SP_T, wacht_reden: SP_T, fase_id: SP_T, poort: SP_T, poort_eigenaar: SP_T, beperking: SP_T, beperking_datum: SP_T,
+  checklist: spL(spO({ id: SP_T, tekst: SP_T, punt: SP_T, klaar: SP_T, gedaan: SP_T })), aangemaakt: SP_T, ts: SP_T, bron: SP_T, ...SP_STEMPEL,   // niet: poort_bewijs (link), tg_sync, tg_pending, voorstel (wie/rol)
+});
+const SP_BLOK = spO({ id: SP_T, persoon: SP_T, project_code: SP_T, taak: SP_T, taak_id: SP_T, datum: SP_T, start: SP_T, duurMin: SP_T, status: SP_T, ts: SP_T, ...SP_STEMPEL });   // niet: notitie, voorstel, agenda_*
+const SP_INRICHT = spO({ id: SP_T, type: SP_T, k: SP_T, label: SP_T, volgorde: SP_T, station: SP_T, soort: SP_T, uursoort: SP_T, namen: SP_FLEX, woorden: SP_FLEX, uren: SP_FLEX, stations: SP_FLEX, activiteiten: SP_FLEX, sleutels: SP_FLEX, vrij: SP_FLEX, soorten: SP_FLEX, voorkeur: SP_FLEX, ...SP_STEMPEL });
+const SP_AFH = spO({ id: SP_T, van_taak: SP_T, naar_taak: SP_T, type: SP_T, lag_dagen: SP_T, status: SP_T, lag_soort: SP_T, van_project: SP_T, ...SP_STEMPEL });
+const SP_OFFERTE_REGEL = spO({ id: SP_T, omschrijving: SP_T, artikel: SP_T, aantal: SP_T, inkoop_stuk: SP_T, marge: SP_T, uren: SP_T, uurtarief: SP_T, begroot: SP_T, leverancier: SP_T, eenheid: SP_T });
+const SP_OFFERTE_META = spO({ status: SP_T, bron: SP_T, leverdatum: SP_T, offertedatum: SP_T, factuurbedrag: SP_T });
+const SP_OFFERTE = spO({
+  titel: SP_T, project_code: SP_T, meta: SP_OFFERTE_META, materiaal: spL(SP_OFFERTE_REGEL), uren: spL(SP_OFFERTE_REGEL),
+  nacalc: spO({ gestart: SP_T, meta: SP_OFFERTE_META, materiaal: spL(SP_OFFERTE_REGEL), uren: spL(SP_OFFERTE_REGEL) }), ...SP_STEMPEL,   // niet: opmerkingen, contact, toggl-koppeling
+});
+const SP_VERBETER_HIST = spO({ tijd: SP_T, fase: SP_T, notitie: SP_T, door: SP_NAAM_UIT_MAIL });
+const SP_VERBETERPUNT = spO({
+  id: SP_T, titel: SP_T, betreft: SP_T, omschrijving: SP_T, tekst: SP_T, type: SP_T, urgentie: SP_T, prioriteit: SP_T, fase: SP_T, status: SP_T, aangemaakt_op: SP_T, ts: SP_T, datum: SP_T,
+  indiener_naam: SP_T, indiener: SP_NAAM_UIT_MAIL, user: SP_NAAM_UIT_MAIL, historie: spL(SP_VERBETER_HIST),
+  reacties: spL(spO({ tijd: SP_T, tekst: SP_T, door: SP_NAAM_UIT_MAIL, naam: SP_T })), _gewijzigd: SP_T,                   // niet: e-mailadressen, oid's, bijlagen/screenshot-URL's, user-agent, logs, tokens
+}, (uit, bron) => {
+  const naam = uit.indiener_naam || uit.indiener || uit.user || ''; if (naam) { uit.indiener_naam = naam; uit.indiener = naam; } delete uit.user; return uit;      // indiener alleen als (voor)naam
+});
+// root: 'array' | 'object' | 'items' | 'kaart'; ontwerp van de rollen: expliciet per store (lees/schrijf), niet per matrixkolom.
+const SPIEGEL_STORES = {
+  mt_projecten:        { root: 'array',  node: spL(SP_PROJECT),           lees: ROLLEN_PROJ_LEES,    schrijf: ROLLEN_SCHRIJF_KANTOOR },
+  mt_planning:         { root: 'object', node: spK(SP_PLAN),              lees: ROLLEN_PROJ_LEES,    schrijf: ROLLEN_SCHRIJF_KANTOOR },
+  mt_planblokken:      { root: 'array',  node: spL(SP_BLOK),              lees: ROLLEN_PROJ_LEES,    schrijf: ROLLEN_SCHRIJF_KANTOOR },
+  mt_planinrichting:   { root: 'array',  node: spL(SP_INRICHT),           lees: ROLLEN_PROJ_LEES,    schrijf: ROLLEN_SCHRIJF_KANTOOR },
+  mt_project_taken_v2: { root: 'object', node: spK(spL(SP_TAAK)),        lees: ROLLEN_PROJ_LEES,    schrijf: ROLLEN_SCHRIJF_KANTOOR },
+  mt_project_afhank:   { root: 'object', node: spK(spL(SP_AFH)),         lees: ROLLEN_PROJ_LEES,    schrijf: ROLLEN_SCHRIJF_KANTOOR },
+  mt_vrijedagen:       { root: 'array',  node: spL(spO({ id: SP_T, datum: SP_T, van: SP_T, tot: SP_T, naam: SP_T, omschrijving: SP_T, soort: SP_T, optioneel: SP_T, label: SP_T, ...SP_STEMPEL })), lees: ROLLEN_PROJ_LEES, schrijf: ROLLEN_SCHRIJF_KANTOOR },
+  mt_calc_offertes:    { root: 'object', node: spO({ offertes: spK(SP_OFFERTE), ts: SP_T, _gewijzigd: SP_T }), lees: ROLLEN_OFFERTE_LEES, schrijf: ROLLEN_SCHRIJF_KANTOOR },
+  mt_calc_defaults:    { root: 'object', node: spO({ materiaal_marge: SP_T, marge_ondergrens: SP_T, uren: spL(spO({ omschrijving: SP_T, uurtarief: SP_T, marge: SP_T })), _gewijzigd: SP_T }), lees: ROLLEN_OFFERTE_LEES, schrijf: ROLLEN_SCHRIJF_KANTOOR },
+  mt_offerte_keuze:    { root: 'object', node: spK(spO({ gekozen: SP_T, afgewezen: SP_FLEX, _gewijzigd: SP_T, _weg: SP_TOMB })), lees: ROLLEN_OFFERTE_LEES, schrijf: ROLLEN_SCHRIJF_KANTOOR },
+  // losse getallen in SharePoint (bv. 50): in de spiegel verpakt als {waarde: n}; de client pakt ze weer uit. Ontbreekt de waarde, dan toont de kijkmodus "toeslag onbekend".
+  mt_toeslag_lak:      { root: 'object', node: spO({ waarde: SP_GETAL }), vereist: ['waarde'], lees: ROLLEN_OFFERTE_LEES, schrijf: ROLLEN_SCHRIJF_KANTOOR },
+  mt_toeslag_spuit:    { root: 'object', node: spO({ waarde: SP_GETAL }), vereist: ['waarde'], lees: ROLLEN_OFFERTE_LEES, schrijf: ROLLEN_SCHRIJF_KANTOOR },
+  mt_uurtarieven:      { root: 'object', node: spK(SP_T, /^(?!__)(?!_vs$)(?!_veldconflict$)(?!_gewijzigd$)[^\x00-\x1f]{1,60}$/), lees: ['eigenaar', 'administratie', 'meekijker'], schrijf: ['eigenaar'] },   // tarief per naam (+ _std); geen stempels
+  mt_verbeterpunten:   { root: 'items',  node: spL(SP_VERBETERPUNT),     lees: ROLLEN_PROJ_LEES,    schrijf: ['eigenaar', 'beheerder', 'kantoor', 'werkplaats'] },
+  mt_feedback:         { root: 'items',  node: spL(SP_VERBETERPUNT),      lees: ROLLEN_PROJ_LEES,    schrijf: ['eigenaar', 'beheerder', 'kantoor', 'werkplaats'] },
+};
+// Bewust NIET gespiegeld: klanten-registry-vol (private contactregistry), mt_verlof (persoonlijk), mt_klant_codes, mt_project_controle, mt_project_sjablonen,
+// mt_opleveringen, mt_attentie (hun tabs zijn voor de coach dicht). Voorraad, bestellijst, mail, contacten, beheer: laag 2 / nooit.
+const SPIEGEL_MAX_BYTES = 8 * 1024 * 1024, SPIEGEL_TS_VOORUIT_MS = 10 * 60 * 1000, SPIEGEL_STORE_RE = /^[a-z0-9_-]{1,60}$/, SPIEGEL_RATE_PER_UUR = 120;
+function spiegelMagLezen(rol, store) { const s = SPIEGEL_STORES[store]; return !!(rol && s && s.lees.includes(rol)); }
+function spiegelMagSchrijven(rol, store) { const s = SPIEGEL_STORES[store]; return !!(rol && s && !ALTIJD_AFDWINGEN.has(rol) && s.schrijf.includes(rol)); }
+const spBytes = t => new TextEncoder().encode(t).length;
+// Projecteert de ruwe SharePoint-inhoud van `store` tot wat de kijkkopie mag bevatten → {data} of {fout}.
+function projecteerSpiegel(store, ruw) {
+  const s = SPIEGEL_STORES[store]; if (!s) return { fout: 'onbekende-store' };
+  if (s.root === 'items') {
+    const lijst = Array.isArray(ruw) ? ruw : (ruw && typeof ruw === 'object' && Array.isArray(ruw.items) ? ruw.items : null);
+    if (!lijst) return { fout: 'vorm' }; return { data: { items: spSchoon(s.node, lijst, 0) || [] } };
+  }
+  if (s.root === 'array' ? !Array.isArray(ruw) : (!ruw || typeof ruw !== 'object' || Array.isArray(ruw))) return { fout: 'vorm' };
+  const data = spSchoon(s.node, ruw, 0);
+  if (data === undefined || (s.vereist && !s.vereist.every(k => k in data))) return { fout: 'vorm' };
+  return { data };
+}
+async function handleSpiegel(p, request, env, ik, json) {
+  const rol = ik.rol || null, m = request.method.toUpperCase();
+  if (!rol || !RECHTEN[rol]) return json({ error: 'geen-toegang', reden: ik.reden || 'geen-rol' }, 403);
+  if (!env.MT_ROLLEN) return json({ error: 'geen-opslag' }, 503);
+  const naam = p.replace(/^\/spiegel\/?/, '');
+  if (naam === '_index' && m === 'GET') {
+    const stores = {}; let cursor;
+    do {
+      const r = await env.MT_ROLLEN.list({ prefix: 'spiegel:', cursor, limit: 1000 });
+      for (const k of r.keys) { const s = k.name.slice('spiegel:'.length); if (spiegelMagLezen(rol, s) && k.metadata) stores[s] = { ts: k.metadata.ts, etag: k.metadata.etag || null, bytes: k.metadata.bytes || null }; }
+      cursor = r.list_complete ? null : r.cursor;
+    } while (cursor);
+    return json({ stores });
+  }
+  if (!SPIEGEL_STORE_RE.test(naam) || !SPIEGEL_STORES[naam]) return json({ error: 'onbekende-store' }, 404);
+  if (m === 'GET') {
+    if (!spiegelMagLezen(rol, naam)) return json({ error: 'geen-toegang', reden: 'spiegel-lezen' }, 403);
+    const rec = await kvJson(env, 'spiegel:' + naam);
+    if (!rec || typeof rec !== 'object' || !('data' in rec)) return json({ error: 'geen-spiegel', store: naam }, 404);   // nog niet gevuld (of onleesbaar): de client toont "nog geen gegevens"
+    return json({ store: naam, ts: rec.ts, etag: rec.etag || null, bron: rec.bron || null, data: rec.data });
+  }
+  if (m !== 'POST') return json({ error: 'methode' }, 405);
+  if (!spiegelMagSchrijven(rol, naam)) return json({ error: 'geen-toegang', reden: 'spiegel-schrijven' }, 403);
+  // Rate-limit per gebruiker: hooguit SPIEGEL_RATE_PER_UUR zendingen per uur (KV-teller; een race telt hooguit een paar te weinig).
+  const blok = Math.floor(Date.now() / 3600e3), rkey = `spiegelrate:${ik.oid}:${blok}`, geteld = (Number(await kvJson(env, rkey)) || 0) + 1;
+  if (geteld > SPIEGEL_RATE_PER_UUR) return json({ error: 'te-vaak', max_per_uur: SPIEGEL_RATE_PER_UUR }, 429);
+  try { await kvZet(env, rkey, geteld, { expirationTtl: 2 * 3600 }); } catch {}
+  const cl = Number(request.headers && request.headers.get ? request.headers.get('content-length') : NaN);
+  if (Number.isFinite(cl) && cl > SPIEGEL_MAX_BYTES + 4096) return json({ error: 'te-groot', max: SPIEGEL_MAX_BYTES }, 413);
+  const tekst = await request.text();
+  if (spBytes(tekst) > SPIEGEL_MAX_BYTES + 4096) return json({ error: 'te-groot', max: SPIEGEL_MAX_BYTES }, 413);        // UTF-8-bytes, niet tekens
+  let b; try { b = JSON.parse(tekst); } catch { return json({ error: 'ongeldige-json' }, 400); }
+  if (!b || typeof b !== 'object' || Array.isArray(b) || Object.keys(b).some(k => !['data', 'etag', 'ts'].includes(k))) return json({ error: 'ongeldig', uitleg: 'object met data, etag, ts' }, 400);
+  if (!b.data || typeof b.data !== 'object') return json({ error: 'ongeldig', uitleg: 'data: object of lijst' }, 400);   // geen null, tekst of getal: een kapotte upload bederft de kopie niet
+  if (!Number.isInteger(b.ts) || b.ts <= 0 || b.ts > Date.now() + SPIEGEL_TS_VOORUIT_MS) return json({ error: 'ongeldige-ts' }, 400);   // ts = SharePoint-wijzigmoment; niet ver in de toekomst
+  if (b.etag != null && (typeof b.etag !== 'string' || b.etag.length > 200)) return json({ error: 'ongeldige-etag' }, 400);
+  if (spBytes(JSON.stringify(b.data)) > SPIEGEL_MAX_BYTES) return json({ error: 'te-groot', max: SPIEGEL_MAX_BYTES }, 413);
+  const huidig = await kvJson(env, 'spiegel:' + naam);
+  if (huidig && Number.isInteger(huidig.ts)) {
+    if (b.ts <= huidig.ts) return json({ error: 'verouderd', ts: huidig.ts }, 409);   // een nieuwere SharePoint-versie ging voor: nooit terug in de tijd
+    if (b.etag && huidig.etag === b.etag) return json({ ok: true, ongewijzigd: true, ts: huidig.ts });   // zelfde SharePoint-versie: geen KV-schrijfactie
+  }
+  const pr = projecteerSpiegel(naam, b.data); if (pr.fout) return json({ error: 'vorm', store: naam }, 400);   // een andere vorm dan deze store heeft: niet bewaren
+  const opgeslagen = JSON.stringify(pr.data), bron = await oidHash(ik.oid), meta = { ts: b.ts, etag: b.etag || null, bytes: spBytes(opgeslagen), bron };
+  await env.MT_ROLLEN.put('spiegel:' + naam, JSON.stringify({ ...meta, data: pr.data }), { metadata: meta });
+  return json({ ok: true, ts: b.ts, bytes: meta.bytes });
+}
+
+// ══ KIJKLOG (meekijker) ══════════════════════════════════════════════════════
+// Server-side, niet te vervalsen: elk geauthenticeerd verzoek van een meekijker (ook geweigerde pogingen, ook van een verlopen account)
+// wordt vastgelegd in D1 `kijklog` (migratie 0002): tijd, oid, tokenadres, methode, route (alleen pad), target, actie (resourcetype,
+// zonder ids/zoektermen/bedragen) en HTTP-status. Geen bodies, geen queryparameters, geen antwoorden. Heartbeat en /track (de eigen
+// events van de client) tellen niet mee. Bewaartermijn 180 dagen (cron + af en toe bij schrijven). Voor het eigen team wordt niets gelogd.
+const KIJKLOG_DAGEN = 180;
+async function kijkLog(env, k) {
+  if (!env.TRACK_DB || !k || !k.oid) return;
+  if (k.route === '/track' || k.route === '/track/heartbeat') return;
+  try {
+    await env.TRACK_DB.prepare('INSERT INTO kijklog (ts, oid, user, methode, route, target, actie, status, ua) VALUES (?,?,?,?,?,?,?,?,?)')
+      .bind(Date.now(), String(k.oid), clip(k.user, 120), clip(k.methode, 8), clip(k.route, 120), clip(k.target, 40),
+        k.target ? clip(actieNaam(k.target, k.methode, k.pad), 80) : null, Number(k.status) || null, clip(k.ua, 160)).run();
+    if (Math.random() < 1 / 200) await kijkOpruimen(env);
+  } catch {}
+}
+async function kijkOpruimen(env) {
+  if (!env.TRACK_DB) return;
+  try { await env.TRACK_DB.prepare('DELETE FROM kijklog WHERE ts < ?').bind(Date.now() - KIJKLOG_DAGEN * DAG_S * 1000).run(); } catch {}
+}
+const dagAmsterdam = ts => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Amsterdam', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ts));
+// Leesbaar onderdeel van de tool bij een serverregel (alleen uit pad/target/actie, geen inhoud).
+function kijkLabel(r) {
+  const route = String(r.route || ''), target = String(r.target || ''), actie = String(r.actie || '');
+  if (route.startsWith('/geld/')) return 'Financiën / Forecast';
+  if (route.startsWith('/spiegel/')) return 'Gegevens: ' + route.slice('/spiegel/'.length).slice(0, 40);
+  if (target === 'toggl_reports' || /reports/.test(actie)) return 'Uren (rapporten)';
+  if (target === 'toggl_focus' || target === 'toggl' || target === 'toggl_admin_projects') return 'Projecten / planning (Toggl)';
+  if (target.startsWith('moneybird')) return 'Moneybird';
+  if (target === 'claude') return 'AI (geweigerd)';
+  if (route === '/klanten') return 'Klanten';
+  if (route.startsWith('/signalen')) return 'Signalen';
+  if (route === '/zoek/moneybird') return 'Zoeken (Moneybird)';
+  if (route === '/me' || route === '/instellingen' || route.startsWith('/teller/')) return 'Inloggen / instellingen';
+  return 'Overig: ' + (route || '/') + (target ? ' ' + target : '');
+}
+// Voegt serverregels (gegroepeerd per dag en onderdeel) en clientgebeurtenissen (tab/project/klant, met duur) samen tot een tijdlijn per dag.
+function bouwTijdlijn(serverRijen, clientRijen) {
+  const items = [], groepen = new Map();
+  for (const r of serverRijen || []) {
+    const label = kijkLabel(r), sl = dagAmsterdam(r.ts) + '|' + label, g = groepen.get(sl);
+    const mis = Number(r.status) >= 400 ? 1 : 0;
+    if (g) { g.n++; g.geweigerd += mis; g.tot = Math.max(g.tot, r.ts); g.ts = Math.min(g.ts, r.ts); }
+    else { const it = { ts: r.ts, tot: r.ts, bron: 'server', soort: 'verzoeken', label, n: 1, geweigerd: mis }; groepen.set(sl, it); items.push(it); }
+  }
+  const bronVan = a => /^tab_/.test(a) ? 'tab' : /^project_/.test(a) ? 'project' : /^klant_/.test(a) ? 'klant' : null;
+  const opens = [], dwells = [];
+  for (const e of clientRijen || []) {
+    const bron = bronVan(String(e.action || '')); if (!bron) continue;
+    const label = String(e.detail || '').slice(0, 80);
+    if (/_open$/.test(e.action)) { const it = { ts: e.ts, bron, soort: 'open', label }; opens.push(it); items.push(it); }
+    else if (/_dwell$/.test(e.action) && Number(e.ms) > 0) dwells.push({ bron, label, eind: e.ts, ms: Number(e.ms) });
+  }
+  for (const d of dwells) {
+    const open = opens.find(o => o.bron === d.bron && o.label === d.label && o.duur_ms == null && Math.abs((d.eind - d.ms) - o.ts) <= 5000);
+    if (open) open.duur_ms = d.ms; else items.push({ ts: d.eind - d.ms, bron: d.bron, soort: 'open', label: d.label, duur_ms: d.ms });
+  }
+  items.sort((a, b) => a.ts - b.ts);
+  const dagen = new Map();
+  for (const it of items) { const d = dagAmsterdam(it.ts); if (!dagen.has(d)) dagen.set(d, []); dagen.get(d).push(it); }
+  return [...dagen.entries()].map(([dag, lijst]) => ({ dag, items: lijst }));
+}
+async function beheerKijklog(request, env, ik, json) {
+  if (ik.rol !== 'eigenaar') return json({ error: 'alleen-eigenaar' }, 403);   // kijkoverzicht: alleen de eigenaar (niet de beheerder)
+  if (!env.TRACK_DB) return json({ error: 'geen-trackopslag', uitleg: 'D1-binding TRACK_DB ontbreekt of migratie 0002 is niet gedraaid' }, 503);
+  const q = new URL(request.url).searchParams, oid = String(q.get('oid') || '');
+  if (!GUID_RE.test(oid)) return json({ error: 'oid verplicht' }, 400);
+  const dag = /^\d{4}-\d{2}-\d{2}$/, nu = Date.now();
+  const tot = dag.test(q.get('tot') || '') ? eindeDagAmsterdam(q.get('tot')) : nu;
+  const vorigeDag = d => new Date(Date.parse(d + 'T12:00:00Z') - 864e5).toISOString().slice(0, 10);   // begin van de dag in Amsterdam = einde van de dag ervoor + 1 ms
+  const van = dag.test(q.get('van') || '') ? eindeDagAmsterdam(vorigeDag(q.get('van'))) + 1 : tot - 30 * DAG_S * 1000;
+  if (!(tot > van) || tot - van > (KIJKLOG_DAGEN + 1) * DAG_S * 1000) return json({ error: 'periode: max ' + KIJKLOG_DAGEN + ' dagen' }, 400);
+  const limiet = Math.max(1, Math.min(5000, parseInt(q.get('limit') || '3000', 10) || 3000));
+  try {
+    const db = env.TRACK_DB;
+    const s = await db.prepare('SELECT ts, methode, route, target, actie, status FROM kijklog WHERE oid = ? AND ts >= ? AND ts <= ? ORDER BY ts LIMIT ?').bind(oid, van, tot, limiet + 1).all();
+    const c = await db.prepare("SELECT ts, action, detail, ms FROM events WHERE ts >= ? AND ts <= ? AND event IN ('tab','project') AND user IN (SELECT DISTINCT user FROM kijklog WHERE oid = ?) ORDER BY ts LIMIT ?").bind(van, tot, oid, limiet + 1).all();
+    const sr = s.results || [], cr = c.results || [], afgekapt = sr.length > limiet || cr.length > limiet;
+    return json({ oid, van, tot, bewaartermijn_dagen: KIJKLOG_DAGEN, afgekapt, verzoeken: Math.min(sr.length, limiet), dagen: bouwTijdlijn(sr.slice(0, limiet), cr.slice(0, limiet)) });
+  } catch (e) { return json({ error: 'kijklog-lezen-mislukt', detail: clip(e && e.message, 120) }, 500); }
+}
+const werkerHandler = {
   // Cron Triggers (wrangler.toml [triggers]): zie koersCron. Fouten worden gelogd, nooit gegooid (de volgende ochtend probeert opnieuw).
   // Splitsing op cron-expressie: alleen SIG_REC_CRON gaat naar de dagelijkse signalen-controle; elke andere trigger (ook zonder
   // event.cron) gaat ongewijzigd naar de Koersmeter.
   async scheduled(event, env, ctx) {
+    waitUntil(ctx, kijkOpruimen(env));   // kijklog: ouder dan 180 dagen weg
     if (event && event.cron === SIG_REC_CRON) {
       const ctl = sigReconciliatie(env).catch(e => { sigLog({ controle: 'fout', fout: String((e && e.message) || e).slice(0, 200) }); return { status: 'fout' }; });
       waitUntil(ctx, ctl);
@@ -5946,7 +6453,7 @@ export default {
     waitUntil(ctx, taak);
     return await taak;
   },
-  async fetch(request, env, ctx) {
+  async fetch(request, env, ctx, kijk) {
     if (new URL(request.url).pathname === '/csp-rapport') return await cspRapport(request, env, ctx);
     // Moneybird-webhook (L3): server-naar-server, eigen handtekening (geen MS-token, geen CORS); zie mbWebhook.
     if (new URL(request.url).pathname === '/mb/webhook') return await mbWebhook(request, env);
@@ -5956,7 +6463,7 @@ export default {
       'Access-Control-Allow-Origin': herkomst,
       'Vary': 'Origin',
       'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PATCH, DELETE',
-      'Access-Control-Allow-Headers': 'Content-Type, X-Auth-Token, X-MT-Bevestiging, X-MT-Actie',
+      'Access-Control-Allow-Headers': 'Content-Type, X-Auth-Token, X-MT-Bevestiging, X-MT-Actie, X-MT-Kijk',
       'Access-Control-Expose-Headers': 'X-MT-Herhaald, Retry-After',
     } : { 'Vary': 'Origin' };
 
@@ -5976,13 +6483,27 @@ export default {
 
     try {
       const url = new URL(request.url);
-      const modus = rollenModus(env);
+      let modus = rollenModus(env);
       // Rollen mogen de tool niet platleggen: KV-storing → geen rol (vaste eigenaren blijven eigenaar).
       let ik;
       try { ik = await bepaalRol(env, msPayload, ctx); }
       catch (e) { const vast = vasteEigenaar(env, msPayload.oid, tokenEmail(msPayload)); ik = { rol: vast ? 'eigenaar' : null, rec: null, vast, reden: 'rollen-fout' }; }
       ik.oid = msPayload.oid; ik.email = tokenEmail(msPayload);
+      modus = effectieveModus(env, ik.rol, ik.rec);   // meekijker: altijd 'afdwingen', ook bij ROLLEN_MODUS log/uit
+      // Kijklog: alleen verzoeken van een meekijker (ook van een verlopen/ingetrokken account); de status komt in de omhulling onderaan erbij.
+      if (kijk && (ik.rol === 'meekijker' || (!ik.rol && ik.rec && ik.rec.role === 'meekijker'))) Object.assign(kijk, { oid: ik.oid, user: ik.email, methode: request.method, route: url.pathname, target: url.searchParams.get('target'), pad: url.searchParams.get('path') || '', ua: request.headers.get('User-Agent') });
 
+      // Fail-closed voor externen: een gast (of ander e-maildomein) zonder rol komt nergens, ook niet in log-modus en ook niet bij een
+      // KV-storing (rollen-fout) of ontbrekende rollenopslag. Alleen /me (eigen status) en /toegang (aanvragen) blijven bereikbaar.
+      // Vaste eigenaren (worker-secrets) zijn hier uitgezonderd.
+      if (!ik.rol && !ik.vast && externToken(msPayload) && url.pathname !== '/me' && url.pathname !== '/toegang')
+        return json({ error: 'geen-toegang', reden: ik.reden || 'geen-rol' }, 403);
+
+      // Meekijker: alleen de nieuwe client (stuurt X-MT-Kijk: <versie>). Een oude, gecachte client zonder kijkmodus-bescherming krijgt niets.
+      if (ik.rol === 'meekijker' || (!ik.rol && ik.rec && ik.rec.role === 'meekijker')) {
+        const kv = parseInt(request.headers.get('X-MT-Kijk') || '', 10);
+        if (!(kv >= KIJK_CLIENT_MIN)) return json({ error: 'client-te-oud', uitleg: 'Herlaad de pagina (Ctrl+F5).' }, 403);
+      }
       // Eigen rol + rechten (front-end: tabs/knoppen verbergen — UI-gemak, geen beveiliging).
       if (url.pathname === '/me') return json(meAntwoord(env, ik, msPayload));
       // Toegang aanvragen (onbekende/gedeactiveerde gebruiker) → lijst in Beheer.
@@ -5997,6 +6518,8 @@ export default {
       if (url.pathname === '/zoek/moneybird') return await handleZoekMb(request, env, ik, json, ctx, modus);
       // Signalen (L3): de gedeelde actiewachtrij. Zien = recht offertes of projecten, wijzigen = offertes 'wijzigen' (in élke modus).
       if (url.pathname === '/signalen' || url.pathname.startsWith('/signalen/') || url.pathname.startsWith('/push/')) return await handleSignalen(url.pathname, request, env, ik, json);
+      // Spiegel: alleen-lezen kopie van SharePoint-bestanden voor de meekijker; rechten per store, in élke modus (zie handleSpiegel).
+      if (url.pathname === '/spiegel' || url.pathname.startsWith('/spiegel/')) return await handleSpiegel(url.pathname, request, env, ik, json);
       // Geldtijdlijn en het financiële dashboard: recht `geld`, in élke ROLLEN_MODUS (zie handleGeld).
       if (url.pathname.startsWith('/geld/')) return await handleGeld(url.pathname, request, env, ik, json);
       if (url.pathname.startsWith('/dashboard/')) {
@@ -6025,6 +6548,12 @@ export default {
           try { const j = await request.clone().json(); velden = j && typeof j === 'object' && !Array.isArray(j) ? Object.keys(j) : []; } catch { velden = []; }
         }
         let besluit = ik.rol ? requirePermission(ik.rol, target, request.method, pad, velden) : { ok: false, reden: ik.reden || 'geen-rol' };
+        // Meekijker: Reports-aanroepen (POST leest hier) alleen met een begrensde body (periode ≤ 400 dagen, vaste velden, klein).
+        if (besluit.ok && ik.rol === 'meekijker' && (target === 'toggl_reports' || (target === 'toggl_focus' && request.method === 'POST'))) {
+          const cl = Number(request.headers.get('content-length'));
+          const fout = Number.isFinite(cl) && cl > KIJKER_BODY_MAX ? 'rapport-body-te-groot' : kijkerRapportBody(target, pad, await request.clone().text());
+          if (fout) besluit = { ok: false, reden: fout };
+        }
         if (besluit.ok && (target === 'toggl' || target === 'toggl_focus') && ['eigen', 'eigen-lezen'].includes(RECHTEN[ik.rol].uren)
             && togglKlasse(target, pad) === 'uren' && !(tgS && (tgS.bron === 'eigen' || tgS.bron === 'secret'))) besluit = { ok: false, reden: 'uren-zonder-eigen-sleutel' };
         try { await noteerBesluit(env, ctx, { ...besluit, modus, rol: ik.rol, oid: ik.oid, target, actie: actieNaam(target, request.method, pad) }); } catch {}
@@ -6146,6 +6675,12 @@ export default {
         if (actie && (env.MT_ACTIES || env.MT_ROLLEN)) return await mbIdempotent(env, ik, actie, method, mbPath, mbFetch, corsHeaders, body);
         const response = await mbFetch();
         const text = await response.text();
+        if (ik.rol === 'meekijker') {   // geen contactgegevens, bijlagen, notities of publieke links naar een externe
+          let j; try { j = JSON.parse(text); } catch { return json({ error: 'moneybird-antwoord-onleesbaar' }, 502); }
+          const soort = mbSoort(mbPath), mager = response.ok && soort ? mbMagerDoc(j, soort) : null;
+          if (response.ok && mager === null) return json({ error: 'moneybird-antwoord-niet-toegestaan' }, 502);   // onbekend soort of onleesbare vorm: nooit ruw doorgeven
+          return new Response(JSON.stringify(response.ok ? mager : { error: 'moneybird-fout' }), { status: response.status, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
         return new Response(text, { status: response.status, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
 
       } else if (target === 'moneybird_upload') {
@@ -6169,7 +6704,8 @@ export default {
           headers: { 'Content-Type': 'application/json', 'Authorization': `Basic ${token}` },
           body
         });
-        const text = await response.text();
+        let text = await response.text();
+        if (ik.rol === 'meekijker' && response.ok && /\/(workspace_users|users)$/.test(String(togglPath).split(/[?#]/)[0])) text = kijkerNamen(text);   // alleen namen, geen e-mail e.d.
         return new Response(text, { status: response.status, headers: { 'Content-Type': 'application/json', ...corsHeaders, ...(response.headers.get('Retry-After') ? { 'Retry-After': response.headers.get('Retry-After') } : {}) } });   // Retry-After van Toggl doorgeven (429)
 
       } else if (target === 'toggl_focus') {
@@ -6185,7 +6721,8 @@ export default {
           },
           body
         });
-        const text = await response.text();
+        let text = await response.text();
+        if (ik.rol === 'meekijker' && response.ok && focusRest(focusPath) === 'users') text = kijkerNamen(text);   // alleen namen, geen e-mail e.d.
         return new Response(text, { status: response.status, headers: { 'Content-Type': 'application/json', ...corsHeaders, ...(response.headers.get('Retry-After') ? { 'Retry-After': response.headers.get('Retry-After') } : {}) } });   // Retry-After van Toggl doorgeven (429)
 
       } else if (target === 'toggl_admin_projects') {
@@ -6230,4 +6767,16 @@ export default {
       });
     }
   }
-}
+};
+// Omhulling: legt de HTTP-status van een meekijker-verzoek vast in de kijklog (waitUntil, vertraagt het antwoord niet).
+export default {
+  scheduled: werkerHandler.scheduled,
+  async fetch(request, env, ctx) {
+    const kijk = {};
+    let r;
+    try { r = await werkerHandler.fetch(request, env, ctx, kijk); }
+    catch (e) { if (kijk.oid) waitUntil(ctx, kijkLog(env, { ...kijk, status: 500 })); throw e; }
+    if (kijk.oid) waitUntil(ctx, kijkLog(env, { ...kijk, status: r.status }));
+    return r;
+  }
+};
