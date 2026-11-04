@@ -5,6 +5,24 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-11-04 — Merge vw-gegevens: VW projectgegevens, calculatie-fix, losse offertes
+- Commit: `c7d77ee` | Auteur: Bart Witte
+
+## 2026-11-04 — Backup = v2.34.0
+- Commit: `9c1792a` | Auteur: Bart Witte
+
+## 2026-11-04 — Projectenlijst: vak "Losse offertes" bovenaan (terugvinden na wegklikken, opent de bestaande offerte)
+- Commit: `c816c4b` | Auteur: Bart Witte
+
+## 2026-11-03 — + Nieuw > Offerte maakt altijd een losse offerte (niet stil bij het open project)
+- Commit: `40dfd00` | Auteur: Bart Witte
+
+## 2026-11-03 — Nieuwe calculatie bij open project deed niets: bewaard calculatiepaneel eerst ongeldig maken
+- Commit: `312c69b` | Auteur: Bart Witte
+
+## 2026-11-03 — Projectgegevens VW: leverdatum als '23 november', onderdeel leeg als het gelijk is aan de projectnaam (ook geen voorstel meer)
+- Commit: `be07027` | Auteur: Bart Witte
+
 ## 2026-11-03 — Release v2.34.0: rol Meekijker voor externe coach (alleen inkijken via worker-spiegel, nooit SharePoint/Graph; kijklog D1; toegang tot einddatum, verlengen, intrekken; actief-account-detectie); worker 7e49709b, D1 0002; Codex 8 rondes; backup = v2.33.0
 - Commit: `dc722d0` | Auteur: Bart Witte
 

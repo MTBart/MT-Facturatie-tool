@@ -1,5 +1,16 @@
 [
   {
+    "versie": "2.34.1",
+    "datum": "2026-11-04",
+    "titel": "Offerte zonder project en Vectorworks-gegevens netter",
+    "voor": "iedereen",
+    "punten": [
+      "+ Nieuw → Offerte start nu altijd een losse offerte. Je hoeft dus niet eerst een project te maken. Koppelen aan een project, of er een project van maken, doe je later vanuit de offerte.",
+      "Losse offertes staan bovenaan de projectenlijst onder \"Losse offertes\". Zo vind je ze terug als je ze hebt weggeklikt.",
+      "Nieuwe calculatie binnen een open project verschijnt nu meteen. Voorheen gebeurde er soms niets tot je het project opnieuw opende.",
+      "Projectgegevens voor Vectorworks: de leverdatum staat er nu als \"23 november\". Het projectonderdeel blijft leeg als het hetzelfde is als de projectnaam."
+    ]
+  },{
     "versie": "2.34.0",
     "datum": "2026-11-03",
     "titel": "Meekijker: een externe coach kan alles inzien maar niets wijzigen",
