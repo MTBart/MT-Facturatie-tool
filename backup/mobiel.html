@@ -26,7 +26,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>BACKUP v2.33.0 — M&T Mobiel</title>
+<title>BACKUP v2.34.0 — M&T Mobiel</title>
 <link rel="manifest" href="manifest-mobiel.json">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jost:ital,wght@0,500;1,400&display=swap">
 <link rel="stylesheet" href="mt-merk.css?v=2026-10-24-logo">
@@ -41,7 +41,8 @@
 <!-- Gedeelde kernlaag (esc, _encPath, authHeader, MSAL-tokenhelpers, _SP-synclaag) —
      één bron voor cockpit én app (audit-actie S2). Moet vóór de code laden die het
      gebruikt; ?v= = cachebuster, zelfde patroon als in v2.html. -->
-<script src="mt-core.js?v=2026-10-13a"></script>
+<script src="mt-core.js?v=2026-11-02c"></script>
+<script src="mt-kijk.js?v=2026-11-02c"></script>
 <script src="mt-iconen.js?v=2026-11-01a" defer></script>
 <script src="mt-project.js?v=2026-10-15b"></script>
 <script src="mt-rollen.js?v=2026-10-09a"></script>
@@ -2246,6 +2247,7 @@ const GRAPH_SCOPES = [
   'https://graph.microsoft.com/Sites.ReadWrite.All'
 ];
 window.MTCore.installAuth({ graphScopes: GRAPH_SCOPES });
+try { if (window.MTKijk) MTKijk.bewaakGraph(); } catch (e) {}   // gast (#EXT#) of meekijker: nooit een Graph-token of popup (mt-kijk.js)
 
 /* ── Track v9 via Worker ── */
 async function tgTrack(path, method='GET', body=null) {
@@ -2343,11 +2345,12 @@ async function initMsal() {
     // Terugkeer uit redirect-login afhandelen (fallback-route als popup niet kan)
     try {
       const redir = await _msal.handleRedirectPromise();
-      if (redir && redir.account) { await toonApp(redir.account); return; }
+      if (redir && redir.account) { try { _msal.setActiveAccount(redir.account); } catch(e0) {} await toonApp(redir.account); return; }
     } catch(eR) { console.warn('MSAL redirect-afhandeling:', eR); }
-    const accounts = _msal.getAllAccounts();
-    if (accounts.length > 0) {
-      await toonApp(accounts[0]);
+    // Het ACTIEVE account (niet zomaar het eerste); meerdere accounts zonder keuze = inlogscherm
+    const acc0 = window.MTKijk ? MTKijk.kiesAccount(_msal) : (_msal.getAllAccounts()[0] || null);
+    if (acc0) {
+      await toonApp(acc0);
     }
     // Anders: login-screen blijft zichtbaar
   } catch(e) {
@@ -2370,7 +2373,7 @@ async function msLogin() {
   try {
     const result = await _msal.loginPopup({scopes: ['openid','profile','email']});
     const account = (result && result.account) || _msal.getAllAccounts()[0];
-    if (account) await toonApp(account);
+    if (account) { try { _msal.setActiveAccount(account); } catch(e0) {} await toonApp(account); }
   } catch(e) {
     if (e.errorCode === 'popup_window_error' || e.errorCode === 'block_nested_popups' || e.errorCode === 'empty_window_error') {
       // Popup kan niet → redirect-login (vereist mobiel.html als SPA redirect-URI in Azure)
@@ -2740,6 +2743,13 @@ async function pvIndienenMobiel() {
 }
 
 async function toonApp(account) {
+  // Meekijker (externe coach): alleen de desktopversie. Geen gegevens, geen Graph, geen uitlog (de sessie blijft voor v2).
+  if (window.MTKijk && (MTKijk.extern(account) || await MTKijk.isMeekijker(WORKER))) {
+    const errEl = document.getElementById('login-error');
+    errEl.textContent = 'Meekijken kan alleen in de desktopversie. Gebruik de desktopversie (v2.html) op je computer.';
+    errEl.style.display = 'block';
+    return;
+  }
   // Valideer domein — alleen @mortiseandtenon.nl
   const email = account.username || '';
   if (!email.toLowerCase().endsWith('@mortiseandtenon.nl')) {

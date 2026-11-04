@@ -59,8 +59,9 @@
   // User-hint uit MSAL (server overschrijft dit met het gevalideerde token).
   function userHint() {
     try {
-      var a = window._msal && window._msal.getAllAccounts();
-      return (a && a[0] && a[0].username || '').toLowerCase();
+      var a = window._actiefAccount ? window._actiefAccount() : null;
+      if (!a) { var l = window._msal && window._msal.getAllAccounts(); a = l && l[0]; }
+      return (a && a.username || '').toLowerCase();
     } catch (e) { return ''; }
   }
 

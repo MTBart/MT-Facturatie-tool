@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-11-03 — Release v2.34.0: rol Meekijker voor externe coach (alleen inkijken via worker-spiegel, nooit SharePoint/Graph; kijklog D1; toegang tot einddatum, verlengen, intrekken; actief-account-detectie); worker 7e49709b, D1 0002; Codex 8 rondes; backup = v2.33.0
+- Commit: `dc722d0` | Auteur: Bart Witte
+
 ## 2026-11-03 — Merge branch meekijker: rol meekijker voor externe coach (alleen inkijken via spiegel, kijklog, toegang tot einddatum, intrekken)
 - Commit: `d9659ab` | Auteur: Bart Witte
 
