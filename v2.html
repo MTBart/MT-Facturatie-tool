@@ -6583,6 +6583,24 @@ function _projKlantFilterChip(){
     ln=(lr&&lr.naam)||(vl&&vl.loc_naam)||f.loc; }
   return `<span class="proj-filterchip">Klant: ${esc(kn)}${ln?' › '+esc(ln):''}<button type="button" onclick="projKlantFilterWis()" aria-label="Klantfilter wissen" title="Filter wissen">✕</button></span>`;
 }
+// Losse offertes (nog zonder project) bovenaan de projectenlijst, zodat je ze na wegklikken terugvindt (Bart, 4-11).
+// Zelfde regel als "Losse offertes" in de Controlelijst; wat daar is afgehandeld (historie) staat hier ook niet meer.
+let _projLosseOpen=false;
+function _projLosseOffertes(){
+  let offs={}, besl=new Map();
+  try{ offs=_ctlOffertes()||{}; besl=ctlBesluitActueel(); }catch(e){ return []; }
+  return Object.entries(offs).filter(([k,o])=>o&&typeof o==='object'&&/^OFF-/i.test(k)&&!o.project_code&&!projVind(k)&&_CTL_OPEN(besl.get(k)))
+    .map(([k,o])=>({key:k,titel:String(o.titel||''),datum:String(o._gewijzigd||'').slice(0,10),status:String((o.meta&&o.meta.status)||'')}))
+    .sort((a,b)=>b.datum.localeCompare(a.datum));
+}
+function _projLosseBlok(el,filter){
+  const f=String(filter||'').toLowerCase(), l=_projLosseOffertes().filter(x=>!f||x.titel.toLowerCase().includes(f));
+  if(!l.length||typeof window.openLosseOfferte!=='function') return;
+  const E=_p2El, d=E('details',{class:'proj-losse',style:'margin:2px 0 8px'},E('summary',{style:'cursor:pointer;font-size:12px;font-weight:600;color:var(--text-dim);padding:2px 0',tekst:'Losse offertes ('+l.length+')',title:'Offertes die nog niet aan een project hangen. Koppelen of een project aanmaken doe je vanuit de offerte.'}),
+    l.map(x=>E('div',{class:'factuur-item',klik:()=>openLosseOfferte(x.key)},E('div',{class:'factuur-item-naam',tekst:x.titel||'(zonder titel)'}),E('div',{class:'factuur-item-sub',tekst:[x.status,x.datum].filter(Boolean).join(' · ')||'nog niet gekoppeld'}))));
+  d.open=_projLosseOpen; d.addEventListener('toggle',()=>{ _projLosseOpen=d.open; });
+  el.prepend(d);
+}
 function renderProjectLijst(filter=''){
   const el=document.getElementById('project-lijst');if(!el) return;
   const chip=document.getElementById('project-filterchip'); if(chip) chip.innerHTML=_projKlantFilterChip();
@@ -6596,13 +6614,14 @@ function renderProjectLijst(filter=''){
       <div class="factuur-item-naam" title="${esc(projNaamVol(p))}">${PF&&PF.selectieModus?`<input type="checkbox" class="pf-rij-vink" ${PF.selectie.has(p.code)?'checked':''} onclick="event.stopPropagation()" onchange="MTProjFilter.selecteer(${jsArg(p.code)},this.checked)" aria-label="Selecteren">`:''}${esc(projNaamVol(p))}</div>
       <div class="factuur-item-sub"><span class="factuur-item-klant">${esc(projKlantNaam(p))}</span>${projTag(p)}${p.fase&&window.MTLead?` <span class="fase-chip fase-${esc(p.fase)}">${esc(MTLead.label(p.fase))}</span>`:''}</div>
     </div>`;
-  if(!PF){ el.innerHTML=projSorteerNieuwst(gefilterd).map(rij).join(''); if(typeof vandaagTeken==='function') vandaagTeken(); return; }
+  if(!PF){ el.innerHTML=projSorteerNieuwst(gefilterd).map(rij).join(''); if(!_projKlantFilter) _projLosseBlok(el,filter); if(typeof vandaagTeken==='function') vandaagTeken(); return; }
   _pfStart();
   const taken=_pfTaken(), r=PF.verwerk(gefilterd.map((p,i)=>_pfItem(p,i,taken)),huidigProject&&huidigProject.code), perCode=new Map(gefilterd.map(p=>[p.code,p]));
   if(!r.lijst.length) el.innerHTML='<div class="pf-leeg">Geen projecten met deze filters.</div>';
   else if(r.groepen){ const gk=PF.stand().groep;
     el.innerHTML=r.groepen.map(g=>`<div class="pf-kop${PF.dicht(gk+':'+g.key)?' dicht':''}"><button type="button" aria-expanded="${esc(!PF.dicht(gk+':'+g.key))}" onclick="MTProjFilter.kopWissel(${jsArg(gk+':'+g.key)})">${esc(g.label)} <span class="n">(${esc(g.aantal)})</span></button></div>${PF.dicht(gk+':'+g.key)?'':g.items.map(x=>rij(perCode.get(x.code))).join('')}`).join(''); }
   else el.innerHTML=r.lijst.map(x=>rij(perCode.get(x.code))).join('');
+  if(!_projKlantFilter) _projLosseBlok(el,filter);
   window._pfZichtbaar=r.lijst.map(x=>x.code);
   try{ projOverzichtTeken(); }catch(e){ console.warn('Projectenoverzicht:',e); }
   if(typeof vandaagTeken==='function') vandaagTeken();
@@ -20600,6 +20619,13 @@ function activiteitOpen(force){
     }
     const key='OFF-'+Date.now().toString(36).toUpperCase();
     const o=getOfferte(key); o.titel='Nieuwe offerte'; saveCalc('off',{key:key});
+    openStandalone(key);
+    if(typeof renderProjectLijst==='function') renderProjectLijst();   // meteen zichtbaar in "Losse offertes"
+  };
+  // Een losse offerte weer openen vanuit "Losse offertes" in de projectenlijst (nooit een nieuwe aanmaken: getOfferte zou dat doen).
+  window.openLosseOfferte=async function(key){
+    await hydrateCalc();
+    if(!CALC.offertes[key]) return mtDialog.alert({title:'Offerte',message:'Deze offerte bestaat niet meer (of is intussen aan een project gekoppeld).'});
     openStandalone(key);
   };
   // Vanuit een geopende mail (inbox) → nieuwe offerte-calculatie met die mail als context.
