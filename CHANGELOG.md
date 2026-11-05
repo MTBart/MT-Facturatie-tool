@@ -5,6 +5,24 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-11-05 — Merge cijfers-breed: Cijfers volle breedte, rapport ingeklapt, Forecast-paneel hersteld
+- Commit: `2c8dffa` | Auteur: Bart Witte
+
+## 2026-11-05 — Merge uren-herstel: alleen-lezen herstelbak en datakwaliteitsmeter
+- Commit: `14e7d44` | Auteur: Bart Witte
+
+## 2026-11-05 — Forecast: paneel Te controleren opent weer op de computer (basisopmaak stond alleen in het telefoonblok)
+- Commit: `3871055` | Auteur: Bart Witte
+
+## 2026-11-05 — Cijfers over de volle breedte: tegels en grafiek bovenaan, rapport ingeklapt eronder met open vragen en acties in de kop; horizon verhuist naar het rapport; hoofdstuk openen wijzigt het dashboard niet meer
+- Commit: `781e6c8` | Auteur: Bart Witte
+
+## 2026-11-05 — Uren zonder project: alleen-lezen herstelbak en datakwaliteitsmeter (T2 brok 1)
+- Commit: `71257cd` | Auteur: Bart Witte
+
+## 2026-11-05 — Release v2.34.4: proefstijl (optionele stijllaag met uitklapbare rail, aan/uit in Instellingen > Weergave) en tabblad Compleet? in Planning (alleen lezen); cache-versies mt-toggl.js en mt-planfilter.js opgehoogd; backup = v2.34.3
+- Commit: `5a5e3ef` | Auteur: Bart Witte
+
 ## 2026-11-05 — Merge planning-compleet: controlepaneel Compleet? in Planning
 - Commit: `d93f63a` | Auteur: Bart Witte
 

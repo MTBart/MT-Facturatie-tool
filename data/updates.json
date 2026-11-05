@@ -1,5 +1,15 @@
 [
   {
+    "versie": "2.34.5",
+    "datum": "2026-11-05",
+    "titel": "Uren zonder project in beeld, Cijfers op volle breedte en Forecast-vragen hersteld",
+    "voor": "iedereen",
+    "punten": [
+      "Uren heeft een nieuw onderdeel \"Zonder project\": per maand zie je hoeveel uren aan een project en een taak hangen, en welke uren nog geen project hebben. Eigenaar en beheerder zien iedereen, de rest alleen de eigen uren. Het overzicht toont alleen en wijzigt niets.",
+      "Rapporten: de cijfertegels en de grafiek gebruiken nu de volle breedte. Het rapport staat ingeklapt onderaan onder \"Rapport en toelichting\", met de open vragen en acties zichtbaar in de balk.",
+      "Forecast: de knop met het uitroepteken opent de vragen weer netjes als paneel op de computer. Ze stonden onderaan de pagina, half achter de zijbalk."
+    ]
+  },{
     "versie": "2.34.4",
     "datum": "2026-11-05",
     "titel": "Proefstijl om te proberen en een controle of de planning compleet is",

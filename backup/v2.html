@@ -14,16 +14,17 @@
   function keuze(){ try{ return localStorage.getItem(K); }catch(e){ return null; } }
   function lees(){ return keuze()!=='oud'; }   // standaard (geen keuze, of geen toegang tot localStorage): nieuw
   function fonts(){ try{ if(document.getElementById('mt-stijl-fonts')) return; var l=document.createElement('link'); l.id='mt-stijl-fonts'; l.rel='stylesheet'; l.href=FONTS; document.head.appendChild(l); }catch(e){} }
-  function toepassen(aan){ var h=document.documentElement; if(aan){ h.setAttribute('data-stijl','nieuw'); fonts(); } else h.removeAttribute('data-stijl'); }
+  function proefAan(){ try{ return localStorage.getItem('mt-proef')==='aan'; }catch(e){ return false; } }   // Proefstijl (aftakking): per gebruiker/toestel, alleen bovenop de nieuwe stijl; attribuut html[data-proef] (mt-stijl-proef.css)
+  function toepassen(aan){ var h=document.documentElement; if(aan){ h.setAttribute('data-stijl','nieuw'); fonts(); if(proefAan()) h.setAttribute('data-proef','1'); else h.removeAttribute('data-proef'); } else { h.removeAttribute('data-stijl'); h.removeAttribute('data-proef'); } }
   try{ var q=new URLSearchParams(location.search).get('stijl'); if(q==='nieuw'||q==='oud'){ try{ localStorage.setItem(K,q); }catch(e){} } }catch(e){}
   toepassen(lees());
-  window.mtStijl={ aan:lees, expliciet:function(){ return keuze()!==null; }, zet:function(aan){ try{ localStorage.setItem(K,aan?'nieuw':'oud'); }catch(e){} toepassen(!!aan); try{ window.dispatchEvent(new Event('mt-stijl')); }catch(e){} } };
-  window.addEventListener('storage',function(e){ if(e.key===K||e.key===null){ toepassen(lees()); try{ window.dispatchEvent(new Event('mt-stijl')); }catch(x){} } });   // twee open tabbladen blijven gelijk
+  window.mtStijl={ proef:proefAan, zetProef:function(aan){ try{ localStorage.setItem('mt-proef',aan?'aan':'uit'); }catch(e){} toepassen(lees()); try{ window.dispatchEvent(new Event('mt-stijl')); }catch(e){} }, aan:lees, expliciet:function(){ return keuze()!==null; }, zet:function(aan){ try{ localStorage.setItem(K,aan?'nieuw':'oud'); }catch(e){} toepassen(!!aan); try{ window.dispatchEvent(new Event('mt-stijl')); }catch(e){} } };
+  window.addEventListener('storage',function(e){ if(e.key===K||e.key==='mt-proef'||e.key===null){ toepassen(lees()); try{ window.dispatchEvent(new Event('mt-stijl')); }catch(x){} } });   // twee open tabbladen blijven gelijk
 })();
 </script>
 <meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BACKUP v2.34.3 — M&T Bedrijfstool v2 bèta</title>
+<title>BACKUP v2.34.4 — M&T Bedrijfstool v2 bèta</title>
 <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <!-- msal-browser lokaal gevendord (was jsdelivr @2 = 2.39.0, laatste v2-release).
@@ -48,7 +49,7 @@
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-10-11b"></script>
 <script src="mt-verbeter.js?v=2026-10-23b"></script>
-<script src="mt-toggl.js?v=2026-10-15z"></script>
+<script src="mt-toggl.js?v=2026-11-05a"></script>
 <script src="mt-koppel.js?v=2026-10-13p"></script>
 <script src="mt-mailactie.js?v=2026-10-13c"></script>
 <script src="mt-binnenkomend.js?v=2026-10-13c"></script>
@@ -61,7 +62,7 @@
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
-<script src="mt-planfilter.js?v=2026-10-24z"></script>
+<script src="mt-planfilter.js?v=2026-11-05a"></script>
 <script src="mt-projfilter.js?v=2026-10-24z"></script>
 <script src="mt-projopruim.js?v=2026-10-23z"></script>
 <script src="mt-planning.js?v=2026-10-24z"></script>
@@ -82,6 +83,7 @@
 <script src="mt-planinrichting.js?v=2026-10-24z"></script>
 <script src="mt-bord.js?v=2026-10-23z"></script>
 <script src="mt-tijdlijn.js?v=2026-10-24z"></script>
+<script src="mt-compleet.js?v=2026-11-05a"></script>
 <script src="mt-personen.js?v=2026-10-17e"></script>
 <script src="mt-werktijden.js?v=2026-10-15t"></script>
 <script src="mt-uren-nieuw.js?v=2026-10-15z"></script>
@@ -90,7 +92,7 @@
 <script src="mt-startvenster.js?v=2026-10-15b"></script>
 <!-- Zijbalk van de nieuwe stijl (alleen actief met data-stijl="nieuw"); bouwt op de bestaande .tab-btn-knoppen -->
 <script src="mt-iconen.js?v=2026-11-01a" defer></script>
-<script src="mt-zijbalk.js?v=2026-10-24z" defer></script>
+<script src="mt-zijbalk.js?v=2026-11-05a" defer></script>
 <script src="mt-geld.js?v=2026-10-29a"></script>
 <script src="mt-forecast.js?v=2026-11-02i"></script>
 <script src="mt-forecast-light.js?v=2026-11-02i"></script>
@@ -922,6 +924,8 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-24z">
 <link rel="stylesheet" href="mt-rust.css?v=2026-10-24z">
 <link rel="stylesheet" href="mt-telefoon.css?v=2026-10-23z">
+<!-- Proefstijl (aftakking, aan/uit per gebruiker in Instellingen > Weergave): alles onder html[data-stijl="nieuw"][data-proef]; zonder dat attribuut doet dit bestand niets -->
+<link rel="stylesheet" href="mt-stijl-proef.css?v=2026-11-05a">
 </head>
 <body>
 <div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (2.29.0, 2026-10-31). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
@@ -945,7 +949,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1 class="mt-merkrij"><svg class="mt-merk" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><rect x="2" y="2" width="96" height="96"/><path d="M55.4 2 V31.3 H34.2 V67.3 H55.4 V98"/></svg><b class="mt-woord">mortise <em>&amp;</em> tenon</b></h1>
-    <span class="header-version">v2.34.3</span>
+    <span class="header-version">v2.34.4</span>
     <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
@@ -1602,6 +1606,12 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
       <label style="display:flex;align-items:center;gap:8px;margin:0;text-transform:none;letter-spacing:0;font-size:13px;font-weight:500;color:var(--text);cursor:pointer"><input type="checkbox" id="stijl-schakel" onchange="mtStijl.zet(!this.checked)"> Oude stijl gebruiken</label>
       <p style="font-size:12px;color:var(--text-dim);margin:6px 0 0">De nieuwe stijl is de standaard. Hier ga je terug naar de oude weergave (en weer naar de nieuwe). Geldt alleen op deze computer; je collega's zien niets.</p>
     </div>
+    <div class="card" id="proef-kaart">
+      <div class="card-title">Proefstijl (nieuw ontwerp)</div>
+      <label style="display:flex;align-items:center;gap:8px;margin:0;text-transform:none;letter-spacing:0;font-size:13px;font-weight:500;color:var(--text);cursor:pointer"><input type="checkbox" id="proef-schakel" onchange="mtStijl.zetProef(this.checked)"> Proefstijl gebruiken</label>
+      <p style="font-size:12px;color:var(--text-dim);margin:6px 0 0">Een zachter ontwerp om uit te proberen: ronde kaarten, pil-knoppen en een smalle menubalk die je kunt uitklappen. Dezelfde tool en dezelfde gegevens; alleen het uiterlijk verandert. Vink uit om meteen terug te gaan. Geldt alleen op deze computer en werkt alleen in de nieuwe stijl.</p>
+    </div>
+    <script>(function(){ var c=document.getElementById('proef-schakel'); if(!c||!window.mtStijl) return; var s=function(){ c.checked=!!mtStijl.proef(); c.disabled=!mtStijl.aan(); }; s(); window.addEventListener('mt-stijl',s); })();</script>
     <script>(function(){ var c=document.getElementById('stijl-schakel'); if(!c||!window.mtStijl) return; var s=function(){ c.checked=!mtStijl.aan(); }; s(); window.addEventListener('mt-stijl',s); })();</script>
     <div class="card" id="upd-kaart" style="display:none">
       <div class="card-title">Wat is er verbeterd</div>
@@ -1898,6 +1908,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
             <button class="btn btn-sm" id="agenda-view-capaciteit" onclick="agendaZetView('capaciteit')" title="Capaciteitsplanning voor het team: per persoon per dag gepland tegenover beschikbaar, met vrije dagen en verlof" style="border:0;border-radius:0;padding:5px 10px">👥 Capaciteit</button>
             <button class="btn btn-sm" id="agenda-view-bord" onclick="agendaZetView('bord')" title="Bord: de taken als kolommen op status, per fase, of de stroom van de projecten door de stations" style="border:0;border-radius:0;padding:5px 10px">▥ Bord</button>
             <button class="btn btn-sm" id="agenda-view-tijdlijn" onclick="agendaZetView('tijdlijn')" title="Tijdlijn: alle projecten op een tijdas, met fasen, afhankelijkheden en het kritieke pad (alleen lezen)" style="border:0;border-radius:0;padding:5px 10px">▤ Tijdlijn</button>
+            <button class="btn btn-sm" id="agenda-view-compleet" onclick="agendaZetView('compleet')" title="Planning compleet?: controleert of de planning betrouwbaar is (taken zonder schatting, werkuren, verlof, uren zonder project; alleen lezen)" style="border:0;border-radius:0;padding:5px 10px">☑ Compleet?</button>
             <button class="btn btn-sm" id="agenda-view-grid" onclick="agendaZetView('grid')" title="Week-rooster" style="border:0;border-radius:0;padding:5px 10px">▦ Rooster</button>
             <button class="btn btn-sm" id="agenda-view-lijst" onclick="agendaZetView('lijst')" title="Timer-lijst (zoals Toggl)" style="border:0;border-radius:0;padding:5px 10px">≣ Lijst</button>
             <button class="btn btn-sm" id="agenda-view-plan" onclick="agendaZetView('plan')" title="Planning-blokken" style="border:0;border-radius:0;padding:5px 10px">📋 Planning</button>
@@ -1934,6 +1945,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
     <div id="agenda-capaciteit" style="display:none"></div>
     <div id="agenda-bord" style="display:none"></div>
     <div id="agenda-tijdlijn" style="display:none"></div>
+    <div id="agenda-compleet" style="display:none"></div>
     <div class="card" id="agenda-gridkaart" style="padding:0;overflow:auto;max-height:74vh">
       <div id="agenda-grid"></div>
     </div>
@@ -4027,16 +4039,17 @@ function renderAgenda(){
   const planBar=document.getElementById('agenda-plan-toolbar'), capBalk=document.getElementById('agenda-cap-balk');
   if(planBar) planBar.style.display=_agenda.view==='plan'?'block':'none';
   if(capBalk) capBalk.style.display=_agenda.view==='plan'?'block':'none';
-  { const mw=_agenda.view==='mijnwerk', cp=_agenda.view==='capaciteit', bd=_agenda.view==='bord', tj=_agenda.view==='tijdlijn', eigen=mw||cp||bd||tj;   // Mijn werk en Capaciteit (stap 2): een eigen vlak in plaats van het rooster
-    [['agenda-view-mijnwerk',mw],['agenda-view-capaciteit',cp],['agenda-view-bord',bd],['agenda-view-tijdlijn',tj]].forEach(([id,aan])=>{ const b=document.getElementById(id); if(b) b.classList.toggle('btn-gold',aan), b.classList.toggle('ui-gekozen',aan), b.classList.toggle('btn-secondary',!aan); });
-    const m=document.getElementById('agenda-mijnwerk'), c=document.getElementById('agenda-capaciteit'), bdEl=document.getElementById('agenda-bord'), tjEl=document.getElementById('agenda-tijdlijn'), gk=document.getElementById('agenda-gridkaart'), tot=document.getElementById('agenda-totalen');
+  { const mw=_agenda.view==='mijnwerk', cp=_agenda.view==='capaciteit', bd=_agenda.view==='bord', tj=_agenda.view==='tijdlijn', cm=_agenda.view==='compleet', eigen=mw||cp||bd||tj||cm;   // Mijn werk en Capaciteit (stap 2): een eigen vlak in plaats van het rooster
+    [['agenda-view-mijnwerk',mw],['agenda-view-capaciteit',cp],['agenda-view-bord',bd],['agenda-view-tijdlijn',tj],['agenda-view-compleet',cm]].forEach(([id,aan])=>{ const b=document.getElementById(id); if(b) b.classList.toggle('btn-gold',aan), b.classList.toggle('ui-gekozen',aan), b.classList.toggle('btn-secondary',!aan); });
+    const m=document.getElementById('agenda-mijnwerk'), c=document.getElementById('agenda-capaciteit'), bdEl=document.getElementById('agenda-bord'), tjEl=document.getElementById('agenda-tijdlijn'), cmEl=document.getElementById('agenda-compleet'), gk=document.getElementById('agenda-gridkaart'), tot=document.getElementById('agenda-totalen');
     { const of=document.getElementById('ag-oudfilter'); if(of&&typeof MTPlanFilter!=='undefined') of.style.display=eigen?'none':''; }   // Mijn werk en Capaciteit hebben de gedeelde filterbalk in beeld; de oude Projecten/Personen-keuze hoort alleen bij Rooster, Lijst en Planning
     { const lh=document.getElementById('agenda-laag-host'); if(lh) lh.style.display=cp?'inline-block':'none'; }   // de knop Geklokt hoort alleen bij de Capaciteit
-    if(m) m.style.display=mw?'block':'none'; if(c) c.style.display=cp?'block':'none'; if(bdEl) bdEl.style.display=bd?'block':'none'; if(tjEl) tjEl.style.display=tj?'block':'none'; if(gk) gk.style.display=eigen?'none':''; if(tot&&eigen) tot.style.display='none'; else if(tot) tot.style.display='';
+    if(m) m.style.display=mw?'block':'none'; if(c) c.style.display=cp?'block':'none'; if(bdEl) bdEl.style.display=bd?'block':'none'; if(tjEl) tjEl.style.display=tj?'block':'none'; if(cmEl) cmEl.style.display=cm?'block':'none'; if(gk) gk.style.display=eigen?'none':''; if(tot&&eigen) tot.style.display='none'; else if(tot) tot.style.display='';
     if(mw){ agRenderFilters(); try{ MTMijnWerk.teken(); }catch(e){ console.warn('Mijn werk:',e); } return; }
     if(cp){ agRenderFilters(); try{ MTCapaciteit.teken(); }catch(e){ console.warn('Capaciteit:',e); } return; }
     if(bd){ try{ MTBord.teken(); }catch(e){ console.warn('Bord:',e); } return; }
-    if(tj){ try{ MTTijdlijn.teken(); }catch(e){ console.warn('Tijdlijn:',e); } return; } }
+    if(tj){ try{ MTTijdlijn.teken(); }catch(e){ console.warn('Tijdlijn:',e); } return; }
+    if(cm){ try{ MTCompleet.open(); }catch(e){ console.warn('Planning compleet:',e); } return; } }
   agRenderFilters();
   if(_agenda.view==='lijst') agRenderLijst(); else if(_agenda.view==='plan') agPlanRender(); else agRenderGrid();
 }
@@ -4313,6 +4326,15 @@ try{ MTTijdlijn.init({ doc:document, planning:MTPlanning, team:()=>capTeam(), ta
   wijzig:(s,o)=>tpWijzig(s,o), wijzigHerstel:(w,o)=>tpWijzigHerstel(w,o), datums:spec=>MTCapaciteitNieuw.drop(spec), toast:(t,o,l,lb)=>MTCapaciteitNieuw.toast(t,o,l,lb),
   naWijziging:()=>{ try{ MTTaakPaneel.ververs(); }catch(e){} },
   openTaak:(code,id,el)=>MTTaakPaneel.open(code,id,{terug:el}), openProject:code=>openProject(code,{sectie:'planning'}) }); }catch(e){ console.warn('Tijdlijn init:',e); }
+// Planning compleet? (mt-compleet.js): controles of de planning betrouwbaar is, alleen lezen. Teamgegevens uit Toggl (werkuren, verlof, geklokte uren) alleen voor beheerders; de taken zijn die van de planning zelf.
+try{ MTCompleet.init({ doc:document, planning:MTPlanning, team:()=>capTeam(), taken:()=>projTakenAll(), takenKlaar:()=>projTakenKlaar(), takenStatusTekst:()=>projTakenStatusTekst(),
+  projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code).map(p=>({code:p.code,label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code})),
+  werkuren:()=>capWerkuren(), verlof:()=>admVerlof(),
+  teamdata:()=>{ try{ return mtIsAdmin()||!!(window.MTRol&&MTRol.isBeheer&&MTRol.isBeheer()); }catch(e){ return false; } },
+  gebruikers:()=>tgUsers(), capaciteit:(ids,van,tot,ververs)=>tgCapaciteit(ids,van,tot,ververs), capaciteitFouten:()=>(tgCapaciteit.laatste&&tgCapaciteit.laatste.fouten)||{}, capaciteitReden:()=>tgCapaciteitStatus(),
+  uren:(van,tot,ververs)=>tgUrenPerGebruiker(van,tot,ververs), foutTekst:e=>_tgFoutTekst(e),
+  openTaak:(code,id,el)=>MTTaakPaneel.open(code,id,{terug:el}), openProject:code=>openProject(code,{sectie:'planning'}),
+  openPersoon:slug=>{ try{ MTPlanFilter.zet({persoon:slug}); }catch(e){} agendaZetView('capaciteit'); } }); }catch(e){ console.warn('Planning compleet init:',e); }
 // Werktijden per medewerker (restyling brok 9, Admin ▸ Team en werktijden): een gedeeld bestand mt_werktijden.json met een record per medewerker.
 // Wijzigen mag alleen een teamadmin (eigenaar/beheer) met een geladen rol (fail-closed); lezen iedereen: de planning van het hele team rekent ermee.
 // Zonder record van een persoon geldt alles als voorheen (werkuren per week / 5, ma-vr). Zie mt-werktijden.js en MTPlanning.werktijden*.

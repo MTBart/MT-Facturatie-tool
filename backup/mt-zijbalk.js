@@ -10,7 +10,7 @@
    ===================================================================== */
 (function () {
   'use strict';
-  var K = 'mt-zijbalk', KM = 'mt-zijbalk-meer', MIN_BREED = 1100, MIN_ZIJBALK = 700, NS = 'http://www.w3.org/2000/svg';
+  var K = 'mt-zijbalk', KP = 'mt-zijbalk-proef', KM = 'mt-zijbalk-meer', MIN_BREED = 1100, MIN_ZIJBALK = 700, NS = 'http://www.w3.org/2000/svg';
   // Lijn-iconen (24x24, stroke): de eerste acht komen uit het canvas (Sidebar.dc.html), de rest in dezelfde stijl.
   // De lijn-iconen staan sinds de rust-pas in mt-iconen.js (één bron voor zijbalk en interface); dat bestand laadt eerst.
   var IC = (window.MTIconen && window.MTIconen.PAD) || {};
@@ -42,7 +42,8 @@
   function html() { return document.documentElement; }
   function wil() { return html().getAttribute('data-stijl') === 'nieuw' && mqZijbalk.matches; }
   function auto() { return mqBreed.matches; }
-  function smal() { return auto() || lees(K) === 'smal'; }
+  function proef() { return html().hasAttribute('data-proef'); }   // proefstijl: eigen keuze (mt-zijbalk-proef), standaard de smalle rail van 60px
+  function smal() { return auto() || (proef() ? lees(KP) !== 'breed' : lees(K) === 'smal'); }
   function tabNaam(b) { var m = /showTab\('([^']+)'/.exec(b.getAttribute('onclick') || ''); return m ? m[1] : ''; }
   function verborgen(b) { return b.style.display === 'none' || b.classList.contains('mt-rol-verborgen'); }
   function ownTekst(b) { var t = ''; for (var i = 0; i < b.childNodes.length; i++) if (b.childNodes[i].nodeType === 3) t += b.childNodes[i].nodeValue; return t.replace(/[^\wÀ-ɏ ]+/g, ' ').replace(/\s+/g, ' ').trim(); }
@@ -107,7 +108,7 @@
     html().removeAttribute('data-zijbalk'); html().removeAttribute('data-zb-auto');
   }
 
-  function wissel() { schrijf(K, lees(K) === 'smal' ? null : 'smal'); pas(); }
+  function wissel() { if (proef()) schrijf(KP, smal() && !auto() ? 'breed' : 'smal'); else schrijf(K, lees(K) === 'smal' ? null : 'smal'); pas(); }
   function plan() { if (st.raf) return; st.raf = requestAnimationFrame(function () { st.raf = 0; sync(); }); }
 
   // Groepstatus: "Meer" alleen tonen als er iets onder zichtbaar is; open als de actieve tab eronder valt; aria-current bijwerken.
