@@ -668,6 +668,51 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
 .mtg-mob .mtk-gelezen{min-height:44px;min-width:96px}
 .mtg-mob .mtk-i{min-width:44px;height:44px;margin:-8px -8px -8px 0}
 .mtg-mob .mtk-och-rij button{align-self:flex-end}
+/* Restyle in de beeldtaal van Cijfers (.mtd): volle breedte, tegels, kaarten; alleen opmaak. Alle kleuren zijn variabelen met terugval (ook proefstijl en oude stijl). */
+.mtg-fin{--mtg-lijn:var(--ink,#1b211e);--mtg-prog:var(--info,#3e5c76);--mtg-zacht:var(--ink-2,#596059);max-width:none;margin:0;display:flex;flex-direction:column;gap:16px;font-family:var(--sans,system-ui,sans-serif);color:var(--ink,#1b211e)}
+.mtg-fin>*{margin-top:0;margin-bottom:0}
+.mtg-fin button:focus-visible,.mtg-fin a:focus-visible{outline:2px solid var(--primary,#17643f);outline-offset:2px}
+.mtg-fin .mtg-kop{margin:0;gap:12px;justify-content:space-between}
+.mtg-fin .mtg-kop h2{font-family:var(--serif,inherit);font-size:24px;line-height:30px;font-weight:600;letter-spacing:-.015em;color:var(--ink,#1b211e);flex:1 1 auto}
+.mtg-status{display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:0 12px;border:1px solid var(--line,#dfd8cb);border-radius:4px;background:var(--surface,var(--card,#fff));color:var(--ink-2,#596059);font:inherit;font-size:13px;cursor:pointer}
+.mtg-status .stip{width:8px;height:8px;border-radius:999px;background:var(--success,#1a6e3b)}.mtg-status.let-op .stip{background:var(--warning,#b7791f)}.mtg-status .sep{color:#8c918a}.mtg-status b{color:var(--ink,#1b211e);font-weight:500}
+.mtg-status[aria-expanded=true]{border-color:var(--border-strong,#9a917f)}
+.mtg-statuspaneel{background:var(--surface,var(--card,#fff));border:1px solid var(--line,#dfd8cb);border-radius:8px;padding:8px 24px 16px;display:flex;flex-direction:column;gap:8px}
+.mtg-fin .mtg-statuspaneel>.mtg-kaart{border:0;padding:8px 0;margin:0;border-radius:0}
+.mtg-fin .mtg-kaart,.mtg-fin .mtg-fb{background:var(--surface,var(--card,#fff));border:1px solid var(--line,var(--border,#dfd8cb));border-radius:8px;padding:20px 24px;margin:0;min-width:0}
+.mtg-fin .mtg-kaart>.mtg-kop b,.mtg-fin details.mtg-kaart>summary{font-size:16px;line-height:22px;font-weight:600}
+.mtg-fin .mtg-kaarten{gap:16px;margin:0;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.mtg-fin .mtg-k{background:var(--surface,var(--card,#fff));border:1px solid var(--line,var(--border,#dfd8cb));border-radius:8px;padding:20px 24px;display:flex;flex-direction:column;gap:6px}
+.mtg-fin .mtg-k .l{font-size:13px;line-height:18px;font-weight:500;color:var(--ink-2,#596059);align-items:center}
+.mtg-fin .mtg-k .w{font-family:var(--mono,ui-monospace,monospace);font-variant-numeric:tabular-nums;font-size:30px;line-height:34px;font-weight:500;letter-spacing:-.02em;margin:0}
+.mtg-fin .mtg-k .s{font-size:13px;line-height:18px;color:var(--ink-2,#596059);margin:0}
+.mtg-fin .mtg-k.rood .w{color:var(--error,#c4322a)}.mtg-fin .mtg-k.amber .w{color:var(--warning,#b7791f)}
+.mtg-fin .mtg-knop{border-radius:4px;border-color:var(--line,#dfd8cb);background:var(--surface,var(--card,#fff));min-height:36px;font-size:13px}
+.mtg-fin .mtg-knop.klein{min-height:32px;padding:0 10px}
+.mtg-fin .mtg-knop.aan{background:var(--primary-soft,#ddefe3);border-color:var(--primary,#17643f);color:var(--primary,#17643f);font-weight:500}
+.mtg-fin .mtg-vraag{border-radius:50%}
+.mtg-fin .mtg-uitleg{background:var(--n-150,#f1ede5);border:1px solid var(--line,#dfd8cb);border-radius:8px;line-height:1.5}
+.mtg-fin .mtg-grafiek svg{height:300px}
+.mtg-fin .mtg-grafiek{position:relative}
+.mtg-kruis{position:absolute;top:10px;bottom:44px;width:1px;background:var(--border-strong,#9a917f);pointer-events:none}
+.mtg-fin .mtg-tip{background:var(--surface,#fff);color:var(--ink,#1b211e);border:1px solid var(--line,#dfd8cb);border-radius:8px;box-shadow:0 8px 24px rgba(40,34,20,.12);padding:10px 14px;font-size:13px;display:flex;flex-direction:column;gap:2px;transform:translate(-50%,-4px);z-index:2}
+.mtg-fin .mtg-tip b{font-weight:600}.mtg-fin .mtg-tip span{font-family:var(--mono,monospace);font-weight:500}.mtg-fin .mtg-tip i{font-style:normal;font-size:12px;color:var(--ink-2,#596059)}
+.mtg-vouwknop{border:1px solid var(--line,#dfd8cb);background:var(--surface,var(--card,#fff));border-radius:4px;width:32px;height:32px;padding:0;cursor:pointer;color:var(--ink-2,#596059);font-size:14px;flex:none;margin-right:4px}
+.mtg-dicht>:not(.mtg-kop){display:none}
+.mtg-fin .mtg-pot,.mtg-fin .mtg-rij{border-bottom-color:var(--n-200,#ece7de)}
+.mtg-fin .mtg-balk{background:var(--n-150,#f1ede5)}
+.mtg-fin .mtg-veld input,.mtg-fin .mtg-veld select,.mtg-fin .mtg-fm{border-radius:4px;border-color:var(--border-strong,#9a917f)}
+.mtg-fin .mtg-legenda{font-size:12px;color:var(--ink-2,#596059)}
+.mtg-fin .mtk{border:1px solid var(--line,#dfd8cb);border-left:4px solid var(--mtk-kleur);border-radius:8px;padding:20px 24px;margin:0;background:var(--surface,var(--card,#fff))}
+.mtg-fin .mtk-titel{font-family:var(--serif,inherit);font-size:22px;font-weight:600}
+.mtg-fin .mtk-och,.mtg-fin .mtk-week{border-radius:8px;margin:0}
+.mtg-fin .mtk-actie,.mtg-fin .mtk-melding{border-radius:4px}
+.mtg-fin .mtk-meters{gap:16px}
+.mtg-fin .mtk-m{border:1px solid var(--line,#dfd8cb);border-top:3px solid #c9d0d6;border-radius:8px;padding:14px 16px}
+.mtg-fin .mtk-m.groen{border-top-color:#2A7A4A}.mtg-fin .mtk-m.oranje{border-top-color:#b7791f}.mtg-fin .mtk-m.rood{border-top-color:#B4412F}.mtg-fin .mtk-m.onbekend{border-top-style:dashed;border-top-color:#8c96a0}
+.mtg-fin .mtk-m .w{font-family:var(--mono,ui-monospace,monospace);font-variant-numeric:tabular-nums;font-size:22px;font-weight:500}
+@media(max-width:760px){.mtg-fin{gap:12px}.mtg-fin .mtg-kaart,.mtg-fin .mtg-fb,.mtg-fin .mtk{padding:16px}.mtg-fin .mtg-kaarten{gap:12px;grid-template-columns:1fr}.mtg-fin .mtg-k{padding:14px 16px}.mtg-fin .mtg-k .w{font-size:24px;line-height:28px}.mtg-fin .mtg-kop h2{font-size:22px}
+.mtg-status,.mtg-fin .mtg-knop,.mtg-vouwknop{min-height:44px}.mtg-vouwknop{width:44px;height:44px}.mtg-statuspaneel{padding:8px 16px 16px}.mtg-fin .mtg-grafiek svg{height:230px}.mtg-fin .mtk-meters{gap:8px}}
 `;
     document.head.appendChild(s);
   }
@@ -796,16 +841,16 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     const noodStand = bes && bes.nood.stand != null ? Math.max(0, bes.nood.stand) : 0, grensSoort = G.drempelSoort(d, st.cfg), onder = G.drempel(d, st.cfg);
     st.meegroei = st.mag && st.cfg ? G.meegroeiPlan(d, st.cfg) : { wijzig: [], voorstel: [] };
     const ruimte = low ? rond(low.saldo - onder) : null;
-    const introWeg = ls.get('mtg:intro:' + st.wie) === 'weg', c = st.compact;
-    st.el.innerHTML = `<div class="mtg${c ? ' mtg-mob' : ''}">
-  ${c ? '' : `<div class="mtg-kop"><h2>Financiën</h2>
+    const introWeg = ls.get('mtg:intro:' + st.wie) !== '', c = st.compact;   // de uitleg staat standaard achter het ?-knopje
+    // De meldingen (Let op, Nog in te stellen) staan achter één statusknop bovenaan; het aantal blijft zichtbaar.
+    st.el.innerHTML = `<div class="mtg mtg-fin${c ? ' mtg-mob' : ''}">
+  ${c ? `<div class="mtg-kop"><h2>Financiën</h2></div>` : `<div class="mtg-kop"><h2>Financiën</h2>
     <div class="mtg-knoppen">
       <button class="mtg-knop ${st.modus === 'lopend' ? 'aan' : ''}" data-modus="lopend">Besteedbaar budget</button>
       <button class="mtg-knop ${st.modus === 'totaal' ? 'aan' : ''}" data-modus="totaal" title="De spaarpotjes zijn geen buffer: dat geld blijft eraf">Inclusief spaarpotjes (niet bedoeld als buffer)</button>
       <button class="mtg-knop" data-forecastplus="1" title="De facturatieplanning per maand die met de prognose meerekent (de eenvoudige schets staat onder Forecast)">Uitgebreide forecast</button>
       ${introWeg ? '<button class="mtg-vraag" data-intro="1" title="Wat zie je hier?">?</button>' : ''}
     </div></div>`}
-  <div id="mtk-plek">${koersHtml()}</div>
   ${introWeg || c ? '' : `<div class="mtg-uitleg"><b>Wat zie je hier?</b> ${esc(UITLEG.intro)} <button class="mtg-knop klein" data-intro="weg">Begrepen</button></div>`}
   ${drukHtml()}
   ${verseKs().length ? '<div class="mtg-melding">✓ Net opgeslagen — wordt verwerkt (op andere apparaten kan het een minuut duren).</div>' : ''}
@@ -817,8 +862,8 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     ${kaart('ruimte', 'Ruimte op laagste punt', ruimte == null ? '—' : eur(ruimte), ruimte != null && ruimte < 0, ruimteSub(low, d, { limiet, noodStand, nood, grensSoort, fictBron: G.fictiefBron(d, st.cfg) }))}
     ${noodKaart(d, bes, nood, kosten)}
   </div>
-  ${kanHtml()}
-  <div class="mtg-kaart">
+  <div id="mtk-plek">${koersHtml()}</div>
+  <div class="mtg-kaart mtg-verloop">
     <div class="mtg-kop" style="margin:0 0 6px"><b style="flex:1">Verloop ${st.modus === 'totaal' ? 'totaal' : 'besteedbaar budget'}</b>
       <div class="mtg-knoppen">${Object.keys(ZOOM).filter(z => !(c && z === 'jaar')).map(z => `<button class="mtg-knop klein ${st.zoom === z ? 'aan' : ''}" data-zoom="${esc(z)}">${esc(z)}</button>`).join('')}
       ${st.offset ? '<button class="mtg-knop klein" data-terug="1">vandaag</button>' : ''}
@@ -827,17 +872,18 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     <div class="mtg-grafiek" id="mtg-grafiek"></div>
     <div class="mtg-legenda"><span><i></i>saldo</span><span><i style="border-top-style:dashed"></i>verwacht</span>${heeftProg && st.prognose ? '<span><i style="border-top:2px dotted #3a5a8a"></i>met prognose (waar het afwijkt)</span>' : ''}${st.modus === 'lopend' ? `${fict > 0 ? '<span><i style="border-top:2px solid #d9a400"></i>fictieve buffer (geel)</span>' : ''}${noodStand > 0 && !nood ? '<span><i style="border-top:2px solid #e07b1a"></i>noodbuffer is op (oranje)</span>' : ''}${limiet != null ? '<span><i style="border-color:var(--mtg-uit)"></i>kredietlimiet (rood)</span>' : ''}${nood ? '<span>incl. noodbuffer</span>' : ''}` : ''}<span><i style="border-top:8px solid rgba(138,138,128,.15);vertical-align:-2px"></i>alleen vaste lasten bekend</span>${st.modus === 'lopend' && cfgE().lopend_streef && cfgE().lopend_streef.datum ? '<span><i style="border-top:2px dashed var(--gold,#B8962E)"></i>doelpad</span>' : ''}<span class="mtg-in">▲ erbij</span><span class="mtg-uit">▼ eraf</span><span>⚑ mijlpaal</span></div>
   </div>
+  ${kanHtml()}
   <div class="mtg-kaart"><div class="mtg-kop" style="margin:0"><b style="flex:1">Komende 14 dagen</b><button class="mtg-vraag" data-uitleg="lijst">?</button></div>${lijstHtml()}</div>
-  ${c ? `${letOpHtml()}${mobielStaart()}` : `${planningHtml()}${prognoseHtml()}
+  ${c ? `${mobielStaart()}` : `${planningHtml()}${prognoseHtml()}
   <div class="mtg-kaart"><div class="mtg-kop" style="margin:0"><b style="flex:1">Potjes en doelen</b><button class="mtg-vraag" data-uitleg="potjes">?</button></div>${potjesHtml()}</div>
   ${schuldenHtml()}
   ${roodHtml()}
-  ${instellenHtml()}
-  ${letOpHtml()}
   ${patronenHtml()}
   ${st.mag ? instellingenHtml() : ''}`}
 </div>`;
     grafiek();
+    statusZet(d.vandaag);
+    vouwBlokken();
     const rk = st.el.querySelector('#mtg-rood'); if (rk) rk.addEventListener('toggle', () => { st.roodOpen = rk.open; });
     st.el.querySelector('.mtg').addEventListener('click', klik);
     st.el.querySelector('.mtg').addEventListener('input', e => {
@@ -860,6 +906,37 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     felicitatie();
     meegroeiUitvoeren();
     if (st.planScroll) { st.planScroll = false; const k = st.el.querySelector('#mtg-plan'); if (k && k.scrollIntoView) { try { k.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) { k.scrollIntoView(); } } }
+  }
+  // De statusknop bovenaan: alle meldingen (Let op, Nog in te stellen) achter één knop met het aantal. Het paneel gebruikt dezelfde blokken als voorheen.
+  const statusAantal = () => (letOpHtml().match(/<li>/g) || []).length + (instellenHtml().match(/<li>/g) || []).length;
+  function statusZet(vandaag) {
+    const kop = st.el.querySelector('.mtg > .mtg-kop'), h2 = kop && kop.querySelector('h2'); if (!h2) return;
+    const n = statusAantal(), el = (tag, klasse, tekst) => { const x = document.createElement(tag); if (klasse) x.className = klasse; if (tekst != null) x.textContent = tekst; return x; };
+    const kn = el('button', 'mtg-status' + (n ? ' let-op' : '')); kn.setAttribute('data-finstatus', '1'); kn.setAttribute('aria-expanded', st.finStatus ? 'true' : 'false');
+    kn.append(el('span', 'stip'), 'Stand ' + datumTekst(vandaag), el('span', 'sep', '·'), el('b', null, n ? n + ' aandachtspunt' + (n === 1 ? '' : 'en') : 'geen aandachtspunten'));
+    h2.after(kn);
+    if (!st.finStatus) return;
+    const p = el('div', 'mtg-statuspaneel'); p.innerHTML = `${letOpHtml()}${instellenHtml()}`;
+    p.querySelectorAll('details').forEach(x => { x.open = true; });
+    if (!n) p.append(el('div', 'mtg-melding', 'Geen aandachtspunten: alles is opgehaald en ingesteld.'));
+    kop.after(p);
+  }
+  // Minder belangrijke blokken zijn uitklapbaar (stand per gebruiker onthouden). Alleen weergave: de inhoud van het blok verandert niet.
+  // Een blok met een open vraag, waarschuwing of rode melding staat standaard open en toont, ook als het dicht is, het aantal in de kop.
+  const VOUW = [['Factuurplanning', 'plan', true], ['Prognose', 'prog', true], ['Potjes en doelen', 'potjes', true], ['Schulden', 'schulden', false]];
+  function vouwBlokken() {
+    const wortel = st.el.querySelector('.mtg'); if (!wortel) return;
+    for (const k of [...wortel.children]) {
+      if (!k.classList.contains('mtg-kaart') || k.tagName === 'DETAILS') continue;
+      const kop = k.querySelector(':scope > .mtg-kop'), b = kop && kop.querySelector('b'); if (!b) continue;
+      const def = VOUW.find(v => b.textContent.trim().indexOf(v[0]) === 0); if (!def) continue;
+      const meld = k.querySelectorAll('.mtg-uitleg, .mtg-fp-m.eerder, .mtg-waarsch').length, bewaard = ls.get('mtg:vouw:' + st.wie + ':' + def[1]);
+      const open = bewaard === '1' ? true : bewaard === '0' ? false : def[2] || meld > 0;
+      const knop = document.createElement('button'); knop.className = 'mtg-vouwknop'; knop.setAttribute('data-vouw', def[1]); knop.setAttribute('aria-expanded', open ? 'true' : 'false');
+      knop.setAttribute('aria-label', (open ? 'Inklappen: ' : 'Uitklappen: ') + def[0]); knop.textContent = open ? '▾' : '▸';
+      kop.insertBefore(knop, kop.firstChild); k.classList.add('mtg-vouwbaar'); k.classList.toggle('mtg-dicht', !open);
+      if (!open && meld > 0) { const bd = document.createElement('span'); bd.className = 'mtg-chip achter'; bd.textContent = '⚠ ' + meld + (meld === 1 ? ' melding' : ' meldingen'); b.after(bd); }
+    }
   }
   // Werkelijk op de bank: de lopende rekening zelf (zonder potjes) en wat dat kost. De bank rekent over dat saldo,
   // ook als er in de potjes genoeg staat.
@@ -1319,12 +1396,12 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
       ${d.vandaag >= vanD && d.vandaag <= totD ? `<line x1="${esc(x(d.vandaag))}" x2="${esc(x(d.vandaag))}" y1="${esc(pt)}" y2="${esc(H - pb)}" stroke="var(--gold,#B8962E)" stroke-dasharray="3 3"/>` : ''}
       ${st.markeer && st.markeer >= vanD && st.markeer <= totD ? `<line x1="${esc(x(st.markeer))}" x2="${esc(x(st.markeer))}" y1="${esc(pt)}" y2="${esc(H - pb)}" stroke="var(--mtg-uit)" stroke-width="1.5" stroke-dasharray="2 2"/><text x="${esc(x(st.markeer) + 3)}" y="${esc(pt + 20)}" font-size="10" fill="var(--mtg-uit)">laagste punt</text>` : ''}
       ${ver.length > 1 ? `<path d="${esc(pad(ver))}" fill="none" stroke="var(--mtg-lijn)" stroke-width="2"/>` : ''}
-      ${(zonder || toek).filter(p => p.datum >= d.vandaag).length > 1 ? `<path d="${esc(pad((zonder || toek).filter(p => p.datum >= d.vandaag)))}" fill="none" stroke="var(--mtg-lijn)" stroke-width="2" stroke-dasharray="6 4"/>` : ''}
+      ${(zonder || toek).filter(p => p.datum >= d.vandaag).length > 1 ? `<path d="${esc(pad((zonder || toek).filter(p => p.datum >= d.vandaag)))}" fill="none" stroke="var(--mtg-prog,var(--mtg-lijn))" stroke-width="2" stroke-dasharray="6 4"/>` : ''}
       ${zonder && toek.length > 1 ? `<path d="${esc(afwijk(toek, zonder.filter(p => p.datum >= d.vandaag)))}" fill="none" stroke="#3a5a8a" stroke-width="2" stroke-dasharray="1 3"/>` : ''}
       ${(() => { const z = G.onzekerVanaf(d, { prognose: st.prognose }); if (z >= totD) return ''; const x0 = Math.max(pl, x(z < vanD ? vanD : z));
         return `<defs><pattern id="mtg-arc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="#8a8a80" stroke-opacity="0.22" stroke-width="2"/></pattern></defs><rect x="${esc(x0)}" y="${esc(pt)}" width="${Math.max(0, W - pr - x0)}" height="${esc(H - pt - pb)}" fill="url(#mtg-arc)" class="mtg-zone"/><text x="${Math.min(x0 + 4, W - pr - 4)}" y="${esc(pt + 32)}" font-size="10" fill="#7a7a70">verder weg: alleen vaste lasten bekend — vul de prognose aan</text>`; })()}
       ${pijlen}${vlaggen}
-      <rect x="${esc(pl)}" y="0" width="${esc(W - pl - pr)}" height="${esc(H)}" fill="transparent" class="mtg-vang"/></svg><div class="mtg-tip" style="display:none"></div>`;
+      <rect x="${esc(pl)}" y="0" width="${esc(W - pl - pr)}" height="${esc(H)}" fill="transparent" class="mtg-vang"/></svg><div class="mtg-kruis" style="display:none"></div><div class="mtg-tip" style="display:none"></div>`;
     st.geo = { vanD, n, W, pl, pr };
     gebaren(box);
   }
@@ -1369,11 +1446,12 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
       if (!ptrs.size) { const sleep = start && start.off !== st.offset; start = null; if (sleep) teken(); }
     };
     box.addEventListener('pointerup', los); box.addEventListener('pointercancel', e => { ptrs.delete(e.pointerId); if (!ptrs.size) { start = null; pinch = null; } });
-    box.addEventListener('pointerleave', () => { const t = tip(); if (t) t.style.display = 'none'; });
+    box.addEventListener('pointerleave', () => { const t = tip(); if (t) t.style.display = 'none'; const kr = box.querySelector('.mtg-kruis'); if (kr) kr.style.display = 'none'; });
     function toonTip(dd, e) {
       const t = tip(), p = dd && st.lijn.punten.find(q => q.datum === dd); if (!t) return; if (!p) { t.style.display = 'none'; return; }
       const r = box.getBoundingClientRect(); t.style.display = ''; t.style.left = (e.clientX - r.left) + 'px'; t.style.top = '40px';
-      t.textContent = `${datumTekst(dd)}: ${eur(p.saldo_gepland != null ? p.saldo_gepland : p.saldo)}`;
+      t.innerHTML = `<b>${esc(datumTekst(dd))}</b><span>${esc(eur(p.saldo_gepland != null ? p.saldo_gepland : p.saldo))}</span><i>${esc(p.datum > st.data.vandaag ? 'verwachting' : p.datum === st.data.vandaag ? 'vandaag' : 'geboekt')}</i>`;
+      const kr = box.querySelector('.mtg-kruis'); if (kr) { kr.style.display = ''; kr.style.left = (e.clientX - r.left) + 'px'; }
     }
   }
   function begrens() {
@@ -1799,6 +1877,9 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     const vl = e.target.closest('[data-doeladvies]');
     if (vl) { e.stopPropagation(); return doelAdvies(vl.dataset.doeladvies); }
     if (e.target.closest('[data-rc]')) { e.preventDefault(); e.stopPropagation(); return rcUitleg(); }
+    const vk = e.target.closest('[data-vouw]');
+    if (vk) { e.preventDefault(); e.stopPropagation(); const k = vk.dataset.vouw, open = vk.getAttribute('aria-expanded') === 'true'; ls.set('mtg:vouw:' + st.wie + ':' + k, open ? '0' : '1'); return teken(); }
+    if (e.target.closest('[data-finstatus]')) { st.finStatus = !st.finStatus; return teken(); }
     const au = e.target.closest('[data-adviesuitleg]');
     if (au) { e.stopPropagation(); return adviesUitleg(au.dataset.adviesuitleg); }
     if (e.target.closest('[data-nood]')) { st.noodMee = !!e.target.closest('[data-nood]').checked; ls.set('mtg:nood:' + st.wie, st.noodMee ? '1' : '0'); return teken(); }
