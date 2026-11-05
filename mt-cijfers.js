@@ -154,6 +154,33 @@
 .mtd-vol{padding:16px 16px 48px}.mtd-vol-in{gap:16px}.mtd-pkop h1{font-size:22px;line-height:26px}.mtd-kpi{padding:14px 16px}.mtd-kv{font-size:22px}.mtd-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
 .mtd-twee{grid-template-columns:minmax(0,1fr)}.mtd-legenda{gap:10px}
 }
+/* kleur: vaste kleur per categorie (klassen mtd-k0..k6), resultaat en oordelen; donkere modus als eigen stappen (gevalideerd met het validatiescript van de dataviz-skill) */
+.mtd{--k0:#2a78d6;--k1:#eb6834;--k2:#1baf7a;--k3:#eda100;--k4:#e87ba4;--k5:#6250d6;--k6:#8c918a;--kres:#118048;--kverlies:#c4322a;--mtd-goed:#1a6e3b;--mtd-goed-bg:#e3f3e8;--mtd-let:#8f5508;--mtd-let-bg:#fcefd9;--mtd-slecht:#b42a23;--mtd-slecht-bg:#fce6e4;--mtd-band:#dbe6ee;--mtd-hoofd:#17643f}
+:root[data-theme="dark"] .mtd{color-scheme:dark;--surface:#1c221f;--canvas:#141916;--ink:#eef1ee;--ink-2:#c0c8c2;--ink-3:#a3ada6;--line:#323b36;--n-150:#242b27;--n-200:#2b332e;--n-300:#38423c;--border-strong:#55605a;--info:#8db3d4;--info-50:#22303b;--primary:#59c28b;--k0:#3987e5;--k1:#d95926;--k2:#199e70;--k3:#c98500;--k4:#d55181;--k5:#9085e9;--k6:#8c918a;--kres:#3fa874;--kverlies:#e66767;--mtd-goed:#6fd29b;--mtd-goed-bg:#1b3a29;--mtd-let:#e8ae4d;--mtd-let-bg:#3a2d12;--mtd-slecht:#ff9088;--mtd-slecht-bg:#44211e;--mtd-band:#2e3f4c;--mtd-hoofd:#59c28b;--success:#6fd29b;--error:#ff9088;--warning:#e8ae4d}
+.mtd-k0{--k:var(--k0)}.mtd-k1{--k:var(--k1)}.mtd-k2{--k:var(--k2)}.mtd-k3{--k:var(--k3)}.mtd-k4{--k:var(--k4)}.mtd-k5{--k:var(--k5)}.mtd-k6{--k:var(--k6)}.mtd-kres{--k:var(--kres)}.mtd-kverlies{--k:var(--kverlies)}
+.mtd-sw{display:inline-block;width:12px;height:12px;border-radius:2px;background:var(--k,#8c918a);flex:0 0 auto}.mtd-sw.verlies{background:repeating-linear-gradient(135deg,var(--kverlies) 0 3px,transparent 3px 5px);border:1px solid var(--kverlies)}.mtd-sw.lijn{height:0;width:14px;border-radius:0;background:none;border-top:3px solid var(--ink,#1b211e)}
+.mtd-oordeel{display:inline-flex;align-items:center;gap:6px;min-height:24px;padding:0 8px;border-radius:4px;font-size:13px;font-weight:500;background:var(--n-150,#f1ede5);color:var(--ink-2,#596059)}
+.mtd-oordeel.goed{background:var(--mtd-goed-bg);color:var(--mtd-goed)}.mtd-oordeel.let-op{background:var(--mtd-let-bg);color:var(--mtd-let)}.mtd-oordeel.slecht{background:var(--mtd-slecht-bg);color:var(--mtd-slecht)}
+.mtd-oordeelrij{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.mtd-oordeelrij>div{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border:1px solid var(--line,#dfd8cb);border-radius:6px;background:var(--surface,#fff)}
+.mtd-or-l{font-size:12px;font-weight:500;color:var(--ink-2,#596059)}.mtd-or-t{font-size:13px;color:var(--ink-2,#596059)}
+/* periodetabel: kolommen in de breedte, scrollt alleen binnen de tabel */
+.mtd-pt{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}
+.mtd-pt table{border-collapse:separate;border-spacing:0;font-size:13px;width:100%}
+.mtd-pt th,.mtd-pt td{padding:7px 8px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--n-200,#ece7de);vertical-align:top}
+.mtd-pt thead th{font-size:12px;font-weight:500;color:var(--ink-2,#596059);background:var(--surface,#fff)}
+.mtd-pt thead th.fc{color:var(--info,#3e5c76)}
+.mtd-pt th:first-child{position:sticky;left:0;z-index:1;text-align:left;background:var(--surface,#fff);font-weight:500;padding-right:12px}
+.mtd-pt td{font-family:var(--mono,monospace);font-variant-numeric:tabular-nums}
+.mtd-pt .tot{border-left:1px solid var(--line,#dfd8cb)}
+.mtd-pt tr.kop th,.mtd-pt tr.kop td{font-weight:600}
+.mtd-pt td.leeg{color:var(--ink-3,#646a64)}
+.mtd-pt-v{display:block}.mtd-pt-fc{display:block;font-size:11px;color:var(--info,#3e5c76)}
+.mtd-pt-bar{display:block;height:4px;margin-top:3px;border-radius:2px;background:var(--k,var(--info,#3e5c76));opacity:.9}
+.mtd-pt tr.vs td{font-size:12px;border-bottom:0}.mtd-pt tr.vs th{font-size:12px;font-weight:400;color:var(--ink-2,#596059);border-bottom:0}
+.mtd-pt td.goed{color:var(--mtd-goed)}.mtd-pt td.slecht{color:var(--mtd-slecht)}
+.mtd-pt td.deels .mtd-pt-v::after{content:'*'}
+.mtd-pt-bar.j0{background:var(--mtd-hoofd)}.mtd-pt-bar.j1{background:var(--k6)}.mtd-pt-bar.j2{background:var(--n-300,#dfd8cb)}.mtd-pt-bar.kost{background:var(--k6)}.mtd-pt-bar.res{background:var(--kres)}
 @media(prefers-reduced-motion:reduce){.mtd-tegel{transition:none}}
 `;
     document.head.appendChild(s);
@@ -798,11 +825,14 @@
     return wrap;
   }
   function tabelEl(per, vgl) {
-    const kop = ['Periode', 'Omzet'].concat(vgl.map(r => 'Omzet ' + r.jaar), ['Kosten', 'Resultaat']);
-    const rijen = per.map((p, i) => { const P = p.P, act = P.maanden > 0, fc = P.prognose > 0, pr = progRes(p), naam = (st.zoom === 'M' ? maandLang(p.id) : (p.label || p.id)) + (fc ? ' (verwachting)' : isLopend(p) ? ' (lopend)' : '');
-      return ee('tr', { class: fc ? 'fc' : '' }, ee('th', { scope: 'row' }, naam), ee('td', null, act ? eur(P.omzet) + (fc ? ' + ' + eur(P.prognose) + ' verwacht' : '') : fc ? eur(P.prognose) + ' verwacht' : '—'),
-        vgl.map(r => ee('td', null, r.w[i] != null ? eur(r.w[i]) : '—')), ee('td', null, act ? eur(P.kosten_totaal) : '—'), ee('td', null, act ? eur(P.resultaat) + (pr != null ? ' + ' + eur(pr - P.resultaat) + ' verwacht' : '') : pr != null ? eur(pr) + ' verwacht' : '—')); });
-    return ee('div', { class: 'mtd-tabelwrap' }, ee('table', { class: 'mtd-tabel' }, ee('caption', { class: 'sr' }, 'Omzet en resultaat ' + jaarTitel() + ' ' + st.jaar), ee('thead', null, ee('tr', null, kop.map(k => ee('th', { scope: 'col' }, k)))), ee('tbody', null, rijen)));
+    const lab = p => (p.label || p.id) + (p.P.prognose > 0 ? ' (verw.)' : isLopend(p) ? '*' : '');
+    const cel = (v, o) => Object.assign({ v, n: v == null ? 0 : 1, vol: true, fc: 0, reden: 'geen gegevens' }, o || {});
+    const rijen = [{ label: 'Omzet', cellen: per.map(p => cel(p.P.maanden ? p.P.omzet : null, { fc: p.P.prognose, vol: !isLopend(p) && !(p.P.prognose > 0), reden: p.P.prognose > 0 ? '' : 'geen gegevens' })) }]
+      .concat(vgl.map(r => ({ label: 'Omzet ' + r.jaar, cellen: r.w.map(v => cel(v)) })),
+        [{ label: 'Kosten', cellen: per.map(p => cel(p.P.maanden ? p.P.kosten_totaal : null)) },
+         { label: 'Resultaat', cellen: per.map(p => { const pr = progRes(p); return cel(p.P.maanden ? p.P.resultaat : null, { fc: p.P.maanden && pr != null ? pr - p.P.resultaat : 0, vol: !isLopend(p) && pr == null }); }) }]);
+    const stijlen = ['j0'].concat(vgl.map(r => r.off > 1 ? 'j2' : 'j1'), ['kost', 'res']), naam = 'Omzet, kosten en resultaat ' + jaarTitel() + ' ' + st.jaar;
+    return periodeTabelEl({ zoom: st.zoom, kolommen: per.map(p => ({ id: p.id, label: lab(p), fc: p.P.prognose > 0 })), rijen, verschil: null, totaalLabel: null }, { naam, hoek: '', stijlen });
   }
   // ── Dashboard: volledig-scherm-paneel per tegel ──
   const PANEEL_TITEL = { besteedbaar: 'Besteedbaar budget', omzet: 'Omzet', brutomarge: 'Brutomarge', resultaat: 'Resultaat', komende: 'Komende 3 maanden', kas: 'Kaspositie', opnames: 'Opnames', hoofd: 'Omzet en resultaat' };
@@ -851,17 +881,71 @@
     toon(Math.max(0, Math.min(11, (t || 1) - 1)));
     return ee('div', { class: 'mtd-chart' }, ee('div', { class: 'mtd-plot' }, svg, tip));
   }
-  // Omzet per kwartaal: boekjaar (geboekt + verwacht), twee vorige jaren en het verschil met vorig jaar voor afgesloten kwartalen.
-  function kwartaalSectie(tm) {
-    const jaar = st.jaar, lm = tm.lm, rest = restPerMaand(), kwartaal = (j, q) => { const ms = [1, 2, 3].map(k => st.maanden.find(m => m.id === `${j}-${d2(q * 3 - 3 + k)}`)), dicht = ms.filter(m => m && m.maanden && !m.prognose && (j < Number(lm.slice(0, 4)) || m.id <= lm));
-      return { som: dicht.reduce((a, m) => a + (m.omzet || 0), 0), n: dicht.length, vol: dicht.length === 3, fc: [1, 2, 3].reduce((a, k) => a + (j === jaar ? rest[`${j}-${d2(q * 3 - 3 + k)}`] || 0 : 0), 0) }; };
-    const cel = (k, fc) => k.n === 0 && !(fc && k.fc > 0) ? '—' : kort(k.som) + (fc && k.fc > 0 ? ' + ' + kort(k.fc) + ' verwacht' : '');
-    const rijen = [1, 2, 3, 4].map(q => { const a = kwartaal(jaar, q), b = kwartaal(jaar - 1, q), c = kwartaal(jaar - 2, q), d = a.vol && b.vol ? dPct(a.som, b.som) : null;
-      return [ee('span', { class: 'mtd-kw-q' }, 'K' + q), ee('span', { class: 'mtd-kw-v' }, a.n === 0 ? '—' : kort(a.som), a.fc > 0 ? ee('span', { class: 'mtd-kw-fc' }, '+ ' + kort(a.fc) + ' verwacht') : null), ee('span', { class: 'mtd-kw-v z' }, st.vgl.j1 ? cel(b) : ''), ee('span', { class: 'mtd-kw-v z' }, st.vgl.j2 ? cel(c) : ''), ee('span', { class: 'mtd-kw-d ' + (d == null ? '' : d >= 0 ? 'goed' : 'slecht') }, d == null ? '' : pctTeken(d))]; });
-    return sectie('Per kwartaal', null, ee('div', { class: 'mtd-kw' }, ee('span', null), [String(jaar), st.vgl.j1 ? String(jaar - 1) : '', st.vgl.j2 ? String(jaar - 2) : '', 'vs ' + (jaar - 1)].map(k => ee('span', { class: 'mtd-kw-k' }, k)), rijen),
-      ee('span', { class: 'mtc-noot' }, 'Verschil alleen voor afgesloten kwartalen. "Verwacht" = lopende maand (voor zover geboekt) plus forecast; dat telt niet mee in de kerncijfers.'));
+  // ── Kleur: vaste kleur per categorie (tokens en klassen in css()); legenda, stapels en tabellen gebruiken dezelfde klasse ──
+  const KAT_VAST = { materiaal: 0, uitbesteed: 1, personeel: 2, huisvesting: 3, overig: 4 };
+  C.katKlasse = function (id, cats) {
+    if (id === 'resultaat') return 'mtd-kres';
+    if (Object.prototype.hasOwnProperty.call(KAT_VAST, id)) return 'mtd-k' + KAT_VAST[id];
+    const vrij = (cats || []).filter(c => !Object.prototype.hasOwnProperty.call(KAT_VAST, c)), i = vrij.indexOf(id);
+    return 'mtd-k' + Math.min(5 + Math.max(i, 0), 6);
+  };
+  const katNaam = c => c === 'resultaat' ? 'Resultaat' : (st.catNaam && st.catNaam[c]) || c;
+  const katKl = c => C.katKlasse(c, st.cats);
+
+  // ── Periodetabel: één tabelvorm voor Cijfers. Kolommen = periodes (volgt Maand/Kwartaal/Jaar), rijen = jaren of reeksen. ──
+  // Rekenen los van de DOM (te testen). Een cel is {v, n, vol, fc, reden}: v = null betekent "—" met een reden; alleen afgesloten maanden tellen,
+  // "verwacht" (fc) staat apart en telt nooit mee. Verschillen alleen tussen volledig afgesloten periodes.
+  const PT_KOL = { M: MND.map((m, i) => ({ id: d2(i + 1), label: m, maanden: [i + 1] })), K: [1, 2, 3, 4].map(q => ({ id: 'K' + q, label: 'K' + q, maanden: [q * 3 - 2, q * 3 - 1, q * 3] })) };
+  C.periodeTabelModel = function (o) {
+    const kol = PT_KOL[o.zoom === 'K' ? 'K' : 'M'], lm = o.lm || null, lmJ = lm ? Number(lm.slice(0, 4)) : 0, rest = o.rest || {}, meet = o.meet || (P => P.omzet);
+    const cel = (j, nrs, metFc) => {
+      const ids = nrs.map(n => `${j}-${d2(n)}`), ms = ids.map(id => o.maanden.find(m => m.id === id)), dicht = ms.filter(m => m && m.maanden && !m.prognose && lm && m.id <= lm);
+      const v = dicht.length ? meet(C.som(dicht, o.cats, o.eerlijk)) : null, fc = metFc && j === o.jaar ? ids.reduce((a, id) => a + (rest[id] || 0), 0) : 0;
+      return { v, n: dicht.length, vol: dicht.length === nrs.length, fc, reden: v != null ? '' : (!lm || ids.every(id => id > lm)) ? 'nog niet afgesloten' : 'niet opgehaald' };
+    };
+    const tm = tmVan(o.jaar, lm), tot = tm > 0 ? Array.from({ length: tm }, (_, i) => i + 1) : [];
+    const rij = j => ({ jaar: j, label: String(j), cellen: kol.map(k => cel(j, k.maanden, true)), totaal: tm > 0 ? (c => c.n === tm ? c : Object.assign(c, { v: null, reden: 'niet alle maanden beschikbaar' }))(cel(j, tot, false)) : { v: null, n: 0, vol: false, fc: 0, reden: 'nog niet afgesloten' } });
+    const jaren = (o.jaren && o.jaren.length ? o.jaren : [o.jaar]).filter(j => j >= Number(START.slice(0, 4))), rijen = jaren.map(rij);
+    // verschil met het jaar ervoor (altijd berekend, ook als die rij niet getoond wordt)
+    const vorig = o.jaar - 1, heeftVorig = vorig >= Number(START.slice(0, 4)), nu = rijen.find(r => r.jaar === o.jaar) || rij(o.jaar), vr = rijen.find(r => r.jaar === vorig) || (heeftVorig ? rij(vorig) : null);
+    const delta = (a, b) => { if (!b) return { d: null, reden: 'geen gegevens ' + vorig }; if (a.v == null) return { d: null, reden: a.reden || 'geen gegevens' }; if (b.v == null) return { d: null, reden: 'geen gegevens ' + vorig }; if (!a.vol || !b.vol) return { d: null, reden: 'alleen afgesloten periodes' }; const d = dPct(a.v, b.v); return d == null ? { d: null, reden: 'vorig jaar is 0' } : { d, reden: '' }; };
+    const verschil = heeftVorig ? { label: 'Verschil met ' + vorig, cellen: nu.cellen.map((c, i) => delta(c, vr.cellen[i])), totaal: delta(Object.assign({}, nu.totaal, { vol: nu.totaal.v != null }), Object.assign({}, vr.totaal, { vol: vr.totaal.v != null })) } : null;
+    return { zoom: o.zoom, kolommen: kol.map(k => ({ id: k.id, label: k.label })), rijen, verschil, totaalLabel: tm > 0 && tm < 12 ? 't/m ' + MND[tm - 1] : 'Jaar', hoofdJaar: o.jaar };
+  };
+  // Zoom Jaar (t/m nu) en 5 jaar: de kolommen zijn jaren, één rij; verschil met het jaar ervoor.
+  C.periodeTabelJaren = function (per, o) {
+    const lm = o.lm || null, tmL = lm ? Number(lm.slice(5, 7)) : 0, meet = o.meet || (P => P.omzet);
+    const cellen = per.map(p => { const n = p.P.maanden, want = o.zoom === 'J' ? tmL : 12, vol = n > 0 && n === want, v = n > 0 ? meet(p.P) : null; return { v, n, vol, fc: 0, reden: v != null ? '' : 'geen gegevens' }; });
+    const verschil = { label: 'Verschil met jaar ervoor', cellen: cellen.map((c, i) => { const b = cellen[i - 1]; if (i === 0) return { d: null, reden: 'geen jaar ervoor' }; if (!c.vol || !b || !b.vol) return { d: null, reden: 'alleen afgesloten periodes' }; const d = dPct(c.v, b.v); return d == null ? { d: null, reden: 'jaar ervoor is 0' } : { d, reden: '' }; }) };
+    return { zoom: o.zoom, kolommen: per.map(p => ({ id: p.id, label: p.label || p.id })), rijen: [{ jaar: null, label: o.label || 'Omzet', cellen, totaal: null }], verschil, totaalLabel: null };
+  };
+  // Tekenen. Eerste rij is het hoofdjaar (vet), de rest grijzer; cel-balkjes op één schaal voor de hele tabel.
+  function periodeTabelEl(m, o) {
+    o = o || {}; const alle = m.rijen.flatMap(r => r.cellen.map(c => c.v != null ? Math.abs(c.v) + (c.fc || 0) : 0)), max = Math.max(1, ...alle), heeftTot = !!m.totaalLabel, nKol = m.kolommen.length + (heeftTot ? 1 : 0);
+    const celEl = (c, bar, stijl, tot) => {
+      const leeg = c.v == null && !(c.fc > 0), neg = c.v != null && c.v < 0;
+      return ee('td', { class: [leeg ? 'leeg' : '', c.v != null && !c.vol ? 'deels' : '', neg ? 'slecht' : '', tot ? 'tot' : ''].filter(Boolean).join(' '), title: leeg ? c.reden : c.v != null && !c.vol ? 'nog niet alle maanden afgesloten' : null },
+        leeg ? '—' : [ee('span', { class: 'mtd-pt-v' }, c.v == null ? '—' : kort(c.v)), c.fc > 0 ? ee('span', { class: 'mtd-pt-fc' }, '+ ' + kort(c.fc) + ' verwacht') : null,
+          bar && c.v != null && c.v > 0 ? ee('span', { class: 'mtd-pt-bar ' + stijl, style: 'width:' + Math.max(3, Math.round(c.v / max * 100)) + '%' }) : null]);
+    };
+    const rijEl = (r, ri) => ee('tr', { class: ri === 0 ? 'kop' : '' }, ee('th', { scope: 'row' }, r.label), r.cellen.map(c => celEl(c, !o.zonderBalk, o.stijlen ? o.stijlen[ri] : 'j' + Math.min(ri, 2), false)), heeftTot && r.totaal ? celEl(r.totaal, false, '', true) : null);
+    const vs = m.verschil ? ee('tr', { class: 'vs' }, ee('th', { scope: 'row' }, m.verschil.label), m.verschil.cellen.map(c => ee('td', { class: c.d == null ? 'leeg' : Math.abs(c.d) < 0.05 ? '' : c.d > 0 ? 'goed' : 'slecht', title: c.d == null ? c.reden : null }, c.d == null ? '—' : (Math.abs(c.d) < 0.05 ? '' : c.d > 0 ? '▲ ' : '▼ ') + pctTeken(c.d))),
+      heeftTot ? ee('td', { class: 'tot ' + (m.verschil.totaal.d == null ? 'leeg' : m.verschil.totaal.d >= 0 ? 'goed' : 'slecht'), title: m.verschil.totaal.d == null ? m.verschil.totaal.reden : null }, m.verschil.totaal.d == null ? '—' : (m.verschil.totaal.d >= 0 ? '▲ ' : '▼ ') + pctTeken(m.verschil.totaal.d)) : null) : null;
+    return ee('div', { class: 'mtd-pt', role: 'region', 'aria-label': o.naam || 'Tabel', tabindex: '0' }, ee('table', { style: 'min-width:' + (96 + nKol * 66) + 'px' }, ee('caption', { class: 'sr' }, o.naam || 'Tabel'),
+      ee('thead', null, ee('tr', null, ee('th', { scope: 'col' }, o.hoek || ''), m.kolommen.map(k => ee('th', { scope: 'col', class: k.fc ? 'fc' : '' }, k.label)), heeftTot ? ee('th', { scope: 'col', class: 'tot' }, m.totaalLabel) : null)),
+      ee('tbody', null, m.rijen.map(rijEl), vs)));
   }
-  async function laadTop() {
+  const zoomWoord = () => st.zoom === 'M' ? 'maand' : st.zoom === 'K' ? 'kwartaal' : 'jaar';
+  // Omzet-tabel van het Omzet-paneel: volgt de knop Maand/Kwartaal/Jaar (de oude kwartaaltabel negeerde die).
+  function omzetTabelSectie(tm) {
+    const lm = tm.lm || laatste(), naam = 'Omzet per ' + zoomWoord() + (st.zoom === 'M' || st.zoom === 'K' ? ' ' + st.jaar : '');
+    const noot = ee('span', { class: 'mtc-noot' }, 'Verschil alleen voor afgesloten periodes ("—" = geen vergelijking mogelijk, houd de muis erboven voor de reden). "Verwacht" = lopende maand (voor zover geboekt) plus forecast; dat telt niet mee in de kerncijfers.');
+    if (st.zoom === 'J' || st.zoom === '5J') return sectie(naam, null, periodeTabelEl(C.periodeTabelJaren(huidigePeriodes(), { zoom: st.zoom, lm, meet: P => P.omzet, label: 'Omzet' }), { naam, hoek: '' }), noot);
+    const model = C.periodeTabelModel({ maanden: st.maanden, cats: st.cats, eerlijk: st.eerlijk, zoom: st.zoom, jaar: st.jaar, jaren: [st.jaar].concat(vglOffsets().map(off => st.jaar - off)), lm, rest: restPerMaand(), meet: P => P.omzet });
+    return sectie(naam, null, periodeTabelEl(model, { naam, hoek: '' }), noot);
+  }
+
+    async function laadTop() {
     if (st.top && st.top.laden) return;   // geen tweede ronde verzoeken terwijl de eerste loopt
     const lm = laatste(), jaar = st.jaar, ms = st.maanden.filter(m => m.maanden && !m.prognose && m.id.startsWith(jaar + '-') && m.id <= lm).map(m => m.id), top = st.top = { jaar, laden: true, items: [], totaal: 0, onvolledig: false, fouten: 0, klaar: 0, n: ms.length }, per = new Map();
     tekenPaneel();
@@ -918,7 +1002,7 @@
     if (id !== 'komende' && id !== 'hoofd') delen.push(bedieningPaneel());
     if (tegel && tegel.kpis.length) delen.push(kpiRij(tegel.kpis));
     const oud = g => htmlBlok(grafiekHtml(per, g)), sel = st.sel ? ee('div', { class: 'mtc-noot' }, `Gekozen: ${st.sel.label || st.sel.id} · `, ee('a', { href: '#', 'data-wissel': '1' }, 'terug naar het boekjaar')) : null;
-    if (id === 'omzet') { delen.push(sectie('Omzet opgeteld door het jaar', 'Zo zie je in één lijn of je voor of achter loopt op eerdere jaren', cumulEl(tm)), ee('div', { class: 'mtd-twee' }, kwartaalSectie(tm), topSectie(), feitenSectie('omzet'))); }
+    if (id === 'omzet') { delen.push(sectie('Omzet opgeteld door het jaar', 'Zo zie je in één lijn of je voor of achter loopt op eerdere jaren', cumulEl(tm)), omzetTabelSectie(tm), ee('div', { class: 'mtd-twee' }, topSectie(), feitenSectie('omzet'))); }
     else if (id === 'brutomarge') delen.push(sectie('Brutomarge per periode', 'Omzet − materiaal − uitbesteed werk, als % van de omzet', sel, oud('brutomarge')), sectie('Kosten tegenover de branche', null, htmlBlok(bulletHtml())), feitenSectie('brutomarge'));
     else if (id === 'resultaat') delen.push(sectie('Omzet, kosten en resultaat', 'Tik op een staaf of kostendeel voor de stukken in Moneybird', sel, oud('omzet_kosten')), feitenSectie('resultaat'));
     else if (id === 'kas') delen.push(sectie('Kaspositie', null, sel, oud('kas')), sectie('Van omzet naar kas', null, htmlBlok(watervalHtml())), feitenSectie('kas'));
