@@ -699,6 +699,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
 .mtg-fin .mtg-tip b{font-weight:600}.mtg-fin .mtg-tip span{font-family:var(--mono,monospace);font-weight:500}.mtg-fin .mtg-tip i{font-style:normal;font-size:12px;color:var(--ink-2,#596059)}
 .mtg-vouwknop{border:1px solid var(--line,#dfd8cb);background:var(--surface,var(--card,#fff));border-radius:4px;width:32px;height:32px;padding:0;cursor:pointer;color:var(--ink-2,#596059);font-size:14px;flex:none;margin-right:4px}
 .mtg-dicht>:not(.mtg-kop){display:none}
+.mtg-fin .mtg-kritiek{border-left:4px solid var(--error,#c4322a);background:var(--error-50,#fce6e4)}.mtg-kritiek .mtg-letop{margin:8px 0 0;padding-left:18px}
 .mtg-fin .mtg-pot,.mtg-fin .mtg-rij{border-bottom-color:var(--n-200,#ece7de)}
 .mtg-fin .mtg-balk{background:var(--n-150,#f1ede5)}
 .mtg-fin .mtg-veld input,.mtg-fin .mtg-veld select,.mtg-fin .mtg-fm{border-radius:4px;border-color:var(--border-strong,#9a917f)}
@@ -829,6 +830,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
   // ── Tekenen ──────────────────────────────────────────────────────────────────
   function teken() {
     if (!st.data) return;
+    const fk = st.focusNa || focusSleutel(); st.focusNa = null;   // focus blijft na het opnieuw tekenen op dezelfde knop (statusknop, uitklapknop)
     const d = st.dataS = G.metScenario(st.data, st.scenario);      // scenario: verschoven termijnen (nog niet opgeslagen)
     // G7: de lijn en alle kaarten rekenen op het besteedbaar budget (G.kasLijn, dezelfde basis als het hoofdgetal en de Koersmeter);
     // modus 'totaal' = lopend + alle potjes. De noodbuffer telt alleen mee met het vinkje (per gebruiker onthouden).
@@ -851,6 +853,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
       <button class="mtg-knop" data-forecastplus="1" title="De facturatieplanning per maand die met de prognose meerekent (de eenvoudige schets staat onder Forecast)">Uitgebreide forecast</button>
       ${introWeg ? '<button class="mtg-vraag" data-intro="1" title="Wat zie je hier?">?</button>' : ''}
     </div></div>`}
+  ${letOpHtml('kritiek')}
   ${introWeg || c ? '' : `<div class="mtg-uitleg"><b>Wat zie je hier?</b> ${esc(UITLEG.intro)} <button class="mtg-knop klein" data-intro="weg">Begrepen</button></div>`}
   ${drukHtml()}
   ${verseKs().length ? '<div class="mtg-melding">✓ Net opgeslagen — wordt verwerkt (op andere apparaten kan het een minuut duren).</div>' : ''}
@@ -884,8 +887,10 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     grafiek();
     statusZet(d.vandaag);
     vouwBlokken();
+    herstelFocus(fk);
     const rk = st.el.querySelector('#mtg-rood'); if (rk) rk.addEventListener('toggle', () => { st.roodOpen = rk.open; });
     st.el.querySelector('.mtg').addEventListener('click', klik);
+    st.el.querySelector('.mtg').addEventListener('keydown', e => { if (e.key === 'Escape' && st.finStatus) { e.preventDefault(); st.finStatus = false; st.focusNa = 'status'; teken(); } });
     st.el.querySelector('.mtg').addEventListener('input', e => {
       const kn = e.target.closest('[name="kan-bedrag"],[name="kan-datum"]');
       if (kn) { st.kan = st.kan || {}; if (kn.name === 'kan-bedrag') st.kan.bedrag = kn.value; else st.kan.datum = kn.value; kanTeken(); return; }
@@ -908,15 +913,15 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     if (st.planScroll) { st.planScroll = false; const k = st.el.querySelector('#mtg-plan'); if (k && k.scrollIntoView) { try { k.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) { k.scrollIntoView(); } } }
   }
   // De statusknop bovenaan: alle meldingen (Let op, Nog in te stellen) achter één knop met het aantal. Het paneel gebruikt dezelfde blokken als voorheen.
-  const statusAantal = () => (letOpHtml().match(/<li>/g) || []).length + (instellenHtml().match(/<li>/g) || []).length;
+  const statusAantal = () => (letOpHtml('info').match(/<li>/g) || []).length + (instellenHtml().match(/<li>/g) || []).length;
   function statusZet(vandaag) {
     const kop = st.el.querySelector('.mtg > .mtg-kop'), h2 = kop && kop.querySelector('h2'); if (!h2) return;
     const n = statusAantal(), el = (tag, klasse, tekst) => { const x = document.createElement(tag); if (klasse) x.className = klasse; if (tekst != null) x.textContent = tekst; return x; };
-    const kn = el('button', 'mtg-status' + (n ? ' let-op' : '')); kn.setAttribute('data-finstatus', '1'); kn.setAttribute('aria-expanded', st.finStatus ? 'true' : 'false');
+    const kn = el('button', 'mtg-status' + (n ? ' let-op' : '')); kn.setAttribute('data-finstatus', '1'); kn.setAttribute('data-fk', 'status'); kn.setAttribute('aria-controls', 'mtg-statuspaneel'); kn.setAttribute('aria-expanded', st.finStatus ? 'true' : 'false');
     kn.append(el('span', 'stip'), 'Stand ' + datumTekst(vandaag), el('span', 'sep', '·'), el('b', null, n ? n + ' aandachtspunt' + (n === 1 ? '' : 'en') : 'geen aandachtspunten'));
     h2.after(kn);
     if (!st.finStatus) return;
-    const p = el('div', 'mtg-statuspaneel'); p.innerHTML = `${letOpHtml()}${instellenHtml()}`;
+    const p = el('div', 'mtg-statuspaneel'); p.id = 'mtg-statuspaneel'; p.innerHTML = `${letOpHtml('info')}${instellenHtml()}`;
     p.querySelectorAll('details').forEach(x => { x.open = true; });
     if (!n) p.append(el('div', 'mtg-melding', 'Geen aandachtspunten: alles is opgehaald en ingesteld.'));
     kop.after(p);
@@ -924,15 +929,21 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
   // Minder belangrijke blokken zijn uitklapbaar (stand per gebruiker onthouden). Alleen weergave: de inhoud van het blok verandert niet.
   // Een blok met een open vraag, waarschuwing of rode melding staat standaard open en toont, ook als het dicht is, het aantal in de kop.
   const VOUW = [['Factuurplanning', 'plan', true], ['Prognose', 'prog', true], ['Potjes en doelen', 'potjes', true], ['Schulden', 'schulden', false]];
+  // Wat in een blok als waarschuwing telt: de meldingsvakken, rode of krappe inhoud en meldingen met een alarmwoord (neutrale "nog geen ..."-teksten niet).
+  const ALARM = /⚠|krap|onder de|tekort|niet genoeg|fout|mislukt|onvolledig|\brood\b|achterstal|moeten worden/i;
+  const alarmen = k => new Set([...k.querySelectorAll('.mtg-uitleg, .mtg-waarsch, .mtg-fp-m.eerder, .mtg-chip.achter, .mtg-melding, [style*="--rood"], [style*="B4412F"], [style*="c0392b"]')].filter(x => !x.matches('.mtg-melding') || ALARM.test(x.textContent))).size;
+  function focusSleutel() { const a = document.activeElement; return a && a.getAttribute && st.el && st.el.contains(a) ? a.getAttribute('data-fk') : null; }
+  function herstelFocus(s) { if (!s || !st.el) return; const e = [...st.el.querySelectorAll('[data-fk]')].find(x => x.getAttribute('data-fk') === s); if (e) try { e.focus({ preventScroll: true }); } catch (x) { /* niet focusbaar */ } }
   function vouwBlokken() {
     const wortel = st.el.querySelector('.mtg'); if (!wortel) return;
     for (const k of [...wortel.children]) {
       if (!k.classList.contains('mtg-kaart') || k.tagName === 'DETAILS') continue;
       const kop = k.querySelector(':scope > .mtg-kop'), b = kop && kop.querySelector('b'); if (!b) continue;
       const def = VOUW.find(v => b.textContent.trim().indexOf(v[0]) === 0); if (!def) continue;
-      const meld = k.querySelectorAll('.mtg-uitleg, .mtg-fp-m.eerder, .mtg-waarsch').length, bewaard = ls.get('mtg:vouw:' + st.wie + ':' + def[1]);
-      const open = bewaard === '1' ? true : bewaard === '0' ? false : def[2] || meld > 0;
-      const knop = document.createElement('button'); knop.className = 'mtg-vouwknop'; knop.setAttribute('data-vouw', def[1]); knop.setAttribute('aria-expanded', open ? 'true' : 'false');
+      const meld = alarmen(k), bewaard = ls.get('mtg:vouw:' + st.wie + ':' + def[1]);
+      let open = bewaard === '1' ? true : bewaard === '0' ? false : def[2] || meld > 0;
+      if (meld > 0 && !open && !(st.vouwHand && st.vouwHand[def[1]])) open = true;   // een opgeslagen dichtstand wint nooit van een actieve waarschuwing (en wordt daardoor niet overschreven); pas na een klik in deze sessie blijft hij dicht, met het aantal in de kop
+      const knop = document.createElement('button'); knop.className = 'mtg-vouwknop'; knop.setAttribute('data-vouw', def[1]); knop.setAttribute('data-fk', 'vouw-' + def[1]); knop.setAttribute('aria-expanded', open ? 'true' : 'false');
       knop.setAttribute('aria-label', (open ? 'Inklappen: ' : 'Uitklappen: ') + def[0]); knop.textContent = open ? '▾' : '▸';
       kop.insertBefore(knop, kop.firstChild); k.classList.add('mtg-vouwbaar'); k.classList.toggle('mtg-dicht', !open);
       if (!open && meld > 0) { const bd = document.createElement('span'); bd.className = 'mtg-chip achter'; bd.textContent = '⚠ ' + meld + (meld === 1 ? ' melding' : ' meldingen'); b.after(bd); }
@@ -1226,12 +1237,19 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
       <ul class="mtg-letop">${[...new Set(w.map(tekst))].map(t => `<li>${esc(t)}</li>`).join('')}</ul>
       ${st.mag ? '<div class="mtg-knoppen"><button class="mtg-knop" data-inst="algemeen">Kredietlimiet en BTW…</button><button class="mtg-knop" data-pot="nieuw">+ potje</button></div>' : '<div class="mtg-melding">De eigenaar stelt dit in.</div>'}</div>`;
   }
-  function letOpHtml() {
+  // Kritiek = raakt direct het geld of de betrouwbaarheid van het getal (onder de kredietlimiet, btw-tekort, rood, een bron die ontbreekt of onvolledig is):
+  // die staan altijd zichtbaar boven de tegels. Informatieve punten (vernieuwen, prognose-controles) gaan achter de statusknop.
+  const isKritiek = x => x.bron === 'limiet' || /^btw/i.test(x.bron || '') || x.onvolledig === true || /bank|saldo|lopend|moneybird|ijk|opslag/i.test(x.bron || '')
+    || /onder de kredietlimiet|\brood\b|niet genoeg|tekort|ontbreekt|kon niet|mislukt|onvolledig/i.test(x.fout || '');
+  function letOpHtml(deel) {   // deel: 'kritiek' (altijd zichtbaar boven de tegels), 'info' (achter de statusknop) of leeg (alles, zoals voorheen)
     const w = (st.data.waarschuwingen || []).filter(x => !isDruk(x) && !isInstellen(x));
     const lw = G.limietWaarschuwing(st.dataS || st.data, { prognose: st.prognose }, dagPlus(st.data.vandaag, 60));
     if (lw && lw.potNietGenoeg) w.unshift({ bron: 'limiet', fout: `Op ${datumTekst(lw.potNietGenoeg.datum)} is ook de BTW-pot niet genoeg: dan zakt lopend + BTW-pot onder de kredietlimiet (zie het laagste punt).` });
     if (lw && lw.timing) w.unshift({ bron: 'limiet', fout: `Je lopende rekening zelf komt op ${datumTekst(lw.timing.datum)} op ${eur(lw.timing.saldo)}, onder de kredietlimiet. Boek eerder geld terug van de BTW-rekening (≈${eur(lw.timing.nodig)} nodig).` });
+    if (deel) { const k = w.filter(isKritiek); w.splice(0, w.length, ...w.filter(x => (deel === 'kritiek') === k.includes(x))); }
     if (!w.length) return '';
+    if (deel === 'kritiek') return `<div class="mtg-kaart mtg-kritiek" role="alert"><div class="mtg-kop" style="margin:0"><b style="flex:1">Direct bekijken (${w.length})</b><button class="mtg-vraag" data-uitleg="letop">?</button></div>
+      <ul class="mtg-letop">${w.map(x => `<li>${esc(x.fout)}${x.rekening ? ` <span class="mtg-chip">${esc(x.rekening)}</span>` : ''}</li>`).join('')}</ul></div>`;
     return `<div class="mtg-kaart"><div class="mtg-kop" style="margin:0"><b style="flex:1">Let op (${w.length})</b><button class="mtg-vraag" data-uitleg="letop">?</button></div>
       <details><summary class="mtg-melding" style="cursor:pointer">tonen</summary><ul class="mtg-letop">${w.map(x => `<li>${esc(x.fout)}${x.rekening ? ` <span class="mtg-chip">${esc(x.rekening)}</span>` : ''}</li>`).join('')}</ul></details></div>`;
   }
@@ -1878,8 +1896,8 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     if (vl) { e.stopPropagation(); return doelAdvies(vl.dataset.doeladvies); }
     if (e.target.closest('[data-rc]')) { e.preventDefault(); e.stopPropagation(); return rcUitleg(); }
     const vk = e.target.closest('[data-vouw]');
-    if (vk) { e.preventDefault(); e.stopPropagation(); const k = vk.dataset.vouw, open = vk.getAttribute('aria-expanded') === 'true'; ls.set('mtg:vouw:' + st.wie + ':' + k, open ? '0' : '1'); return teken(); }
-    if (e.target.closest('[data-finstatus]')) { st.finStatus = !st.finStatus; return teken(); }
+    if (vk) { e.preventDefault(); e.stopPropagation(); const k = vk.dataset.vouw, open = vk.getAttribute('aria-expanded') === 'true'; ls.set('mtg:vouw:' + st.wie + ':' + k, open ? '0' : '1'); (st.vouwHand = st.vouwHand || {})[k] = true; st.focusNa = 'vouw-' + k; return teken(); }
+    if (e.target.closest('[data-finstatus]')) { st.finStatus = !st.finStatus; st.focusNa = 'status'; return teken(); }
     const au = e.target.closest('[data-adviesuitleg]');
     if (au) { e.stopPropagation(); return adviesUitleg(au.dataset.adviesuitleg); }
     if (e.target.closest('[data-nood]')) { st.noodMee = !!e.target.closest('[data-nood]').checked; ls.set('mtg:nood:' + st.wie, st.noodMee ? '1' : '0'); return teken(); }

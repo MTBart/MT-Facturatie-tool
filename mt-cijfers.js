@@ -241,10 +241,10 @@
     st.vandaag = opt.vandaag || new Date().toISOString().slice(0, 10); st.jaar = st.jaar || Number(st.vandaag.slice(0, 4));
     st.eerlijk = ls.get('mtc:eerlijk:' + st.wie) !== '0';
     st.vgl = C.vglLees(ls.get('mtc:vgl:' + st.wie), mobiel());
-    css(); teken();
+    besteedBewaak(); css(); teken();
     if (!C._resize && root.addEventListener) { let tm = null; C._resize = true; root.addEventListener('resize', () => { clearTimeout(tm); tm = setTimeout(() => { if (st.el && st.el.isConnected && st.maanden.length && Math.abs(((st.el.clientWidth || 640) - 24) - BR) > 24) teken(); }, 200); }); }
     if (!st.maanden.length && !st.laden) await C.laad();
-    else if (!st.bes.data && !st.bes.laden) besteedLaad();
+    else besteedLaad();
   };
   C.laad = async function (herbouw) {
     st.laden = true; st.rondes = 0; st.fout = null; const mislukt = new Set();
@@ -582,7 +582,7 @@
     if (!cfg) return leeg('instellingen van Financiën niet geladen');
     try {
       const zoom = BES_ZOOM[o.zoom] ? o.zoom : 'maand', nood = !!o.nood, prognose = o.prognose !== false;
-      const d = typeof G.metScenario === 'function' ? G.metScenario(data, {}) : data, bes = G.besteedbaar(d, cfg, { nood });
+      const d = typeof G.metScenario === 'function' ? G.metScenario(data, o.scenario || {}) : data, bes = G.besteedbaar(d, cfg, { nood });
       if (!bes) return leeg('lopende rekening onbekend');
       const lijn = G.kasLijn(d, cfg, { prognose, nood}); if (!lijn || lijn.onbekend) return leeg('lopende rekening onbekend');
       const low = G.laagste(lijn, C._dag(d.vandaag, BES_ZOOM[zoom])), onder = G.drempel(d, cfg);
@@ -592,9 +592,12 @@
   function besZoom() { const z = st.besZoom || ls.get('mtg:zoom:' + st.wie); return BES_ZOOM[z] ? z : 'maand'; }
   // De tegel: kale getallen (voor de tests) en wat de tegel erbij zegt.
   function besteedTegelModel() {
-    const b = st.bes, o = { nood: ls.get('mtg:nood:' + st.wie) === '1', prognose: ls.get('mtg:prognose:' + st.wie) !== '0', zoom: besZoom(), laden: b.laden, fout: b.fout };
-    const sleutel = [o.nood, o.prognose, o.zoom, o.laden, o.fout, !!root.MTGeld].join('|');
-    if (!b.cache || b.cache.data !== b.data || b.cache.cfg !== b.cfg || b.cache.sleutel !== sleutel) b.cache = { data: b.data, cfg: b.cfg, sleutel, m: C.besteedModel(b.data, b.cfg, o) };
+    // Is Financiën zelf geladen voor dezelfde gebruiker, dan is dat de bron (dan staat hier altijd het getal dat daar staat, ook na een wijziging in de config of een
+    // onopgeslagen scenario); anders de eigen kopie van dezelfde verzoeken.
+    const b = st.bes, fin = root.MTGeld && root.MTGeld._st, live = !!(fin && fin.data && fin.cfg && fin.wie === st.wie), data = live ? fin.data : b.data, cfg = live ? fin.cfg : b.cfg;
+    const o = { nood: ls.get('mtg:nood:' + st.wie) === '1', prognose: ls.get('mtg:prognose:' + st.wie) !== '0', zoom: besZoom(), laden: b.laden, fout: b.fout, scenario: live ? fin.scenario : null };
+    const sleutel = [o.nood, o.prognose, o.zoom, o.laden, o.fout, !!root.MTGeld, live, JSON.stringify(o.scenario || {})].join('|');
+    if (!b.cache || b.cache.data !== data || b.cache.cfg !== cfg || b.cache.sleutel !== sleutel) b.cache = { data, cfg, sleutel, m: C.besteedModel(data, cfg, o) };
     const m = b.cache.m;
     if (!m.ok) return { id: 'besteedbaar', label: 'Besteedbaar budget', waarde: '—', sub: m.reden, ok: false, klik: false, m, rijen: [], chip: null };
     const bes = m.bes, low = m.low, ruimte = m.ruimte, rijen = [];
@@ -606,15 +609,26 @@
   }
   C.besteedTegel = besteedTegelModel;
   async function besteedLaad() {
-    const b = st.bes; if (b.laden || !st.bron || !st.vandaag) return;
-    b.laden = true; b.fout = null;
+    besteedBewaak();
+    const b = st.bes, bron = st.bron; if (!bron || !st.vandaag) return;
+    const tok = b.tok = (b.tok || 0) + 1; b.laden = true; b.fout = null;   // elke ronde een eigen token: een laat antwoord van een oude ronde (of van een andere gebruiker of bron) telt niet
+    let d = null, c = null, fout = null;
     try {
-      const v = st.vandaag, [d, c] = await Promise.all([st.bron.haal(`/geld/tijdlijn?van=${C._dag(v, -35)}&tot=${C._dag(v, 364)}&historie=1`), st.bron.haal('/geld/config')]);   // dezelfde verzoeken als Financiën
+      const v = st.vandaag; [d, c] = await Promise.all([bron.haal(`/geld/tijdlijn?van=${C._dag(v, -35)}&tot=${C._dag(v, 364)}&historie=1`), bron.haal('/geld/config')]);   // dezelfde verzoeken als Financiën
       if (!d || d.error) throw new Error(d && d.error || 'geen antwoord');
-      b.data = d; b.cfg = c && c.config ? c.config : null;
-    } catch (e) { b.fout = (e && e.message) || String(e); }
-    b.laden = false; if (st.el && st.el.isConnected) teken();
+    } catch (e) { fout = (e && e.message) || String(e); }
+    if (st.bes !== b || b.tok !== tok) return;
+    b.laden = false;
+    if (fout) { b.fout = fout; b.data = null; b.cfg = null; } else { b.data = d; b.cfg = c && c.config ? c.config : null; }   // bij een mislukte verversing geen oud getal laten staan
+    if (st.el && st.el.isConnected) teken();
   }
+  // Andere gebruiker of andere bron dan waarvoor st.bes geladen is: alles weg, zodat er nooit een getal van iemand anders of van vorige sessie staat.
+  function besteedBewaak() {
+    if (st.bes.wie === st.wie && st.bes.bron === st.bron) return;
+    st.bes = { data: null, cfg: null, laden: false, fout: null, cache: null, tok: 0, wie: st.wie, bron: st.bron }; st.besZoom = null;
+  }
+  C._besteedLaad = besteedLaad; C._besteedBewaak = besteedBewaak;
+  C.ververs = () => { if (st.el && st.el.isConnected && st.maanden.length) teken(); return besteedLaad(); };   // voor als Rapporten opnieuw opent: meteen herschilderen (Financiën kan veranderd zijn), dan opnieuw ophalen
   const trap = (lijst, x, y) => lijst.map((p, i) => (i ? `H${x(p.datum).toFixed(1)}V${y(p.saldo).toFixed(1)}` : `M${x(p.datum).toFixed(1)} ${y(p.saldo).toFixed(1)}`)).join('');
   // Het verloop: tot vandaag de lopende rekening (doorgetrokken), daarna het besteedbaar budget zoals Financiën het verwacht (gestippeld).
   function besteedGrafiek(m, o) {
