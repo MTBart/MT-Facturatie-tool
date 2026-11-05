@@ -5,6 +5,24 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-11-05 — Merge planning-compleet: controlepaneel Compleet? in Planning
+- Commit: `d93f63a` | Auteur: Bart Witte
+
+## 2026-11-05 — Merge proefstijl: optionele stijllaag met uitklapbare rail
+- Commit: `81cd39a` | Auteur: Bart Witte
+
+## 2026-11-05 — Planning compleet?: controlepaneel in Planning (alleen lezen)
+- Commit: `75b117f` | Auteur: Bart Witte
+
+## 2026-11-05 — Proefstijl: uitklapbare rail (60px met iconen, uitklapbaar naar iconen + tekst)
+- Commit: `1454aad` | Auteur: Bart Witte
+
+## 2026-11-05 — Proefstijl: stijllaag mt-stijl-proef.css + schakelaar in Instellingen > Weergave
+- Commit: `5865411` | Auteur: Bart Witte
+
+## 2026-11-05 — Release v2.34.3: Instellingen in vijf uitklapbare groepen met zoekveld; backup = v2.34.2
+- Commit: `5b8f47e` | Auteur: Bart Witte
+
 ## 2026-11-05 — Merge instellingen: Instellingen in uitklapbare groepen met zoekveld
 - Commit: `9657ca8` | Auteur: Bart Witte
 

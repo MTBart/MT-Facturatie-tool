@@ -1,5 +1,15 @@
 [
   {
+    "versie": "2.34.4",
+    "datum": "2026-11-05",
+    "titel": "Proefstijl om te proberen en een controle of de planning compleet is",
+    "voor": "iedereen",
+    "punten": [
+      "Proefstijl: een nieuw ontwerp met ronde kaarten en een smalle zijbalk die je kunt uitklappen. Zet hem aan of uit bij Instellingen > Weergave. Hij werkt op de computer en alleen als de nieuwe stijl aan staat. Het is een proef: zeg vooral wat je ervan vindt.",
+      "Planning heeft een nieuw tabblad \"Compleet?\" dat laat zien of de planning klopt, bijvoorbeeld welke taken nog geen schatting hebben. Het tabblad leest alleen en wijzigt niets.",
+      "Eigenaar en beheerder zien daar ook drie extra controles: werkuren bij mensen die niet meer actief zijn, werkuren en verlof die niet kloppen, en uren zonder project en taak."
+    ]
+  },{
     "versie": "2.34.3",
     "datum": "2026-11-05",
     "titel": "Instellingen overzichtelijk in groepen",
