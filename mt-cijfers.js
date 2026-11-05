@@ -21,7 +21,7 @@
   const WEERGAVEN = [['omzet_kosten', 'Omzet en kosten'], ['brutomarge', 'Brutomarge'], ['kosten_pct', 'Kosten vs branche'], ['opnames', 'Opnames'], ['kas', 'Kas'], ['waterval', 'Waterval']];
   const REEKS_NAAR = { omzet_kosten: 'omzet_kosten', omzet: 'omzet_kosten', kosten: 'omzet_kosten', resultaat: 'omzet_kosten', brutomarge: 'brutomarge', kosten_pct: 'kosten_pct', opnames: 'opnames', kas: 'kas', waterval: 'waterval' };
   const st = C._st = { el: null, bron: null, mag: false, wie: '', maanden: [], cats: [], bm: {}, ontbrekend: [], laden: false, rondes: 0, fout: null, prognose: null, kasProg: null,
-    jaar: null, stapelSel: null, kUit: null, kTop: null, kCache: {}, paneelFokus: null, zoom: 'M', weergave: 'omzet_kosten', eerlijk: true, vergelijk: 0, vgl: { j1: true, j2: true, b: true }, statusOpen: false, tabel: false, vast: null, hover: null, paneel: null, paneelEl: null, paneelNieuw: false, openerFk: null, top: null, sel: null, focusCat: null, horizon: 'kort', opHorizon: null, correctieVan: null, prive: [], vandaag: null, nietIngedeeld: [], bes: { data: null, cfg: null, laden: false, fout: null, cache: null }, besZoom: null };
+    jaar: null, stapelSel: null, kUit: null, kTop: null, kTimer: null, kCache: {}, paneelFokus: null, zoom: 'M', weergave: 'omzet_kosten', eerlijk: true, vergelijk: 0, vgl: { j1: true, j2: true, b: true }, statusOpen: false, tabel: false, vast: null, hover: null, paneel: null, paneelEl: null, paneelNieuw: false, openerFk: null, top: null, sel: null, focusCat: null, horizon: 'kort', opHorizon: null, correctieVan: null, prive: [], vandaag: null, nietIngedeeld: [], bes: { data: null, cfg: null, laden: false, fout: null, cache: null }, besZoom: null };
   const ls = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { } } };
   const mobiel = () => { try { return root.matchMedia && root.matchMedia('(max-width: 760px)').matches; } catch (e) { return false; } };
 
@@ -225,6 +225,7 @@
 @media(max-width:760px){.mtd-kb-kop{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:'naam waarde' 'spoor spoor' 'oordeel oordeel'}.mtd-kb-naam{grid-area:naam}.mtd-kb-waarde{grid-area:waarde}.mtd-kb-spoor{grid-area:spoor}.mtd-kb-oordeel{grid-area:oordeel}.mtd-kb-uit{padding-left:6px}}
 .mtd-s100-spoor{position:relative;min-width:0}.mtd-s100-streep{position:absolute;top:-4px;bottom:-4px;width:0;border-left:2px solid var(--ink,#1b211e)}
 .mtd-s100-over{position:absolute;top:0;height:26px;background:repeating-linear-gradient(135deg,rgba(255,255,255,.6) 0 3px,transparent 3px 6px);outline:1px dashed var(--kverlies);outline-offset:-1px;pointer-events:none}
+.mtd-s100-over.credit{background:repeating-linear-gradient(135deg,rgba(255,255,255,.55) 0 2px,transparent 2px 5px);outline:1px dashed var(--ink-3,#646a64)}.mtd-sw.credit{background:repeating-linear-gradient(135deg,var(--k6) 0 2px,transparent 2px 5px);border:1px dashed var(--ink-3,#646a64)}.mtd-s100-m.credit{color:var(--ink-2,#596059)}
 .mtd-s100-m{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--mtd-slecht)}
 @media(prefers-reduced-motion:reduce){.mtd-tegel{transition:none}}
 `;
@@ -309,6 +310,7 @@
 
   // ── Laden ────────────────────────────────────────────────────────────────
   C.mount = async function (el, opt) {
+    wisKTimer();
     st.el = el; st.bron = opt.bron; st.mag = !!opt.magWijzigen; st.wie = opt.wie || ''; st.opHorizon = opt.opHorizon || null; st.horizon = opt.horizon || st.horizon;
     st.vandaag = opt.vandaag || new Date().toISOString().slice(0, 10); st.jaar = st.jaar || Number(st.vandaag.slice(0, 4));
     st.eerlijk = ls.get('mtc:eerlijk:' + st.wie) !== '0';
@@ -320,7 +322,7 @@
     else besteedLaad();
   };
   C.laad = async function (herbouw) {
-    st.laden = true; st.rondes = 0; st.fout = null; st.kCache = {}; const mislukt = new Set();
+    st.laden = true; st.rondes = 0; st.fout = null; st.kCache = {}; wisKTimer(); const mislukt = new Set();
     const [prog] = await Promise.all([st.bron.haal('/geld/prognose').catch(() => null)]);
     st.prognoseRuw = prog && prog.items ? prog.items : {};
     for (;;) {
@@ -373,7 +375,7 @@
     st.sel = null; st.vast = null;
     // Een rapportsectie wijst een grafiek aan: de bijbehorende tegel gaat open (omzet en kosten staan in Resultaat, opnames en waterval bij Kaspositie).
     const naarPaneel = doel.paneel;
-    if (naarPaneel === 'brutomarge') { st.kUit = doel.kUit; st.kTop = null; }   // rij van die categorie open, focus erop
+    if (naarPaneel === 'brutomarge') { st.kUit = doel.kUit; st.kTop = null; wisKTimer(); }   // rij van die categorie open, focus erop
     st.paneelFokus = naarPaneel ? doel.fokus : null;
     if (st.paneel && !naarPaneel) st.paneel = null;
     teken();
@@ -1120,7 +1122,14 @@
     if (!(P.omzet > 0)) return null;
     const res = P.omzet - P.kosten_totaal, alle = cats.map(c => ({ id: c, v: P.kosten[c] || 0 })).concat([{ id: 'resultaat', v: res }]), pc = v => v / P.omzet * 100;
     const delen = alle.filter(d => d.v > 0).map(d => ({ id: d.id, v: d.v, pct: pc(d.v) })), tot = delen.reduce((a, d) => a + d.pct, 0);
-    return { delen, tot, resultaat: pc(res), verlies: res < 0 ? -pc(res) : 0, credit: -alle.filter(d => d.id !== 'resultaat' && d.v < 0).reduce((a, d) => a + pc(d.v), 0) || 0, overschot: Math.max(0, tot - 100) };
+    return { delen, tot, resultaat: pc(res), verlies: res < 0 ? -pc(res) : 0, credit: -alle.filter(d => d.id !== 'resultaat' && d.v < 0).reduce((a, d) => a + pc(d.v), 0) || 0, overschot: Math.max(0, tot - 100), overVerlies: res < 0 ? -pc(res) : 0, overCredit: -alle.filter(d => d.id !== 'resultaat' && d.v < 0).reduce((a, d) => a + pc(d.v), 0) || 0 };   // voorbij de streep: eerst het credit-deel (neutraal), dan het verlies
+  };
+  // Uitleg onder de balken, alleen over wat er in die rijen echt staat.
+  C.balkUitleg = function (bal) {
+    const b = bal.filter(Boolean), uit = ['Alle percentages zijn % van de omzet; de streep is 100% omzet.'];
+    if (b.some(x => x.verlies > 0)) uit.push('Rode arcering voorbij de streep = verlies: de kosten zijn hoger dan de omzet.');
+    if (b.some(x => x.credit > 0)) uit.push('Grijze stippen voorbij de streep = credit (negatieve kosten, bijvoorbeeld een creditnota): dat is geen verlies, maar de balk is dan langer dan de omzet.');
+    return uit.join(' ');
   };
   C.balkSchaal = rijen => Math.max(100, ...rijen.filter(Boolean).map(b => b.tot));
   const pctMin = v => (v < 0 ? '−' : '') + pctF(Math.abs(v));
@@ -1133,11 +1142,12 @@
       if (!b) return ee('div', { class: 'mtd-s100' }, ee('span', { class: 'mtd-s100-n' }, r.naam), ee('span', { class: 'mtd-s100-leeg' }, '— ' + (r.reden || 'geen gegevens')));
       const streep = 100 / schaal * 100, mark = [];
       if (b.verlies > 0) mark.push(ee('span', { class: 'mtd-s100-m' }, ee('span', { class: 'mtd-sw verlies' }), `Verlies ${pctMin(b.resultaat)} van de omzet (kosten ${pctF(b.tot)})`));
-      if (b.credit > 0) mark.push(ee('span', { class: 'mtd-s100-m' }, ee('span', { class: 'mtd-sw verlies' }), `Credit ${pctMin(-b.credit)} (niet in de balk)`));
+      if (b.credit > 0) mark.push(ee('span', { class: 'mtd-s100-m credit' }, ee('span', { class: 'mtd-sw credit' }), `Credit ${pctMin(-b.credit)}: negatieve kosten, geen verlies (de balk is ${pctF(b.credit)} langer dan de omzet)`));
       return ee('div', { class: 'mtd-s100' }, ee('span', { class: 'mtd-s100-n' }, r.naam),
         ee('div', { class: 'mtd-s100-spoor' }, ee('div', { class: 'mtd-s100-b', role: 'img', style: `width:${(b.tot / schaal * 100).toFixed(2)}%`, 'aria-label': r.naam + ', % van de omzet: ' + b.delen.map(d => `${katNaam(d.id)} ${pctF(d.pct)}`).join(', ') + (b.verlies > 0 ? '; verlies ' + pctMin(b.resultaat) : '') + (b.credit > 0 ? '; credit ' + pctMin(-b.credit) : '') },
           b.delen.map(d => ee('span', { class: 'mtd-s100-d ' + katKl(d.id), style: 'flex:' + d.pct.toFixed(3), title: `${katNaam(d.id)}: ${pctF(d.pct)} van de omzet` }, d.pct / schaal > 0.07 ? Math.round(d.pct) + '%' : ''))),
-          b.overschot > 0 ? ee('span', { class: 'mtd-s100-over', style: `left:${streep.toFixed(2)}%;width:${(b.overschot / schaal * 100).toFixed(2)}%` }) : null,
+          b.overCredit > 0 ? ee('span', { class: 'mtd-s100-over credit', style: `left:${streep.toFixed(2)}%;width:${(b.overCredit / schaal * 100).toFixed(2)}%` }) : null,
+          b.overVerlies > 0 ? ee('span', { class: 'mtd-s100-over', style: `left:${((100 + b.overCredit) / schaal * 100).toFixed(2)}%;width:${(b.overVerlies / schaal * 100).toFixed(2)}%` }) : null,
           ee('span', { class: 'mtd-s100-streep', style: `left:${streep.toFixed(2)}%` }, ee('span', { class: 'sr' }, '100% van de omzet'))),
         ee('span', { class: 'mtd-s100-t' }, mark));
     };
@@ -1150,7 +1160,7 @@
         ee('td', { class: o.branche.ref && !o.branche.reden ? '' : 'leeg', title: o.branche.reden || null }, o.branche.reden ? '—' : [bmTekst2(o.branche.ref), ee('span', { class: 'mtd-pt-fc' }, oordeelEl(o.branche.oordeel, o.branche.oordeel.woord + (o.branche.oordeel.pp ? ' (' + puntTekst(o.branche.oordeel.pp) + ')' : '')))]))))));
     const redenen = [...new Set(v.vorig.filter(q => !q.u).map(q => q.reden))];
     return ee('div', { class: 'mtd-info vast heeft mtd-sdetail' }, ee('div', { class: 'mtd-tk' }, ee('span', { class: 'mtd-tt' }, titel), ee('span', { class: 'mtd-tlab' }, 'geboekt, geen prognose')),
-      ee('h4', { class: 'mtd-sh' }, 'Waar ging elke € omzet heen'), ee('div', { class: 'mtd-s100s' }, rijen), ee('p', { class: 'mtc-noot' }, 'Alle percentages zijn % van de omzet; de streep is 100% omzet. Staat een balk voorbij de streep, dan zijn de kosten hoger dan de omzet (arcering = verlies).'),
+      ee('h4', { class: 'mtd-sh' }, 'Waar ging elke € omzet heen'), ee('div', { class: 'mtd-s100s' }, rijen), ee('p', { class: 'mtc-noot' }, C.balkUitleg(bal)),
       ee('h4', { class: 'mtd-sh' }, 'Tegenover vorige jaren en de branche'), !v.afgesloten ? ee('p', { class: 'mtc-noot' }, 'Geen vergelijking: ' + v.reden + '. Vergelijken gebeurt alleen tussen afgesloten periodes.') : null,
       tabel, redenen.length && v.afgesloten ? ee('p', { class: 'mtc-noot' }, 'Niet vergeleken: ' + redenen.join('; ') + '.') : null,
       ee('div', { class: 'mtd-tacties' }, ee('button', { class: 'mtc-knop', 'data-drill': 'omzet:' + p.id, 'data-fk': 'drill-stapel' }, 'Omzetstukken bekijken')));
@@ -1219,17 +1229,24 @@
   const WACHT_429_S = 30, MAX_FOUTEN_OP_RIJ = 2;   // zonder bekende wachttijd een vaste wachttijd; na 2 fouten achter elkaar stoppen
   C._nu = () => Date.now();
   // st.bron.haal (geldHaal in v2.html en mobiel.html) geeft bij een HTTP-fout {error: 'HTTP 429', ...json}: geen status en geen retryAfter.
-  // Daarom hier herkennen: status 429, "429" of "even druk" in de tekst, en de wachttijd uit retryAfter, retry_after of de tekst. Een exception met e.status/e.retryAfter telt ook.
-  const druk429 = x => !!x && (x.status === 429 || /\b429\b|retry later|even druk|te veel verzoeken/i.test(String(x.error || x.message || '')));
+  // Daarom hier herkennen: status 429, "HTTP 429" aan het begin van de melding, een retryAfter/retry_after-veld of de "even druk"-melding, en de wachttijd uit dat veld of de tekst. Een exception met e.status/e.retryAfter telt ook.
+  const druk429 = x => !!x && (x.status === 429 || Number(x.retryAfter) > 0 || Number(x.retry_after) > 0 || /^\s*HTTP 429\b/i.test(String(x.error || x.message || '')) || /even druk/i.test(String(x.error || x.message || '')));   // een los getal 429 ergens in een tekst (bv. boeking #429) is een gewone fout
   const wachtSec = x => { const t = String((x && (x.error || x.message)) || ''), m = /retry[ -]?after\D{0,3}(\d+)/i.exec(t), s = Number(x && (x.retryAfter != null ? x.retryAfter : x.retry_after)) || (m ? Number(m[1]) : 0); return Math.min(300, Math.max(5, s || WACHT_429_S)); };
   // Per categorie en periode bewaren we de opgehaalde maanden: een nieuwe klik haalt alleen de ontbrekende maanden op.
-  function kCacheVoor(sleutel, cat) { const k = st.kCache = st.kCache || {}; return k[sleutel] || (k[sleutel] = { sleutel, cat, ok: new Map(), laden: false, n: 0, klaar: 0, items: [], fouten: 0, onvolledig: false, wachtTot: 0, limiet: false, gestopt: false, timer: null }); }
+  function kCacheVoor(sleutel, cat) { const k = st.kCache = st.kCache || {}; return k[sleutel] || (k[sleutel] = { sleutel, cat, ok: new Map(), laden: false, n: 0, klaar: 0, items: [], fouten: 0, onvolledig: false, wachtTot: 0, limiet: false, gestopt: false }); }
   function kRekenItems(c) {
     const per = new Map(); let onv = false;
     for (const e of c.ok.values()) { if (e.onvolledig) onv = true; for (const [k, v] of e.per) per.set(k, (per.get(k) || 0) + v); }
     c.items = [...per.entries()].map(([naam, v]) => ({ naam, v })).filter(x => x.v > 0).sort((a, b) => b.v - a.v); c.klaar = c.ok.size; c.onvolledig = onv || c.klaar < c.n;
   }
-  function kWachtTimer(c) { clearTimeout(c.timer); c.timer = setTimeout(() => { if (st.paneel) tekenPaneel(); }, Math.max(0, c.wachtTot - C._nu()) + 60); if (c.timer && c.timer.unref) c.timer.unref(); }
+  function wisKTimer() { if (st.kTimer) { clearTimeout(st.kTimer.t); st.kTimer = null; } }
+  const kTimerGeldig = c => !!st.kTimer && st.kTimer.c === c && st.paneel === 'brutomarge' && st.kUit === c.cat && st.kTop === c;
+  function kWachtTimer(c) {
+    wisKTimer();
+    const t = setTimeout(() => { const geldig = kTimerGeldig(c); st.kTimer = null; if (geldig) tekenPaneel(); }, Math.max(0, c.wachtTot - C._nu()) + 60);   // tekenPaneel bewaart de focus (data-fk)
+    if (t && t.unref) t.unref(); st.kTimer = { t, c };
+  }
+  C._wisKTimer = wisKTimer; C._kTimerGeldig = kTimerGeldig; C._sluitPaneel = () => sluitPaneel();
   async function laadKosten(cat) {
     const kz = kiesPeriode(); if (!kz) return;
     const sleutel = kSleutel(cat, kz), c = kCacheVoor(sleutel, cat), ms = kz.p.ms.filter(m => !m.prognose && m.maanden && m.id <= kz.lm).map(m => m.id);
@@ -1251,7 +1268,7 @@
         kRekenItems(c); if (st.kTop === c) tekenPaneel();
       }
     } finally {
-      c.laden = false; kRekenItems(c); if (c.limiet) kWachtTimer(c);   // altijd uit de laadstand
+      c.laden = false; kRekenItems(c); if (c.limiet && st.kTop === c) kWachtTimer(c);   // altijd uit de laadstand
       if (st.kTop === c) tekenPaneel();
     }
   }
@@ -1380,7 +1397,7 @@
     st.paneelNieuw = false; maat();
   }
   function openPaneel(id, opener) { st.paneel = id; st.paneelNieuw = true; st.openerFk = opener ? opener.getAttribute('data-fk') : null; tekenPaneel(); }
-  function sluitPaneel() { st.paneel = null; st.focusCat = null; st.sel = null; st.kUit = null; st.kTop = null; tekenPaneel(); verwerkWacht(); const k = st.openerFk; st.openerFk = null; herstelFocus(k, st.el); }
+  function sluitPaneel() { st.paneel = null; st.focusCat = null; st.sel = null; st.kUit = null; st.kTop = null; wisKTimer(); tekenPaneel(); verwerkWacht(); const k = st.openerFk; st.openerFk = null; herstelFocus(k, st.el); }
   function toetsPaneel(e) {
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); sluitPaneel(); return; }
     if (e.key === 'Tab' && st.paneelEl) { const f = [...st.paneelEl.querySelectorAll('button:not([disabled]),a[href],[tabindex="0"],select,input')].filter(x => x.getClientRects().length); if (!f.length) return; const eerste = f[0], laatste2 = f[f.length - 1];
@@ -1574,7 +1591,7 @@
   function klik(e) {
     const b = e.target.closest('[data-zoom],[data-jaar],[data-eerlijk],[data-vgl],[data-horizon],[data-indeling],[data-wissel],[data-tik],[data-euro],[data-bullet],[data-paneel],[data-sluitpaneel],[data-status],[data-tabel],[data-stapel],[data-kuit],[data-kladen],[data-kdrill],[data-drill],[data-topladen],[data-bzoom],[data-naarfin]'); if (!b) { tikOpPositie(e); return; }
     const d = b.dataset;
-    if (d.zoom || d.jaar || d.tik || d.wissel) st.kTop = null;   // andere periode: een lopende leverancierslijst stopt
+    if (d.zoom || d.jaar || d.tik || d.wissel) { st.kTop = null; wisKTimer(); }   // andere periode: een lopende leverancierslijst stopt
     if (d.naarfin) { e.preventDefault(); const kn = document.getElementById('tab-btn-geld'); if (kn && typeof root.showTab === 'function') { sluitPaneel(); root.showTab('geld', kn); } return; }
     if (d.bzoom) { if (BES_ZOOM[d.bzoom]) st.besZoom = d.bzoom; return teken(); }   // alleen dit paneel: de keuze van Financiën zelf blijft onaangeroerd
     if (d.paneel) return openPaneel(d.paneel, b);
@@ -1582,7 +1599,7 @@
     if (d.status) { st.statusOpen = !st.statusOpen; teken(); const k = st.statusOpen ? 'status-sluit' : 'status'; herstelFocus(k, st.el); return; }
     if (d.drill) { const [soort, pid] = d.drill.split(':'), p = huidigePeriodes().find(q => q.id === pid); return drill(soort, null, p); }
     if (d.topladen) return laadTop();
-    if (d.kuit) { const open = st.kUit !== d.kuit; st.kUit = open ? d.kuit : null; st.kTop = null; teken(); if (open && st.cats.includes(d.kuit)) laadKosten(d.kuit); return; }
+    if (d.kuit) { const open = st.kUit !== d.kuit; st.kUit = open ? d.kuit : null; st.kTop = null; wisKTimer(); teken(); if (open && st.cats.includes(d.kuit)) laadKosten(d.kuit); return; }
     if (d.kladen) return laadKosten(d.kladen);
     if (d.kdrill) { const kz = kiesPeriode(); return drill('kosten', d.kdrill, kz && !kz.ytd ? kz.p : null); }
     if (d.stapel) { st.stapelSel = st.stapelSel === d.stapel ? null : d.stapel; }

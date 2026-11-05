@@ -1,6 +1,6 @@
 // Visuele cijfers: periodetabel, stapel-rekening, oordelen, omzetzin, kostenvergelijking (mt-cijfers.js), zonder DOM. Draaien: node test/cijfers-visueel.test.js â€” nep-gegevens.
 'use strict';
-const assert = require('assert');
+const assert = require('assert'), fs = require('fs');
 const Nep = require('./fixtures/cijfers-nep.js');
 require('../mt-cijfers.js');
 const C = globalThis.MTCijfers, st = C._st;
@@ -177,6 +177,18 @@ test('100%-balk: schaal is het hoogste totaal; verlies en credit apart; delen bl
   const credit = C.stapelBalk(P(1000, { materiaal: 300, uitbesteed: -20, personeel: 400 }), ['materiaal', 'uitbesteed', 'personeel']);
   assert.ok(Math.abs(credit.credit - 2) < 1e-9); assert.ok(Math.abs(credit.tot - 102) < 1e-9); assert.ok(Math.abs(credit.overschot - 2) < 1e-9); assert.strictEqual(C.stapelBalk({ omzet: 0, kosten: {}, kosten_totaal: 0 }, []), null);
 });
+test('credit is geen verlies: eigen deel voorbij de streep, verlies-arcering alleen bij kosten boven de omzet', () => {
+  const P = (omzet, kosten) => ({ omzet, kosten, kosten_totaal: Object.values(kosten).reduce((a, x) => a + x, 0) }), cats = ['materiaal', 'uitbesteed', 'personeel'];
+  const credit = C.stapelBalk(P(1000, { materiaal: 300, uitbesteed: -20, personeel: 400 }), cats);
+  assert.ok(Math.abs(credit.overCredit - 2) < 1e-9); assert.strictEqual(credit.overVerlies, 0); assert.strictEqual(credit.verlies, 0); assert.ok(Math.abs(credit.overschot - 2) < 1e-9);
+  const beide = C.stapelBalk(P(1000, { materiaal: 700, uitbesteed: -50, personeel: 450 }), cats);
+  assert.ok(Math.abs(beide.verlies - 10) < 1e-9 && Math.abs(beide.credit - 5) < 1e-9); assert.ok(Math.abs(beide.overVerlies - 10) < 1e-9 && Math.abs(beide.overCredit - 5) < 1e-9); assert.ok(Math.abs(beide.overschot - (beide.overVerlies + beide.overCredit)) < 1e-9, 'voorbij de streep: credit plus verlies');
+  const verlies = C.stapelBalk(P(1000, { materiaal: 500, uitbesteed: 100, personeel: 700 }), cats); assert.strictEqual(verlies.overCredit, 0); assert.ok(Math.abs(verlies.overVerlies - 30) < 1e-9);
+  const winst = C.stapelBalk(P(1000, { materiaal: 300, uitbesteed: 100, personeel: 400 }), cats); assert.strictEqual(winst.overVerlies, 0); assert.strictEqual(winst.overCredit, 0);
+  const u1 = C.balkUitleg([winst]); assert.ok(!/verlies|credit/i.test(u1), u1); assert.ok(/100% omzet/.test(u1));
+  const u2 = C.balkUitleg([credit, null]); assert.ok(/credit/i.test(u2) && /geen verlies/.test(u2) && !/Rode arcering/.test(u2), u2);
+  const u3 = C.balkUitleg([verlies]); assert.ok(/Rode arcering/.test(u3) && /verlies/.test(u3) && !/credit/i.test(u3), u3); assert.ok(/credit/i.test(C.balkUitleg([beide])) && /Rode arcering/.test(C.balkUitleg([beide])));
+});
 (async () => {
   const echteNu = C._nu; let nu = 1000000; C._nu = () => nu; const wacht = () => new Promise(r => setTimeout(r, 1));
   const ok = u => ({ items: [{ tegenpartij: 'Nep A', bedrag: 100 }, { tegenpartij: 'Nep B', bedrag: 50 }, { tegenpartij: 'Nep A', bedrag: 25 }], meer: 0 });
@@ -214,6 +226,26 @@ test('100%-balk: schaal is het hoogste totaal; verlies en credit apart; delen bl
     st.kCache = {}; lopen = []; st.bron = bron(() => { throw new Error('x'); }, lopen); await C._laadKosten('personeel'); c = st.kTop;
     assert.strictEqual(lopen.length, 2); assert.strictEqual(c.gestopt, true); assert.strictEqual(c.laden, false); assert.strictEqual(c.fouten, 2); assert.strictEqual(c.items.length, 0);
     st.kCache = {}; lopen = []; st.bron = bron((u, k) => k === 1 || k === 3 || k === 5 ? { error: 'nee' } : ok(u), lopen); await C._laadKosten('personeel'); assert.strictEqual(lopen.length, 10, 'fouten die niet opeenvolgen stoppen niet'); assert.strictEqual(st.kTop.fouten, 3);
+    // 7) rate-limit alleen via status, "HTTP 429" aan het begin, een veld of "even druk"; een los getal 429 in een tekst is een gewone fout
+    const limiet = async fout => { st.kCache = {}; lopen = []; st.bron = bron((u, k) => k === 2 ? fout : ok(u), lopen); await C._laadKosten('personeel'); return st.kTop.limiet; };
+    assert.strictEqual(await limiet({ error: 'fout bij boeking #429' }), false, 'los getal 429 is een gewone fout'); assert.strictEqual(lopen.length, 10);
+    assert.strictEqual(await limiet({ error: 'Factuur 4290 niet gevonden (HTTP 429 is niet de reden)' }), false);
+    assert.strictEqual(await limiet({ error: 'HTTP 429' }), true); assert.strictEqual(await limiet({ error: 'HTTP 429 Too Many Requests' }), true);
+    assert.strictEqual(await limiet({ error: 'Moneybird is even druk, probeer het zo opnieuw' }), true); assert.strictEqual(await limiet({ error: 'x', status: 429 }), true); assert.strictEqual(await limiet({ error: 'x', retryAfter: 9 }), true);
+    assert.strictEqual(st.kTop.wachtTot, nu + 9000);
+    // 8) wachttimer in st: alleen geldig voor hetzelfde paneel en dezelfde rij; opgeruimd bij sluiten, periodewissel en rijwissel
+    st.paneel = null; st.kUit = 'personeel'; st.kCache = {}; lopen = []; st.bron = bron((u, k) => k === 2 ? { error: 'HTTP 429', retry_after: 5 } : ok(u), lopen);   // geen paneel: de test heeft geen DOM
+    await C._laadKosten('personeel'); const c8 = st.kTop; st.paneel = 'brutomarge'; assert.ok(st.kTimer && st.kTimer.c === c8, 'timer in st'); assert.strictEqual(C._kTimerGeldig(c8), true);
+    st.kUit = 'materiaal'; assert.strictEqual(C._kTimerGeldig(c8), false, 'andere rij'); st.kUit = 'personeel'; st.paneel = 'kas'; assert.strictEqual(C._kTimerGeldig(c8), false, 'ander paneel'); st.paneel = 'brutomarge';
+    st.kTop = null; assert.strictEqual(C._kTimerGeldig(c8), false, 'periodewissel zet kTop op null'); st.kTop = c8;
+    C._wisKTimer(); assert.strictEqual(st.kTimer, null); assert.strictEqual(C._kTimerGeldig(c8), false);
+    st.paneel = null; st.kCache = {}; lopen = []; st.bron = bron((u, k) => k === 2 ? { error: 'HTTP 429', retry_after: 5 } : ok(u), lopen); await C._laadKosten('personeel'); assert.ok(st.kTimer); st.paneel = 'brutomarge';
+    C._sluitPaneel(); assert.strictEqual(st.kTimer, null, 'sluiten ruimt de timer op'); assert.strictEqual(st.paneel, null);
+    st.paneel = null; st.kUit = 'personeel'; st.kCache = {}; st.bron = bron((u, k) => k === 2 ? { error: 'HTTP 429', retry_after: 5 } : ok(u), []); await C._laadKosten('personeel'); assert.ok(st.kTimer);
+    C._pauze = 0; st.el = null; st.bron = { haal: async p => p.startsWith('/geld/prognose') ? Nep.prognose() : Nep.antwoord('2026-11') }; await C.laad(); assert.strictEqual(st.kTimer, null, 'C.laad ruimt de timer op'); assert.deepStrictEqual(st.kCache, {});
+    const src = fs.readFileSync(require('path').join(__dirname, '..', 'mt-cijfers.js'), 'utf8');
+    assert.ok(/C\.mount = async function \(el, opt\) \{\r?\n\s*wisKTimer\(\);/.test(src), 'remount ruimt de timer op');
+    assert.ok(/d\.zoom \|\| d\.jaar \|\| d\.tik \|\| d\.wissel\) \{ st\.kTop = null; wisKTimer\(\); \}/.test(src), 'periodewissel ruimt de timer op');
     n++; console.log('ok  - kosten-leveranciers: één ronde, cache per periode, 429 met wachttijd, hervatten, annuleren, twee fouten achter elkaar');
   } catch (e) { console.log('FOUT - kosten-leveranciers\n' + (e.stack || e)); process.exitCode = 1; }
   C._nu = echteNu; console.log(`${n} tests gedaan`);
