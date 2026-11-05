@@ -242,6 +242,7 @@
     st.eerlijk = ls.get('mtc:eerlijk:' + st.wie) !== '0';
     st.vgl = C.vglLees(ls.get('mtc:vgl:' + st.wie), mobiel());
     besteedBewaak(); css(); teken();
+    if (!C._wachtLuisteraar && typeof document !== 'undefined' && document.addEventListener) { C._wachtLuisteraar = true; document.addEventListener('focusout', () => setTimeout(verwerkWacht, 0)); try { new MutationObserver(() => verwerkWacht()).observe(document.body, { childList: true }); } catch (e) { } }   // een uitgestelde herschildering verwerken zodra het blad dicht of het invoerveld los is
     if (!C._resize && root.addEventListener) { let tm = null; C._resize = true; root.addEventListener('resize', () => { clearTimeout(tm); tm = setTimeout(() => { if (st.el && st.el.isConnected && st.maanden.length && Math.abs(((st.el.clientWidth || 640) - 24) - BR) > 24) teken(); }, 200); }); }
     if (!st.maanden.length && !st.laden) await C.laad();
     else besteedLaad();
@@ -592,11 +593,11 @@
   function besZoom() { const z = st.besZoom || ls.get('mtg:zoom:' + st.wie); return BES_ZOOM[z] ? z : 'maand'; }
   // De tegel: kale getallen (voor de tests) en wat de tegel erbij zegt.
   function besteedTegelModel() {
-    // Is Financiën zelf geladen voor dezelfde gebruiker, dan is dat de bron (dan staat hier altijd het getal dat daar staat, ook na een wijziging in de config of een
-    // onopgeslagen scenario); anders de eigen kopie van dezelfde verzoeken.
+    // Is Financiën zelf geladen voor dezelfde gebruiker, dan is de actuele config en tijdlijn daarvan de bron (ook na een configwijziging); anders de eigen kopie van dezelfde
+    // verzoeken. Een onopgeslagen scenario in Financiën telt bewust NIET mee: de tegel toont altijd het echte besteedbaar budget.
     const b = st.bes, fin = root.MTGeld && root.MTGeld._st, live = !!(fin && fin.data && fin.cfg && fin.wie === st.wie), data = live ? fin.data : b.data, cfg = live ? fin.cfg : b.cfg;
-    const o = { nood: ls.get('mtg:nood:' + st.wie) === '1', prognose: ls.get('mtg:prognose:' + st.wie) !== '0', zoom: besZoom(), laden: b.laden, fout: b.fout, scenario: live ? fin.scenario : null };
-    const sleutel = [o.nood, o.prognose, o.zoom, o.laden, o.fout, !!root.MTGeld, live, JSON.stringify(o.scenario || {})].join('|');
+    const o = { nood: ls.get('mtg:nood:' + st.wie) === '1', prognose: ls.get('mtg:prognose:' + st.wie) !== '0', zoom: besZoom(), laden: b.laden, fout: b.fout };
+    const sleutel = [o.nood, o.prognose, o.zoom, o.laden, o.fout, !!root.MTGeld, live].join('|');
     if (!b.cache || b.cache.data !== data || b.cache.cfg !== cfg || b.cache.sleutel !== sleutel) b.cache = { data, cfg, sleutel, m: C.besteedModel(data, cfg, o) };
     const m = b.cache.m;
     if (!m.ok) return { id: 'besteedbaar', label: 'Besteedbaar budget', waarde: '—', sub: m.reden, ok: false, klik: false, m, rijen: [], chip: null };
@@ -608,8 +609,8 @@
     return { id: 'besteedbaar', label: 'Besteedbaar budget' + (m.nood ? ' (incl. noodbuffer)' : ''), waarde: eur(bes.besteedbaar), raw: bes.besteedbaar, sub: 'lopende rekening min de btw die je nog moet betalen' + (m.nood ? ', plus de noodbuffer' : ''), ok: true, klik: true, m, rijen, chip, rood: bes.besteedbaar < 0 };
   }
   C.besteedTegel = besteedTegelModel;
-  async function besteedLaad() {
-    besteedBewaak();
+  function besteedLaad() { besteedBewaak(); const p = besteedRonde(); st.bes.belofte = p; return p; }   // de belofte van de lopende ronde: ververs() voegt daarbij aan i.p.v. een nieuwe te starten
+  async function besteedRonde() {
     const b = st.bes, bron = st.bron; if (!bron || !st.vandaag) return;
     const tok = b.tok = (b.tok || 0) + 1; b.laden = true; b.fout = null;   // elke ronde een eigen token: een laat antwoord van een oude ronde (of van een andere gebruiker of bron) telt niet
     let d = null, c = null, fout = null;
@@ -619,16 +620,32 @@
     } catch (e) { fout = (e && e.message) || String(e); }
     if (st.bes !== b || b.tok !== tok) return;
     b.laden = false;
-    if (fout) { b.fout = fout; b.data = null; b.cfg = null; } else { b.data = d; b.cfg = c && c.config ? c.config : null; }   // bij een mislukte verversing geen oud getal laten staan
-    if (st.el && st.el.isConnected) teken();
+    if (fout) { b.fout = fout; b.data = null; b.cfg = null; } else { b.data = d; b.cfg = c && c.config ? c.config : null; b.laatst = Date.now(); }   // bij een mislukte verversing geen oud getal laten staan
+    herteken();
   }
+  // Een automatische herschildering (nieuw getal binnen) wacht zolang een volschermpaneel, een blad (Indeling e.d.) of een invoerveld met focus open is, en wordt daarna verwerkt.
+  function tekenBezig() {
+    if (st.paneel) return true; if (typeof document === 'undefined') return false;
+    const a = document.activeElement; return !!document.querySelector('.mtc-sheet') || !!(a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName) && ((st.el && st.el.contains(a)) || (st.paneelEl && st.paneelEl.contains(a))));
+  }
+  function herteken() { if (!(st.el && st.el.isConnected)) return; if (tekenBezig()) { st.bes.wacht = true; return; } st.bes.wacht = false; (C._tekenHook || teken)(); }
+  function verwerkWacht() { if (st.bes.wacht && !tekenBezig()) herteken(); }
+  C._herteken = herteken; C._verwerkWacht = verwerkWacht;
   // Andere gebruiker of andere bron dan waarvoor st.bes geladen is: alles weg, zodat er nooit een getal van iemand anders of van vorige sessie staat.
   function besteedBewaak() {
     if (st.bes.wie === st.wie && st.bes.bron === st.bron) return;
     st.bes = { data: null, cfg: null, laden: false, fout: null, cache: null, tok: 0, wie: st.wie, bron: st.bron }; st.besZoom = null;
   }
   C._besteedLaad = besteedLaad; C._besteedBewaak = besteedBewaak;
-  C.ververs = () => { if (st.el && st.el.isConnected && st.maanden.length) teken(); return besteedLaad(); };   // voor als Rapporten opnieuw opent: meteen herschilderen (Financiën kan veranderd zijn), dan opnieuw ophalen
+  // Voor als Rapporten opnieuw opent: meteen herschilderen (Financiën kan veranderd zijn). Geen nieuwe laadronde als er al een loopt (tenzij de config van Financiën intussen wijzigde)
+  // of als de laatste minder dan 60 seconden geleden klaar was.
+  C.ververs = () => {
+    besteedBewaak(); const b = st.bes, fin = root.MTGeld && root.MTGeld._st, finCfg = (fin && fin.cfg) || null, gewijzigd = finCfg !== (b.finCfg || null); b.finCfg = finCfg;
+    if (st.maanden.length) herteken();
+    if (b.laden && b.belofte && !gewijzigd) return b.belofte;
+    if (!gewijzigd && !b.laden && b.laatst && Date.now() - b.laatst < 60000) return Promise.resolve();
+    return besteedLaad();
+  };
   const trap = (lijst, x, y) => lijst.map((p, i) => (i ? `H${x(p.datum).toFixed(1)}V${y(p.saldo).toFixed(1)}` : `M${x(p.datum).toFixed(1)} ${y(p.saldo).toFixed(1)}`)).join('');
   // Het verloop: tot vandaag de lopende rekening (doorgetrokken), daarna het besteedbaar budget zoals Financiën het verwacht (gestippeld).
   function besteedGrafiek(m, o) {
@@ -926,7 +943,7 @@
     st.paneelNieuw = false; maat();
   }
   function openPaneel(id, opener) { st.paneel = id; st.paneelNieuw = true; st.openerFk = opener ? opener.getAttribute('data-fk') : null; tekenPaneel(); }
-  function sluitPaneel() { st.paneel = null; st.focusCat = null; st.sel = null; tekenPaneel(); const k = st.openerFk; st.openerFk = null; herstelFocus(k, st.el); }
+  function sluitPaneel() { st.paneel = null; st.focusCat = null; st.sel = null; tekenPaneel(); verwerkWacht(); const k = st.openerFk; st.openerFk = null; herstelFocus(k, st.el); }
   function toetsPaneel(e) {
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); sluitPaneel(); return; }
     if (e.key === 'Tab' && st.paneelEl) { const f = [...st.paneelEl.querySelectorAll('button:not([disabled]),a[href],[tabindex="0"],select,input')].filter(x => x.getClientRects().length); if (!f.length) return; const eerste = f[0], laatste2 = f[f.length - 1];

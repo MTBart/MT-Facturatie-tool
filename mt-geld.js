@@ -928,10 +928,12 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
   }
   // Minder belangrijke blokken zijn uitklapbaar (stand per gebruiker onthouden). Alleen weergave: de inhoud van het blok verandert niet.
   // Een blok met een open vraag, waarschuwing of rode melding staat standaard open en toont, ook als het dicht is, het aantal in de kop.
-  const VOUW = [['Factuurplanning', 'plan', true], ['Prognose', 'prog', true], ['Potjes en doelen', 'potjes', true], ['Schulden', 'schulden', false]];
+  const VOUW = [['Factuurplanning', 'plan', true, true], ['Prognose', 'prog', true, true], ['Potjes en doelen', 'potjes', true, true], ['Schulden', 'schulden', false, false]];   // [titel, sleutel, standaard open, strikt]
   // Wat in een blok als waarschuwing telt: de meldingsvakken, rode of krappe inhoud en meldingen met een alarmwoord (neutrale "nog geen ..."-teksten niet).
-  const ALARM = /⚠|krap|onder de|tekort|niet genoeg|fout|mislukt|onvolledig|\brood\b|achterstal|moeten worden/i;
-  const alarmen = k => new Set([...k.querySelectorAll('.mtg-uitleg, .mtg-waarsch, .mtg-fp-m.eerder, .mtg-chip.achter, .mtg-melding, [style*="--rood"], [style*="B4412F"], [style*="c0392b"]')].filter(x => !x.matches('.mtg-melding') || ALARM.test(x.textContent))).size;
+  // Structureel, niet op woorden: een echte waarschuwing draagt zelf de klasse mtg-alarm. In een strikt blok telt een .mtg-melding zonder info-merk (mtg-info) ook als alarm;
+  // .mtg-uitleg telt nooit mee (alleen als hij zelf mtg-alarm draagt). Neutrale lege-staat-teksten dragen mtg-info.
+  const isAlarm = (x, strikt) => { const c = x.classList; return !!c && (c.contains('mtg-alarm') || (!!strikt && c.contains('mtg-melding') && !c.contains('mtg-info') && !c.contains('mtg-uitleg'))); };
+  const alarmen = (k, strikt) => [...k.querySelectorAll('*')].filter(x => isAlarm(x, strikt)).length;
   function focusSleutel() { const a = document.activeElement; return a && a.getAttribute && st.el && st.el.contains(a) ? a.getAttribute('data-fk') : null; }
   function herstelFocus(s) { if (!s || !st.el) return; const e = [...st.el.querySelectorAll('[data-fk]')].find(x => x.getAttribute('data-fk') === s); if (e) try { e.focus({ preventScroll: true }); } catch (x) { /* niet focusbaar */ } }
   function vouwBlokken() {
@@ -940,7 +942,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
       if (!k.classList.contains('mtg-kaart') || k.tagName === 'DETAILS') continue;
       const kop = k.querySelector(':scope > .mtg-kop'), b = kop && kop.querySelector('b'); if (!b) continue;
       const def = VOUW.find(v => b.textContent.trim().indexOf(v[0]) === 0); if (!def) continue;
-      const meld = alarmen(k), bewaard = ls.get('mtg:vouw:' + st.wie + ':' + def[1]);
+      const meld = alarmen(k, def[3]), bewaard = ls.get('mtg:vouw:' + st.wie + ':' + def[1]);
       let open = bewaard === '1' ? true : bewaard === '0' ? false : def[2] || meld > 0;
       if (meld > 0 && !open && !(st.vouwHand && st.vouwHand[def[1]])) open = true;   // een opgeslagen dichtstand wint nooit van een actieve waarschuwing (en wordt daardoor niet overschreven); pas na een klik in deze sessie blijft hij dicht, met het aantal in de kop
       const knop = document.createElement('button'); knop.className = 'mtg-vouwknop'; knop.setAttribute('data-vouw', def[1]); knop.setAttribute('data-fk', 'vouw-' + def[1]); knop.setAttribute('aria-expanded', open ? 'true' : 'false');
@@ -1176,6 +1178,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
       const s = (d.saldo.potten || {})[p.id];
       const nu = p.virtueel ? virtueelSaldo(p, d.vandaag) : s ? s.gerapporteerd : null;
       rijen.push(potRij(p.id, G.potNaam(p) + (p.actief === false ? ' (gearchiveerd)' : ''), nu, p.streef, p.virtueel ? (p.weekinleg ? rond(p.weekinleg * 52 / 12) : null) : G.tempo(d, p.id), p, !p.streef && p.doel === 'btw' ? G.btwDekking(d, p.id) : null));
+      if (!p.streef && p.doel === 'btw') { const dk = G.btwDekking(d, p.id); if (dk && dk.gedekt !== true) rijen.push('<span class="mtg-alarm" hidden></span>'); }   // BTW-pot dekt de aangifte niet (of saldo onbekend): telt als waarschuwing voor het blok
     }
     return rijen.join('') + (st.mag ? '<div style="margin-top:10px"><button class="mtg-knop" data-pot="nieuw">+ potje of doel toevoegen</button></div>' : '');
   }
@@ -1221,7 +1224,9 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
   // Waarschuwingen in drie soorten: Moneybird even druk (429), nog in te stellen (verwacht tot de eigenaar het
   // instelt) en de rest (Let op).
   const isDruk = x => x.status === 429 || /\b429\b|retry later|even druk/i.test(x.fout || '');
-  const isInstellen = x => x.bron === 'config' && !isDruk(x);
+  // Een ontbrekende essentiële rekeningconfiguratie (btw, kredietlimiet, saldo/ijkpunt, terugboeking) maakt het besteedbaar-getal onbetrouwbaar: dat is geen "nog in te stellen" maar een melding.
+  const isEssentieel = x => x.bron === 'config' && /btw|kredietlimiet|ijk|saldo|lopende rekening|terugboek|aangifte/i.test(x.fout || '');
+  const isInstellen = x => x.bron === 'config' && !isDruk(x) && !isEssentieel(x);   // puur optionele instellingen (spaarpotten, weekdag, ...)
   G._soorten = { isDruk, isInstellen };
   function drukHtml() {
     const w = (st.data.waarschuwingen || []).filter(isDruk);
@@ -1239,14 +1244,17 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
   }
   // Kritiek = raakt direct het geld of de betrouwbaarheid van het getal (onder de kredietlimiet, btw-tekort, rood, een bron die ontbreekt of onvolledig is):
   // die staan altijd zichtbaar boven de tegels. Informatieve punten (vernieuwen, prognose-controles) gaan achter de statusknop.
-  const isKritiek = x => x.bron === 'limiet' || /^btw/i.test(x.bron || '') || x.onvolledig === true || /bank|saldo|lopend|moneybird|ijk|opslag/i.test(x.bron || '')
-    || /onder de kredietlimiet|\brood\b|niet genoeg|tekort|ontbreekt|kon niet|mislukt|onvolledig/i.test(x.fout || '');
+  // Fail-safe: alles is kritiek, tenzij de soort expliciet op de korte lijst informatieve soorten staat. Een onbekende bron of tekst komt dus altijd in "Direct bekijken".
+  const INFO_BRONNEN = ['profiel', 'patronen', 'prognose', 'verkoopfacturen'];   // vernieuwen, controles in de prognose, factuur zonder datum
+  const isKritiek = x => x.onvolledig === true || !INFO_BRONNEN.includes(x.bron);
+  const verdeel = w => ({ kritiek: w.filter(isKritiek), info: w.filter(x => !isKritiek(x)) });
+  G._weergave = { isKritiek, isEssentieel, isInstellen, isAlarm, alarmen, verdeel };   // voor de tests
   function letOpHtml(deel) {   // deel: 'kritiek' (altijd zichtbaar boven de tegels), 'info' (achter de statusknop) of leeg (alles, zoals voorheen)
     const w = (st.data.waarschuwingen || []).filter(x => !isDruk(x) && !isInstellen(x));
     const lw = G.limietWaarschuwing(st.dataS || st.data, { prognose: st.prognose }, dagPlus(st.data.vandaag, 60));
     if (lw && lw.potNietGenoeg) w.unshift({ bron: 'limiet', fout: `Op ${datumTekst(lw.potNietGenoeg.datum)} is ook de BTW-pot niet genoeg: dan zakt lopend + BTW-pot onder de kredietlimiet (zie het laagste punt).` });
     if (lw && lw.timing) w.unshift({ bron: 'limiet', fout: `Je lopende rekening zelf komt op ${datumTekst(lw.timing.datum)} op ${eur(lw.timing.saldo)}, onder de kredietlimiet. Boek eerder geld terug van de BTW-rekening (≈${eur(lw.timing.nodig)} nodig).` });
-    if (deel) { const k = w.filter(isKritiek); w.splice(0, w.length, ...w.filter(x => (deel === 'kritiek') === k.includes(x))); }
+    if (deel) { const v = verdeel(w); w.splice(0, w.length, ...(deel === 'kritiek' ? v.kritiek : v.info)); }
     if (!w.length) return '';
     if (deel === 'kritiek') return `<div class="mtg-kaart mtg-kritiek" role="alert"><div class="mtg-kop" style="margin:0"><b style="flex:1">Direct bekijken (${w.length})</b><button class="mtg-vraag" data-uitleg="letop">?</button></div>
       <ul class="mtg-letop">${w.map(x => `<li>${esc(x.fout)}${x.rekening ? ` <span class="mtg-chip">${esc(x.rekening)}</span>` : ''}</li>`).join('')}</ul></div>`;
@@ -1591,11 +1599,11 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
       <button class="mtg-knop klein ${st.prognose ? 'aan' : ''}" data-prognose="1">${st.prognose ? 'meegenomen' : 'niet meegenomen'}</button><button class="mtg-vraag" data-uitleg="prognose">?</button></div>`;
     if (heeft) h += `<div class="mtg-uitleg">Scenario (nog niet opgeslagen): ${esc(Object.values(sc).reduce((a, x) => a + Object.keys(x).length, 0))} termijn(en) verschoven. ${st.mag ? '<button class="mtg-knop klein aan" data-sc="opslaan">Opslaan</button> ' : ''}<button class="mtg-knop klein" data-sc="terug">Terug</button></div>`;
     const soort = G.drempelSoort(st.data, st.cfg), grens = soort === 'fictief' ? 'de gele lijn' : 'de nullijn';   // G7: het bedrag van de fictieve buffer staat nergens in Geld
-    if (advies && !advies.ok) h += `<div class="mtg-uitleg" style="background:#fbe3dd;border-color:#f0b8aa"><b>Krap:</b> laagste punt ${esc(eur(advies.low.saldo))} op ${esc(datumTekst(advies.low.datum))}, onder ${esc(grens)}${soort === 'ondergrens' ? ' (' + esc(eur(advies.drempel)) + ')' : ''}. <button class="mtg-vraag" data-uitleg="advies">?</button><br>`
+    if (advies && !advies.ok) h += `<div class="mtg-uitleg mtg-alarm" style="background:#fbe3dd;border-color:#f0b8aa"><b>Krap:</b> laagste punt ${esc(eur(advies.low.saldo))} op ${esc(datumTekst(advies.low.datum))}, onder ${esc(grens)}${soort === 'ondergrens' ? ' (' + esc(eur(advies.drempel)) + ')' : ''}. <button class="mtg-vraag" data-uitleg="advies">?</button><br>`
       + (advies.voorstel ? `Factureer <b>${esc(advies.voorstel.event.tegenpartij)}</b> op ${esc(datumTekst(advies.voorstel.naar))} i.p.v. ${esc(datumTekst(advies.voorstel.van))} → laagste punt +${esc(eur(advies.voorstel.winst))}${advies.voorstel.low.saldo >= advies.drempel ? ' (weer boven ' + grens + ')' : `, maar nog steeds onder ${grens}`}${advies.voorstel.opTijd ? '' : ' — de betaling komt pas na het dieptepunt binnen, eerder factureren kan niet meer'}${advies.voorstel.doelpad ? ' → doelpad gehaald' : ''}. <button class="mtg-knop klein" data-advies="1">Probeer</button>`
         : 'Geen prognosetermijn die op tijd gefactureerd kan worden om dit op te lossen.') + '</div>';
     const posten = p.posten || [];
-    if (!posten.length) h += `<div class="mtg-melding">Nog geen prognose. ${st.mag ? 'Vink in een project "gaat zeker door" aan, of voeg hier een project of post toe.' : ''}</div>`;
+    if (!posten.length) h += `<div class="mtg-melding mtg-info">Nog geen prognose. ${st.mag ? 'Vink in een project "gaat zeker door" aan, of voeg hier een project of post toe.' : ''}</div>`;
     for (const x of posten) {
       if (x.soort === 'post') { const e = (st.data.events || []).find(q => q.prognose === x.sleutel); h += `<div class="mtg-rij" ${st.mag ? `data-prog="${esc(x.sleutel)}"` : ''}><span class="p ${e && e.delta > 0 ? 'mtg-in' : 'mtg-uit'}">${e && e.delta > 0 ? '▲' : '▼'}</span><span class="n">${esc(x.omschrijving)} <span class="mtg-chip">handmatig</span>${x.aan ? '' : ' <span class="mtg-chip">uit</span>'}</span><span class="b">${e ? esc(datumTekst(e.datum)) + ' ' + eur(e.delta) : ''}</span></div>`; continue; }
       h += `<div class="mtg-pot" ${st.mag ? `data-prog="${esc(x.sleutel)}" style="cursor:pointer"` : ''}><div class="r1"><b>${esc(x.naam || x.code)}</b>${x.aan ? '' : '<span class="mtg-chip">uit</span>'}<span>${esc(eur(x.totaal))}</span><span class="mtg-chip">${esc(x.gefactureerd > 0 ? 'gefactureerd ' + kort(x.gefactureerd) : 'nog niets gefactureerd')}</span></div>
@@ -1603,7 +1611,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
           const nieuw = sc[x.sleutel] && sc[x.sleutel][t.id], ev = (st.data.events || []).find(q => q.prognose === x.sleutel && q.termijn_id === t.id);
           return `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:3px 0">${esc(t.label)}: ${esc(eur(t.bedrag))}${t.gefactureerd > 0 ? ` (${t.open > 0 ? 'deels ' : ''}gefactureerd ${kort(t.gefactureerd)})` : ''}${t.open > 0 && t.aan && x.aan ? ` · factuur <input type="date" class="mtg-fd" data-sl="${esc(x.sleutel)}" data-tm="${esc(t.id)}" value="${esc(nieuw || t.factuurdatum)}" style="font-size:12px;padding:2px 4px;border:1px solid var(--border,#ccc);border-radius:4px">${ev ? ` → binnen rond ${esc(datumTekst(ev.datum))}` : ''}${nieuw ? ' <span class="mtg-chip prog">scenario</span>' : ''}` : t.aan ? '' : ' · uit'}</div>`;
         }).join('')}</div>
-        ${(x.vragen || []).slice(0, 3).map(f => `<div class="mtg-uitleg">Hoort factuur ${esc(f.nummer || f.id)} (${esc(eur(f.bedrag))}, ${esc(datumTekst(f.datum))}${f.ref ? ', "' + esc(f.ref) + '"' : ''}) bij dit project?${f.meerdere ? ' <b>Hij past bij meer dan één project.</b>' : ''} ${st.mag ? `<button class="mtg-knop klein aan" data-vraag="ja" data-sl="${esc(x.sleutel)}" data-f="${esc(f.id)}">Ja</button> <button class="mtg-knop klein" data-vraag="nee" data-sl="${esc(x.sleutel)}" data-f="${esc(f.id)}">Nee</button>` : ''}</div>`).join('')}</div>`;
+        ${(x.vragen || []).slice(0, 3).map(f => `<div class="mtg-uitleg mtg-alarm">Hoort factuur ${esc(f.nummer || f.id)} (${esc(eur(f.bedrag))}, ${esc(datumTekst(f.datum))}${f.ref ? ', "' + esc(f.ref) + '"' : ''}) bij dit project?${f.meerdere ? ' <b>Hij past bij meer dan één project.</b>' : ''} ${st.mag ? `<button class="mtg-knop klein aan" data-vraag="ja" data-sl="${esc(x.sleutel)}" data-f="${esc(f.id)}">Ja</button> <button class="mtg-knop klein" data-vraag="nee" data-sl="${esc(x.sleutel)}" data-f="${esc(f.id)}">Nee</button>` : ''}</div>`).join('')}</div>`;
     }
     if (st.mag) h += `<div class="mtg-knoppen" style="margin-top:8px"><button class="mtg-knop" data-prog="nieuw-project">+ project</button><button class="mtg-knop" data-prog="nieuw-post">+ handmatige post</button></div>`;
     return h + '</div>';
@@ -1714,15 +1722,15 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
         <span class="b">${esc(eur(r.status === 'gefactureerd' ? r.bedrag : r.open, true))}</span>
         ${r.status === 'gefactureerd' ? '<span class="mtg-chip">gefactureerd</span>' : `${r.status === 'deels' ? `<span class="mtg-chip">deels gefactureerd (${esc(kort(r.gefactureerd))})</span>` : ''}${st.mag ? maandSelect(r, vandaag) : toonMaand ? `<span class="m">${esc(maandTekst(r.maand, true))}</span>` : ''}`}</div>`;
     const telTekst = v => aantal(v) ? aantal(v) + (aantal(v) === 1 ? ' termijn' : ' termijnen') : v.regels.length ? 'alles gefactureerd' : '';
-    const blok = (kop, v, klasse) => `<div class="mtg-fp-m ${esc(klasse)}"><div class="mtg-fp-mk"><b>${esc(kop)}</b><span class="n">${esc(telTekst(v))}</span><b class="t">${v.regels.length ? esc(eur(v.totaal, true)) : '—'}</b></div>${klasse === 'eerder' ? '<div class="mtg-melding" style="padding:2px 0">Deze factuurdatum is voorbij. Kies een nieuwe maand of factureer.</div>' : ''}${v.regels.map(r => regel(r, klasse === 'eerder' || klasse === 'later')).join('')}</div>`;
+    const blok = (kop, v, klasse) => `<div class="mtg-fp-m ${esc(klasse)}"><div class="mtg-fp-mk"><b>${esc(kop)}</b><span class="n">${esc(telTekst(v))}</span><b class="t">${v.regels.length ? esc(eur(v.totaal, true)) : '—'}</b></div>${klasse === 'eerder' ? '<div class="mtg-melding mtg-alarm" style="padding:2px 0">Controle vereist: deze factuurdatum is voorbij. Kies een nieuwe maand of factureer.</div>' : ''}${v.regels.map(r => regel(r, klasse === 'eerder' || klasse === 'later')).join('')}</div>`;
     let h = `<div class="mtg-kaart" id="mtg-plan"><div class="mtg-kop" style="margin:0 0 6px"><b style="flex:1">Factuurplanning</b>
       <div class="mtg-knoppen"><button class="mtg-knop klein ${n === 6 ? 'aan' : ''}" data-planmnd="6">6 maanden</button><button class="mtg-knop klein ${n === 12 ? 'aan' : ''}" data-planmnd="12">12 maanden</button></div><button class="mtg-vraag" data-uitleg="planning">?</button></div>`;
     if (filter) h += `<div class="mtg-uitleg">Alleen ${esc(fp ? fp.naam || fp.code : 'dit project')} <button class="mtg-knop klein" data-planwis="1">Toon alle projecten</button>${fp ? '' : '<br>Dit project heeft (nog) geen prognose die doorgaat: vink hieronder bij Prognose aan dat het zeker doorgaat.'}</div>`;
-    if (!(p.posten || []).some(x => x.soort === 'project' && x.aan && (x.termijnen || []).length)) return h + `<div class="mtg-melding">Nog geen termijnen om te plannen. Vink bij Prognose in een project "gaat zeker door" aan.</div></div>`;
+    if (!(p.posten || []).some(x => x.soort === 'project' && x.aan && (x.termijnen || []).length)) return h + `<div class="mtg-melding mtg-info">Nog geen termijnen om te plannen. Vink bij Prognose in een project "gaat zeker door" aan.</div></div>`;
     if (pl.eerder.regels.length) h += blok('Eerder gepland, nog niet gefactureerd', pl.eerder, 'eerder');
     h += pl.maanden.map(m => m.regels.length ? blok(maandTekst(m.ym), m, 'maand') : `<div class="mtg-fp-m leeg"><div class="mtg-fp-mk"><span>${esc(maandTekst(m.ym))}</span><span class="t">—</span></div></div>`).join('');
     if (pl.later.regels.length) h += blok('Later', pl.later, 'later');
-    return h + `<div class="mtg-fp-tot"><span>Nog te factureren${filter ? '' : ' (incl. btw)'}</span><b>${esc(eur(pl.totaal, true))}</b></div>${pl.gefactureerd > 0 ? `<div class="mtg-melding" style="padding:2px 0">Al gefactureerd in deze periode: ${esc(eur(pl.gefactureerd, true))}</div>` : ''}</div>`;
+    return h + `<div class="mtg-fp-tot"><span>Nog te factureren${filter ? '' : ' (incl. btw)'}</span><b>${esc(eur(pl.totaal, true))}</b></div>${pl.gefactureerd > 0 ? `<div class="mtg-melding mtg-info" style="padding:2px 0">Al gefactureerd in deze periode: ${esc(eur(pl.gefactureerd, true))}</div>` : ''}</div>`;
   }
   // Vanuit een ander scherm (bv. het blokje in de offerte): de planning op één project filteren en in beeld scrollen.
   G.planFocus = function (sleutel) { st.planSl = sleutel || null; st.planScroll = !!sleutel; if (st.data) teken(); };
