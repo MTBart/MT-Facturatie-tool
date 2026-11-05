@@ -21,7 +21,7 @@
   const WEERGAVEN = [['omzet_kosten', 'Omzet en kosten'], ['brutomarge', 'Brutomarge'], ['kosten_pct', 'Kosten vs branche'], ['opnames', 'Opnames'], ['kas', 'Kas'], ['waterval', 'Waterval']];
   const REEKS_NAAR = { omzet_kosten: 'omzet_kosten', omzet: 'omzet_kosten', kosten: 'omzet_kosten', resultaat: 'omzet_kosten', brutomarge: 'brutomarge', kosten_pct: 'kosten_pct', opnames: 'opnames', kas: 'kas', waterval: 'waterval' };
   const st = C._st = { el: null, bron: null, mag: false, wie: '', maanden: [], cats: [], bm: {}, ontbrekend: [], laden: false, rondes: 0, fout: null, prognose: null, kasProg: null,
-    jaar: null, zoom: 'M', weergave: 'omzet_kosten', eerlijk: true, vergelijk: 0, vgl: { j1: true, j2: true, b: true }, statusOpen: false, tabel: false, vast: null, hover: null, paneel: null, paneelEl: null, paneelNieuw: false, openerFk: null, top: null, sel: null, focusCat: null, horizon: 'kort', opHorizon: null, correctieVan: null, prive: [], vandaag: null, nietIngedeeld: [], bes: { data: null, cfg: null, laden: false, fout: null, cache: null }, besZoom: null };
+    jaar: null, stapelSel: null, zoom: 'M', weergave: 'omzet_kosten', eerlijk: true, vergelijk: 0, vgl: { j1: true, j2: true, b: true }, statusOpen: false, tabel: false, vast: null, hover: null, paneel: null, paneelEl: null, paneelNieuw: false, openerFk: null, top: null, sel: null, focusCat: null, horizon: 'kort', opHorizon: null, correctieVan: null, prive: [], vandaag: null, nietIngedeeld: [], bes: { data: null, cfg: null, laden: false, fout: null, cache: null }, besZoom: null };
   const ls = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { } } };
   const mobiel = () => { try { return root.matchMedia && root.matchMedia('(max-width: 760px)').matches; } catch (e) { return false; } };
 
@@ -181,6 +181,20 @@
 .mtd-pt td.goed{color:var(--mtd-goed)}.mtd-pt td.slecht{color:var(--mtd-slecht)}
 .mtd-pt td.deels .mtd-pt-v::after{content:'*'}
 .mtd-pt-bar.j0{background:var(--mtd-hoofd)}.mtd-pt-bar.j1{background:var(--k6)}.mtd-pt-bar.j2{background:var(--n-300,#dfd8cb)}.mtd-pt-bar.kost{background:var(--k6)}.mtd-pt-bar.res{background:var(--kres)}
+/* stapel "waar ging de omzet heen" */
+.mtd-seg{fill:var(--k);stroke:var(--surface,#fff);stroke-width:2;paint-order:stroke}.mtd-seg.mtd-verlies{fill:url(#mtd-verlies);stroke:var(--kverlies)}
+.mtd-verlies-bg{fill:var(--mtd-slecht-bg)}.mtd-verlies-lijn{stroke:var(--kverlies)}
+.mtd-omzetlijn{stroke:var(--ink,#1b211e);stroke-width:2.5;stroke-linecap:round}
+.mtd-stapel.sel .mtd-seg{stroke:var(--ink,#1b211e);stroke-width:1}.mtd-stapel:not(.sel) .mtd-seg{opacity:.92}
+.mtd-hit[aria-pressed=true]{fill:rgba(120,130,125,.10)}
+.mtd-sdetail{display:flex;gap:10px}.mtd-sh{margin:6px 0 0;font-size:13px;font-weight:600}
+.mtd-s100s{display:flex;flex-direction:column;gap:6px}
+.mtd-s100{display:grid;grid-template-columns:96px minmax(0,1fr) auto;align-items:center;gap:10px}.mtd-s100-n{font-size:13px;font-weight:500}.mtd-s100-t{font-size:12px;color:var(--mtd-slecht)}
+.mtd-s100-b{display:flex;gap:2px;height:26px;min-width:0}.mtd-s100-d{display:flex;align-items:center;justify-content:center;min-width:2px;background:var(--k);color:#fff;font-size:11px;font-weight:600;border-radius:2px;overflow:hidden}.mtd-s100-d.mtd-k3{color:#0b0b0b}
+.mtd-s100-leeg{grid-column:2/4;font-size:12px;color:var(--ink-3,#646a64)}
+.mtd-sdetail .mtd-pt th:first-child,.mtd-sdetail .mtd-pt thead th{background:var(--n-150,#f1ede5)}
+.mtd-pt td .mtd-oordeel{min-height:20px;font-size:12px;padding:0 6px}
+@media(max-width:760px){.mtd-s100{grid-template-columns:minmax(0,1fr);gap:4px}.mtd-s100-leeg{grid-column:1}}
 @media(prefers-reduced-motion:reduce){.mtd-tegel{transition:none}}
 `;
     document.head.appendChild(s);
@@ -945,7 +959,132 @@
     return sectie(naam, null, periodeTabelEl(model, { naam, hoek: '' }), noot);
   }
 
-    async function laadTop() {
+    // ── Oordelen: goed / let op / slecht, vastgelegd in één constante (nooit alleen kleur: er hoort altijd een woord en teken bij) ──
+  const DREMPEL = C.DREMPEL = { INLIJN_PP: 1, SLECHT_PP: 5 };   // verschil in procentpunten: binnen INLIJN_PP = in lijn; tot SLECHT_PP = let op; daarboven slecht
+  // ref: een getal (punt) of {van, tot} / {pct} zoals de branchecijfers. hogerIsGoed bepaalt welke kant gunstig is. pp = punten buiten de band (0 = erbinnen).
+  C.oordeel = function (v, ref, hogerIsGoed) {
+    if (v == null || !isFinite(v) || ref == null) return null;
+    let lo, hi; if (typeof ref === 'number') { if (!isFinite(ref)) return null; lo = hi = ref; } else if (ref.van != null && ref.tot != null) { lo = ref.van; hi = ref.tot; } else if (ref.pct != null) { lo = hi = ref.pct; } else return null;
+    const pp = v > hi ? v - hi : v < lo ? v - lo : 0, abs = Math.abs(pp), beter = hogerIsGoed ? pp > 0 : pp < 0;
+    if (abs <= DREMPEL.INLIJN_PP) return { niveau: 'goed', woord: 'in lijn', pp, beter: false };
+    if (beter) return { niveau: 'goed', woord: 'beter', pp, beter: true };
+    return abs <= DREMPEL.SLECHT_PP ? { niveau: 'let-op', woord: 'iets slechter', pp, beter: false } : { niveau: 'slecht', woord: 'duidelijk slechter', pp, beter: false };
+  };
+  const OORDEEL_ICOON = { 'goed': '✓', 'let-op': '!', 'slecht': '✕' };
+  const oordeelEl = (o, tekst) => o ? ee('span', { class: 'mtd-oordeel ' + o.niveau }, ee('span', { 'aria-hidden': 'true' }, OORDEEL_ICOON[o.niveau]), tekst ? tekst : o.woord) : null;
+  const puntTekst = pp => pp == null ? '' : (Math.abs(pp) < 0.05 ? '0,0' : puntTeken(pp)) + ' punt';
+
+  // ── Stapel "Waar ging de omzet heen" (rekenen los te testen): per periode kosten per categorie + resultaat, alleen geboekte cijfers ──
+  // Positieve delen stapelen vanaf 0; een negatief resultaat staat onder de nullijn en telt niet in de stapel (die loopt dan tot de kosten, de omzet staat als streep).
+  C.stapelModel = function (per, cats) {
+    const kol = per.map(p => {
+      const P = p.P; if (!(P.maanden > 0)) return { id: p.id, label: p.label || p.id, geen: true };
+      const omzet = P.omzet, resultaat = omzet - P.kosten_totaal, delen = cats.map(c => ({ id: c, v: P.kosten[c] || 0 })), boven = []; let top = 0, credit = 0;
+      for (const d of delen) { if (d.v > 0) { boven.push({ id: d.id, v: d.v, y0: top, y1: top + d.v }); top += d.v; } else if (d.v < 0) credit += -d.v; }
+      let onder = null; if (resultaat > 0) { boven.push({ id: 'resultaat', v: resultaat, y0: top, y1: top + resultaat }); top += resultaat; } else if (resultaat < 0) onder = { id: 'resultaat', v: resultaat, y0: 0, y1: resultaat };
+      const alle = delen.concat([{ id: 'resultaat', v: resultaat }]);
+      return { id: p.id, label: p.label || p.id, geen: false, omzet, resultaat, delen: alle.map(d => Object.assign(d, { pct: omzet > 0 ? d.v / omzet * 100 : null })), boven, onder, top: Math.max(top, omzet), som: alle.reduce((a, d) => a + d.v, 0), credit };
+    });
+    const ks = kol.filter(k => !k.geen);
+    return { kolommen: kol, max: ks.length ? Math.max(...ks.map(k => k.top)) : 0, min: ks.length ? Math.min(0, ...ks.map(k => k.onder ? k.onder.y1 : 0)) : 0 };
+  };
+  // Vergelijking van één gekozen periode met dezelfde periode in de twee vorige jaren en de branche. Alleen tussen afgesloten periodes; ontbrekend = {v:null, reden}.
+  const verwachtMnd = (zoom, lm) => zoom === 'M' ? 1 : zoom === 'K' ? 3 : zoom === 'J' ? (lm ? Number(lm.slice(5, 7)) : 0) : 12;
+  C.periodeAfgesloten = (p, zoom, lm) => !!lm && !!p && p.P.maanden > 0 && p.P.maanden === verwachtMnd(zoom, lm) && p.ms.every(m => m.prognose || m.id <= lm);
+  C.stapelVergelijk = function (o) {
+    const { per, i, zoom, lm } = o, p = per[i], ond = P => { if (!(P.omzet > 0)) return null; const u = { brutomarge: P.brutomarge_pct, resultaat: P.resultaat / P.omzet * 100 }; for (const c of o.cats) u[c] = (P.kosten[c] || 0) / P.omzet * 100; return u; };
+    const dit = p && p.P.maanden > 0 ? ond(p.P) : null, ditOk = C.periodeAfgesloten(p, zoom, lm);
+    const reden0 = !p || !(p.P.maanden > 0) ? 'geen geboekte maand in deze periode' : !(p.P.omzet > 0) ? 'geen omzet in deze periode' : !ditOk ? 'deze periode is nog niet afgesloten' : '';
+    const vorigeVan = off => {
+      if (zoom === 'M' || zoom === 'K') { const j = o.jaar - off; if (j < Number(START.slice(0, 4))) return null; const q = C.periodes(o.maanden, zoom, j, lm, [])[i]; return q ? Object.assign(q, { P: C.som(q.ms, o.cats, o.eerlijk) }) : null; }
+      return per.find(x => x.id === String(Number(p.id) - off)) || null;
+    };
+    const vorig = o.offsets.map(off => {
+      const q = vorigeVan(off), jr = zoom === 'M' || zoom === 'K' ? o.jaar - off : Number(p.id) - off, uit = { off, jaar: jr, label: String(jr), delen: null, v: null, reden: '' };
+      if (reden0) { uit.reden = reden0; return uit; }
+      if (!q || !(q.P.maanden > 0)) { uit.reden = 'geen gegevens ' + jr; return uit; }
+      if (!C.periodeAfgesloten(q, zoom, lm)) { uit.reden = 'periode ' + jr + ' is niet volledig'; return uit; }
+      uit.u = ond(q.P); uit.P = q.P; if (!uit.u) uit.reden = 'geen omzet in ' + jr; return uit;
+    });
+    const namen = ['brutomarge'].concat(o.cats, ['resultaat']);
+    const onderdelen = namen.map(id => {
+      const hoger = id === 'brutomarge' || id === 'resultaat', v = dit ? dit[id] : null, ref = o.bm ? o.bm[id] : null;
+      const vj = vorig.map(q => { const w = q.u ? q.u[id] : null, ord = reden0 || w == null ? null : C.oordeel(v, w, hoger); return { off: q.off, jaar: q.jaar, v: w, pp: w == null || v == null ? null : v - w, oordeel: ord, reden: w != null ? '' : (q.reden || 'geen gegevens ' + q.jaar) }; });
+      const br = { ref: ref || null, oordeel: null, reden: '' };
+      if (reden0) br.reden = reden0; else if (!ref || (ref.van == null && ref.pct == null)) br.reden = 'geen branchecijfer voor ' + (id === 'brutomarge' ? 'brutomarge' : katNaam(id).toLowerCase()); else br.oordeel = C.oordeel(v, ref, hoger);
+      return { id, naam: id === 'brutomarge' ? 'Brutomarge' : katNaam(id), hogerIsGoed: hoger, v, vorig: vj, branche: br };
+    });
+    return { afgesloten: ditOk, reden: reden0, onderdelen, vorig, dit };
+  };
+  const bmTekst2 = b => !b ? '' : b.van != null && b.tot != null ? `${pct(b.van)}–${pct(b.tot)}` : pct(b.pct);
+
+  function stapelKaart(per) {
+    const m = C.stapelModel(per, st.cats), br = BR, klein = br < 500, ho = klein ? 230 : 320, ml = klein ? 40 : 56, mr = 10, mt = 14, mb = 26, n = Math.max(1, per.length), bw = (br - ml - mr) / n, x = i => ml + i * bw + bw / 2;
+    const sc = C.schaalVoor([[m.max], [m.min]], { min: 0, max: 1 }), y = v => mt + (ho - mt - mb) * (1 - (v - sc.a) / (sc.b - sc.a)), w = Math.max(6, Math.min(56, bw * 0.66));
+    const heeft = m.kolommen.some(k => !k.geen);
+    const svg = ss('svg', { viewBox: `0 0 ${br} ${ho}`, class: 'mtd-svg', role: 'img', 'aria-label': `Waar ging de omzet heen, per ${zoomWoord()}: materiaal, uitbesteed, personeel, overige kosten en resultaat, geboekte cijfers` });
+    svg.append(ss('defs', null, ss('pattern', { id: 'mtd-verlies', width: 6, height: 6, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' }, ss('rect', { width: 6, height: 6, class: 'mtd-verlies-bg' }), ss('line', { x1: 0, y1: 0, x2: 0, y2: 6, class: 'mtd-verlies-lijn', 'stroke-width': 2 }))));
+    sc.ticks.forEach(tk => svg.append(ss('line', { x1: ml, x2: br - mr, y1: y(tk), y2: y(tk), class: tk === 0 ? 'mtd-as0' : 'mtd-raster' }), ss('text', { x: ml - 6, y: y(tk) + 4, 'text-anchor': 'end', class: 'mtd-astekst' }, kort(tk))));
+    const sel = per.findIndex(p => p.id === st.stapelSel), tip = ee('div', { class: 'mtd-tip', role: 'status', hidden: true });
+    const tipVul = k => { tip.replaceChildren(ee('div', { class: 'mtd-tk' }, ee('span', { class: 'mtd-tt' }, k.label), ee('span', { class: 'mtd-tlab' }, 'geboekt')),
+      ee('div', { class: 'mtd-tr' }, ee('span', { class: 'mtd-sw lijn' }), ee('span', { class: 'mtd-tl' }, 'Omzet'), ee('span', { class: 'mtd-tv' }, kort(k.omzet)), ee('span', { class: 'mtd-td' }, '100%')),
+      ...k.delen.map(d => ee('div', { class: 'mtd-tr' }, ee('span', { class: 'mtd-sw ' + (d.id === 'resultaat' && d.v < 0 ? 'verlies' : katKl(d.id)) }), ee('span', { class: 'mtd-tl' }, katNaam(d.id) + (d.id === 'resultaat' && d.v < 0 ? ' (verlies)' : '')), ee('span', { class: 'mtd-tv' }, kort(d.v)), ee('span', { class: 'mtd-td' }, d.pct == null ? '' : Math.round(d.pct) + '%')))); };
+    m.kolommen.forEach((k, i) => {
+      if (k.geen) return; const x0 = x(i) - w / 2, g = ss('g', { class: 'mtd-stapel' + (i === sel ? ' sel' : '') });
+      k.boven.forEach(s => g.append(ss('rect', { class: 'mtd-seg ' + katKl(s.id), x: x0, y: y(s.y1), width: w, height: Math.max(0.5, y(s.y0) - y(s.y1)) }, ss('title', null, `${katNaam(s.id)} ${k.label}: ${eur(s.v)}`))));
+      if (k.onder) g.append(ss('rect', { class: 'mtd-seg mtd-verlies', x: x0, y: y(0), width: w, height: Math.max(0.5, y(k.onder.y1) - y(0)) }, ss('title', null, `Verlies ${k.label}: ${eur(k.resultaat)}`)));
+      g.append(ss('line', { class: 'mtd-omzetlijn', x1: x0 - 3, x2: x0 + w + 3, y1: y(k.omzet), y2: y(k.omzet) }, ss('title', null, `Omzet ${k.label}: ${eur(k.omzet)}`)));
+      svg.append(g);
+    });
+    per.forEach((p, i) => svg.append(ss('text', { x: x(i), y: ho - mb + 17, 'text-anchor': 'middle', class: 'mtd-xtekst' }, (p.label || p.id) + (isLopend(p) ? '*' : ''))));
+    const kruis = ss('line', { class: 'mtd-kruis', y1: mt - 4, y2: ho - mb, visibility: 'hidden' }); svg.append(kruis);
+    per.forEach((p, i) => { const k = m.kolommen[i], naamP = st.zoom === 'M' ? maandLang(p.id) : (p.label || p.id);
+      const hit = ss('rect', { class: 'mtd-hit', x: ml + i * bw, y: mt - 8, width: bw, height: ho - mt - mb + 8, tabindex: '0', role: 'button', 'data-stapel': p.id, 'data-fk': 'stap-' + i, 'aria-pressed': String(i === sel),
+        'aria-label': k.geen ? `${naamP}: geen geboekte cijfers` : `${naamP}: omzet ${kort(k.omzet)}, resultaat ${kort(k.resultaat)}. Vergelijking tonen.` });
+      if (!k.geen) { hit.addEventListener('mouseenter', () => { kruis.setAttribute('x1', x(i)); kruis.setAttribute('x2', x(i)); kruis.setAttribute('visibility', 'visible'); tipVul(k); tip.hidden = false; tip.style.left = (x(i) / br * 100) + '%'; tip.style.transform = i < 2 ? 'translateX(8px)' : i > n - 3 ? 'translateX(calc(-100% - 8px))' : 'translateX(-50%)'; });
+        hit.addEventListener('mouseleave', () => { kruis.setAttribute('visibility', 'hidden'); tip.hidden = true; }); }
+      hit.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); hit.dispatchEvent(new MouseEvent('click', { bubbles: true })); } });
+      svg.append(hit); });
+    const gebruikt = st.cats.filter(c => m.kolommen.some(k => !k.geen && k.delen.some(d => d.id === c && d.v > 0))), verlies = m.kolommen.some(k => k.onder);
+    const leg = ee('div', { class: 'mtd-legenda', role: 'list', 'aria-label': 'Legenda' }, gebruikt.map(c => ee('span', { class: 'mtd-leg', role: 'listitem' }, ee('span', { class: 'mtd-sw ' + katKl(c) }), katNaam(c))), ee('span', { class: 'mtd-leg', role: 'listitem' }, ee('span', { class: 'mtd-sw mtd-kres' }), 'Resultaat'),
+      verlies ? ee('span', { class: 'mtd-leg', role: 'listitem' }, ee('span', { class: 'mtd-sw verlies' }), 'Verlies (onder de nullijn)') : null, ee('span', { class: 'mtd-leg', role: 'listitem' }, ee('span', { class: 'mtd-sw lijn' }), 'Omzet'));
+    if (!heeft) return ee('p', { class: 'mtc-noot' }, 'Geen geboekte cijfers in deze periodes.');
+    const delen = [leg, ee('div', { class: 'mtd-plot' }, svg, tip)];
+    if (sel >= 0 && !m.kolommen[sel].geen) delen.push(stapelDetail(per, sel));
+    else delen.push(ee('p', { class: 'mtc-noot' }, `Klik op een kolom om die ${zoomWoord()} te vergelijken met dezelfde periode in eerdere jaren en met de branche.`));
+    return ee('div', { class: 'mtd-chart' }, delen);
+  }
+  const pctF = v => v == null ? '—' : v.toLocaleString('nl-NL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+  function stapelDetail(per, i) {
+    const p = per[i], v = C.stapelVergelijk({ per, i, zoom: st.zoom, jaar: st.jaar, maanden: st.maanden, cats: st.cats, eerlijk: st.eerlijk, bm: st.bm, lm: laatste(), offsets: [1, 2] });
+    const titel = st.zoom === 'M' ? maandLang(p.id) : st.zoom === 'K' ? `${p.label} ${st.jaar}` : (p.label || p.id);
+    // 100%-balken: de verdeling van elke € omzet per periode, zelfde kleuren als de stapel
+    const balk = (naam, u, P) => { const delen = u ? [].concat(st.cats.map(c => ({ id: c, v: P.kosten[c] || 0 })), [{ id: 'resultaat', v: P.omzet - P.kosten_totaal }]) : null;
+      if (!delen) return null;
+      const pos = delen.filter(d => d.v > 0), tot = pos.reduce((a, d) => a + d.v, 0), res = delen[delen.length - 1].v;
+      return ee('div', { class: 'mtd-s100' }, ee('span', { class: 'mtd-s100-n' }, naam), ee('div', { class: 'mtd-s100-b', role: 'img', 'aria-label': naam + ': ' + delen.map(d => `${katNaam(d.id)} ${pctF(d.v / P.omzet * 100)}`).join(', ') },
+        pos.map(d => ee('span', { class: 'mtd-s100-d ' + katKl(d.id), style: 'flex:' + (d.v / tot).toFixed(4), title: `${katNaam(d.id)}: ${pctF(d.v / P.omzet * 100)} van de omzet` }, d.v / tot > 0.07 ? Math.round(d.v / P.omzet * 100) + '%' : ''))),
+        ee('span', { class: 'mtd-s100-t' }, res < 0 ? 'kosten ' + Math.round(-res / P.omzet * 100 + 100) + '% van de omzet: verlies' : ''));
+    };
+    const rijen = [balk(titel, v.dit, p.P)].concat(v.vorig.map(q => q.u ? balk(q.label, q.u, q.P) : ee('div', { class: 'mtd-s100' }, ee('span', { class: 'mtd-s100-n' }, q.label), ee('span', { class: 'mtd-s100-leeg' }, '— ' + q.reden))));
+    const ond = v.onderdelen.filter(o => o.v != null || o.id === 'brutomarge');
+    const tabel = ee('div', { class: 'mtd-pt', role: 'region', 'aria-label': 'Vergelijking per onderdeel', tabindex: '0' }, ee('table', { style: 'min-width:560px' }, ee('caption', { class: 'sr' }, 'Vergelijking van ' + titel + ' met vorige jaren en de branche, in procenten van de omzet'),
+      ee('thead', null, ee('tr', null, ee('th', { scope: 'col' }, 'Onderdeel'), ee('th', { scope: 'col' }, titel), v.vorig.map(q => ee('th', { scope: 'col' }, q.label)), ee('th', { scope: 'col' }, 'Branche'))),
+      ee('tbody', null, ond.map(o => ee('tr', null, ee('th', { scope: 'row' }, ee('span', { class: 'mtd-sw ' + (o.id === 'brutomarge' ? 'mtd-kres' : katKl(o.id)), style: 'margin-right:6px' }), o.naam), ee('td', null, pctF(o.v)),
+        o.vorig.map(q => ee('td', { class: q.v == null ? 'leeg' : '', title: q.v == null ? q.reden : null }, q.v == null ? '—' : [pctF(q.v), ee('span', { class: 'mtd-pt-fc' }, puntTekst(q.pp), ' ', oordeelEl(q.oordeel))])),
+        ee('td', { class: o.branche.ref && !o.branche.reden ? '' : 'leeg', title: o.branche.reden || null }, o.branche.reden ? '—' : [bmTekst2(o.branche.ref), ee('span', { class: 'mtd-pt-fc' }, oordeelEl(o.branche.oordeel, o.branche.oordeel.woord + ' (' + puntTekst(o.branche.oordeel.pp) + ')'))]))))));
+    const redenen = [...new Set(v.vorig.filter(q => !q.u).map(q => q.reden))];
+    return ee('div', { class: 'mtd-info vast heeft mtd-sdetail' }, ee('div', { class: 'mtd-tk' }, ee('span', { class: 'mtd-tt' }, titel), ee('span', { class: 'mtd-tlab' }, 'geboekt, geen prognose')),
+      ee('h4', { class: 'mtd-sh' }, 'Waar ging elke € omzet heen'), ee('div', { class: 'mtd-s100s' }, rijen),
+      ee('h4', { class: 'mtd-sh' }, 'Tegenover vorige jaren en de branche'), !v.afgesloten ? ee('p', { class: 'mtc-noot' }, 'Geen vergelijking: ' + v.reden + '. Vergelijken gebeurt alleen tussen afgesloten periodes.') : null,
+      tabel, redenen.length && v.afgesloten ? ee('p', { class: 'mtc-noot' }, 'Niet vergeleken: ' + redenen.join('; ') + '.') : null,
+      ee('div', { class: 'mtd-tacties' }, ee('button', { class: 'mtc-knop', 'data-drill': 'omzet:' + p.id, 'data-fk': 'drill-stapel' }, 'Omzetstukken bekijken')));
+  }
+  function stapelSectie(per) {
+    return sectie('Waar ging de omzet heen', `Per ${zoomWoord()}, alleen geboekte cijfers (geen prognose) · klik op een kolom voor de vergelijking`, stapelKaart(per),
+      ee('span', { class: 'mtc-noot' }, 'De streep is de omzet. Een negatief resultaat staat onder de nullijn en telt niet mee in de stapel; die loopt dan tot de totale kosten. Eerlijk beeld: lonen buiten de W&V tellen mee bij personeel (zoals ingesteld).' + (per.some(isLopend) ? ' * = lopende maand: nog niet compleet, dus vaak nog zonder alle omzet.' : '')));
+  }
+  async function laadTop() {
     if (st.top && st.top.laden) return;   // geen tweede ronde verzoeken terwijl de eerste loopt
     const lm = laatste(), jaar = st.jaar, ms = st.maanden.filter(m => m.maanden && !m.prognose && m.id.startsWith(jaar + '-') && m.id <= lm).map(m => m.id), top = st.top = { jaar, laden: true, items: [], totaal: 0, onvolledig: false, fouten: 0, klaar: 0, n: ms.length }, per = new Map();
     tekenPaneel();
@@ -1002,7 +1141,7 @@
     if (id !== 'komende' && id !== 'hoofd') delen.push(bedieningPaneel());
     if (tegel && tegel.kpis.length) delen.push(kpiRij(tegel.kpis));
     const oud = g => htmlBlok(grafiekHtml(per, g)), sel = st.sel ? ee('div', { class: 'mtc-noot' }, `Gekozen: ${st.sel.label || st.sel.id} · `, ee('a', { href: '#', 'data-wissel': '1' }, 'terug naar het boekjaar')) : null;
-    if (id === 'omzet') { delen.push(sectie('Omzet opgeteld door het jaar', 'Zo zie je in één lijn of je voor of achter loopt op eerdere jaren', cumulEl(tm)), omzetTabelSectie(tm), ee('div', { class: 'mtd-twee' }, topSectie(), feitenSectie('omzet'))); }
+    if (id === 'omzet') { delen.push(sectie('Omzet opgeteld door het jaar', 'Zo zie je in één lijn of je voor of achter loopt op eerdere jaren', cumulEl(tm)), stapelSectie(per), omzetTabelSectie(tm), ee('div', { class: 'mtd-twee' }, topSectie(), feitenSectie('omzet'))); }
     else if (id === 'brutomarge') delen.push(sectie('Brutomarge per periode', 'Omzet − materiaal − uitbesteed werk, als % van de omzet', sel, oud('brutomarge')), sectie('Kosten tegenover de branche', null, htmlBlok(bulletHtml())), feitenSectie('brutomarge'));
     else if (id === 'resultaat') delen.push(sectie('Omzet, kosten en resultaat', 'Tik op een staaf of kostendeel voor de stukken in Moneybird', sel, oud('omzet_kosten')), feitenSectie('resultaat'));
     else if (id === 'kas') delen.push(sectie('Kaspositie', null, sel, oud('kas')), sectie('Van omzet naar kas', null, htmlBlok(watervalHtml())), feitenSectie('kas'));
@@ -1219,7 +1358,7 @@
     return true;
   }
   function klik(e) {
-    const b = e.target.closest('[data-zoom],[data-jaar],[data-eerlijk],[data-vgl],[data-horizon],[data-indeling],[data-wissel],[data-tik],[data-euro],[data-bullet],[data-paneel],[data-sluitpaneel],[data-status],[data-tabel],[data-drill],[data-topladen],[data-bzoom],[data-naarfin]'); if (!b) { tikOpPositie(e); return; }
+    const b = e.target.closest('[data-zoom],[data-jaar],[data-eerlijk],[data-vgl],[data-horizon],[data-indeling],[data-wissel],[data-tik],[data-euro],[data-bullet],[data-paneel],[data-sluitpaneel],[data-status],[data-tabel],[data-stapel],[data-drill],[data-topladen],[data-bzoom],[data-naarfin]'); if (!b) { tikOpPositie(e); return; }
     const d = b.dataset;
     if (d.naarfin) { e.preventDefault(); const kn = document.getElementById('tab-btn-geld'); if (kn && typeof root.showTab === 'function') { sluitPaneel(); root.showTab('geld', kn); } return; }
     if (d.bzoom) { if (BES_ZOOM[d.bzoom]) st.besZoom = d.bzoom; return teken(); }   // alleen dit paneel: de keuze van Financiën zelf blijft onaangeroerd
@@ -1228,8 +1367,9 @@
     if (d.status) { st.statusOpen = !st.statusOpen; teken(); const k = st.statusOpen ? 'status-sluit' : 'status'; herstelFocus(k, st.el); return; }
     if (d.drill) { const [soort, pid] = d.drill.split(':'), p = huidigePeriodes().find(q => q.id === pid); return drill(soort, null, p); }
     if (d.topladen) return laadTop();
-    if (d.zoom) { st.zoom = d.zoom; st.sel = null; st.vast = null; }
-    else if (d.jaar) { st.jaar = Math.max(Number(START.slice(0, 4)), Math.min(Number(st.vandaag.slice(0, 4)), st.jaar + Number(d.jaar))); st.sel = null; st.vast = null; st.top = null; }
+    if (d.stapel) { st.stapelSel = st.stapelSel === d.stapel ? null : d.stapel; }
+    else if (d.zoom) { st.zoom = d.zoom; st.sel = null; st.vast = null; st.stapelSel = null; }
+    else if (d.jaar) { st.jaar = Math.max(Number(START.slice(0, 4)), Math.min(Number(st.vandaag.slice(0, 4)), st.jaar + Number(d.jaar))); st.sel = null; st.vast = null; st.top = null; st.stapelSel = null; }
     else if (d.eerlijk) { st.eerlijk = !st.eerlijk; ls.set('mtc:eerlijk:' + st.wie, st.eerlijk ? '1' : '0'); }
     else if (d.vgl) { st.vgl[d.vgl] = !st.vgl[d.vgl]; ls.set('mtc:vgl:' + st.wie, C.vglTekst(st.vgl)); }
     else if (d.tabel) { st.tabel = !st.tabel; }

@@ -72,4 +72,67 @@ test('categoriekleuren: vast per categorie, resultaat apart, onbekende categorie
   assert.strictEqual(C.katKlasse('materiaal', cats), C.katKlasse('materiaal', ['a']));
 });
 
+// ── oordeel en stapel ──
+const perM = (zoom, jaar) => C.periodes(st.maanden, zoom, jaar || 2026, '2026-10', []).map(p => Object.assign(p, { P: C.som(p.ms, st.cats, true) }));
+const vgl = (zoom, i, extra) => C.stapelVergelijk(Object.assign({ per: perM(zoom), i, zoom, jaar: 2026, maanden: st.maanden, cats: st.cats, eerlijk: true, bm: st.bm, lm: '2026-10', offsets: [1, 2] }, extra || {}));
+test('oordeel: drempels uit één constante, woord + niveau, hoger/lager is goed', () => {
+  assert.deepStrictEqual([C.DREMPEL.INLIJN_PP, C.DREMPEL.SLECHT_PP], [1, 5]);
+  assert.strictEqual(C.oordeel(53, { van: 50, tot: 56 }, true).woord, 'in lijn');
+  assert.strictEqual(C.oordeel(60, { van: 50, tot: 56 }, true).woord, 'beter'); assert.strictEqual(C.oordeel(60, { van: 50, tot: 56 }, true).niveau, 'goed');
+  assert.strictEqual(C.oordeel(47, { van: 50, tot: 56 }, true).niveau, 'let-op');
+  assert.strictEqual(C.oordeel(40, { van: 50, tot: 56 }, true).niveau, 'slecht');
+  assert.strictEqual(C.oordeel(35, 28, false).niveau, 'slecht', 'kosten veel hoger = slecht'); assert.strictEqual(C.oordeel(20, 28, false).niveau, 'goed');
+  assert.strictEqual(C.oordeel(28.9, { pct: 28 }, false).woord, 'in lijn');
+});
+test('oordeel: geen oordeel zonder waarde of referentie', () => {
+  assert.strictEqual(C.oordeel(null, 5, true), null); assert.strictEqual(C.oordeel(5, null, true), null); assert.strictEqual(C.oordeel(5, {}, true), null); assert.strictEqual(C.oordeel(NaN, 5, true), null);
+});
+test('stapel: de som van de delen is de omzet, per periode, ook per kwartaal en jaar', () => {
+  zet(); for (const [zoom, j] of [['M', 2026], ['K', 2025], ['5J', 2026]]) {
+    const m = C.stapelModel(zoom === '5J' ? C.periodes(st.maanden, '5J', 2026, '2026-10', []).map(p => Object.assign(p, { P: C.som(p.ms, st.cats, true) })) : perM(zoom, j), st.cats);
+    for (const k of m.kolommen.filter(x => !x.geen)) { assert.ok(Math.abs(k.som - k.omzet) < 1e-6, `${zoom} ${k.id}: ${k.som} != ${k.omzet}`); assert.ok(Math.abs(k.delen.reduce((a, d) => a + d.pct, 0) - 100) < 1e-6); }
+  }
+});
+test('stapel: alleen geboekte cijfers; periode zonder boeking is leeg', () => {
+  zet(); const m = C.stapelModel(perM('M'), st.cats); assert.strictEqual(m.kolommen[11].geen, true);
+  assert.strictEqual(m.kolommen[0].geen, false);
+});
+test('stapel: negatief resultaat staat onder de nullijn en maakt de stapel niet vals', () => {
+  zet(); const mm = st.maanden.find(x => x.id === '2026-03'); mm.omzet = 20000;
+  const k = C.stapelModel(perM('M'), st.cats).kolommen[2]; assert.ok(k.resultaat < 0); assert.ok(k.onder && k.onder.y1 === k.resultaat && k.onder.y0 === 0);
+  assert.ok(!k.boven.some(s => s.id === 'resultaat'), 'geen resultaatdeel boven de nul'); assert.ok(Math.abs(k.top - (k.omzet - k.resultaat)) < 1e-6, 'stapel loopt tot de kosten');
+  assert.ok(k.top > k.omzet); assert.ok(Math.abs(k.som - k.omzet) < 1e-6);
+  const m = C.stapelModel(perM('M'), st.cats); assert.strictEqual(m.min, k.resultaat);
+});
+test('stapel: een creditpost (negatieve kosten) wordt niet als stuk getekend maar blijft in de som', () => {
+  zet(); const mm = st.maanden.find(x => x.id === '2026-02'); mm.kosten.overig = -500;
+  const k = C.stapelModel(perM('M'), st.cats).kolommen[1]; assert.ok(!k.boven.some(s => s.id === 'overig')); assert.strictEqual(k.credit, 500); assert.ok(Math.abs(k.som - k.omzet) < 1e-6);
+});
+test('stapelvergelijk: afgesloten periode vergelijkt met twee vorige jaren en de branche', () => {
+  zet(); const v = vgl('M', 2), bm = v.onderdelen.find(o => o.id === 'brutomarge');
+  assert.strictEqual(v.afgesloten, true); assert.strictEqual(v.vorig.length, 2); assert.ok(bm.vorig.every(q => q.v != null && q.oordeel));
+  assert.ok(Math.abs(bm.v - 66.5) < 0.05); assert.strictEqual(bm.branche.oordeel.niveau, 'goed'); assert.strictEqual(bm.branche.oordeel.beter, true);
+});
+test('stapelvergelijk: branche ontbreekt voor een categorie = "—" met reden, geen oordeel', () => {
+  zet(); const mat = vgl('M', 2).onderdelen.find(o => o.id === 'materiaal');
+  assert.strictEqual(mat.branche.oordeel, null); assert.ok(/geen branchecijfer voor materiaal/.test(mat.branche.reden));
+  const b0 = vgl('M', 2, { bm: {} }).onderdelen.find(o => o.id === 'brutomarge'); assert.strictEqual(b0.branche.oordeel, null); assert.ok(b0.branche.reden);
+  const mat2 = vgl('M', 2, { bm: { materiaal: { van: 24, tot: 28 } } }).onderdelen.find(o => o.id === 'materiaal'); assert.ok(mat2.branche.oordeel);
+});
+test('stapelvergelijk: ontbrekend vorig jaar of niet afgesloten periode = "—" met reden, nooit 0', () => {
+  zet(); st.maanden = st.maanden.filter(m => m.id !== '2025-03'); const v = vgl('M', 2), q = v.vorig[0];
+  assert.strictEqual(q.u, undefined); assert.ok(/geen gegevens 2025/.test(q.reden)); assert.ok(v.onderdelen.every(o => o.vorig[0].v === null && o.vorig[0].oordeel === null && o.vorig[0].reden));
+  assert.ok(v.onderdelen.every(o => o.vorig[1].v != null), '2024 blijft wel beschikbaar');
+  zet(); const lopend = vgl('M', 10); assert.strictEqual(lopend.afgesloten, false); assert.ok(/nog niet afgesloten/.test(lopend.reden));
+  assert.ok(lopend.onderdelen.every(o => o.vorig.every(q => q.v === null && /nog niet afgesloten/.test(q.reden)) && /nog niet afgesloten/.test(o.branche.reden) && o.branche.oordeel === null));
+  assert.strictEqual(vgl('K', 3).afgesloten, false);
+});
+test('stapelvergelijk: jaar-vorm vergelijkt met voorgaande jaren; 2026 t/m nu is vergelijkbaar, 5 jaar niet', () => {
+  zet(); const per = C.periodes(st.maanden, 'J', 2026, '2026-10', []).map(p => Object.assign(p, { P: C.som(p.ms, st.cats, true) }));
+  const v = C.stapelVergelijk({ per, i: per.length - 1, zoom: 'J', jaar: 2026, maanden: st.maanden, cats: st.cats, eerlijk: true, bm: st.bm, lm: '2026-10', offsets: [1, 2] });
+  assert.strictEqual(v.afgesloten, true); assert.ok(v.vorig.every(q => q.u)); assert.strictEqual(v.vorig[0].jaar, 2025);
+  const per5 = C.periodes(st.maanden, '5J', 2026, '2026-10', []).map(p => Object.assign(p, { P: C.som(p.ms, st.cats, true) }));
+  assert.strictEqual(C.stapelVergelijk({ per: per5, i: per5.length - 1, zoom: '5J', jaar: 2026, maanden: st.maanden, cats: st.cats, eerlijk: true, bm: st.bm, lm: '2026-10', offsets: [1, 2] }).afgesloten, false);
+});
+
 console.log(`${n} tests gedaan`);
