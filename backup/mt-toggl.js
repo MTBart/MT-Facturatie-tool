@@ -281,6 +281,61 @@ async function tgUrenPerGebruiker(van,tot,ververs){
   }
   return rijen;
 }
+// Herstelbak uren (alleen lezen, mt-uren-herstel.js). Zelfde Focus Reports-query als tgUrenPerGebruiker, maar over een exact tijdvak in ISO-instants
+// (de maandgrenzen in Amsterdam rekent de module uit). → [{user, project, taak, sec}]
+async function tgUrenPerGebruikerIso(vanIso,totIso,ververs){
+  const k='mt_tgzm|'+vanIso+'|'+totIso+'|'+_tgVandaag();
+  let rijen=ververs?null:_tgCacheLees(k);
+  if(!rijen){
+    const body={groupings:[{property:'project_id'},{property:'task_id'},{property:'user'}],
+      aggregations:[{property:'duration',function:'sum'}],
+      filters:[{property:'start',operator:'between',value:[vanIso,totIso]}]};
+    const r=await _tgEenmalig(k,()=>_tgQueue(()=>focusFetchPad('reports/workspaces/'+FOCUS_WS+'/query','POST',body)));
+    const lijst=r&&r.data_json_row;
+    if(!Array.isArray(lijst)) throw new Error('Toggl gaf een onverwacht antwoord (geen data_json_row)');
+    if(!lijst.every(x=>x&&typeof x==='object'&&'sum_duration' in x&&(x.user_account_id!=null||x.user_id!=null))) throw new Error('Toggl geeft geen duur of gebruiker mee in de urenrapportage');
+    rijen=lijst.map(x=>({user:x.user_account_id!=null?x.user_account_id:x.user_id,project:x.project_id||null,taak:x.task_id||null,sec:Number(x.sum_duration)||0}));
+    _tgCacheZet(k,rijen);
+  }
+  return rijen;
+}
+// Alle entries van het team over een periode (hele dagen, van t/m tot) uit Reports v3 search/time_entries, per pagina van 1000 regels (alleen lezen, POST is hier een query).
+// Maximaal 20 pagina's: is het antwoord dan nog niet leeg, dan is onvolledig=true (nooit stil afkappen). → {entries:[{id,persoon,start,sec,project,taak,omschrijving}], onvolledig}
+async function tgUrenEntriesTeam(van,tot){
+  const PAGE=1000, MAXP=20; let regels=[], first=1, onvolledig=false;
+  for(let p=0;p<MAXP;p++){
+    const f=first, chunk=await _tgQueue(()=>tgReports({start_date:van,end_date:tot,page_size:PAGE,first_row_number:f}));
+    if(!Array.isArray(chunk)) throw new Error('Toggl gaf een onverwacht antwoord op de urenrapportage');
+    regels=regels.concat(chunk);
+    if(chunk.length<PAGE) break;
+    first+=PAGE;
+    if(p===MAXP-1) onvolledig=true;
+  }
+  const {un}=agNames(); const entries=[];
+  regels.forEach(r=>{
+    if(!r||typeof r!=='object') return;
+    const lijst=Array.isArray(r.time_entries)?r.time_entries:[r];
+    lijst.forEach(te=>{
+      const sec=te.seconds!=null?Number(te.seconds):Number(te.duration);
+      if(!(sec>0)||!(te.start||r.start)) return;   // lopende timers (negatieve duur) en regels zonder start tellen niet
+      entries.push({id:te.id!=null?te.id:null,persoon:r.username||un[r.user_id]||'Onbekende gebruiker',start:te.start||r.start,sec,project:r.project_id||null,taak:r.task_id||null,omschrijving:r.description||te.description||''});
+    });
+  });
+  return {entries,onvolledig};
+}
+// Eigen entries (Track api/v9 me/time_entries, alleen lezen) in dezelfde vorm. Hooguit 1000 per aanroep: komt het daar op uit, dan onvolledig=true.
+async function tgUrenEntriesEigen(van,tot){
+  const lijst=await tgStore.eigenEntries(van,tot);
+  if(!Array.isArray(lijst)) throw new Error('Toggl gaf een onverwacht antwoord op de eigen uren');
+  const entries=[];
+  lijst.forEach(e=>{
+    if(!e||typeof e!=='object'||!e.start) return;
+    const sec=e.duration!=null?Number(e.duration):NaN;
+    if(!(sec>0)) return;   // een lopende timer heeft een negatieve duur
+    entries.push({id:e.id!=null?e.id:null,persoon:'Jij',start:e.start,sec,project:e.project_id||e.pid||null,taak:e.task_id||e.tid||null,omschrijving:e.description||''});
+  });
+  return {entries,onvolledig:lijst.length>=1000};
+}
 // Leesbare reden bij een mislukte capaciteitsaanroep (code = HTTP-status of 'antwoord').
 function tgCapaciteitReden(c){ return c==='402'?'402: jullie Toggl-abonnement heeft capaciteit niet':c==='403'?'403: geen rechten':c==='429'?'429: even wachten':c==='antwoord'?'onverwacht antwoord':'HTTP '+c; }
 // Reden voor de legenda van de projecttijdlijn: leeg als Toggl voor iedereen werkte, anders waarom (een deel van) de personen terugvalt op Beheer.
@@ -465,7 +520,7 @@ async function tgReports(body){
   if(!h['X-Auth-Token']) throw new Error('Microsoft-login vereist');
   const res=await fetch(`${WORKER}?target=toggl_reports&path=${encodeURIComponent(`workspace/${TG_WS}/search/time_entries`)}`,
     {method:'POST',headers:{...h,'Content-Type':'application/json'},body:JSON.stringify(body)});
-  if(!res.ok) throw new Error('Reports HTTP '+res.status);
+  if(!res.ok){ const e=new Error('Reports HTTP '+res.status); e.status=res.status; try{ e.retryAfter=Number(res.headers.get('Retry-After'))||0; }catch(_){} throw e; }
   return res.json();
 }
 async function tgFocusPaged(resource){
@@ -553,6 +608,7 @@ function tgSub(name,btn){
   if(name==='taken' && !_tgCache.taken) tgLaadTaken();
   if(name==='board') tgLaadBoard();
   if(name==='beheer') tgLaadBeheer();
+  if(name==='herstel'){ try{ MTUrenHerstel.open(); }catch(e){ console.warn('Uren zonder project:',e); } }
 }
 
 // ── TIMELINE (Toggl-2.0 kalender in de Uren-tab; hergebruikt de agenda-bouwstenen) ──

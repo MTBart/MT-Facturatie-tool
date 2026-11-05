@@ -5,6 +5,27 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-11-05 — Merge financien-stijl: tegel Besteedbaar budget en restyle Financien
+- Commit: `dc3a54c` | Auteur: Bart Witte
+
+## 2026-11-05 — Codex ronde 3: onvolledig gaat voor bij optionele config-meldingen; verouderd profiel en verouderde patronen zijn kritiek
+- Commit: `fcf1c36` | Auteur: Bart Witte
+
+## 2026-11-05 — Codex ronde 2: tegel negeert onopgeslagen scenario, fail-safe meldingsclassificatie, essentiële config als melding, structurele alarmdetectie, samengevoegde en uitgestelde verversing
+- Commit: `18480d0` | Auteur: Bart Witte
+
+## 2026-11-05 — Codex-punten: tegel Besteedbaar volgt Financiën en laadt veilig; kritieke meldingen blijven zichtbaar; waarschuwing wint van opgeslagen dichtstand; Escape en focus bij statusknop
+- Commit: `5742a13` | Auteur: Bart Witte
+
+## 2026-11-05 — Financiën: restyle in de beeldtaal van Cijfers (volle breedte, tegels, kaarten, grafiek met crosshair), meldingen achter een statusknop, minder belangrijke blokken uitklapbaar met onthouden stand
+- Commit: `8844353` | Auteur: Bart Witte
+
+## 2026-11-05 — Cijfers: tegel Besteedbaar budget over de volle breedte onder de zes tegels, met verloop en verwachting gestippeld
+- Commit: `7b17ba5` | Auteur: Bart Witte
+
+## 2026-11-05 — Release v2.34.5: Uren zonder project (alleen lezen), Cijfers op volle breedte met rapport ingeklapt eronder, Forecast-paneel Te controleren hersteld op de computer; backup = v2.34.4
+- Commit: `c2a2131` | Auteur: Bart Witte
+
 ## 2026-11-05 — Merge cijfers-breed: Cijfers volle breedte, rapport ingeklapt, Forecast-paneel hersteld
 - Commit: `2c8dffa` | Auteur: Bart Witte
 

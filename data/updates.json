@@ -1,5 +1,15 @@
 [
   {
+    "versie": "2.34.6",
+    "datum": "2026-11-05",
+    "titel": "Tegel Besteedbaar budget en Financiën in een nieuwe stijl",
+    "voor": "beheer",
+    "punten": [
+      "Cijfers heeft een nieuwe tegel Besteedbaar budget over de volle breedte: het verloop tot vandaag en daarna gestippeld de verwachting. Het getal komt uit dezelfde berekening als Financiën.",
+      "Financiën gebruikt nu de volle breedte en dezelfde tegels en grafiek als Cijfers. Rode meldingen staan bovenaan onder Direct bekijken, rustige meldingen zitten achter een statusknop.",
+      "Factuurplanning, Prognose, Potjes en Schulden kun je inklappen. De tool onthoudt je keuze. Komt er een waarschuwing bij, dan gaat zo'n blok vanzelf open."
+    ]
+  },{
     "versie": "2.34.5",
     "datum": "2026-11-05",
     "titel": "Uren zonder project in beeld, Cijfers op volle breedte en Forecast-vragen hersteld",

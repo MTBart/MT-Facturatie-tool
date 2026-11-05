@@ -24,7 +24,7 @@
 </script>
 <meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BACKUP v2.34.4 — M&T Bedrijfstool v2 bèta</title>
+<title>BACKUP v2.34.5 — M&T Bedrijfstool v2 bèta</title>
 <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <!-- msal-browser lokaal gevendord (was jsdelivr @2 = 2.39.0, laatste v2-release).
@@ -49,7 +49,7 @@
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-10-11b"></script>
 <script src="mt-verbeter.js?v=2026-10-23b"></script>
-<script src="mt-toggl.js?v=2026-11-05a"></script>
+<script src="mt-toggl.js?v=2026-11-05b"></script>
 <script src="mt-koppel.js?v=2026-10-13p"></script>
 <script src="mt-mailactie.js?v=2026-10-13c"></script>
 <script src="mt-binnenkomend.js?v=2026-10-13c"></script>
@@ -83,7 +83,8 @@
 <script src="mt-planinrichting.js?v=2026-10-24z"></script>
 <script src="mt-bord.js?v=2026-10-23z"></script>
 <script src="mt-tijdlijn.js?v=2026-10-24z"></script>
-<script src="mt-compleet.js?v=2026-11-05a"></script>
+<script src="mt-compleet.js?v=2026-11-05b"></script>
+<script src="mt-uren-herstel.js?v=2026-11-05a"></script>
 <script src="mt-personen.js?v=2026-10-17e"></script>
 <script src="mt-werktijden.js?v=2026-10-15t"></script>
 <script src="mt-uren-nieuw.js?v=2026-10-15z"></script>
@@ -95,13 +96,13 @@
 <script src="mt-zijbalk.js?v=2026-11-05a" defer></script>
 <script src="mt-geld.js?v=2026-10-29a"></script>
 <script src="mt-forecast.js?v=2026-11-02i"></script>
-<script src="mt-forecast-light.js?v=2026-11-02i"></script>
+<script src="mt-forecast-light.js?v=2026-11-05a"></script>
 <script src="mt-koers.js?v=2026-10-23a"></script>
 <script src="mt-schulden.js?v=2026-10-12a"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
 <script src="mt-verhuis.js?v=2026-10-23k7"></script>
-<script src="mt-cijfers.js?v=2026-11-05a"></script>
-<script src="mt-rapport.js?v=2026-10-09a"></script>
+<script src="mt-cijfers.js?v=2026-11-05b"></script>
+<script src="mt-rapport.js?v=2026-11-05a"></script>
 <script src="mt-calcopslag.js?v=2026-10-23a"></script>
 <script src="calc-engine.js"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
@@ -921,7 +922,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <!-- Nieuwe stijl: alle regels onder html[data-stijl="nieuw"]; ?v= = cachebuster (bump bij elke wijziging) -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jost:ital,wght@0,500;1,400&display=swap">
 <link rel="stylesheet" href="mt-merk.css?v=2026-10-24-logo">
-<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-24z">
+<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-11-05a">
 <link rel="stylesheet" href="mt-rust.css?v=2026-10-24z">
 <link rel="stylesheet" href="mt-telefoon.css?v=2026-10-23z">
 <!-- Proefstijl (aftakking, aan/uit per gebruiker in Instellingen > Weergave): alles onder html[data-stijl="nieuw"][data-proef]; zonder dat attribuut doet dit bestand niets -->
@@ -949,7 +950,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1 class="mt-merkrij"><svg class="mt-merk" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><rect x="2" y="2" width="96" height="96"/><path d="M55.4 2 V31.3 H34.2 V67.3 H55.4 V98"/></svg><b class="mt-woord">mortise <em>&amp;</em> tenon</b></h1>
-    <span class="header-version">v2.34.4</span>
+    <span class="header-version">v2.34.5</span>
     <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
@@ -2302,6 +2303,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
       <button class="tg-navitem active" onclick="tgSub('timer',this)">⏱ Timer</button>
       <button class="tg-navitem" onclick="tgSub('timeline',this)">📅 Timeline</button>
       <button class="tg-navitem" onclick="tgSub('reports',this)">📊 Reports</button>
+      <button class="tg-navitem" onclick="tgSub('herstel',this)">&#9888; Zonder project</button>
       <div class="tg-side-grp">Beheer</div>
       <button class="tg-navitem" onclick="tgSub('projecten',this)">📁 Projecten</button>
       <button class="tg-navitem" onclick="tgSub('beheer',this)">🏷 Clients &amp; Tags</button>
@@ -2387,6 +2389,9 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
         <button class="btn btn-sm btn-gold" onclick="tgLaadReport()">Genereer</button>
       </div>
       <div id="tg-report"><div class="tg-leeg">Kies een periode en klik Genereer.</div></div>
+    </div>
+    <div id="tg-sub-herstel" class="tg-subcontent">
+      <div id="uren-herstel"><div class="tg-leeg">Laden&hellip;</div></div>
     </div>
     <div id="tg-sub-beheer" class="tg-subcontent">
       <div class="tg-toolbar">
@@ -4334,7 +4339,13 @@ try{ MTCompleet.init({ doc:document, planning:MTPlanning, team:()=>capTeam(), ta
   gebruikers:()=>tgUsers(), capaciteit:(ids,van,tot,ververs)=>tgCapaciteit(ids,van,tot,ververs), capaciteitFouten:()=>(tgCapaciteit.laatste&&tgCapaciteit.laatste.fouten)||{}, capaciteitReden:()=>tgCapaciteitStatus(),
   uren:(van,tot,ververs)=>tgUrenPerGebruiker(van,tot,ververs), foutTekst:e=>_tgFoutTekst(e),
   openTaak:(code,id,el)=>MTTaakPaneel.open(code,id,{terug:el}), openProject:code=>openProject(code,{sectie:'planning'}),
-  openPersoon:slug=>{ try{ MTPlanFilter.zet({persoon:slug}); }catch(e){} agendaZetView('capaciteit'); } }); }catch(e){ console.warn('Planning compleet init:',e); }
+  openPersoon:slug=>{ try{ MTPlanFilter.zet({persoon:slug}); }catch(e){} agendaZetView('capaciteit'); },
+  openHerstel:()=>{ try{ showTab('toggl',[...document.querySelectorAll('.tabs-wrap .tab-btn')].find(b=>(b.getAttribute('onclick')||'').includes("showTab('toggl'"))); tgSub('herstel',[...document.querySelectorAll('#tab-toggl .tg-navitem')].find(b=>(b.getAttribute('onclick')||'').includes("'herstel'"))); }catch(e){ console.warn('Uren zonder project openen:',e); } } }); }catch(e){ console.warn('Planning compleet init:',e); }
+// Uren zonder project (mt-uren-herstel.js, T2 brok 1): herstelbak + datakwaliteitsmeter, ALLEEN LEZEN. Eigenaar/beheer ziet alle personen (Reports), iedereen anders alleen de eigen entries (Track me/time_entries).
+try{ MTUrenHerstel.init({ doc:document, vandaag:()=>_tgVandaag(), nu:()=>Date.now(), lockDagen:()=>{ try{ const c=admCfg(); return (c&&c.lockDagen!=null)?c.lockDagen:14; }catch(e){ return 14; } },
+  teamdata:()=>{ try{ return mtIsAdmin()||!!(window.MTRol&&MTRol.isBeheer&&MTRol.isBeheer()); }catch(e){ return false; } },
+  gebruikers:()=>tgUsers(), rijenMaand:(van,tot,ververs)=>tgUrenPerGebruikerIso(van,tot,ververs), entriesTeam:(van,tot)=>tgUrenEntriesTeam(van,tot),
+  eigenEntries:(van,tot)=>tgUrenEntriesEigen(van,tot), foutTekst:e=>_tgFoutTekst(e) }); }catch(e){ console.warn('Uren zonder project init:',e); }
 // Werktijden per medewerker (restyling brok 9, Admin ▸ Team en werktijden): een gedeeld bestand mt_werktijden.json met een record per medewerker.
 // Wijzigen mag alleen een teamadmin (eigenaar/beheer) met een geladen rol (fail-closed); lezen iedereen: de planning van het hele team rekent ermee.
 // Zonder record van een persoon geldt alles als voorheen (werkuren per week / 5, ma-vr). Zie mt-werktijden.js en MTPlanning.werktijden*.
