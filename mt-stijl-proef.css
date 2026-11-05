@@ -1,0 +1,106 @@
+/* =====================================================================
+   mt-stijl-proef.css: de PROEFSTIJL (zachter ontwerp: ronde kaarten, pil-knoppen, segmenten, uitklapbare rail).
+   Een aftakking om te proberen, geen vervanger. Alles staat onder html[data-stijl="nieuw"][data-proef]; zonder het attribuut data-proef
+   doet dit bestand niets en is de tool pixel-gelijk aan de huidige nieuwe stijl. Aan/uit: Instellingen > Weergave
+   ("Proefstijl (nieuw ontwerp)"), per gebruiker onthouden (localStorage "mt-proef"). Alleen opmaak: geen gedrag, teksten of gegevens.
+   Laadt NA mt-stijl-nieuw.css, mt-rust.css en mt-stijl-mobiel.css en past vooral de tokens aan; de componentregels daaronder
+   maken van de bestaande klassen (.card, .btn, .chip, .data-table, .modal, .pl-sch, .tab-btn, .zb-nav) de zachte variant.
+   Geen bewegende achtergronden, geen glas/blur.
+   Kleuren: de huisstijl (canvas #f6f3ed, primair #17643f, messing #d19a1f, info #3e5c76). Lettertypen: Bricolage (titels), Geist, Geist Mono (getallen).
+   ===================================================================== */
+
+/* ── 1. Tokens ── */
+html[data-stijl="nieuw"][data-proef]{
+  --radius-cell:6px;
+  --radius-ctl:12px;
+  --radius-panel:16px;
+  --radius-sm:12px; --radius:16px; --radius-lg:16px;
+  --radius-pil:999px;
+  --control-h:38px;
+  --row-h:46px;
+  --line:#ece7de; --line-soft:#f1ede5; --border:#ece7de; --border-hair:#f1ede5;
+  --line-strong:#d6cfc0; --border-strong:#d6cfc0;
+  --sidebar:#f6f3ed; --sidebar-hover:#ece7de; --sidebar-active:#17643f;
+  --proef-schaduw:0 1px 2px rgba(27,33,30,.04),0 8px 24px -12px rgba(27,33,30,.10);
+  --shadow-card:var(--proef-schaduw); --shadow-sm:0 1px 2px rgba(27,33,30,.06);
+  --shadow-pop:0 24px 60px -12px rgba(27,33,30,.24);
+  --rail-w:60px;
+}
+
+/* ── 2. Basis: titels in Bricolage, getallen in Geist Mono ── */
+html[data-stijl="nieuw"][data-proef] body{background:var(--canvas)}
+html[data-stijl="nieuw"][data-proef] :is(h1,h2,h3,.card-title,.ui-sectie-kop){font-family:var(--font-head)}
+html[data-stijl="nieuw"][data-proef] .card-title,html[data-stijl="nieuw"][data-proef] .ui-sectie-kop{font-weight:600;font-size:17px;letter-spacing:-.01em}
+html[data-stijl="nieuw"][data-proef] :is(.num,.mono,.kpi-value,.kpi-waarde,.data-table td.num,.data-table th.num){font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+
+/* kop bovenin: kaartwit met een haarlijn, geen gekleurde streep */
+html[data-stijl="nieuw"][data-proef] header{background:var(--surface);box-shadow:none;border-bottom:1px solid var(--line)}
+html[data-stijl="nieuw"][data-proef] header::after{background:none;height:0}
+
+/* ── 3. Kaarten en panelen: radius 16 en een zachte schaduw ── */
+html[data-stijl="nieuw"][data-proef] :is(.card,.ui-sectie,.ins-groep){background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-panel);box-shadow:var(--proef-schaduw)}
+html[data-stijl="nieuw"][data-proef] .card:hover{border-color:var(--line);box-shadow:var(--proef-schaduw)}
+html[data-stijl="nieuw"][data-proef] :is(.project-kaart,.grafiek-wrap,.kpi-card,.cf-canvas-wrap,.vd-kaart,.project-card){border-radius:var(--radius-panel);box-shadow:var(--proef-schaduw)}
+html[data-stijl="nieuw"][data-proef] .ins-groep>summary{border-radius:var(--radius-panel)}
+html[data-stijl="nieuw"][data-proef] .modal{border-radius:20px;box-shadow:var(--shadow-pop)}
+html[data-stijl="nieuw"][data-proef] .modal-overlay{backdrop-filter:none;-webkit-backdrop-filter:none}
+html[data-stijl="nieuw"][data-proef] .login-box{border-radius:20px}
+
+/* ── 4. Knoppen: pillen ── */
+html[data-stijl="nieuw"][data-proef] :is(.btn,.ui-knop){border-radius:var(--radius-pil);padding:0 16px;border-color:var(--line);background:var(--surface)}
+html[data-stijl="nieuw"][data-proef] .btn:hover{background:var(--surface-2)}
+html[data-stijl="nieuw"][data-proef] :is(.btn-sm,.btn-xs){padding:0 12px;border-radius:var(--radius-pil)}
+html[data-stijl="nieuw"][data-proef] .btn-xs{padding:3px 12px}
+html[data-stijl="nieuw"][data-proef] :is(.btn-primary,.ui-knop--primair,.btn.ui-hoofd,.btn-gold.ui-hoofd){background:var(--primary);border-color:var(--primary);color:var(--on-primary)}
+html[data-stijl="nieuw"][data-proef] :is(.btn-ghost,.btn-quiet,.ui-knop--stil){background:transparent;border-color:transparent}
+html[data-stijl="nieuw"][data-proef] .btn-danger{border-color:var(--line)}
+
+/* ── 5. Segmenten en tabs: een pil-balk met een witte actieve knop ── */
+html[data-stijl="nieuw"][data-proef] :is(.pl-schakel,.ui-seg,.seg){display:inline-flex;gap:2px;padding:3px;border-radius:var(--radius-pil);background:var(--surface-2);border:0}
+html[data-stijl="nieuw"][data-proef] :is(.pl-sch,.ui-seg>button,.seg>button){height:30px;padding:0 14px;border-radius:var(--radius-pil);border:0;background:transparent;color:var(--ink-2);font:500 13px/18px var(--font-ui);box-shadow:none}
+html[data-stijl="nieuw"][data-proef] :is(.pl-sch,.ui-seg>button,.seg>button):hover{background:transparent;color:var(--ink)}
+html[data-stijl="nieuw"][data-proef] :is(.pl-sch,.ui-seg>button,.seg>button)[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(27,33,30,.08)}
+html[data-stijl="nieuw"][data-proef] .proj-secnav{border-radius:var(--radius-panel);box-shadow:var(--proef-schaduw)}
+
+/* ── 6. Invoervelden ── */
+html[data-stijl="nieuw"][data-proef] :is(input,select,textarea,.ui-veld){border-color:var(--line-strong);border-radius:var(--radius-ctl)}
+html[data-stijl="nieuw"][data-proef] :is(input,select,textarea):focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(23,100,63,.14)}
+html[data-stijl="nieuw"][data-proef] input[type=checkbox],html[data-stijl="nieuw"][data-proef] input[type=radio]{border-radius:revert}
+
+/* ── 7. Chips en badges: pillen ── */
+html[data-stijl="nieuw"][data-proef] :is(.chip,.ui-chip,.filter-btn,.proj-filterchip,.ib-fchip,.act-chip){border-radius:var(--radius-pil);border-color:var(--line)}
+html[data-stijl="nieuw"][data-proef] .badge{border-radius:var(--radius-pil);padding:2px 10px}
+html[data-stijl="nieuw"][data-proef] :is(.st-pill,.pm-badge,.fase-chip,.bk-pil,.tab-badge){border-radius:var(--radius-pil)}
+
+/* ── 8. Tabellen: ruimer, haarlijnen, kolomkoppen rustig ── */
+html[data-stijl="nieuw"][data-proef] .data-table{border-collapse:separate;border-spacing:0}
+html[data-stijl="nieuw"][data-proef] .data-table thead th{background:var(--surface);color:var(--ink-2);font-weight:500;border-bottom:1px solid var(--line)}
+html[data-stijl="nieuw"][data-proef] .data-table tbody td{border-bottom:1px solid var(--line-soft)}
+html[data-stijl="nieuw"][data-proef] .data-table tbody tr:hover td{background:#faf8f4}
+html[data-stijl="nieuw"][data-proef] .data-table tbody tr:last-child td{border-bottom:0}
+
+/* ── 9. De rail: 60px met afgeronde iconknoppen (uitklapbaar naar iconen + tekst) ──
+   mt-zijbalk.js houdt in proefstijl een eigen keuze bij (localStorage "mt-zijbalk-proef", standaard smal) en zet html[data-zijbalk]. */
+html[data-stijl="nieuw"][data-proef][data-zijbalk]{--zb-w:60px}
+html[data-stijl="nieuw"][data-proef][data-zijbalk="breed"]{--zb-w:232px}
+html[data-stijl="nieuw"][data-proef][data-zijbalk] .zb-nav{background:var(--sidebar);border-right:1px solid var(--line);padding:12px 0;gap:4px}
+html[data-stijl="nieuw"][data-proef][data-zijbalk] .zb-nav :is(.tab-btn,.zb-meer,.zb-toggle,.zb-stijl){height:40px;border-radius:12px;border-color:transparent;background:transparent;box-shadow:none}
+html[data-stijl="nieuw"][data-proef][data-zijbalk] .zb-nav :is(.tab-btn,.zb-meer,.zb-toggle,.zb-stijl):hover{background:var(--sidebar-hover)}
+html[data-stijl="nieuw"][data-proef][data-zijbalk] .zb-nav .tab-btn.active{background:var(--primary);color:#fff;border:0}
+html[data-stijl="nieuw"][data-proef][data-zijbalk] .zb-nav .tab-btn.active::before{display:none}
+html[data-stijl="nieuw"][data-proef][data-zijbalk] .zb-nav .tab-btn.active .zb-ic{color:#fff}
+html[data-stijl="nieuw"][data-proef][data-zijbalk] .zb-nav .tab-btn.active .zb-t{color:#fff}
+html[data-stijl="nieuw"][data-proef][data-zijbalk] .zb-nav .tab-help-btn{border-radius:12px}
+/* smal: 40px-knoppen midden in de 60px-rail */
+html[data-stijl="nieuw"][data-proef][data-zijbalk="smal"] .zb-nav :is(.tab-btn,.zb-meer,.zb-toggle,.zb-stijl){width:40px;margin:1px 10px;padding:0;justify-content:center}
+html[data-stijl="nieuw"][data-proef][data-zijbalk="smal"] .zb-nav .tab-btn[data-zb-meer]{margin-left:10px}
+html[data-stijl="nieuw"][data-proef][data-zijbalk="smal"] .zb-nav .tab-help-btn{width:40px;margin:1px 10px}
+html[data-stijl="nieuw"][data-proef][data-zijbalk="smal"] .zb-nav .tab-btn .tab-badge,html[data-stijl="nieuw"][data-proef][data-zijbalk="smal"] .zb-nav .tab-btn #rapport-badge{top:6px;right:6px;border:2px solid var(--sidebar)}
+/* breed: iconen + tekst, knoppen 40px hoog met ronde hoeken */
+html[data-stijl="nieuw"][data-proef][data-zijbalk="breed"] .zb-nav :is(.tab-btn,.zb-meer,.zb-toggle,.zb-stijl){margin:1px 10px;padding:0 12px}
+html[data-stijl="nieuw"][data-proef][data-zijbalk="breed"] .zb-nav .tab-btn[data-zb-meer]{margin-left:22px}
+html[data-stijl="nieuw"][data-proef][data-zijbalk] .zb-nav :is(.tab-btn,.zb-meer,.zb-toggle,.zb-stijl):focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){html[data-stijl="nieuw"][data-proef] *{transition:none!important}}
+
+/* ── 10. Schakelaar in Instellingen > Weergave ── */
+html[data-stijl="nieuw"][data-proef] #proef-kaart{border-color:var(--primary)}
