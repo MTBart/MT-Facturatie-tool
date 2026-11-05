@@ -247,6 +247,7 @@
     if (u) {
       k.appendChild(el('div', { klass: 'pc-meta', tekst: st.van + ' t/m ' + st.tot + ': ' + uurTekst(u.zonderUur) + ' van ' + uurTekst(u.totaalUur) + ' (' + u.pct + '%) hangt nergens aan.' }));
       const w = wisselKnop('d', u.personen.length); if (w) k.appendChild(w);
+      if (D.openHerstel) k.appendChild(link('Open Uren zonder project (per maand, alleen lezen)', () => D.openHerstel(), 'Naar de herstelbak in de Uren-tab'));
       if (S.open.d) k.appendChild(el('ul', { klass: 'pc-lijst' }, u.personen.map(p => el('li', null, persoonKnop(p.naam, p.slug), el('span', { klass: 'pc-bal', 'aria-hidden': 'true' }, el('i', { stijl: 'width:' + Math.min(100, p.pct) + '%' })), el('span', { klass: 'pc-meta', tekst: p.pct + '% · ' + uurTekst(p.zonderUur) + ' van ' + uurTekst(p.uur) })))));
     }
     return k;

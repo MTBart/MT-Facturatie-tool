@@ -48,7 +48,7 @@
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-10-11b"></script>
 <script src="mt-verbeter.js?v=2026-10-23b"></script>
-<script src="mt-toggl.js?v=2026-11-05a"></script>
+<script src="mt-toggl.js?v=2026-11-05b"></script>
 <script src="mt-koppel.js?v=2026-10-13p"></script>
 <script src="mt-mailactie.js?v=2026-10-13c"></script>
 <script src="mt-binnenkomend.js?v=2026-10-13c"></script>
@@ -82,7 +82,8 @@
 <script src="mt-planinrichting.js?v=2026-10-24z"></script>
 <script src="mt-bord.js?v=2026-10-23z"></script>
 <script src="mt-tijdlijn.js?v=2026-10-24z"></script>
-<script src="mt-compleet.js?v=2026-11-05a"></script>
+<script src="mt-compleet.js?v=2026-11-05b"></script>
+<script src="mt-uren-herstel.js?v=2026-11-05a"></script>
 <script src="mt-personen.js?v=2026-10-17e"></script>
 <script src="mt-werktijden.js?v=2026-10-15t"></script>
 <script src="mt-uren-nieuw.js?v=2026-10-15z"></script>
@@ -2300,6 +2301,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
       <button class="tg-navitem active" onclick="tgSub('timer',this)">⏱ Timer</button>
       <button class="tg-navitem" onclick="tgSub('timeline',this)">📅 Timeline</button>
       <button class="tg-navitem" onclick="tgSub('reports',this)">📊 Reports</button>
+      <button class="tg-navitem" onclick="tgSub('herstel',this)">&#9888; Zonder project</button>
       <div class="tg-side-grp">Beheer</div>
       <button class="tg-navitem" onclick="tgSub('projecten',this)">📁 Projecten</button>
       <button class="tg-navitem" onclick="tgSub('beheer',this)">🏷 Clients &amp; Tags</button>
@@ -2385,6 +2387,9 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
         <button class="btn btn-sm btn-gold" onclick="tgLaadReport()">Genereer</button>
       </div>
       <div id="tg-report"><div class="tg-leeg">Kies een periode en klik Genereer.</div></div>
+    </div>
+    <div id="tg-sub-herstel" class="tg-subcontent">
+      <div id="uren-herstel"><div class="tg-leeg">Laden&hellip;</div></div>
     </div>
     <div id="tg-sub-beheer" class="tg-subcontent">
       <div class="tg-toolbar">
@@ -4332,7 +4337,13 @@ try{ MTCompleet.init({ doc:document, planning:MTPlanning, team:()=>capTeam(), ta
   gebruikers:()=>tgUsers(), capaciteit:(ids,van,tot,ververs)=>tgCapaciteit(ids,van,tot,ververs), capaciteitFouten:()=>(tgCapaciteit.laatste&&tgCapaciteit.laatste.fouten)||{}, capaciteitReden:()=>tgCapaciteitStatus(),
   uren:(van,tot,ververs)=>tgUrenPerGebruiker(van,tot,ververs), foutTekst:e=>_tgFoutTekst(e),
   openTaak:(code,id,el)=>MTTaakPaneel.open(code,id,{terug:el}), openProject:code=>openProject(code,{sectie:'planning'}),
-  openPersoon:slug=>{ try{ MTPlanFilter.zet({persoon:slug}); }catch(e){} agendaZetView('capaciteit'); } }); }catch(e){ console.warn('Planning compleet init:',e); }
+  openPersoon:slug=>{ try{ MTPlanFilter.zet({persoon:slug}); }catch(e){} agendaZetView('capaciteit'); },
+  openHerstel:()=>{ try{ showTab('toggl',[...document.querySelectorAll('.tabs-wrap .tab-btn')].find(b=>(b.getAttribute('onclick')||'').includes("showTab('toggl'"))); tgSub('herstel',[...document.querySelectorAll('#tab-toggl .tg-navitem')].find(b=>(b.getAttribute('onclick')||'').includes("'herstel'"))); }catch(e){ console.warn('Uren zonder project openen:',e); } } }); }catch(e){ console.warn('Planning compleet init:',e); }
+// Uren zonder project (mt-uren-herstel.js, T2 brok 1): herstelbak + datakwaliteitsmeter, ALLEEN LEZEN. Eigenaar/beheer ziet alle personen (Reports), iedereen anders alleen de eigen entries (Track me/time_entries).
+try{ MTUrenHerstel.init({ doc:document, vandaag:()=>_tgVandaag(), nu:()=>Date.now(), lockDagen:()=>{ try{ const c=admCfg(); return (c&&c.lockDagen!=null)?c.lockDagen:14; }catch(e){ return 14; } },
+  teamdata:()=>{ try{ return mtIsAdmin()||!!(window.MTRol&&MTRol.isBeheer&&MTRol.isBeheer()); }catch(e){ return false; } },
+  gebruikers:()=>tgUsers(), rijenMaand:(van,tot,ververs)=>tgUrenPerGebruikerIso(van,tot,ververs), entriesTeam:(van,tot)=>tgUrenEntriesTeam(van,tot),
+  eigenEntries:(van,tot)=>tgUrenEntriesEigen(van,tot), foutTekst:e=>_tgFoutTekst(e) }); }catch(e){ console.warn('Uren zonder project init:',e); }
 // Werktijden per medewerker (restyling brok 9, Admin ▸ Team en werktijden): een gedeeld bestand mt_werktijden.json met een record per medewerker.
 // Wijzigen mag alleen een teamadmin (eigenaar/beheer) met een geladen rol (fail-closed); lezen iedereen: de planning van het hele team rekent ermee.
 // Zonder record van een persoon geldt alles als voorheen (werkuren per week / 5, ma-vr). Zie mt-werktijden.js en MTPlanning.werktijden*.
