@@ -5,6 +5,12 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-11-05 — Merge instellingen: Instellingen in uitklapbare groepen met zoekveld
+- Commit: `9657ca8` | Auteur: Bart Witte
+
+## 2026-11-05 — v2.34.2: mt-cijfers.js cache-versie opgehoogd zodat iedereen direct het nieuwe dashboard laadt
+- Commit: `609fd11` | Auteur: Bart Witte
+
 ## 2026-11-05 — Release v2.34.2: nieuw cijfers-dashboard (zes tegels met vergelijking vorig jaar/2 jaar terug/branche, volledig scherm per tegel, grafiek met verwachting, tooltip, tabel en volledig scherm, schaalfix, meldingen achter een statusknop, telefoonlayout); backup = v2.34.1
 - Commit: `c4712cf` | Auteur: Bart Witte
 
@@ -19,6 +25,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ## 2026-11-05 — Cijfers: schaal centraal (alle getekende waarden eerst verzamelen), test met nep-gegevens
 - Commit: `c7ee00f` | Auteur: Bart Witte
+
+## 2026-11-05 — Instellingen: uitklapbare groepen met zoekveld
+- Commit: `90cfdb8` | Auteur: Bart Witte
 
 ## 2026-11-04 — Release v2.34.1: + Nieuw > Offerte altijd losse offerte, vak "Losse offertes" in de projectenlijst, nieuwe calculatie bij open project zichtbaar, VW projectgegevens (leverdatum "23 november", onderdeel leeg als gelijk aan naam); backup = v2.34.0
 - Commit: `3544f46` | Auteur: Bart Witte

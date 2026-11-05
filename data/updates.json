@@ -1,5 +1,14 @@
 [
   {
+    "versie": "2.34.3",
+    "datum": "2026-11-05",
+    "titel": "Instellingen overzichtelijk in groepen",
+    "voor": "iedereen",
+    "punten": [
+      "Instellingen staan nu in vijf groepen die je open- en dichtklapt: Mijn account, Tarieven & calculatie, Administratie, Koppelingen en Archief. De tool onthoudt welke groepen je open had.",
+      "Bovenaan staat een zoekveld: typ bijvoorbeeld \"uurtarief\" of \"Toggl\" en je ziet alleen de instellingen die daarbij horen."
+    ]
+  },{
     "versie": "2.34.2",
     "datum": "2026-11-05",
     "titel": "Cijfers: overzichtelijk dashboard met tegels en een betere grafiek",
