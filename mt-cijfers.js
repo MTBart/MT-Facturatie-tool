@@ -195,6 +195,11 @@
 .mtd-sdetail .mtd-pt th:first-child,.mtd-sdetail .mtd-pt thead th{background:var(--n-150,#f1ede5)}
 .mtd-pt td .mtd-oordeel{min-height:20px;font-size:12px;padding:0 6px}
 @media(max-width:760px){.mtd-s100{grid-template-columns:minmax(0,1fr);gap:4px}.mtd-s100-leeg{grid-column:1}}
+.mtd-l-huidig{stroke-width:4.5;stroke-linecap:round}.mtd-l-vgl{stroke-width:1.75}
+.mtd-lijnlabel{font-size:12px;fill:var(--ink-2,#596059)}.mtd-lijnlabel.huidig{font-size:13px;font-weight:700;fill:var(--ink,#1b211e)}.mtd-lijnlabel.prog{fill:var(--info,#3e5c76)}
+.mtd-cumzin{display:flex;align-items:center;gap:10px;margin:0;font-size:16px;line-height:22px;font-weight:600;color:var(--ink,#1b211e)}
+.mtd-cumzin .pijl{display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:28px;border-radius:4px;font-size:14px;background:var(--n-150,#f1ede5);color:var(--ink-2,#596059)}
+.mtd-cumzin.voor .pijl{background:var(--mtd-goed-bg);color:var(--mtd-goed)}.mtd-cumzin.achter .pijl{background:var(--mtd-slecht-bg);color:var(--mtd-slecht)}
 @media(prefers-reduced-motion:reduce){.mtd-tegel{transition:none}}
 `;
     document.head.appendChild(s);
@@ -870,9 +875,18 @@
     for (const m of C.prognose(st.maanden, st.prognoseRuw, st.vandaag, st.eerlijk, st.cats).maanden) uit[m.id] = m.omzet;
     return uit;
   }
+  // Eén zin in woorden: hoeveel je voor of achter ligt op vorig jaar, op dezelfde datum (eind van de laatste afgesloten maand). Alleen echte, afgesloten cijfers.
+  C.cumulZin = function (c0, c1, t, jaar) {
+    if (!(t > 0) || !c0 || c0[t - 1] == null) return { tekst: 'Nog geen afgesloten maand om mee te vergelijken.', richting: null };
+    const a = c0[t - 1], b = c1 ? c1[t - 1] : null, mnd = MAANDLANG[t - 1];
+    if (b == null) return { tekst: `Geen vergelijking met ${jaar - 1} eind ${mnd}: niet alle maanden van ${jaar - 1} zijn beschikbaar.`, richting: null };
+    const v = a - b, d = dPct(a, b), p = d == null ? '' : ` (${pct(Math.abs(d))})`;
+    if (Math.abs(v) < 0.5) return { tekst: `Eind ${mnd} ligt je omzet gelijk aan ${jaar - 1} op dezelfde datum.`, richting: 0 };
+    return { tekst: `Eind ${mnd} ligt je omzet ${eur(Math.abs(v))}${p} ${v > 0 ? 'voor' : 'achter'} op ${jaar - 1} op dezelfde datum.`, richting: v > 0 ? 1 : -1 };
+  };
   // Opgetelde omzet door het jaar (cumulatief): boekjaar, vorige jaren en forecast.
   function cumulEl(tm) {
-    const br = BR, klein = br < 500, ho = klein ? 230 : 340, ml = klein ? 40 : 56, mr = 10, mt = 28, mb = 24, bw = (br - ml - mr) / 12, x = i => ml + i * bw + bw / 2, jaar = st.jaar, lm = tm.lm, t = tm.tm;
+    const br = BR, klein = br < 500, ho = klein ? 230 : 340, ml = klein ? 40 : 56, mr = klein ? 46 : 100, mt = 28, mb = 24, bw = (br - ml - mr) / 12, x = i => ml + i * bw + bw / 2, jaar = st.jaar, lm = tm.lm, t = tm.tm;
     const cum = (j, tot) => { let s = 0, stop = false; return Array.from({ length: 12 }, (_, i) => { if (stop || i + 1 > tot) return null; const m = st.maanden.find(q => q.id === `${j}-${d2(i + 1)}`); if (!m || !m.maanden || m.prognose) { stop = true; return null; } s += m.omzet || 0; return s; }); };
     const c0 = cum(jaar, t), c1 = st.vgl.j1 ? cum(jaar - 1, 12) : null, c2 = st.vgl.j2 ? cum(jaar - 2, 12) : null, rest = restPerMaand();
     let cp = null; if (tm.verwacht != null && t > 0) { cp = Array(12).fill(null); cp[t - 1] = c0[t - 1]; let s = c0[t - 1]; for (let i = t; i < 12; i++) { s += rest[`${jaar}-${d2(i + 1)}`] || 0; cp[i] = s; } }
@@ -882,6 +896,12 @@
     if (cp) { const dx = ml + t * bw; svg.append(ss('line', { x1: dx, x2: dx, y1: mt - 14, y2: ho - mb, class: 'mtd-scheid' }), ss('text', { x: dx + (dx > br - 150 ? -5 : 5), y: mt - 5, 'text-anchor': dx > br - 150 ? 'end' : 'start', class: 'mtd-scheidtekst' }, 'vanaf hier verwachting')); }
     const lijn = (r, cls) => r ? svg.append(ss('path', { d: padD(r.map((v, i) => v == null ? null : [x(i), y(v)])), class: cls })) : null;
     lijn(c2, 'mtd-l-vgl o2'); lijn(c1, 'mtd-l-vgl o1'); lijn(cp, 'mtd-l-prog'); lijn(c0, 'mtd-l-huidig');
+    // jaarlabels direct bij de lijnen (geen kleur-alleen), op de rechterrand zonder elkaar te raken
+    const eindY = r => { if (!r) return null; for (let i = 11; i >= 0; i--) if (r[i] != null) return { i, v: r[i] }; return null; };
+    const lab = [[c2, String(jaar - 2), 'o2'], [c1, String(jaar - 1), 'o1'], [cp, klein ? 'verw.' : 'verwacht', 'prog']].map(([r, t, k]) => { const e = eindY(r); return e ? { t, k, x: x(e.i) + 7, y: y(e.v) } : null; }).filter(Boolean).sort((a, b) => a.y - b.y);
+    for (let i = 1; i < lab.length; i++) if (lab[i].y - lab[i - 1].y < 14) lab[i].y = lab[i - 1].y + 14;
+    lab.forEach(l => svg.append(ss('text', { x: l.x, y: l.y + 4, class: 'mtd-lijnlabel ' + l.k }, l.t)));
+    const e0 = eindY(c0); if (e0) svg.append(ss('text', { x: x(e0.i) - 6, y: y(e0.v) + 20, 'text-anchor': 'end', class: 'mtd-lijnlabel huidig' }, String(jaar)));
     MND.forEach((m, i) => svg.append(ss('text', { x: x(i), y: ho - mb + 16, 'text-anchor': 'middle', class: 'mtd-xtekst' + (i >= t && cp ? ' fc' : '') }, m)));
     const kruis = ss('line', { class: 'mtd-kruis', y1: mt - 4, y2: ho - mb }); svg.append(kruis);
     const tip = ee('div', { class: 'mtd-tip', role: 'status' });
@@ -893,7 +913,9 @@
     MND.forEach((m, i) => { const hit = ss('rect', { class: 'mtd-hit', x: ml + i * bw, y: mt - 16, width: bw, height: ho - mt + 16, tabindex: '0', role: 'button', 'data-fk': 'cum-' + i, 'aria-label': `Opgeteld t/m ${MAANDLANG[i]}` });
       hit.addEventListener('mouseenter', () => toon(i)); hit.addEventListener('focus', () => toon(i)); hit.addEventListener('click', () => toon(i)); svg.append(hit); });
     toon(Math.max(0, Math.min(11, (t || 1) - 1)));
-    return ee('div', { class: 'mtd-chart' }, ee('div', { class: 'mtd-plot' }, svg, tip));
+    const z = C.cumulZin(c0, c1 || cum(jaar - 1, 12), t, jaar);
+    const leg = ee('div', { class: 'mtd-legenda' }, legendaItem('huidig', String(jaar)), c1 ? legendaItem('dashed', String(jaar - 1)) : null, c2 ? legendaItem('dotted', String(jaar - 2)) : null, cp ? legendaItem('prog', 'verwachting') : null);
+    return ee('div', { class: 'mtd-chart' }, ee('p', { class: 'mtd-cumzin ' + (z.richting === 1 ? 'voor' : z.richting === -1 ? 'achter' : ''), role: 'status' }, ee('span', { class: 'pijl', 'aria-hidden': 'true' }, z.richting === 1 ? '▲' : z.richting === -1 ? '▼' : '–'), z.tekst), leg, ee('div', { class: 'mtd-plot' }, svg, tip));
   }
   // ── Kleur: vaste kleur per categorie (tokens en klassen in css()); legenda, stapels en tabellen gebruiken dezelfde klasse ──
   const KAT_VAST = { materiaal: 0, uitbesteed: 1, personeel: 2, huisvesting: 3, overig: 4 };
@@ -1141,7 +1163,7 @@
     if (id !== 'komende' && id !== 'hoofd') delen.push(bedieningPaneel());
     if (tegel && tegel.kpis.length) delen.push(kpiRij(tegel.kpis));
     const oud = g => htmlBlok(grafiekHtml(per, g)), sel = st.sel ? ee('div', { class: 'mtc-noot' }, `Gekozen: ${st.sel.label || st.sel.id} · `, ee('a', { href: '#', 'data-wissel': '1' }, 'terug naar het boekjaar')) : null;
-    if (id === 'omzet') { delen.push(sectie('Omzet opgeteld door het jaar', 'Zo zie je in één lijn of je voor of achter loopt op eerdere jaren', cumulEl(tm)), stapelSectie(per), omzetTabelSectie(tm), ee('div', { class: 'mtd-twee' }, topSectie(), feitenSectie('omzet'))); }
+    if (id === 'omzet') { delen.push(sectie('Omzet opgeteld door het jaar', 'Dikke lijn = dit jaar; de gestippelde lijnen zijn eerdere jaren op dezelfde datum', cumulEl(tm)), stapelSectie(per), omzetTabelSectie(tm), ee('div', { class: 'mtd-twee' }, topSectie(), feitenSectie('omzet'))); }
     else if (id === 'brutomarge') delen.push(sectie('Brutomarge per periode', 'Omzet − materiaal − uitbesteed werk, als % van de omzet', sel, oud('brutomarge')), sectie('Kosten tegenover de branche', null, htmlBlok(bulletHtml())), feitenSectie('brutomarge'));
     else if (id === 'resultaat') delen.push(sectie('Omzet, kosten en resultaat', 'Tik op een staaf of kostendeel voor de stukken in Moneybird', sel, oud('omzet_kosten')), feitenSectie('resultaat'));
     else if (id === 'kas') delen.push(sectie('Kaspositie', null, sel, oud('kas')), sectie('Van omzet naar kas', null, htmlBlok(watervalHtml())), feitenSectie('kas'));

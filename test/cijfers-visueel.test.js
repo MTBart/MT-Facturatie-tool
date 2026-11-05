@@ -135,4 +135,13 @@ test('stapelvergelijk: jaar-vorm vergelijkt met voorgaande jaren; 2026 t/m nu is
   assert.strictEqual(C.stapelVergelijk({ per: per5, i: per5.length - 1, zoom: '5J', jaar: 2026, maanden: st.maanden, cats: st.cats, eerlijk: true, bm: st.bm, lm: '2026-10', offsets: [1, 2] }).afgesloten, false);
 });
 
+test('omzetzin: voor, achter, gelijk en niet te vergelijken, in woorden', () => {
+  const c0 = [10000, 25000, 40000], c1 = [9000, 20000, 30000];
+  const z = C.cumulZin(c0, c1, 3, 2026); assert.strictEqual(z.richting, 1); assert.ok(/Eind maart/.test(z.tekst) && /voor op 2025/.test(z.tekst) && /33,3%/.test(z.tekst) && /10\.000/.test(z.tekst), z.tekst);
+  const a = C.cumulZin([1, 2, 20], [5, 6, 40], 3, 2026); assert.strictEqual(a.richting, -1); assert.ok(/achter op 2025/.test(a.tekst));
+  assert.strictEqual(C.cumulZin([1, 2, 30], [5, 6, 30], 3, 2026).richting, 0);
+  const g = C.cumulZin(c0, [9000, null, null], 3, 2026); assert.strictEqual(g.richting, null); assert.ok(/Geen vergelijking met 2025/.test(g.tekst) && !/voor|achter/.test(g.tekst));
+  assert.strictEqual(C.cumulZin([null], null, 0, 2026).richting, null);
+});
+
 console.log(`${n} tests gedaan`);
