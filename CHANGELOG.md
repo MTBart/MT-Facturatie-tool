@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-11-05 — Release v2.34.2: nieuw cijfers-dashboard (zes tegels met vergelijking vorig jaar/2 jaar terug/branche, volledig scherm per tegel, grafiek met verwachting, tooltip, tabel en volledig scherm, schaalfix, meldingen achter een statusknop, telefoonlayout); backup = v2.34.1
+- Commit: `c4712cf` | Auteur: Bart Witte
+
 ## 2026-11-05 — Cijfers: Codex-review verwerkt (feitzinnen, schaal, grootste klanten, forecast-label)
 - Commit: `b808b78` | Auteur: Bart Witte
 
