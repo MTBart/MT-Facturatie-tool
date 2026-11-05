@@ -81,6 +81,8 @@
 .mtd-statuspaneel h2{margin:0;font-size:16px}.mtd-statuspaneel h3{margin:16px 0 6px;font-size:13px;color:var(--ink-2,#596059);font-weight:600}.mtd-statuspaneel ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px;font-size:13px}
 .mtd-sp-kop{display:flex;justify-content:space-between;align-items:center;gap:12px}
 .mtd-tegels{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+@media(min-width:1200px){.mtd-tegels{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(min-width:2200px){.mtd-tegels{grid-template-columns:repeat(6,minmax(0,1fr))}}
 .mtd-tegel{display:flex;flex-direction:column;gap:12px;padding:20px 24px;background:var(--surface,#fff);border:1px solid var(--line,#dfd8cb);border-radius:8px;color:inherit;cursor:pointer;transition:border-color .15s ease-out;min-width:0}
 .mtd-tegel:hover{border-color:var(--border-strong,#9a917f)}.mtd-tegel.uit{cursor:default}.mtd-tegel.uit:hover{border-color:var(--line,#dfd8cb)}.mtd-tegel.uit .mtd-getal{color:var(--ink-3,#646a64)}
 .mtd-t-kop{display:flex;align-items:center;justify-content:space-between;gap:8px}.mtd-t-l{font-size:13px;line-height:18px;font-weight:500;color:var(--ink-2,#596059)}.mtd-vol-ico{color:#8c918a;font-size:15px}
@@ -510,7 +512,7 @@
   const staal = streep => ee('span', { class: 'mtd-staal ' + streep, 'aria-hidden': 'true' });
   const jaarTitel = () => st.zoom === 'M' ? 'per maand' : st.zoom === 'K' ? 'per kwartaal' : 'per jaar';
 
-  // De bediening: boekjaar, periode, eerlijk beeld, vergelijken, horizon en (eigenaar) indeling.
+  // De bediening: boekjaar, periode, eerlijk beeld, vergelijken en (eigenaar) indeling. De horizon stuurt alleen het advies en staat bij het rapport.
   function bediening() {
     const uit = [];
     if (st.zoom === 'M' || st.zoom === 'K') uit.push(ee('div', { class: 'mtc-groep' }, ee('button', { 'data-jaar': '-1', 'data-fk': 'jaar-', 'aria-label': 'Vorig boekjaar', disabled: st.jaar <= Number(START.slice(0, 4)) }, '‹'),
@@ -519,7 +521,6 @@
     uit.push(ee('button', { class: 'mtc-knop' + (st.eerlijk ? ' aan' : ''), 'data-eerlijk': '1', 'data-fk': 'eerlijk', 'aria-pressed': String(st.eerlijk), title: 'Telt lonen die alleen via de bank zijn betaald mee als personeelskosten' }, 'Eerlijk beeld'));
     uit.push(ee('div', { class: 'mtd-vgl', role: 'group', 'aria-label': 'Vergelijk met' }, ee('span', { class: 'mtd-vgl-t' }, 'Vergelijk'),
       [['j1', String(st.jaar - 1), 'dashed'], ['j2', String(st.jaar - 2), 'dotted'], ['b', 'Branche', 'brons']].map(([k, naam, streep]) => ee('button', { class: 'mtd-vglknop' + (st.vgl[k] ? ' aan' : ''), 'data-vgl': k, 'data-fk': 'vgl-' + k, 'aria-pressed': String(!!st.vgl[k]) }, staal(streep), naam))));
-    uit.push(groep('Horizon advies', [['kort', 'Korte termijn'], ['lang', 'Lange termijn']].map(([k, t]) => ee('button', { 'data-horizon': k, 'data-fk': 'hor-' + k, class: st.horizon === k ? 'aan' : '', 'aria-pressed': String(st.horizon === k) }, t))));
     if (st.mag) uit.push(ee('button', { class: 'mtc-knop', 'data-indeling': '1', 'data-fk': 'indeling', title: 'Indeling grootboeken, privé, aflossing, loonpatronen, branche' }, '⚙ Indeling'));
     return ee('div', { class: 'mtd-bar' }, uit);
   }
@@ -553,7 +554,7 @@
 
   function teken() {
     if (!st.el) return;
-    const fk = focusSleutel(); maat(Math.max(320, (st.el.clientWidth || 640) - 50), 1400);
+    const fk = focusSleutel(); maat(Math.max(320, (st.el.clientWidth || 640) - 50), 2400);
     const wortel = ee('div', { class: 'mtc mtd' }); wortel.addEventListener('click', klik); wortel.addEventListener('keydown', toets);
     const modelFout = st.fout && !st.maanden.length;
     wortel.append(ee('div', { class: 'mtd-kop' }, ee('h2', { class: 'mtd-titel' }, 'Cijfers ' + st.jaar), st.maanden.length ? statusKnop() : null), bediening());
@@ -600,7 +601,7 @@
 
   function hoofdGrafiek(per, o) {
     o = o || {};
-    const br = o.breedte || BR, klein = br < 500, ho = o.hoog || (klein ? 190 : 300), ml = klein ? 40 : 56, mr = 10, mt = 28, mb = 24;
+    const br = o.breedte || BR, klein = br < 500, ho = o.hoog || (klein ? 190 : Math.min(440, Math.max(300, Math.round(br * .27)))), ml = klein ? 40 : 56, mr = 10, mt = 28, mb = 24;
     const n = Math.max(1, per.length), bw = (br - ml - mr) / n, x = i => ml + i * bw + bw / 2, vgl = vergelijkReeks(per, P => P.omzet);
     // alle getekende waarden eerst: staven + forecast bovenop + vergelijkjaren; dan pas de schaal
     const sc = C.schaalVoor([per.map(p => (p.P.maanden ? p.P.omzet : 0) + p.P.prognose), ...vgl.map(r => r.w)], { min: 0, max: 1 }), y = v => mt + (ho - mt - mb) * (1 - (v - sc.a) / (sc.b - sc.a));

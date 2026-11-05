@@ -186,7 +186,7 @@ html[data-stijl="nieuw"] .tab-content [style*="max-width:900px"],html[data-stijl
 html[data-stijl="nieuw"] #tab-verbeterpunten>[style*="max-width:800px"]{max-width:1100px!important}   /* een formulier: niet over de hele breedte */
 html[data-stijl="nieuw"] #inbox-pane-binnenkomend{max-width:1100px!important}
 html[data-stijl="nieuw"] .mtg{max-width:none}
-html[data-stijl="nieuw"] .mtr.mtr-met{max-width:min(100%,1800px)}
+html[data-stijl="nieuw"] .mtr.mtr-met{max-width:none}
 html[data-stijl="nieuw"] .card>p,html[data-stijl="nieuw"] .card>.field>p{max-width:80ch}
 html[data-stijl="nieuw"] .card .field>input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file]),
 html[data-stijl="nieuw"] .card .field>select,html[data-stijl="nieuw"] .card .field>textarea{max-width:720px}
