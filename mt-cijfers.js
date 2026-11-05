@@ -1118,7 +1118,7 @@
       ee('thead', null, ee('tr', null, ee('th', { scope: 'col' }, 'Onderdeel'), ee('th', { scope: 'col' }, titel), v.vorig.map(q => ee('th', { scope: 'col' }, q.label)), ee('th', { scope: 'col' }, 'Branche'))),
       ee('tbody', null, ond.map(o => ee('tr', null, ee('th', { scope: 'row' }, ee('span', { class: 'mtd-sw ' + (o.id === 'brutomarge' ? 'mtd-kres' : katKl(o.id)), style: 'margin-right:6px' }), o.naam), ee('td', null, pctF(o.v)),
         o.vorig.map(q => ee('td', { class: q.v == null ? 'leeg' : '', title: q.v == null ? q.reden : null }, q.v == null ? '—' : [pctF(q.v), ee('span', { class: 'mtd-pt-fc' }, puntTekst(q.pp), ' ', oordeelEl(q.oordeel))])),
-        ee('td', { class: o.branche.ref && !o.branche.reden ? '' : 'leeg', title: o.branche.reden || null }, o.branche.reden ? '—' : [bmTekst2(o.branche.ref), ee('span', { class: 'mtd-pt-fc' }, oordeelEl(o.branche.oordeel, o.branche.oordeel.woord + ' (' + puntTekst(o.branche.oordeel.pp) + ')'))]))))));
+        ee('td', { class: o.branche.ref && !o.branche.reden ? '' : 'leeg', title: o.branche.reden || null }, o.branche.reden ? '—' : [bmTekst2(o.branche.ref), ee('span', { class: 'mtd-pt-fc' }, oordeelEl(o.branche.oordeel, o.branche.oordeel.woord + (o.branche.oordeel.pp ? ' (' + puntTekst(o.branche.oordeel.pp) + ')' : '')))]))))));
     const redenen = [...new Set(v.vorig.filter(q => !q.u).map(q => q.reden))];
     return ee('div', { class: 'mtd-info vast heeft mtd-sdetail' }, ee('div', { class: 'mtd-tk' }, ee('span', { class: 'mtd-tt' }, titel), ee('span', { class: 'mtd-tlab' }, 'geboekt, geen prognose')),
       ee('h4', { class: 'mtd-sh' }, 'Waar ging elke € omzet heen'), ee('div', { class: 'mtd-s100s' }, rijen),
