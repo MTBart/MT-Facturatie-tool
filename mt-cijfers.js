@@ -276,7 +276,7 @@
     if (g.van && /^\d{4}/.test(g.van)) st.jaar = Number(g.van.slice(0, 4));
     st.sel = null; st.vast = null;
     // Een rapportsectie wijst een grafiek aan: de bijbehorende tegel gaat open (omzet en kosten staan in Resultaat, opnames en waterval bij Kaspositie).
-    const naarPaneel = { omzet_kosten: g.categorie ? 'resultaat' : null, brutomarge: 'brutomarge', kosten_pct: 'brutomarge', opnames: 'kas', kas: 'kas', waterval: 'kas' }[st.weergave];
+    const naarPaneel = { omzet_kosten: g.categorie ? 'resultaat' : null, brutomarge: 'brutomarge', kosten_pct: 'brutomarge', opnames: 'opnames', kas: 'kas', waterval: 'kas' }[st.weergave];
     if (st.paneel && !naarPaneel) st.paneel = null;
     teken();
     if (naarPaneel && st.maanden.length) { st.paneel = naarPaneel; st.paneelNieuw = true; st.openerFk = null; tekenPaneel(); }
@@ -313,7 +313,7 @@
   const puntTeken = x => x == null ? '' : (x >= 0 ? '+' : '−') + Math.abs(x).toLocaleString('nl-NL', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   // chip "▲ 13,3% t.o.v. 2025": pijl, tekst en oordeel (goed/slecht/neutraal). punten = verschil in procentpunten i.p.v. percentage.
   const chipVan = (d, vs, opt) => { if (d == null || !isFinite(d)) return null; const op = (opt && opt.hogerIsGoed) !== false, nul = Math.abs(d) < 0.05;
-    return { pijl: nul ? '' : d > 0 ? '▲' : '▼', tekst: (opt && opt.punt ? Math.abs(d).toLocaleString('nl-NL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' punt' : pct(Math.abs(d))) + ' t.o.v. ' + vs, goed: nul ? null : (d > 0) === op }; };
+    return { pijl: nul ? '' : d > 0 ? '▲' : '▼', tekst: (opt && opt.punt ? Math.abs(d).toLocaleString('nl-NL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' punt' : pct(Math.abs(d))) + ' t.o.v. ' + vs, goed: nul || (opt && opt.neutraal) ? null : (d > 0) === op }; };
   // De drie vergelijk-schakelaars (jaar−1, jaar−2, branche): onthouden per gebruiker.
   C.vglLees = (tekst, mob) => { const t = tekst == null ? null : String(tekst); return t && /^[01]{3}$/.test(t) ? { j1: t[0] === '1', j2: t[1] === '1', b: t[2] === '1' } : { j1: true, j2: !mob, b: true }; };
   C.vglTekst = v => (v.j1 ? '1' : '0') + (v.j2 ? '1' : '0') + (v.b ? '1' : '0');
@@ -418,8 +418,17 @@
         spark: tm ? C.sparkPaden({ vorig: reeks(j1, f), huidig: reeks(jaar, f), prog: kp && kp.some(v => v != null) ? kp : null }) : null, klik: true,
         kpis: [{ l: 'Kas incl. btw-pot', v: k0 ? kort(k0.met_btw) : '—', s: `eind ${mn}` }, { l: 'Waarvan lopend', v: k0 && k0.lopend != null ? kort(k0.lopend) : '—', s: 'zonder btw-pot' }, { l: `Eind ${mn} ${j1}`, v: k1 ? kort(k1.met_btw) : '—', s: k0 && k1 ? pctTeken(dPct(k0.met_btw, k1.met_btw)) : '' }, { l: `Opnames ${jaar}`, v: kort(A.prive_totaal), s: Object.entries(A.prive).map(([n, x]) => n + ' ' + kort(x)).join(' · ') || '—' }] });
     }
-    // Debiteuren open: er is nog geen bron voor openstaande verkoopfacturen in de cijfers van de worker; geen verzonnen getal.
-    t.push({ id: 'debiteuren', label: 'Debiteuren open', waarde: '—', sub: 'Nog geen bron voor openstaande facturen', rijen: [], spark: null, klik: false, kpis: [] });
+    // Opnames (privé, per eigenaar): geboekte opnames t/m de laatste afgesloten maand, tegenover hetzelfde deel van vorige jaren.
+    // (Een Debiteuren-tegel is er niet: de worker levert geen openstaande verkoopfacturen.)
+    {
+      const oRij = [], namen = Object.entries(A.prive).filter(([, x]) => x > 0), f = P => P.prive_totaal;
+      if (B) oRij.push(rij(String(j1), kort(B.prive_totaal), pctTeken(dPct(A.prive_totaal, B.prive_totaal)), { soort: 'j1', streep: 'dashed' }));
+      if (B2) oRij.push(rij(String(j2), kort(B2.prive_totaal), pctTeken(dPct(A.prive_totaal, B2.prive_totaal)), { soort: 'j2', streep: 'dotted' }));
+      if (A.aflossing > 0) oRij.push(rij('Aflossing', kort(A.aflossing), '', { streep: 'geen' }));
+      t.push({ id: 'opnames', label: 'Opnames', waarde: kort(A.prive_totaal), sub: namen.length ? namen.map(([n, x]) => n + ' ' + kort(x)).join(' · ') : (tm ? 'jan t/m ' + MND[tm - 1] : ''), chip: B && B.prive_totaal ? chipVan(dPct(A.prive_totaal, B.prive_totaal), j1, { neutraal: true }) : null, rijen: oRij,
+        spark: tm ? C.sparkPaden({ vorig: reeks(j1, f), huidig: reeks(jaar, f) }) : null, klik: true,
+        kpis: [{ l: `Opnames t/m ${MND[Math.max(0, tm - 1)]}`, v: kort(A.prive_totaal), s: namen.map(([n, x]) => n + ' ' + kort(x)).join(' · ') }, { l: `Zelfde periode ${j1}`, v: B ? kort(B.prive_totaal) : '—', s: B ? pctTeken(dPct(A.prive_totaal, B.prive_totaal)) : '' }, { l: `Zelfde periode ${j2}`, v: B2 ? kort(B2.prive_totaal) : '—', s: B2 ? pctTeken(dPct(A.prive_totaal, B2.prive_totaal)) : '' }, { l: 'Aflossing', v: kort(A.aflossing), s: `t/m ${MND[Math.max(0, tm - 1)]}` }] });
+    }
     t.A = A; t.B = B; t.B2 = B2; t.tm = tm; t.lm = lm; t.verwacht = verwacht;
     return t;
   }
@@ -447,7 +456,6 @@
     uitleg.push(`Forecast: omzet uit de termijnen in de prognose (≈ excl. 21% btw); kosten = omzet × (1 − gemiddelde brutomarge${pr.marge != null ? ' ' + pct(pr.marge * 100) : ''}) + gemiddelde vaste kosten${pr.vast != null ? ' ' + kort(pr.vast) : ''}/mnd, uit ${pr.kostenBasis} afgesloten ${pl(pr.kostenBasis, 'maand', 'maanden')}. Forecast telt nooit mee in de kerncijfers en is altijd gestippeld of gearceerd.`);
     uitleg.push('Komende 3 maanden = termijnen in de prognose met factuurdatum na vandaag (lopende maand + 2 maanden), omzet excl. btw. Het zijn verwachtingen, geen geboekte omzet.');
     if (st.bm && Object.keys(st.bm).length) uitleg.push(`Branche${st.bmBron === 'standaard' ? ': standaard CBS-kengetallen' : ': eigen of ingestelde waarden'}; voor omzet en kaspositie is geen brancheniveau beschikbaar. Aanpassen kan via ⚙ Indeling.`);
-    uitleg.push('Debiteuren open: er is nog geen bron voor openstaande verkoopfacturen in deze cijfers, daarom staat er geen bedrag.');
     uitleg.push('Historie en indeling: cijfers komen uit Moneybird (alleen lezen), per boekjaar (kalenderjaar). Na late boekingen kan een afgesloten jaar opnieuw worden opgehaald via ⚙ Indeling.');
     return { aandacht, uitleg, lm };
   };
@@ -480,6 +488,9 @@
       if (st.eerlijk && A.correctie) uit.push({ icoon: 'klok', t: `In het resultaat zit ${kort(A.correctie)} aan lonen die via de bank zijn betaald maar niet in de W&V staan.`, bron: 'eerlijk beeld; uit te zetten bovenaan' });
       const maandRes = Array.from({ length: t }, (_, i) => { const m = st.maanden.find(x => x.id === `${jaar}-${d2(i + 1)}`); return m && m.maanden && !m.prognose ? C.som([m], st.cats, st.eerlijk).resultaat : null; }), neg = maandRes.map((v, i) => v != null && v < 0 ? MAANDLANG[i] : null).filter(Boolean);
       if (maandRes.some(v => v != null)) uit.push({ icoon: neg.length ? 'dal' : 'trend', t: neg.length ? `In ${neg.join(', ')} was het resultaat negatief.` : `Elke afgesloten maand van ${jaar} had een positief resultaat.`, bron: `maandresultaten jan–${mn} ${jaar}` });
+    } else if (id === 'opnames') {
+      if (A.prive_totaal > 0) uit.push({ icoon: 'taart', t: `Opnames en aflossing samen ${kort(A.prive_totaal + A.aflossing)} in ${jaar} tot nu toe (opnames ${kort(A.prive_totaal)}, aflossing ${kort(A.aflossing)}).`, bron: 'Moneybird, geboekte opnames en aflossingen' });
+      if (B && B.prive_totaal > 0 && A.prive_totaal > 0) uit.push({ icoon: 'taart', t: `Opnames waren ${pctTeken(dPct(A.prive_totaal, B.prive_totaal))} ten opzichte van dezelfde maanden van ${j1} (${kort(B.prive_totaal)}).`, bron: `jan–${mn} ${jaar} tegenover ${j1}` });
     } else if (id === 'kas') {
       const k0 = (st.maanden.find(x => x.id === lm) || {}).kas;
       if (k0 && k0.met_btw != null) uit.push({ icoon: 'klok', t: `Eind ${MAANDLANG[t - 1]} staat er ${kort(k0.met_btw)} (incl. btw-pot)${k0.lopend != null ? ', waarvan ' + kort(k0.lopend) + ' lopend' : ''}.`, bron: 'balans in Moneybird, stand op het maandeinde' });
@@ -641,7 +652,7 @@
     return ee('div', { class: 'mtd-tabelwrap' }, ee('table', { class: 'mtd-tabel' }, ee('caption', { class: 'sr' }, 'Omzet en resultaat ' + jaarTitel() + ' ' + st.jaar), ee('thead', null, ee('tr', null, kop.map(k => ee('th', { scope: 'col' }, k)))), ee('tbody', null, rijen)));
   }
   // ── Dashboard: volledig-scherm-paneel per tegel ──
-  const PANEEL_TITEL = { omzet: 'Omzet', brutomarge: 'Brutomarge', resultaat: 'Resultaat', komende: 'Komende 3 maanden', kas: 'Kaspositie', hoofd: 'Omzet en resultaat' };
+  const PANEEL_TITEL = { omzet: 'Omzet', brutomarge: 'Brutomarge', resultaat: 'Resultaat', komende: 'Komende 3 maanden', kas: 'Kaspositie', opnames: 'Opnames', hoofd: 'Omzet en resultaat' };
   const ICONEN = { trend: 'M3 17l6-6 4 4 8-8M15 7h6v6', dal: 'M3 7l6 6 4-4 8 8M15 17h6v-6', klok: 'M12 7v5l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z', taart: 'M21 12A9 9 0 1 1 12 3v9z' };
   const mbAdmin = () => { try { const a = typeof root.getAdmin === 'function' ? String(root.getAdmin() || '') : ''; return /^[\w-]+$/.test(a) ? a : ''; } catch (e) { return ''; } };
   const sectie = (titel, sub, ...inhoud) => ee('section', { class: 'mtd-kaart', 'aria-label': titel }, ee('div', { class: 'mtd-kaartkop' }, ee('div', null, ee('h3', null, titel), sub ? ee('span', { class: 'mtc-noot' }, sub) : null)), inhoud);
@@ -749,7 +760,8 @@
     if (id === 'omzet') { delen.push(sectie('Omzet opgeteld door het jaar', 'Zo zie je in één lijn of je voor of achter loopt op eerdere jaren', cumulEl(tm)), ee('div', { class: 'mtd-twee' }, kwartaalSectie(tm), topSectie(), feitenSectie('omzet'))); }
     else if (id === 'brutomarge') delen.push(sectie('Brutomarge per periode', 'Omzet − materiaal − uitbesteed werk, als % van de omzet', sel, oud('brutomarge')), sectie('Kosten tegenover de branche', null, htmlBlok(bulletHtml())), feitenSectie('brutomarge'));
     else if (id === 'resultaat') delen.push(sectie('Omzet, kosten en resultaat', 'Tik op een staaf of kostendeel voor de stukken in Moneybird', sel, oud('omzet_kosten')), feitenSectie('resultaat'));
-    else if (id === 'kas') delen.push(sectie('Kaspositie', null, sel, oud('kas')), sectie('Privé-opnames en aflossing', null, oud('opnames')), sectie('Van omzet naar kas', null, htmlBlok(watervalHtml())), feitenSectie('kas'));
+    else if (id === 'kas') delen.push(sectie('Kaspositie', null, sel, oud('kas')), sectie('Van omzet naar kas', null, htmlBlok(watervalHtml())), feitenSectie('kas'));
+    else if (id === 'opnames') delen.push(sectie('Privé-opnames en aflossing', 'Komen uit het resultaat (of uit de kas als dat niet genoeg is)', sel, oud('opnames')), feitenSectie('opnames'));
     else if (id === 'komende') delen.push(komendeSectie(tm), feitenSectie('komende'));
     else if (id === 'hoofd') { delen.push(hoofdKaart(per, { paneel: true, breedte, hoog: 380 })); if (!st.tabel) delen.push(tabelEl(per, vergelijkReeks(per, P => P.omzet))); }
     return delen.filter(Boolean);

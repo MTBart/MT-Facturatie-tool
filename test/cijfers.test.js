@@ -55,7 +55,7 @@ test('tegels: omzet t/m oktober, vergelijking en forecast apart gehouden', () =>
   zet(); const tg = C._tegels(), o = tg.find(x => x.id === 'omzet');
   assert.strictEqual(tg.length, 6); assert.strictEqual(o.waarde, '€ 495k'); assert.strictEqual(o.chip.pijl, '▲'); assert.ok(/13,3%/.test(o.chip.tekst));
   const k = tg.find(x => x.id === 'komende'); assert.strictEqual(k.tot, 140000); assert.ok(k.forecast);
-  assert.strictEqual(tg.find(x => x.id === 'debiteuren').waarde, '—');   // geen bron: geen verzonnen getal
+  const op = tg.find(x => x.id === 'opnames'); assert.strictEqual(op.waarde, '€ 40k'); assert.ok(!tg.some(x => x.id === 'debiteuren'));   // geen bron voor debiteuren: geen tegel, geen verzonnen getal
   assert.strictEqual(tg.A.prognose, 0);
 });
 test('tegels: ontbrekende vorig-jaar-maand geeft geen vergelijking', () => {
