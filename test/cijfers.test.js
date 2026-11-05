@@ -78,4 +78,33 @@ test('status: aandachtspunten en toelichting', () => {
   zet({ mislukt: [], ontbrekend: [], waarsch: [] }); assert.strictEqual(C.statusItems().aandacht.length, 0);
 });
 test('vergelijk-schakelaars: onthouden en terugzetten', () => { assert.deepStrictEqual(C.vglLees(C.vglTekst({ j1: true, j2: false, b: true })), { j1: true, j2: false, b: true }); assert.deepStrictEqual(C.vglLees('xx'), { j1: true, j2: true, b: true }); });
-console.log(`${n} tests gedaan`);
+test('feitzinnen: ontbrekende maand = geen uitspraken (omzet, brutomarge, resultaat)', () => {
+  zet(); st.maanden = st.maanden.filter(m => m.id !== '2026-04');
+  for (const id of ['omzet', 'brutomarge', 'resultaat', 'kas']) assert.deepStrictEqual(C.feiten(id), [], id);
+});
+test('feitzinnen: nooit "positief"; resultaat €0 blijft neutraal', () => {
+  zet(); assert.ok(!C.feiten('resultaat').some(x => /positief/.test(x.t)));
+  const m = st.maanden.find(x => x.id === '2026-03'), oud = m.omzet; m.omzet = m.kosten_totaal + m.correctie;   // resultaat precies 0 (eerlijk beeld: correctie telt als kosten)
+  try { const f = C.feiten('resultaat'); assert.ok(!f.some(x => /positief/.test(x.t) || (/negatief/.test(x.t) && /maart/.test(x.t)))); } finally { m.omzet = oud; }
+});
+test('schaal: negatieve brancheband en referentiewaarden vallen binnen de as (geen +10-truc)', () => {
+  zet({ zoom: 'M' }); st.bm = { brutomarge: { van: -35, tot: -20, bron: 'nep' } }; const html = C._grafiekHtml('brutomarge');
+  const r = /<rect x="[\d.]+" y="([\d.\-]+)" width="[\d.]+" height="([\d.\-]+)" fill="#e4e7eb"/.exec(html); assert.ok(r, 'bandje getekend');
+  assert.ok(Number(r[1]) >= BOVEN - 0.6 && Number(r[1]) + Number(r[2]) <= ONDER + 0.6, `band ${r[1]}+${r[2]} buiten ${BOVEN}..${ONDER}`);
+  st.bm = { brutomarge: { pct: 95 } }; const y2 = /<line x1="[\d.]+" x2="[\d.]+" y1="([\d.\-]+)" y2="[\d.\-]+" stroke="#7f8a96"/.exec(C._grafiekHtml('brutomarge')); assert.ok(y2 && Number(y2[1]) >= BOVEN - 0.6, 'lijn op 95% binnen de grafiek');
+});
+test('komende 3 maanden: eerlijk gelabeld als verwachting, niet ontdubbeld met boekingen', () => {
+  zet(); const k = C._tegels().find(x => x.id === 'komende'); assert.ok(/verwachting uit forecast/.test(k.sub));
+  const alles = [k.sub, ...C.statusItems().uitleg, ...C.feiten('komende').map(x => x.t + x.bron)].join(' ');
+  assert.ok(/niet ontdubbeld/.test(alles)); assert.ok(!/geen geboekte omzet/.test(alles));
+});
+(async () => {
+  try {
+    zet(); st.paneel = null; let n1 = 0; st.bron = { haal: async u => { n1++; if (/2026-03/.test(u)) throw new Error('stuk'); if (/2026-05/.test(u)) return { error: 'nee' }; return { items: [{ tegenpartij: 'Nep A', bedrag: 100 }] }; } };
+    const p1 = C._laadTop(), p2 = C._laadTop(); await Promise.all([p1, p2]);
+    assert.strictEqual(n1, 10, 'één verzoek per maand, geen tweede ronde'); assert.strictEqual(st.top.laden, false); assert.strictEqual(st.top.fouten, 2); assert.strictEqual(st.top.onvolledig, true); assert.strictEqual(st.top.items[0].v, 800);
+    st.bron = { haal: async () => ({ items: [{ tegenpartij: 'Nep B', bedrag: 5 }] }) }; await C._laadTop(); assert.strictEqual(st.top.fouten, 0); assert.strictEqual(st.top.laden, false);   // opnieuw proberen
+    n++; console.log('ok  - grootste klanten: fout/exceptie zet laden uit, onvolledig + opnieuw proberen, geen dubbele verzoeken');
+  } catch (e) { console.log('FOUT - grootste klanten\n' + (e.stack || e)); process.exitCode = 1; }
+  console.log(`${n} tests gedaan`);
+})();

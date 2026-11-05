@@ -283,6 +283,7 @@
   };
   C.horizon = function (h) { st.horizon = h; teken(); };
   // Voor de tests (zonder DOM): de tekenfuncties op de huidige staat.
+  C._laadTop = () => laadTop();
   C._grafiekHtml = (g) => grafiekHtml(huidigePeriodes(), g);
 
   // ── Tekenen ──────────────────────────────────────────────────────────────
@@ -399,7 +400,7 @@
       const v1 = terug(1), v2 = terug(2), kRij = fm.map(m => rij(maandNaam(m.id), m.omzet > 0 ? kort(m.omzet) : '—', '', { soort: 'prog', streep: 'prog' }));
       if (tot > 0 && v1 != null) kRij.push(rij('Geboekt ' + (Number(huidig.slice(0, 4)) - 1), kort(v1), pctTeken(dPct(tot, v1)), { soort: 'j1', streep: 'dashed', goed: tot >= v1 }));
       if (tot > 0 && v2 != null) kRij.push(rij('Geboekt ' + (Number(huidig.slice(0, 4)) - 2), kort(v2), pctTeken(dPct(tot, v2)), { soort: 'j2', streep: 'dotted', goed: tot >= v2 }));
-      t.push({ id: 'komende', label: 'Komende 3 maanden', waarde: tot > 0 ? kort(tot) : '—', sub: tot > 0 ? `${MND[Number(fm[0].id.slice(5, 7)) - 1]} t/m ${MND[Number(fm[2].id.slice(5, 7)) - 1]} · forecast` : 'geen termijnen in de forecast', forecast: true, chip: tot > 0 && v1 != null ? chipVan(dPct(tot, v1), 'vorig jaar') : null, rijen: kRij,
+      t.push({ id: 'komende', label: 'Komende 3 maanden', waarde: tot > 0 ? kort(tot) : '—', sub: tot > 0 ? `${MND[Number(fm[0].id.slice(5, 7)) - 1]} t/m ${MND[Number(fm[2].id.slice(5, 7)) - 1]} · verwachting uit forecast` : 'geen termijnen in de forecast', forecast: true, chip: tot > 0 && v1 != null ? chipVan(dPct(tot, v1), 'vorig jaar') : null, rijen: kRij,
         spark: tot > 0 ? C.sparkPaden({ vorig: v1 != null ? fm.map(m => { const x = st.maanden.find(q => q.id === `${Number(m.id.slice(0, 4)) - 1}${m.id.slice(4)}`); return x && x.maanden ? x.omzet : null; }) : null, prog: fm.map(m => m.omzet > 0 ? m.omzet : null) }) : null, klik: true, breed: true, fm, tot, v1, v2,
         kpis: [{ l: 'Verwacht, komende 3 maanden', v: tot > 0 ? kort(tot) : '—', s: 'forecast', prog: true }].concat(fm.map(m => ({ l: maandNaam(m.id), v: m.omzet > 0 ? kort(m.omzet) : '—', s: 'forecast', prog: true }))) });
     }
@@ -454,7 +455,7 @@
       : 'Eerlijk beeld staat uit: het resultaat is zoals het in de W&V staat, zonder de lonen die alleen via de bank zijn betaald.');
     uitleg.push('Brutomarge = omzet − materiaal − uitbesteed werk, als % van de omzet.');
     uitleg.push(`Forecast: omzet uit de termijnen in de prognose (≈ excl. 21% btw); kosten = omzet × (1 − gemiddelde brutomarge${pr.marge != null ? ' ' + pct(pr.marge * 100) : ''}) + gemiddelde vaste kosten${pr.vast != null ? ' ' + kort(pr.vast) : ''}/mnd, uit ${pr.kostenBasis} afgesloten ${pl(pr.kostenBasis, 'maand', 'maanden')}. Forecast telt nooit mee in de kerncijfers en is altijd gestippeld of gearceerd.`);
-    uitleg.push('Komende 3 maanden = termijnen in de prognose met factuurdatum na vandaag (lopende maand + 2 maanden), omzet excl. btw. Het zijn verwachtingen, geen geboekte omzet.');
+    uitleg.push('Komende 3 maanden = termijnen in de prognose met factuurdatum na vandaag (lopende maand + 2 maanden), omzet excl. btw. Het is een verwachting uit de forecast, niet ontdubbeld met boekingen: een termijn die al is gefactureerd kan er nog in staan (de prognose weet niet welke termijnen al gefactureerd zijn). Hetzelfde geldt voor Verwacht jaar en de forecast-staven.');
     if (st.bm && Object.keys(st.bm).length) uitleg.push(`Branche${st.bmBron === 'standaard' ? ': standaard CBS-kengetallen' : ': eigen of ingestelde waarden'}; voor omzet en kaspositie is geen brancheniveau beschikbaar. Aanpassen kan via ⚙ Indeling.`);
     uitleg.push('Historie en indeling: cijfers komen uit Moneybird (alleen lezen), per boekjaar (kalenderjaar). Na late boekingen kan een afgesloten jaar opnieuw worden opgehaald via ⚙ Indeling.');
     return { aandacht, uitleg, lm };
@@ -463,6 +464,7 @@
   // Feitzinnen onder "Wat de cijfers zeggen": alleen wat uit de gegevens volgt, met de bron erbij. Geen interpretatie of AI-tekst.
   C.feiten = function (id, extra) {
     const tm = tegelModel(), uit = [], A = tm.A, B = tm.B, lm = tm.lm; if (!A || !lm) return uit;
+    if (id !== 'komende' && st.maanden.filter(m => m.maanden && !m.prognose && m.id.startsWith(st.jaar + '-') && m.id <= lm).length !== tm.tm) return uit;   // ontbrekende maand = geen uitspraak
     const jaar = st.jaar, j1 = jaar - 1, t = tm.tm, mn = MND[t - 1];
     const maandOmzet = (j) => Array.from({ length: t }, (_, i) => { const m = st.maanden.find(x => x.id === `${j}-${d2(i + 1)}`); return m && m.maanden && !m.prognose ? m.omzet || 0 : null; });
     if (id === 'omzet') {
@@ -487,7 +489,7 @@
       if (B) uit.push({ icoon: A.resultaat >= B.resultaat ? 'trend' : 'dal', t: `${kort(Math.abs(A.resultaat - B.resultaat))} ${A.resultaat >= B.resultaat ? 'meer' : 'minder'} resultaat dan in dezelfde maanden van ${j1} (${kort(B.resultaat)}).`, bron: `jan–${mn} ${jaar} tegenover ${j1}` });
       if (st.eerlijk && A.correctie) uit.push({ icoon: 'klok', t: `In het resultaat zit ${kort(A.correctie)} aan lonen die via de bank zijn betaald maar niet in de W&V staan.`, bron: 'eerlijk beeld; uit te zetten bovenaan' });
       const maandRes = Array.from({ length: t }, (_, i) => { const m = st.maanden.find(x => x.id === `${jaar}-${d2(i + 1)}`); return m && m.maanden && !m.prognose ? C.som([m], st.cats, st.eerlijk).resultaat : null; }), neg = maandRes.map((v, i) => v != null && v < 0 ? MAANDLANG[i] : null).filter(Boolean);
-      if (maandRes.some(v => v != null)) uit.push({ icoon: neg.length ? 'dal' : 'trend', t: neg.length ? `In ${neg.join(', ')} was het resultaat negatief.` : `Elke afgesloten maand van ${jaar} had een positief resultaat.`, bron: `maandresultaten jan–${mn} ${jaar}` });
+      if (maandRes.some(v => v != null)) uit.push({ icoon: neg.length ? 'dal' : 'klok', t: neg.length ? `In ${neg.join(', ')} was het resultaat negatief.` : `Geen enkele afgesloten maand van ${jaar} had een negatief resultaat.`, bron: `maandresultaten jan–${mn} ${jaar}` });
     } else if (id === 'opnames') {
       if (A.prive_totaal > 0) uit.push({ icoon: 'taart', t: `Opnames en aflossing samen ${kort(A.prive_totaal + A.aflossing)} in ${jaar} tot nu toe (opnames ${kort(A.prive_totaal)}, aflossing ${kort(A.aflossing)}).`, bron: 'Moneybird, geboekte opnames en aflossingen' });
       if (B && B.prive_totaal > 0 && A.prive_totaal > 0) uit.push({ icoon: 'taart', t: `Opnames waren ${pctTeken(dPct(A.prive_totaal, B.prive_totaal))} ten opzichte van dezelfde maanden van ${j1} (${kort(B.prive_totaal)}).`, bron: `jan–${mn} ${jaar} tegenover ${j1}` });
@@ -709,25 +711,32 @@
       ee('span', { class: 'mtc-noot' }, 'Verschil alleen voor afgesloten kwartalen. "Verwacht" = lopende maand (voor zover geboekt) plus forecast; dat telt niet mee in de kerncijfers.'));
   }
   async function laadTop() {
-    const lm = laatste(), jaar = st.jaar, ms = st.maanden.filter(m => m.maanden && !m.prognose && m.id.startsWith(jaar + '-') && m.id <= lm).map(m => m.id), top = st.top = { jaar, laden: true, items: [], totaal: 0, onvolledig: false, klaar: 0, n: ms.length }, per = new Map();
+    if (st.top && st.top.laden) return;   // geen tweede ronde verzoeken terwijl de eerste loopt
+    const lm = laatste(), jaar = st.jaar, ms = st.maanden.filter(m => m.maanden && !m.prognose && m.id.startsWith(jaar + '-') && m.id <= lm).map(m => m.id), top = st.top = { jaar, laden: true, items: [], totaal: 0, onvolledig: false, fouten: 0, klaar: 0, n: ms.length }, per = new Map();
     tekenPaneel();
-    for (const ym of ms) {
-      if (st.top !== top) return;
-      const r = await st.bron.haal(`/geld/cijfers/detail?maand=${encodeURIComponent(ym)}&reeks=omzet`);
-      if (!r || r.error) top.onvolledig = true; else { if (r.meer || r.onvolledig) top.onvolledig = true; for (const x of r.items || []) { const k = String(x.tegenpartij || 'Onbekend'); per.set(k, (per.get(k) || 0) + (Number(x.bedrag) || 0)); } }
-      top.klaar++; tekenPaneel();
+    try {
+      for (const ym of ms) {
+        if (st.top !== top) return;
+        try {
+          const r = await st.bron.haal(`/geld/cijfers/detail?maand=${encodeURIComponent(ym)}&reeks=omzet`);
+          if (!r || r.error) { top.onvolledig = true; top.fouten++; } else { if (r.meer || r.onvolledig) top.onvolledig = true; for (const x of r.items || []) { const k = String(x.tegenpartij || 'Onbekend'); per.set(k, (per.get(k) || 0) + (Number(x.bedrag) || 0)); } }
+        } catch (e) { top.onvolledig = true; top.fouten++; }
+        top.klaar++; tekenPaneel();
+      }
+    } finally {
+      if (st.top === top) { top.items = [...per.entries()].map(([naam, v]) => ({ naam, v })).filter(x => x.v > 0).sort((a, b) => b.v - a.v); top.totaal = top.items.reduce((a, x) => a + x.v, 0); top.laden = false; tekenPaneel(); }   // altijd uit de laadstand
     }
-    top.items = [...per.entries()].map(([naam, v]) => ({ naam, v })).filter(x => x.v > 0).sort((a, b) => b.v - a.v); top.totaal = top.items.reduce((a, x) => a + x.v, 0); top.laden = false; tekenPaneel();
   }
   function topSectie() {
     const top = st.top && st.top.jaar === st.jaar ? st.top : null;
     if (!top) return sectie('Waar de omzet vandaan komt', 'Per klant, uit de geboekte stukken', ee('p', { class: 'mtc-noot' }, 'Hiervoor worden de omzetstukken van alle afgesloten maanden uit Moneybird opgehaald (alleen lezen).'), ee('button', { class: 'mtc-knop', 'data-topladen': '1', 'data-fk': 'topladen' }, 'Grootste klanten tonen'));
     if (top.laden) return sectie('Waar de omzet vandaan komt', null, ee('p', { class: 'mtc-noot' }, `Ophalen uit Moneybird… ${top.klaar} van ${top.n} maanden`));
-    if (!top.items.length) return sectie('Waar de omzet vandaan komt', null, ee('p', { class: 'mtc-noot' }, 'Geen omzetstukken gevonden.'));
+    const opnieuw = () => top.fouten ? ee('button', { class: 'mtc-knop', 'data-topladen': '1', 'data-fk': 'topladen' }, 'Opnieuw proberen') : null, fout = top.fouten ? ee('p', { class: 'mtc-waarsch' }, `Niet alle maanden konden worden opgehaald (${top.fouten} van ${top.n}); de lijst is onvolledig.`) : null;
+    if (!top.items.length) return sectie('Waar de omzet vandaan komt', null, fout, ee('p', { class: 'mtc-noot' }, top.fouten ? 'Geen omzetstukken opgehaald.' : 'Geen omzetstukken gevonden.'), opnieuw());
     const v5 = top.items.slice(0, 5), rest = top.items.slice(5), max = v5[0].v, overig = rest.reduce((a, x) => a + x.v, 0);
     const balk = (naam, v, breed, grijs) => ee('div', { class: 'mtd-pr' }, ee('div', { class: 'mtd-pr-k' }, ee('span', null, naam), ee('span', { class: 'mtd-pr-v' }, kort(v))), ee('div', { class: 'mtd-pr-b' }, ee('div', { class: grijs ? 'grijs' : '', style: `width:${Math.max(1, Math.round(breed))}%` })));
     return sectie('Waar de omzet vandaan komt', 'Grootste klanten ' + st.jaar + ' (geboekte stukken)', v5.map(x => balk(x.naam, x.v, x.v / max * 100)), rest.length ? balk(`Overige klanten (${rest.length}×)`, overig, 100, true) : null,
-      top.onvolledig ? ee('p', { class: 'mtc-noot' }, 'Niet alle stukken konden worden opgehaald of er zijn kleinere posten weggelaten; de lijst kan onvolledig zijn.') : null);
+      fout, top.onvolledig && !top.fouten ? ee('p', { class: 'mtc-noot' }, 'Er zijn kleinere posten weggelaten; de lijst kan onvolledig zijn.') : null, opnieuw());
   }
   // Komende maanden: verwachte omzet per maand uit de forecast, met de geboekte omzet van dezelfde maand vorig jaar ter vergelijking.
   function komendeSectie(tm) {
@@ -743,14 +752,14 @@
     const rijen = fm.map((m, i) => ee('tr', null, ee('th', { scope: 'row' }, maandLang(m.id)), ee('td', null, eur(m.omzet)), ee('td', null, String(m.termijnen)), ee('td', null, vg[i] != null ? eur(vg[i]) : '—'), ee('td', { class: vg[i] != null && m.omzet >= vg[i] ? 'goed' : 'slecht' }, vg[i] != null ? pctTeken(dPct(m.omzet, vg[i])) : '')));
     return sectie('Verwachte omzet per maand', 'forecast: termijnen in de prognose met factuurdatum na vandaag, excl. btw', ee('div', { class: 'mtd-chart' }, ee('div', { class: 'mtd-plot' }, svg)),
       ee('div', { class: 'mtd-tabelwrap' }, ee('table', { class: 'mtd-tabel' }, ee('thead', null, ee('tr', null, ['Maand', 'Verwacht', 'Termijnen', 'Zelfde maand vorig jaar (geboekt)', 'Verschil'].map(k => ee('th', { scope: 'col' }, k)))), ee('tbody', null, rijen))),
-      ee('span', { class: 'mtc-noot' }, 'Dit zijn verwachtingen, geen geboekte omzet. Ze tellen niet mee in de kerncijfers.'));
+      ee('span', { class: 'mtc-noot' }, 'Verwachting uit de forecast, niet ontdubbeld met boekingen (een al gefactureerde termijn kan er nog in staan). Telt niet mee in de kerncijfers.'));
   }
 
   function bedieningPaneel() { const b = bediening(); [...b.querySelectorAll('[data-horizon],[data-indeling]')].forEach(e => (e.closest('.mtc-groep') && e.closest('.mtc-groep').getAttribute('aria-label') === 'Horizon advies' ? e.closest('.mtc-groep') : e).remove()); return b; }
   function paneelInhoud(id, breedte) {
     const tm = tegelModel(), tegel = tm.find(q => q.id === id), per = huidigePeriodes(), lm = tm.lm || laatste();
     const kop = ee('div', { class: 'mtd-pkop' }, ee('div', { class: 'mtd-pkop-l' }, ee('button', { class: 'mtd-kn ico', 'data-sluitpaneel': '1', 'data-fk': 'sluit', 'aria-label': 'Sluiten en terug naar cijfers' }, '✕'),
-      ee('div', null, ee('h1', null, PANEEL_TITEL[id] || id), ee('span', { class: 'mtc-noot' }, id === 'komende' ? 'forecast · verwachting, geen geboekte omzet' : id === 'hoofd' ? `${st.jaar} · ${jaarTitel()}` : lm ? `${st.jaar} · geboekt t/m ${dagKort(lm)}${id === 'omzet' ? ' · excl. btw' : ''}` : String(st.jaar)))),
+      ee('div', null, ee('h1', null, PANEEL_TITEL[id] || id), ee('span', { class: 'mtc-noot' }, id === 'komende' ? 'verwachting uit forecast (niet ontdubbeld met boekingen)' : id === 'hoofd' ? `${st.jaar} · ${jaarTitel()}` : lm ? `${st.jaar} · geboekt t/m ${dagKort(lm)}${id === 'omzet' ? ' · excl. btw' : ''}` : String(st.jaar)))),
       ee('div', { class: 'mtd-pkop-r' }, id === 'omzet' ? ee('a', { class: 'mtd-kn', href: mbAdmin() ? `https://moneybird.com/${mbAdmin()}/sales_invoices` : 'https://moneybird.com/', target: '_blank', rel: 'noopener noreferrer' }, 'Bekijk boekingen in Moneybird ↗') : null));
     const delen = [kop];
     if (!tm.length || !lm) { delen.push(ee('div', { class: 'mtc-kaart mtc-noot' }, 'Nog geen afgesloten maanden om te tonen.')); return delen; }
@@ -871,7 +880,7 @@
       if (per.some(p => p.P.prognose || p.P.prognoseKosten)) leg.push(['background:url(#x);background:repeating-linear-gradient(45deg,#eef1f6 0 3px,#9fb3d6 3px 5px)', 'prognose']);
     } else if (g === 'brutomarge') {
       const vals = per.map(p => p.P.maanden ? p.P.brutomarge_pct : null), bm = st.bm.brutomarge, vgl = vergelijkReeks(per, P => P.brutomarge_pct);
-      const sc = C.schaalVoor([vals, ...vgl.map(r => r.w), bm ? [bm.van, bm.tot, bm.pct].map(v => v == null ? null : v + 10) : []], { min: 0, max: 70 }), y =v => MT + (HO - MT - MB) * (1 - (v - sc.a) / (sc.b - sc.a));         // %-as altijd vanaf 0
+      const sc = C.schaalVoor([vals, ...vgl.map(r => r.w), bm ? [bm.van, bm.tot, bm.pct] : []], { min: 0 }), y =v => MT + (HO - MT - MB) * (1 - (v - sc.a) / (sc.b - sc.a));         // %-as altijd vanaf 0
       svg += assen(sc, y, v => v + '%');
       if (bm) svg += bm.van != null && bm.tot != null ? `<rect x="${esc(ML)}" y="${esc(y(bm.tot))}" width="${esc(BR - ML - MR)}" height="${esc(y(bm.van) - y(bm.tot))}" fill="#e4e7eb"/>` : `<line x1="${esc(ML)}" x2="${esc(BR - MR)}" y1="${esc(y(bm.pct))}" y2="${esc(y(bm.pct))}" stroke="#7f8a96" stroke-width="2" stroke-dasharray="6 3"/>`;
       per.forEach((p, i) => { const v = vals[i], w = Math.max(4, bw * 0.55);
