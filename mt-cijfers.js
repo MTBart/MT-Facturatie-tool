@@ -21,7 +21,7 @@
   const WEERGAVEN = [['omzet_kosten', 'Omzet en kosten'], ['brutomarge', 'Brutomarge'], ['kosten_pct', 'Kosten vs branche'], ['opnames', 'Opnames'], ['kas', 'Kas'], ['waterval', 'Waterval']];
   const REEKS_NAAR = { omzet_kosten: 'omzet_kosten', omzet: 'omzet_kosten', kosten: 'omzet_kosten', resultaat: 'omzet_kosten', brutomarge: 'brutomarge', kosten_pct: 'kosten_pct', opnames: 'opnames', kas: 'kas', waterval: 'waterval' };
   const st = C._st = { el: null, bron: null, mag: false, wie: '', maanden: [], cats: [], bm: {}, ontbrekend: [], laden: false, rondes: 0, fout: null, prognose: null, kasProg: null,
-    jaar: null, stapelSel: null, kUit: null, kTop: null, zoom: 'M', weergave: 'omzet_kosten', eerlijk: true, vergelijk: 0, vgl: { j1: true, j2: true, b: true }, statusOpen: false, tabel: false, vast: null, hover: null, paneel: null, paneelEl: null, paneelNieuw: false, openerFk: null, top: null, sel: null, focusCat: null, horizon: 'kort', opHorizon: null, correctieVan: null, prive: [], vandaag: null, nietIngedeeld: [], bes: { data: null, cfg: null, laden: false, fout: null, cache: null }, besZoom: null };
+    jaar: null, stapelSel: null, kUit: null, kTop: null, kCache: {}, paneelFokus: null, zoom: 'M', weergave: 'omzet_kosten', eerlijk: true, vergelijk: 0, vgl: { j1: true, j2: true, b: true }, statusOpen: false, tabel: false, vast: null, hover: null, paneel: null, paneelEl: null, paneelNieuw: false, openerFk: null, top: null, sel: null, focusCat: null, horizon: 'kort', opHorizon: null, correctieVan: null, prive: [], vandaag: null, nietIngedeeld: [], bes: { data: null, cfg: null, laden: false, fout: null, cache: null }, besZoom: null };
   const ls = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { } } };
   const mobiel = () => { try { return root.matchMedia && root.matchMedia('(max-width: 760px)').matches; } catch (e) { return false; } };
 
@@ -223,6 +223,9 @@
 .mtd-kb-vgl{display:flex;flex-wrap:wrap;gap:8px 24px}.mtd-kb-vgl>div{display:flex;align-items:center;gap:8px}
 .mtd-lev{display:flex;flex-direction:column;gap:8px}.mtd-lev .mtd-sh{margin:0}.mtd-pr-b>div.mtd-kcat{background:var(--k,var(--info,#3e5c76))}.mtd-pr-b>div.mtd-kcat.grijs{background:#b8b2a4}
 @media(max-width:760px){.mtd-kb-kop{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:'naam waarde' 'spoor spoor' 'oordeel oordeel'}.mtd-kb-naam{grid-area:naam}.mtd-kb-waarde{grid-area:waarde}.mtd-kb-spoor{grid-area:spoor}.mtd-kb-oordeel{grid-area:oordeel}.mtd-kb-uit{padding-left:6px}}
+.mtd-s100-spoor{position:relative;min-width:0}.mtd-s100-streep{position:absolute;top:-4px;bottom:-4px;width:0;border-left:2px solid var(--ink,#1b211e)}
+.mtd-s100-over{position:absolute;top:0;height:26px;background:repeating-linear-gradient(135deg,rgba(255,255,255,.6) 0 3px,transparent 3px 6px);outline:1px dashed var(--kverlies);outline-offset:-1px;pointer-events:none}
+.mtd-s100-m{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--mtd-slecht)}
 @media(prefers-reduced-motion:reduce){.mtd-tegel{transition:none}}
 `;
     document.head.appendChild(s);
@@ -317,7 +320,7 @@
     else besteedLaad();
   };
   C.laad = async function (herbouw) {
-    st.laden = true; st.rondes = 0; st.fout = null; const mislukt = new Set();
+    st.laden = true; st.rondes = 0; st.fout = null; st.kCache = {}; const mislukt = new Set();
     const [prog] = await Promise.all([st.bron.haal('/geld/prognose').catch(() => null)]);
     st.prognoseRuw = prog && prog.items ? prog.items : {};
     for (;;) {
@@ -354,17 +357,27 @@
   C._dag = (d, n) => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
   C._eind = ym => `${ym}-${String(new Date(Date.UTC(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0)).getUTCDate()).padStart(2, '0')}`;
   // Een rapportsectie opent de grafiek in context.
+  // Waar een rapportsectie naartoe wijst (los te testen): grafiek, paneel, welke kostenrij openklapt en waar de focus komt.
+  C.toonDoel = function (g, cats) {
+    const weergave = REEKS_NAAR[g.reeks] || 'omzet_kosten', cat = g.categorie && (cats || []).indexOf(g.categorie) >= 0 ? g.categorie : null;
+    let paneel = { omzet_kosten: g.categorie ? 'resultaat' : null, brutomarge: 'brutomarge', kosten_pct: 'brutomarge', opnames: 'opnames', kas: 'kas', waterval: 'kas' }[weergave];
+    if (g.reeks === 'kosten' && g.categorie) paneel = 'brutomarge';   // kosten van een categorie: de rij in "Kosten tegenover de branche"
+    const kUit = paneel === 'brutomarge' ? cat : null;
+    return { weergave, paneel, kUit, fokus: kUit ? 'kb-' + kUit : null };
+  };
   C.toon = function (g) {
     if (!g) return;
-    st.weergave = REEKS_NAAR[g.reeks] || 'omzet_kosten'; st.focusCat = g.categorie || null;
+    const doel = C.toonDoel(g, st.cats); st.weergave = doel.weergave; st.focusCat = g.categorie || null;
     if (g.per) st.zoom = g.per === 'kwartaal' ? 'K' : g.per === 'jaar' ? '5J' : 'M';
     if (g.van && /^\d{4}/.test(g.van)) st.jaar = Number(g.van.slice(0, 4));
     st.sel = null; st.vast = null;
     // Een rapportsectie wijst een grafiek aan: de bijbehorende tegel gaat open (omzet en kosten staan in Resultaat, opnames en waterval bij Kaspositie).
-    const naarPaneel = { omzet_kosten: g.categorie ? 'resultaat' : null, brutomarge: 'brutomarge', kosten_pct: 'brutomarge', opnames: 'opnames', kas: 'kas', waterval: 'kas' }[st.weergave];
+    const naarPaneel = doel.paneel;
+    if (naarPaneel === 'brutomarge') { st.kUit = doel.kUit; st.kTop = null; }   // rij van die categorie open, focus erop
+    st.paneelFokus = naarPaneel ? doel.fokus : null;
     if (st.paneel && !naarPaneel) st.paneel = null;
     teken();
-    if (naarPaneel && st.maanden.length) { st.paneel = naarPaneel; st.paneelNieuw = true; st.openerFk = null; tekenPaneel(); }
+    if (naarPaneel && st.maanden.length) { st.paneel = naarPaneel; st.paneelNieuw = true; st.openerFk = null; tekenPaneel(); if (doel.kUit && naarPaneel === 'brutomarge' && st.bron) laadKosten(doel.kUit); }
   };
   C.horizon = function (h) { st.horizon = h; teken(); };
   // Voor de tests (zonder DOM): de tekenfuncties op de huidige staat.
@@ -932,7 +945,7 @@
       if (v != null) rijen.push({ l: String(jaar), v: kort(v), stip: fc ? 'prog' : 'huidig' });
       for (const [r, off, streep] of [[c1, 1, 'dashed'], [c2, 2, 'dotted']]) if (r && r[i] != null) rijen.push({ l: String(jaar - off), v: kort(r[i]), d: v != null ? pctTeken(dPct(v, r[i])) : '', goed: v != null ? v >= r[i] : null, stip: streep });
       tip.replaceChildren(ee('div', { class: 'mtd-tk' }, ee('span', { class: 'mtd-tt' }, 't/m ' + MAANDLANG[i]), ee('span', { class: 'mtd-tlab' + (fc ? ' fc' : '') }, fc ? 'verwachting' : geb ? 'opgeteld' : '')), ...rijen.map(rijTip));
-      tip.style.left = (x(i) / br * 100) + '%'; tip.style.transform = i < 2 ? 'translateX(8px)' : i > 8 ? 'translateX(calc(-100% - 8px))' : 'translateX(-50%)'; };
+      tip.style.top = i >= 6 ? 'auto' : ''; tip.style.bottom = i >= 6 ? '34px' : ''; tip.style.left = (x(i) / br * 100) + '%'; tip.style.transform = i < 2 ? 'translateX(8px)' : i > 8 ? 'translateX(calc(-100% - 8px))' : 'translateX(-50%)'; };
     MND.forEach((m, i) => { const hit = ss('rect', { class: 'mtd-hit', x: ml + i * bw, y: mt - 16, width: bw, height: ho - mt + 16, tabindex: '0', role: 'button', 'data-fk': 'cum-' + i, 'aria-label': `Opgeteld t/m ${MAANDLANG[i]}` });
       hit.addEventListener('mouseenter', () => toon(i)); hit.addEventListener('focus', () => toon(i)); hit.addEventListener('click', () => toon(i)); svg.append(hit); });
     toon(Math.max(0, Math.min(11, (t || 1) - 1)));
@@ -1101,18 +1114,34 @@
     return ee('div', { class: 'mtd-chart' }, delen);
   }
   const pctF = v => v == null ? '—' : v.toLocaleString('nl-NL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+  // Balk "waar ging elke € omzet heen" (rekenen los te testen). Alle percentages zijn % van de omzet. Positieve delen vormen de balk; die kan langer zijn dan 100%
+  // (kosten boven de omzet = verlies, of creditposten). Negatief resultaat en credits staan apart (verlies, credit), de balkschaal is het hoogste totaal van de getoonde rijen.
+  C.stapelBalk = function (P, cats) {
+    if (!(P.omzet > 0)) return null;
+    const res = P.omzet - P.kosten_totaal, alle = cats.map(c => ({ id: c, v: P.kosten[c] || 0 })).concat([{ id: 'resultaat', v: res }]), pc = v => v / P.omzet * 100;
+    const delen = alle.filter(d => d.v > 0).map(d => ({ id: d.id, v: d.v, pct: pc(d.v) })), tot = delen.reduce((a, d) => a + d.pct, 0);
+    return { delen, tot, resultaat: pc(res), verlies: res < 0 ? -pc(res) : 0, credit: -alle.filter(d => d.id !== 'resultaat' && d.v < 0).reduce((a, d) => a + pc(d.v), 0) || 0, overschot: Math.max(0, tot - 100) };
+  };
+  C.balkSchaal = rijen => Math.max(100, ...rijen.filter(Boolean).map(b => b.tot));
+  const pctMin = v => (v < 0 ? '−' : '') + pctF(Math.abs(v));
   function stapelDetail(per, i) {
     const p = per[i], v = C.stapelVergelijk({ per, i, zoom: st.zoom, jaar: st.jaar, maanden: st.maanden, cats: st.cats, eerlijk: st.eerlijk, bm: st.bm, lm: laatste(), offsets: [1, 2] });
     const titel = st.zoom === 'M' ? maandLang(p.id) : st.zoom === 'K' ? `${p.label} ${st.jaar}` : (p.label || p.id);
-    // 100%-balken: de verdeling van elke € omzet per periode, zelfde kleuren als de stapel
-    const balk = (naam, u, P) => { const delen = u ? [].concat(st.cats.map(c => ({ id: c, v: P.kosten[c] || 0 })), [{ id: 'resultaat', v: P.omzet - P.kosten_totaal }]) : null;
-      if (!delen) return null;
-      const pos = delen.filter(d => d.v > 0), tot = pos.reduce((a, d) => a + d.v, 0), res = delen[delen.length - 1].v;
-      return ee('div', { class: 'mtd-s100' }, ee('span', { class: 'mtd-s100-n' }, naam), ee('div', { class: 'mtd-s100-b', role: 'img', 'aria-label': naam + ': ' + delen.map(d => `${katNaam(d.id)} ${pctF(d.v / P.omzet * 100)}`).join(', ') },
-        pos.map(d => ee('span', { class: 'mtd-s100-d ' + katKl(d.id), style: 'flex:' + (d.v / tot).toFixed(4), title: `${katNaam(d.id)}: ${pctF(d.v / P.omzet * 100)} van de omzet` }, d.v / tot > 0.07 ? Math.round(d.v / P.omzet * 100) + '%' : ''))),
-        ee('span', { class: 'mtd-s100-t' }, res < 0 ? 'kosten ' + Math.round(-res / P.omzet * 100 + 100) + '% van de omzet: verlies' : ''));
+    // 100%-balken op één gezamenlijke schaal: percentages zijn % van de omzet, de streep is 100% omzet; boven de 100% (verlies of credits) loopt de balk voorbij de streep
+    const reeksen = [{ naam: titel, u: v.dit, P: p.P }].concat(v.vorig.map(q => ({ naam: q.label, u: q.u, P: q.P, reden: q.reden }))), bal = reeksen.map(r => r.u ? C.stapelBalk(r.P, st.cats) : null), schaal = C.balkSchaal(bal);
+    const balk = (r, b) => {
+      if (!b) return ee('div', { class: 'mtd-s100' }, ee('span', { class: 'mtd-s100-n' }, r.naam), ee('span', { class: 'mtd-s100-leeg' }, '— ' + (r.reden || 'geen gegevens')));
+      const streep = 100 / schaal * 100, mark = [];
+      if (b.verlies > 0) mark.push(ee('span', { class: 'mtd-s100-m' }, ee('span', { class: 'mtd-sw verlies' }), `Verlies ${pctMin(b.resultaat)} van de omzet (kosten ${pctF(b.tot)})`));
+      if (b.credit > 0) mark.push(ee('span', { class: 'mtd-s100-m' }, ee('span', { class: 'mtd-sw verlies' }), `Credit ${pctMin(-b.credit)} (niet in de balk)`));
+      return ee('div', { class: 'mtd-s100' }, ee('span', { class: 'mtd-s100-n' }, r.naam),
+        ee('div', { class: 'mtd-s100-spoor' }, ee('div', { class: 'mtd-s100-b', role: 'img', style: `width:${(b.tot / schaal * 100).toFixed(2)}%`, 'aria-label': r.naam + ', % van de omzet: ' + b.delen.map(d => `${katNaam(d.id)} ${pctF(d.pct)}`).join(', ') + (b.verlies > 0 ? '; verlies ' + pctMin(b.resultaat) : '') + (b.credit > 0 ? '; credit ' + pctMin(-b.credit) : '') },
+          b.delen.map(d => ee('span', { class: 'mtd-s100-d ' + katKl(d.id), style: 'flex:' + d.pct.toFixed(3), title: `${katNaam(d.id)}: ${pctF(d.pct)} van de omzet` }, d.pct / schaal > 0.07 ? Math.round(d.pct) + '%' : ''))),
+          b.overschot > 0 ? ee('span', { class: 'mtd-s100-over', style: `left:${streep.toFixed(2)}%;width:${(b.overschot / schaal * 100).toFixed(2)}%` }) : null,
+          ee('span', { class: 'mtd-s100-streep', style: `left:${streep.toFixed(2)}%` }, ee('span', { class: 'sr' }, '100% van de omzet'))),
+        ee('span', { class: 'mtd-s100-t' }, mark));
     };
-    const rijen = [balk(titel, v.dit, p.P)].concat(v.vorig.map(q => q.u ? balk(q.label, q.u, q.P) : ee('div', { class: 'mtd-s100' }, ee('span', { class: 'mtd-s100-n' }, q.label), ee('span', { class: 'mtd-s100-leeg' }, '— ' + q.reden))));
+    const rijen = reeksen.map((r, k) => balk(r, bal[k]));
     const ond = v.onderdelen.filter(o => o.v != null || o.id === 'brutomarge');
     const tabel = ee('div', { class: 'mtd-pt', role: 'region', 'aria-label': 'Vergelijking per onderdeel', tabindex: '0' }, ee('table', { style: 'min-width:560px' }, ee('caption', { class: 'sr' }, 'Vergelijking van ' + titel + ' met vorige jaren en de branche, in procenten van de omzet'),
       ee('thead', null, ee('tr', null, ee('th', { scope: 'col' }, 'Onderdeel'), ee('th', { scope: 'col' }, titel), v.vorig.map(q => ee('th', { scope: 'col' }, q.label)), ee('th', { scope: 'col' }, 'Branche'))),
@@ -1121,7 +1150,7 @@
         ee('td', { class: o.branche.ref && !o.branche.reden ? '' : 'leeg', title: o.branche.reden || null }, o.branche.reden ? '—' : [bmTekst2(o.branche.ref), ee('span', { class: 'mtd-pt-fc' }, oordeelEl(o.branche.oordeel, o.branche.oordeel.woord + (o.branche.oordeel.pp ? ' (' + puntTekst(o.branche.oordeel.pp) + ')' : '')))]))))));
     const redenen = [...new Set(v.vorig.filter(q => !q.u).map(q => q.reden))];
     return ee('div', { class: 'mtd-info vast heeft mtd-sdetail' }, ee('div', { class: 'mtd-tk' }, ee('span', { class: 'mtd-tt' }, titel), ee('span', { class: 'mtd-tlab' }, 'geboekt, geen prognose')),
-      ee('h4', { class: 'mtd-sh' }, 'Waar ging elke € omzet heen'), ee('div', { class: 'mtd-s100s' }, rijen),
+      ee('h4', { class: 'mtd-sh' }, 'Waar ging elke € omzet heen'), ee('div', { class: 'mtd-s100s' }, rijen), ee('p', { class: 'mtc-noot' }, 'Alle percentages zijn % van de omzet; de streep is 100% omzet. Staat een balk voorbij de streep, dan zijn de kosten hoger dan de omzet (arcering = verlies).'),
       ee('h4', { class: 'mtd-sh' }, 'Tegenover vorige jaren en de branche'), !v.afgesloten ? ee('p', { class: 'mtc-noot' }, 'Geen vergelijking: ' + v.reden + '. Vergelijken gebeurt alleen tussen afgesloten periodes.') : null,
       tabel, redenen.length && v.afgesloten ? ee('p', { class: 'mtc-noot' }, 'Niet vergeleken: ' + redenen.join('; ') + '.') : null,
       ee('div', { class: 'mtd-tacties' }, ee('button', { class: 'mtc-knop', 'data-drill': 'omzet:' + p.id, 'data-fk': 'drill-stapel' }, 'Omzetstukken bekijken')));
@@ -1187,36 +1216,58 @@
 
   // Kosten tegenover de branche: twee groepen, elk met één eigen schaal. Rij uitklapbaar: grootste leveranciers (één ronde, annuleerbaar), vergelijking, zin.
   const kSleutel = (cat, kz) => [cat, kz.p.id, kz.zoom, kz.ytd ? 'ytd' : 'sel', st.jaar].join('|');
+  const WACHT_429_S = 30, MAX_FOUTEN_OP_RIJ = 2;   // zonder bekende wachttijd een vaste wachttijd; na 2 fouten achter elkaar stoppen
+  C._nu = () => Date.now();
+  // st.bron.haal (geldHaal in v2.html en mobiel.html) geeft bij een HTTP-fout {error: 'HTTP 429', ...json}: geen status en geen retryAfter.
+  // Daarom hier herkennen: status 429, "429" of "even druk" in de tekst, en de wachttijd uit retryAfter, retry_after of de tekst. Een exception met e.status/e.retryAfter telt ook.
+  const druk429 = x => !!x && (x.status === 429 || /\b429\b|retry later|even druk|te veel verzoeken/i.test(String(x.error || x.message || '')));
+  const wachtSec = x => { const t = String((x && (x.error || x.message)) || ''), m = /retry[ -]?after\D{0,3}(\d+)/i.exec(t), s = Number(x && (x.retryAfter != null ? x.retryAfter : x.retry_after)) || (m ? Number(m[1]) : 0); return Math.min(300, Math.max(5, s || WACHT_429_S)); };
+  // Per categorie en periode bewaren we de opgehaalde maanden: een nieuwe klik haalt alleen de ontbrekende maanden op.
+  function kCacheVoor(sleutel, cat) { const k = st.kCache = st.kCache || {}; return k[sleutel] || (k[sleutel] = { sleutel, cat, ok: new Map(), laden: false, n: 0, klaar: 0, items: [], fouten: 0, onvolledig: false, wachtTot: 0, limiet: false, gestopt: false, timer: null }); }
+  function kRekenItems(c) {
+    const per = new Map(); let onv = false;
+    for (const e of c.ok.values()) { if (e.onvolledig) onv = true; for (const [k, v] of e.per) per.set(k, (per.get(k) || 0) + v); }
+    c.items = [...per.entries()].map(([naam, v]) => ({ naam, v })).filter(x => x.v > 0).sort((a, b) => b.v - a.v); c.klaar = c.ok.size; c.onvolledig = onv || c.klaar < c.n;
+  }
+  function kWachtTimer(c) { clearTimeout(c.timer); c.timer = setTimeout(() => { if (st.paneel) tekenPaneel(); }, Math.max(0, c.wachtTot - C._nu()) + 60); if (c.timer && c.timer.unref) c.timer.unref(); }
   async function laadKosten(cat) {
     const kz = kiesPeriode(); if (!kz) return;
-    const sleutel = kSleutel(cat, kz);
-    if (st.kTop && st.kTop.sleutel === sleutel && st.kTop.laden) return;   // geen tweede ronde terwijl de eerste loopt
-    const ms = kz.p.ms.filter(m => !m.prognose && m.maanden && m.id <= kz.lm).map(m => m.id), top = st.kTop = { sleutel, cat, laden: true, klaar: 0, n: ms.length, items: [], fouten: 0, onvolledig: false }, per = new Map();
+    const sleutel = kSleutel(cat, kz), c = kCacheVoor(sleutel, cat), ms = kz.p.ms.filter(m => !m.prognose && m.maanden && m.id <= kz.lm).map(m => m.id);
+    c.n = ms.length; kRekenItems(c);
+    if (c.laden) { st.kTop = c; return; }   // geen tweede ronde terwijl de eerste loopt
+    const todo = ms.filter(ym => !c.ok.has(ym));
+    if (!todo.length || C._nu() < c.wachtTot) { st.kTop = c; tekenPaneel(); return; }   // alles al binnen, of nog even wachten
+    st.kTop = c; c.laden = true; c.fouten = 0; c.limiet = false; c.gestopt = false; let opRij = 0;
     tekenPaneel();
     try {
-      for (const ym of ms) {
-        if (st.kTop !== top) return;   // ingeklapt of een andere rij gekozen: stoppen
-        try {
-          const r = await st.bron.haal(`/geld/cijfers/detail?maand=${encodeURIComponent(ym)}&reeks=kosten&categorie=${encodeURIComponent(cat)}`);
-          if (!r || r.error) { top.onvolledig = true; top.fouten++; } else { if (r.meer || r.onvolledig) top.onvolledig = true; for (const x of r.items || []) { const k = String(x.tegenpartij || 'Onbekend'); per.set(k, (per.get(k) || 0) + (Number(x.bedrag) || 0)); } }
-        } catch (e) { top.onvolledig = true; top.fouten++; }
-        top.klaar++; if (st.kTop === top) tekenPaneel();
+      for (const ym of todo) {
+        if (st.kTop !== c) break;   // ingeklapt, andere rij of andere periode: stoppen
+        let r = null, fout = false, druk = null;
+        try { r = await st.bron.haal(`/geld/cijfers/detail?maand=${encodeURIComponent(ym)}&reeks=kosten&categorie=${encodeURIComponent(cat)}`); if (!r || r.error) { fout = true; if (druk429(r)) druk = r; } }
+        catch (e) { fout = true; if (druk429(e)) druk = e; }
+        if (druk) { c.wachtSec = wachtSec(druk); c.wachtTot = C._nu() + c.wachtSec * 1000; c.limiet = true; break; }   // 429: de ronde stopt, wat er is blijft staan
+        if (fout) { c.fouten++; if (++opRij >= MAX_FOUTEN_OP_RIJ) { c.gestopt = true; break; } }
+        else { opRij = 0; const per = new Map(); for (const x of r.items || []) { const k = String(x.tegenpartij || 'Onbekend'); per.set(k, (per.get(k) || 0) + (Number(x.bedrag) || 0)); } c.ok.set(ym, { per: [...per.entries()], onvolledig: !!(r.meer || r.onvolledig) }); }
+        kRekenItems(c); if (st.kTop === c) tekenPaneel();
       }
     } finally {
-      if (st.kTop === top) { top.items = [...per.entries()].map(([naam, v]) => ({ naam, v })).filter(x => x.v > 0).sort((a, b) => b.v - a.v); top.laden = false; tekenPaneel(); }   // altijd uit de laadstand
+      c.laden = false; kRekenItems(c); if (c.limiet) kWachtTimer(c);   // altijd uit de laadstand
+      if (st.kTop === c) tekenPaneel();
     }
   }
   C._laadKosten = laadKosten;
   function leveranciersEl(o, kz) {
-    const top = st.kTop && st.kTop.sleutel === kSleutel(o.id, kz) ? st.kTop : null;
-    if (!top) return ee('div', null, ee('p', { class: 'mtc-noot' }, 'Grootste leveranciers worden uit Moneybird opgehaald (alleen lezen).'), ee('button', { class: 'mtc-knop', 'data-kladen': o.id, 'data-fk': 'kladen-' + o.id }, 'Grootste leveranciers tonen'));
-    if (top.laden) return ee('p', { class: 'mtc-noot', role: 'status' }, `Leveranciers ophalen uit Moneybird… ${top.klaar} van ${top.n} maanden`);
-    const opnieuw = top.fouten ? ee('button', { class: 'mtc-knop', 'data-kladen': o.id, 'data-fk': 'kladen-' + o.id }, 'Opnieuw proberen') : null, fout = top.fouten ? ee('p', { class: 'mtc-waarsch' }, `Niet alle maanden konden worden opgehaald (${top.fouten} van ${top.n}); de lijst is onvolledig.`) : null;
-    if (!top.items.length) return ee('div', null, fout, ee('p', { class: 'mtc-noot' }, top.fouten ? 'Geen stukken opgehaald.' : 'Geen losse stukken gevonden in deze periode.'), opnieuw);
-    const P = kz.p.P, totaal = P.kosten[o.id] - (st.eerlijk && o.id === 'personeel' ? P.correctie : 0), gevonden = top.items.reduce((a, x) => a + x.v, 0), v5 = top.items.slice(0, 5), rest = top.items.slice(5), max = v5[0].v, overig = rest.reduce((a, x) => a + x.v, 0);
+    const c = (st.kCache || {})[kSleutel(o.id, kz)], nu = C._nu();
+    if (!c || (!c.laden && !c.ok.size && !c.fouten && !c.limiet)) return ee('div', null, ee('p', { class: 'mtc-noot' }, 'Grootste leveranciers worden uit Moneybird opgehaald (alleen lezen).'), ee('button', { class: 'mtc-knop', 'data-kladen': o.id, 'data-fk': 'kladen-' + o.id }, 'Grootste leveranciers tonen'));
+    if (c.laden) return ee('p', { class: 'mtc-noot', role: 'status' }, `Leveranciers ophalen uit Moneybird… ${c.klaar} van ${c.n} maanden`);
+    const ontbreekt = c.n - c.klaar, wacht = c.wachtTot > nu ? Math.ceil((c.wachtTot - nu) / 1000) : 0;
+    const opnieuw = ontbreekt > 0 ? ee('button', { class: 'mtc-knop', 'data-kladen': o.id, 'data-fk': 'kladen-' + o.id, disabled: wacht > 0 }, wacht > 0 ? `Opnieuw proberen over ${wacht} s` : 'Ontbrekende maanden opnieuw proberen') : null;
+    const fout = ontbreekt > 0 ? ee('p', { class: 'mtc-waarsch', role: 'status' }, `Niet alle maanden zijn opgehaald (${c.klaar} van ${c.n}); de lijst is onvolledig.${c.limiet ? ' De server vroeg om even te wachten' + (wacht ? ': probeer het over ' + wacht + ' seconden opnieuw.' : '; je kunt het nu opnieuw proberen.') : c.gestopt ? ' Gestopt na twee fouten achter elkaar.' : ''}`) : null;
+    if (!c.items.length) return ee('div', null, fout, ee('p', { class: 'mtc-noot' }, ontbreekt > 0 ? 'Nog geen stukken opgehaald.' : 'Geen losse stukken gevonden in deze periode.'), opnieuw);
+    const P = kz.p.P, totaal = P.kosten[o.id] - (st.eerlijk && o.id === 'personeel' ? P.correctie : 0), gevonden = c.items.reduce((a, x) => a + x.v, 0), v5 = c.items.slice(0, 5), rest = c.items.slice(5), max = v5[0].v, overig = rest.reduce((a, x) => a + x.v, 0);
     const balk = (naam, v, breed, grijs) => ee('div', { class: 'mtd-pr' }, ee('div', { class: 'mtd-pr-k' }, ee('span', null, naam), ee('span', { class: 'mtd-pr-v' }, kort(v))), ee('div', { class: 'mtd-pr-b' }, ee('div', { class: (grijs ? 'grijs ' : '') + katKl(o.id) + ' mtd-kcat', style: `width:${Math.max(1, Math.round(breed))}%` })));
-    return ee('div', { class: 'mtd-lev' }, ee('h5', { class: 'mtd-sh' }, 'Grootste leveranciers in deze periode'), v5.map(x => balk(x.naam, x.v, x.v / max * 100)), rest.length ? balk(`Overige leveranciers (${rest.length}×)`, overig, 100, true) : null, fout,
-      ee('p', { class: 'mtc-noot' }, `Opgehaald uit Moneybird: ${kort(gevonden)}${totaal > 0 && gevonden < totaal * 0.99 ? ` van ${kort(totaal)} in deze categorie; het verschil is niet als losse factuur, bon of mutatie te zien` : ''}.${st.eerlijk && o.id === 'personeel' && P.correctie ? ` Daarnaast ${kort(P.correctie)} lonen buiten de W&V (eerlijk beeld), niet in deze lijst.` : ''}${top.onvolledig && !top.fouten ? ' Er zijn kleinere posten weggelaten.' : ''}`), opnieuw);
+    return ee('div', { class: 'mtd-lev' }, ee('h5', { class: 'mtd-sh' }, 'Grootste leveranciers in deze periode' + (ontbreekt > 0 ? ' (onvolledig)' : '')), v5.map(x => balk(x.naam, x.v, x.v / max * 100)), rest.length ? balk(`Overige leveranciers (${rest.length}×)`, overig, 100, true) : null, fout,
+      ee('p', { class: 'mtc-noot' }, `Opgehaald uit Moneybird: ${kort(gevonden)}${totaal > 0 && gevonden < totaal * 0.99 && ontbreekt === 0 ? ` van ${kort(totaal)} in deze categorie; het verschil is niet als losse factuur, bon of mutatie te zien` : ''}.${st.eerlijk && o.id === 'personeel' && P.correctie ? ` Daarnaast ${kort(P.correctie)} lonen buiten de W&V (eerlijk beeld), niet in deze lijst.` : ''}${c.onvolledig && ontbreekt === 0 ? ' Er zijn kleinere posten weggelaten.' : ''}`), opnieuw);
   }
   function kostenRij(o, kz, schaal, kost) {
     const open = st.kUit === o.id, ord = o.branche.oordeel, id = 'kb-uit-' + o.id, bmw = o.branche.ref, pos = v => (Math.max(schaal.min, Math.min(schaal.max, v)) - schaal.min) / (schaal.max - schaal.min) * 100, nul = pos(0), v = o.v;
@@ -1325,7 +1376,7 @@
     const binnen = ee('div', { class: 'mtd-vol-in' }, paneelInhoud(st.paneel, BR));
     o.replaceChildren(binnen); o.scrollTop = scroll;
     o.querySelectorAll('.mtc-grafiek').forEach(gebaren);
-    if (fk) herstelFocus(fk, o); else if (st.paneelNieuw) { const s = o.querySelector('[data-sluitpaneel]'); if (s) s.focus(); }
+    if (fk) herstelFocus(fk, o); else if (st.paneelNieuw) { const f = st.paneelFokus ? [...o.querySelectorAll('[data-fk]')].find(x => x.getAttribute('data-fk') === st.paneelFokus) : null, s = f || o.querySelector('[data-sluitpaneel]'); if (s) { s.focus(); if (f) try { f.scrollIntoView({ block: 'center' }); } catch (e) { } } st.paneelFokus = null; }
     st.paneelNieuw = false; maat();
   }
   function openPaneel(id, opener) { st.paneel = id; st.paneelNieuw = true; st.openerFk = opener ? opener.getAttribute('data-fk') : null; tekenPaneel(); }
