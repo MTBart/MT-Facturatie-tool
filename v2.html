@@ -81,6 +81,7 @@
 <script src="mt-planinrichting.js?v=2026-10-24z"></script>
 <script src="mt-bord.js?v=2026-10-23z"></script>
 <script src="mt-tijdlijn.js?v=2026-10-24z"></script>
+<script src="mt-compleet.js?v=2026-11-05a"></script>
 <script src="mt-personen.js?v=2026-10-17e"></script>
 <script src="mt-werktijden.js?v=2026-10-15t"></script>
 <script src="mt-uren-nieuw.js?v=2026-10-15z"></script>
@@ -1896,6 +1897,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
             <button class="btn btn-sm" id="agenda-view-capaciteit" onclick="agendaZetView('capaciteit')" title="Capaciteitsplanning voor het team: per persoon per dag gepland tegenover beschikbaar, met vrije dagen en verlof" style="border:0;border-radius:0;padding:5px 10px">👥 Capaciteit</button>
             <button class="btn btn-sm" id="agenda-view-bord" onclick="agendaZetView('bord')" title="Bord: de taken als kolommen op status, per fase, of de stroom van de projecten door de stations" style="border:0;border-radius:0;padding:5px 10px">▥ Bord</button>
             <button class="btn btn-sm" id="agenda-view-tijdlijn" onclick="agendaZetView('tijdlijn')" title="Tijdlijn: alle projecten op een tijdas, met fasen, afhankelijkheden en het kritieke pad (alleen lezen)" style="border:0;border-radius:0;padding:5px 10px">▤ Tijdlijn</button>
+            <button class="btn btn-sm" id="agenda-view-compleet" onclick="agendaZetView('compleet')" title="Planning compleet?: controleert of de planning betrouwbaar is (taken zonder schatting, werkuren, verlof, uren zonder project; alleen lezen)" style="border:0;border-radius:0;padding:5px 10px">☑ Compleet?</button>
             <button class="btn btn-sm" id="agenda-view-grid" onclick="agendaZetView('grid')" title="Week-rooster" style="border:0;border-radius:0;padding:5px 10px">▦ Rooster</button>
             <button class="btn btn-sm" id="agenda-view-lijst" onclick="agendaZetView('lijst')" title="Timer-lijst (zoals Toggl)" style="border:0;border-radius:0;padding:5px 10px">≣ Lijst</button>
             <button class="btn btn-sm" id="agenda-view-plan" onclick="agendaZetView('plan')" title="Planning-blokken" style="border:0;border-radius:0;padding:5px 10px">📋 Planning</button>
@@ -1932,6 +1934,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
     <div id="agenda-capaciteit" style="display:none"></div>
     <div id="agenda-bord" style="display:none"></div>
     <div id="agenda-tijdlijn" style="display:none"></div>
+    <div id="agenda-compleet" style="display:none"></div>
     <div class="card" id="agenda-gridkaart" style="padding:0;overflow:auto;max-height:74vh">
       <div id="agenda-grid"></div>
     </div>
@@ -4025,16 +4028,17 @@ function renderAgenda(){
   const planBar=document.getElementById('agenda-plan-toolbar'), capBalk=document.getElementById('agenda-cap-balk');
   if(planBar) planBar.style.display=_agenda.view==='plan'?'block':'none';
   if(capBalk) capBalk.style.display=_agenda.view==='plan'?'block':'none';
-  { const mw=_agenda.view==='mijnwerk', cp=_agenda.view==='capaciteit', bd=_agenda.view==='bord', tj=_agenda.view==='tijdlijn', eigen=mw||cp||bd||tj;   // Mijn werk en Capaciteit (stap 2): een eigen vlak in plaats van het rooster
-    [['agenda-view-mijnwerk',mw],['agenda-view-capaciteit',cp],['agenda-view-bord',bd],['agenda-view-tijdlijn',tj]].forEach(([id,aan])=>{ const b=document.getElementById(id); if(b) b.classList.toggle('btn-gold',aan), b.classList.toggle('ui-gekozen',aan), b.classList.toggle('btn-secondary',!aan); });
-    const m=document.getElementById('agenda-mijnwerk'), c=document.getElementById('agenda-capaciteit'), bdEl=document.getElementById('agenda-bord'), tjEl=document.getElementById('agenda-tijdlijn'), gk=document.getElementById('agenda-gridkaart'), tot=document.getElementById('agenda-totalen');
+  { const mw=_agenda.view==='mijnwerk', cp=_agenda.view==='capaciteit', bd=_agenda.view==='bord', tj=_agenda.view==='tijdlijn', cm=_agenda.view==='compleet', eigen=mw||cp||bd||tj||cm;   // Mijn werk en Capaciteit (stap 2): een eigen vlak in plaats van het rooster
+    [['agenda-view-mijnwerk',mw],['agenda-view-capaciteit',cp],['agenda-view-bord',bd],['agenda-view-tijdlijn',tj],['agenda-view-compleet',cm]].forEach(([id,aan])=>{ const b=document.getElementById(id); if(b) b.classList.toggle('btn-gold',aan), b.classList.toggle('ui-gekozen',aan), b.classList.toggle('btn-secondary',!aan); });
+    const m=document.getElementById('agenda-mijnwerk'), c=document.getElementById('agenda-capaciteit'), bdEl=document.getElementById('agenda-bord'), tjEl=document.getElementById('agenda-tijdlijn'), cmEl=document.getElementById('agenda-compleet'), gk=document.getElementById('agenda-gridkaart'), tot=document.getElementById('agenda-totalen');
     { const of=document.getElementById('ag-oudfilter'); if(of&&typeof MTPlanFilter!=='undefined') of.style.display=eigen?'none':''; }   // Mijn werk en Capaciteit hebben de gedeelde filterbalk in beeld; de oude Projecten/Personen-keuze hoort alleen bij Rooster, Lijst en Planning
     { const lh=document.getElementById('agenda-laag-host'); if(lh) lh.style.display=cp?'inline-block':'none'; }   // de knop Geklokt hoort alleen bij de Capaciteit
-    if(m) m.style.display=mw?'block':'none'; if(c) c.style.display=cp?'block':'none'; if(bdEl) bdEl.style.display=bd?'block':'none'; if(tjEl) tjEl.style.display=tj?'block':'none'; if(gk) gk.style.display=eigen?'none':''; if(tot&&eigen) tot.style.display='none'; else if(tot) tot.style.display='';
+    if(m) m.style.display=mw?'block':'none'; if(c) c.style.display=cp?'block':'none'; if(bdEl) bdEl.style.display=bd?'block':'none'; if(tjEl) tjEl.style.display=tj?'block':'none'; if(cmEl) cmEl.style.display=cm?'block':'none'; if(gk) gk.style.display=eigen?'none':''; if(tot&&eigen) tot.style.display='none'; else if(tot) tot.style.display='';
     if(mw){ agRenderFilters(); try{ MTMijnWerk.teken(); }catch(e){ console.warn('Mijn werk:',e); } return; }
     if(cp){ agRenderFilters(); try{ MTCapaciteit.teken(); }catch(e){ console.warn('Capaciteit:',e); } return; }
     if(bd){ try{ MTBord.teken(); }catch(e){ console.warn('Bord:',e); } return; }
-    if(tj){ try{ MTTijdlijn.teken(); }catch(e){ console.warn('Tijdlijn:',e); } return; } }
+    if(tj){ try{ MTTijdlijn.teken(); }catch(e){ console.warn('Tijdlijn:',e); } return; }
+    if(cm){ try{ MTCompleet.open(); }catch(e){ console.warn('Planning compleet:',e); } return; } }
   agRenderFilters();
   if(_agenda.view==='lijst') agRenderLijst(); else if(_agenda.view==='plan') agPlanRender(); else agRenderGrid();
 }
@@ -4311,6 +4315,15 @@ try{ MTTijdlijn.init({ doc:document, planning:MTPlanning, team:()=>capTeam(), ta
   wijzig:(s,o)=>tpWijzig(s,o), wijzigHerstel:(w,o)=>tpWijzigHerstel(w,o), datums:spec=>MTCapaciteitNieuw.drop(spec), toast:(t,o,l,lb)=>MTCapaciteitNieuw.toast(t,o,l,lb),
   naWijziging:()=>{ try{ MTTaakPaneel.ververs(); }catch(e){} },
   openTaak:(code,id,el)=>MTTaakPaneel.open(code,id,{terug:el}), openProject:code=>openProject(code,{sectie:'planning'}) }); }catch(e){ console.warn('Tijdlijn init:',e); }
+// Planning compleet? (mt-compleet.js): controles of de planning betrouwbaar is, alleen lezen. Teamgegevens uit Toggl (werkuren, verlof, geklokte uren) alleen voor beheerders; de taken zijn die van de planning zelf.
+try{ MTCompleet.init({ doc:document, planning:MTPlanning, team:()=>capTeam(), taken:()=>projTakenAll(), takenKlaar:()=>projTakenKlaar(), takenStatusTekst:()=>projTakenStatusTekst(),
+  projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code).map(p=>({code:p.code,label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code})),
+  werkuren:()=>capWerkuren(), verlof:()=>admVerlof(),
+  teamdata:()=>{ try{ return mtIsAdmin()||!!(window.MTRol&&MTRol.isBeheer&&MTRol.isBeheer()); }catch(e){ return false; } },
+  gebruikers:()=>tgUsers(), capaciteit:(ids,van,tot,ververs)=>tgCapaciteit(ids,van,tot,ververs), capaciteitFouten:()=>(tgCapaciteit.laatste&&tgCapaciteit.laatste.fouten)||{}, capaciteitReden:()=>tgCapaciteitStatus(),
+  uren:(van,tot,ververs)=>tgUrenPerGebruiker(van,tot,ververs), foutTekst:e=>_tgFoutTekst(e),
+  openTaak:(code,id,el)=>MTTaakPaneel.open(code,id,{terug:el}), openProject:code=>openProject(code,{sectie:'planning'}),
+  openPersoon:slug=>{ try{ MTPlanFilter.zet({persoon:slug}); }catch(e){} agendaZetView('capaciteit'); } }); }catch(e){ console.warn('Planning compleet init:',e); }
 // Werktijden per medewerker (restyling brok 9, Admin ▸ Team en werktijden): een gedeeld bestand mt_werktijden.json met een record per medewerker.
 // Wijzigen mag alleen een teamadmin (eigenaar/beheer) met een geladen rol (fail-closed); lezen iedereen: de planning van het hele team rekent ermee.
 // Zonder record van een persoon geldt alles als voorheen (werkuren per week / 5, ma-vr). Zie mt-werktijden.js en MTPlanning.werktijden*.

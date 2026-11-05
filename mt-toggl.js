@@ -99,15 +99,25 @@ function _tgFoutTekst(e){
   if(st===429) return 'Toggl vraagt om even te wachten';
   return (e&&e.message)||'onbekende fout';
 }
+// Is een Toggl-gebruiker actief? true/false, of null als Toggl in de lijst niets over de status zegt (dan niet raden).
+function tgUserActief(u){
+  if(!u||typeof u!=='object') return null;
+  if(u.active===false||u.is_active===false||u.inactive===true||u.is_inactive===true||u.deactivated===true||u.disabled===true) return false;
+  if(u.deactivated_at||u.inactive_at||u.removed_at||u.disabled_at) return false;
+  const st=String(u.status||u.state||'').toLowerCase();
+  if(/inactive|deactiv|disabled|removed|suspend/.test(st)) return false;
+  if(u.active===true||u.is_active===true||/^active$|^enabled$|^joined$/.test(st)) return true;
+  return null;
+}
 // Gebruikers van de organisatie: user_account_id ↔ naam/e-mail (sessie-cache).
 let _tgUsersCache=null;
 const _tgLopend={};          // lopende verzoeken delen (project- en klanttijdlijn tegelijk open)
 function _tgEenmalig(k,fn){ if(!_tgLopend[k]) _tgLopend[k]=Promise.resolve().then(fn).finally(()=>{ delete _tgLopend[k]; }); return _tgLopend[k]; }
 async function tgUsers(){
   if(_tgUsersCache) return _tgUsersCache;
-  const k='mt_tg_users|'+_tgVandaag(), c=_tgCacheLees(k); if(c) return (_tgUsersCache=c);
+  const k='mt_tg_users2|'+_tgVandaag(), c=_tgCacheLees(k); if(c) return (_tgUsersCache=c);
   const d=await _tgEenmalig(k,()=>focusFetchOrg('users'));
-  const lijst=(Array.isArray(d)?d:(d&&(d.data||d.users))||[]).map(u=>({id:u.user_account_id||u.id,naam:u.name||u.fullname||u.email||'',email:String(u.email||'').toLowerCase()}));
+  const lijst=(Array.isArray(d)?d:(d&&(d.data||d.users))||[]).map(u=>({id:u.user_account_id||u.id,naam:u.name||u.fullname||u.email||'',email:String(u.email||'').toLowerCase(),actief:tgUserActief(u)}));
   _tgCacheZet(k,lijst); return (_tgUsersCache=lijst);
 }
 // Werkelijke uren per gebruiker per week (en per taak) voor de projecten van `codes`.
@@ -229,17 +239,18 @@ function _tgCapLees(d,uid){
       // Alleen dagen met echte getallen (ook echte 0 is een getal); ontbrekende velden worden niet als 0 gelezen.
       if(x.working_minutes==null||x.estimated_minutes==null||!isFinite(Number(x.working_minutes))||!isFinite(Number(x.estimated_minutes))) return;
       const werk=Number(x.working_minutes), gepland=Number(x.estimated_minutes);
-      dagen[dag]={werk:werk/60,gepland:gepland/60,vrij:(werk-gepland)/60}; }); });
+      const verlofMin=x.time_off_minutes!=null&&isFinite(Number(x.time_off_minutes))?Number(x.time_off_minutes):null;   // verlof in Toggl-capaciteit; null = Toggl gaf het niet mee
+      dagen[dag]={werk:werk/60,gepland:gepland/60,vrij:(werk-gepland)/60,verlof:verlofMin==null?null:verlofMin/60}; }); });
   return dagen;
 }
-async function tgCapaciteit(userIds,van,tot){
+async function tgCapaciteit(userIds,van,tot,ververs){
   const ids=[...new Set((userIds||[]).filter(Boolean))]; const uit={}, fouten={};
   tgCapaciteit.laatste={totaal:ids.length,ok:0,fouten,van,tot};
   if(!ids.length) return uit;
   await Promise.all(ids.map(async uid=>{
-    const k='mt_tgcap1|'+uid+'|'+van+'|'+tot+'|'+_tgVandaag(), c=_tgCacheLees(k);
+    const k='mt_tgcap2|'+uid+'|'+van+'|'+tot+'|'+_tgVandaag(), c=ververs?null:_tgCacheLees(k);
     if(c){ uit[uid]=c; tgCapaciteit.laatste.ok++; return; }
-    const f=_tgCapFout[k]; if(f&&Date.now()-f.ts<300000){ fouten[uid]=f.code; return; }
+    const f=ververs?null:_tgCapFout[k]; if(f&&Date.now()-f.ts<300000){ fouten[uid]=f.code; return; }
     try{
       const d=await _tgEenmalig(k,()=>focusFetch(`capacities/users?user_id=${encodeURIComponent(uid)}&unit=day&start_date=${van}&end_date=${tot}`));
       const dagen=_tgCapLees(d,uid);
@@ -248,6 +259,27 @@ async function tgCapaciteit(userIds,van,tot){
     }catch(e){ const code=(String(e&&e.message||'').match(/HTTP (\d{3})/)||[])[1]||'antwoord'; fouten[uid]=code; _tgCapFout[k]={ts:Date.now(),code}; }
   }));
   return uit;
+}
+// Compleetheidscontrole (alleen lezen): geklokte seconden per gebruiker, project en taak over een periode van hele dagen (van t/m tot, lokale tijd).
+// Zelfde Reports-query als tgReportsUren, maar zonder projectfilter, zodat ook uren zonder project meekomen. project/taak null = niet gekoppeld.
+// → [{user, project, taak, sec}]
+async function tgUrenPerGebruiker(van,tot,ververs){
+  const k='mt_tgzk|'+van+'|'+tot+'|'+_tgVandaag();
+  let rijen=ververs?null:_tgCacheLees(k);
+  if(!rijen){
+    const [ay,am,ad]=String(van).split('-').map(Number), [ey,em,ed]=String(tot).split('-').map(Number);
+    const a=new Date(ay,am-1,ad), e=new Date(ey,em-1,ed+1);
+    const body={groupings:[{property:'project_id'},{property:'task_id'},{property:'user'}],
+      aggregations:[{property:'duration',function:'sum'}],
+      filters:[{property:'start',operator:'between',value:[a.toISOString(),e.toISOString()]}]};
+    const r=await _tgEenmalig(k,()=>_tgQueue(()=>focusFetchPad(`reports/workspaces/${FOCUS_WS}/query`,'POST',body)));
+    const lijst=r&&r.data_json_row;
+    if(!Array.isArray(lijst)) throw new Error('Toggl gaf een onverwacht antwoord (geen data_json_row)');
+    if(!lijst.every(x=>x&&typeof x==='object'&&'sum_duration' in x&&(x.user_account_id!=null||x.user_id!=null))) throw new Error('Toggl geeft geen duur of gebruiker mee in de urenrapportage');
+    rijen=lijst.map(x=>({user:x.user_account_id!=null?x.user_account_id:x.user_id,project:x.project_id||null,taak:x.task_id||null,sec:Number(x.sum_duration)||0}));
+    _tgCacheZet(k,rijen);
+  }
+  return rijen;
 }
 // Leesbare reden bij een mislukte capaciteitsaanroep (code = HTTP-status of 'antwoord').
 function tgCapaciteitReden(c){ return c==='402'?'402: jullie Toggl-abonnement heeft capaciteit niet':c==='403'?'403: geen rechten':c==='429'?'429: even wachten':c==='antwoord'?'onverwacht antwoord':'HTTP '+c; }
