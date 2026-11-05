@@ -336,6 +336,24 @@ select{appearance:none;-webkit-appearance:none;background-image:url("data:image/
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4)}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--space-3)}
 .grid4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:var(--space-3)}
+/* Instellingen: uitklapbare groepen met zoekveld (#ins-wrap); de kaarten erin blijven gewone .card's */
+.ins-zoek{margin-bottom:var(--space-4)}
+.ins-zoek input{width:100%;max-width:420px}
+.ins-groep{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:var(--space-4);box-shadow:var(--shadow-sm)}
+.ins-groep[hidden]{display:none}
+.ins-groep>summary{list-style:none;cursor:pointer;position:relative;display:flex;flex-direction:column;gap:2px;min-height:44px;justify-content:center;padding:var(--space-4) calc(var(--space-5) + 24px) var(--space-4) var(--space-5)}
+.ins-groep>summary::-webkit-details-marker{display:none}
+.ins-groep>summary::after{content:"\25BE";position:absolute;right:var(--space-5);top:50%;transform:translateY(-50%);color:var(--text-faint);font-size:18px;transition:transform .15s}
+.ins-groep[open]>summary::after{transform:translateY(-50%) rotate(180deg)}
+.ins-titel{font-size:15px;font-weight:600;color:var(--text)}
+.ins-sub{font-size:12px;color:var(--text-dim)}
+.ins-body{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:var(--space-4);align-items:start;padding:0 var(--space-5) var(--space-5)}
+.ins-body>*{min-width:0}
+.ins-body>.card{margin-bottom:0;box-shadow:none}
+.ins-breed{grid-column:1/-1;overflow-x:auto}
+.ins-weg{display:none!important}
+.ins-geen{font-size:13px;color:var(--text-dim);margin:0 0 var(--space-4)}
+@media (max-width:760px){.ins-groep>summary{padding-left:var(--space-4)}.ins-body{padding:0 var(--space-3) var(--space-3)}}
 
 /* ── BUTTONS ── */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:var(--control-h);padding:0 var(--space-4);border-radius:var(--radius-sm);border:1px solid transparent;cursor:pointer;font-family:var(--sans);font-size:var(--text-sm);font-weight:600;transition:all 0.15s;letter-spacing:0.01em;line-height:1}
@@ -1569,8 +1587,14 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
   </div>
 
   <div id="tab-instellingen" class="tab-content">
-    <!-- F5: verhuisknop (alleen zichtbaar met de proefvlag mt_verhuis_proef tot het nieuwe domein gekoppeld is) -->
-    <div class="card" id="verhuis-kaart" style="display:none"><div class="card-title">Verhuizen naar het nieuwe adres</div><div id="verhuis-plek"></div></div>
+    <!-- Indeling in uitklapbare groepen (ins-*): alleen verplaatst, geen kaart herschreven. De kaarten blijven direct kind van .ins-body;
+         wat rol/recht of code (style.display) verbergt, verbergt ook de groep zodra alle kaarten weg zijn (zie de script hieronder). -->
+    <div id="ins-wrap">
+    <div class="ins-zoek"><input type="search" id="ins-zoek" placeholder="Zoek in instellingen&hellip;" aria-label="Zoek in instellingen" autocomplete="off"></div>
+    <p class="ins-geen" id="ins-geen" hidden>Niets gevonden in de instellingen.</p>
+    <details class="ins-groep" id="ins-g-account" data-ins-groep>
+      <summary><span class="ins-titel">Mijn account</span><span class="ins-sub">Weergave, Toggl koppelen, wat is er verbeterd</span></summary>
+      <div class="ins-body">
     <div class="card" id="stijl-kaart">
       <div class="card-title">Weergave</div>
       <label style="display:flex;align-items:center;gap:8px;margin:0;text-transform:none;letter-spacing:0;font-size:13px;font-weight:500;color:var(--text);cursor:pointer"><input type="checkbox" id="stijl-schakel" onchange="mtStijl.zet(!this.checked)"> Oude stijl gebruiken</label>
@@ -1586,87 +1610,94 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
       <p style="font-size:12px;color:var(--text-dim);margin:0 0 8px">Je timer en uren lopen via je eigen Toggl-account. Eén keer koppelen; je sleutel wordt versleuteld bewaard en is voor niemand zichtbaar — ook niet voor beheerders.</p>
       <span data-tgk-badge></span>
     </div>
+      </div>
+    </details>
+    <details class="ins-groep" id="ins-g-tarieven" data-ins-groep>
+      <summary><span class="ins-titel">Tarieven &amp; calculatie</span><span class="ins-sub">Uurtarieven, materiaaltoeslagen, projectsjabloon</span></summary>
+      <div class="ins-body">
+    <div class="card" id="uurtarief-kaart">
+      <div class="card-title">Uurtarieven</div>
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:1rem">€ per uur excl. btw, per teamlid; het standaardtarief geldt voor iedereen zonder eigen tarief. Gebruikt in de nacalculatie (projectvenster) en als startwaarde van nieuwe uurregels in de calculatie. Hier pas je ze altijd aan.</p>
+      <div class="grid2" id="uurtarief-velden"></div>
+      <button class="btn btn-secondary btn-sm" onclick="saveUurtarieven()">Opslaan</button>
+      <span id="uurtarief-status" style="font-size:12px;color:var(--text-dim);margin-left:8px"></span>
+      <div id="uurtarief-calcmelding" style="font-size:12.5px;margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Materiaaltoeslagen</div>
+      <div class="grid2">
+        <div class="field">
+          <label>Lak (€/m²)</label>
+          <input type="number" id="s-toeslag-lak" value="50" step="5">
+        </div>
+        <div class="field">
+          <label>Spuitwerk (€/m²)</label>
+          <input type="number" id="s-toeslag-spuit" value="80" step="5">
+        </div>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="saveToeslagen()">Opslaan</button>
+      <span id="toeslag-status" style="font-size:12px;color:var(--text-dim);margin-left:8px"></span>
+    </div>
+    <div class="card" id="sjabloon-kaart" style="display:none">
+      <div class="card-title">Projectsjabloon</div>
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:1rem">De standaardketen voor een nieuw project: fases, taken (met activiteit en een aandeel van het budget in %) en afhankelijkheden met wachttijd, bv. de levertijd van materiaal. Bij "Gewonnen → project" en "Direct project" wordt dit sjabloon voorgesteld; je kunt het dan nog aanpassen of overslaan. Het budget komt uit de calculatie en de datums rekenen terug vanaf de leverdatum. Alleen eigenaar en beheer kunnen het sjabloon wijzigen.</p>
+      <div id="sjabloon-inhoud"></div>
+    </div>
+      </div>
+    </details>
+    <details class="ins-groep" id="ins-g-administratie" data-ins-groep>
+      <summary><span class="ins-titel">Administratie</span><span class="ins-sub">Leveranciers, grootboekrekeningen, contacten</span></summary>
+      <div class="ins-body">
+    <div class="card">
+      <div class="card-title">Leveranciers</div>
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:1rem">Beheer leverancierscontacten per categorie.</p>
+      <div id="leveranciers-beheer"></div>
+      <button class="btn btn-secondary btn-sm mt1" onclick="voegLeverancierToe()">+ Leverancier toevoegen</button>
+    </div>
+    <div class="card" data-recht="moneybird">
+      <div class="card-title">Grootboekrekeningen</div>
+      <div id="ledger-list" style="font-size:12px;color:var(--text-dim)">Laden...</div>
+      <button class="btn btn-secondary btn-sm mt1" onclick="loadLedgers()">Herladen</button>
+    </div>
     <div class="card" data-recht="projecten:wijzigen" id="mtc-instel-kaart">
       <div class="card-title">Contacten</div>
       <p style="font-size:12px;color:var(--text-dim);margin:0 0 8px">Eén contactenregister voor klanten, leveranciers en collega's. “Bijwerken” leest Moneybird, projecten en gekoppelde mails; je ziet eerst wat er zou veranderen en niets wordt overschreven.</p>
       <div class="flex"><button class="btn btn-secondary btn-sm" data-mtc="bijwerken">↻ Contacten bijwerken</button><button class="btn btn-secondary btn-sm" data-mtc="zoek">🔎 Contact zoeken</button><span id="mtc-instel-status" style="font-size:12px;color:var(--text-dim)"></span></div>
     </div>
-    <div class="grid2">
-      <div>
-        <div class="card" data-recht="moneybird">
-          <div class="card-title">API Tokens</div>
-          <p style="font-size:12px;color:var(--text-dim);margin-bottom:1rem;background:var(--orange-light);padding:10px 12px;border-radius:6px;border-left:3px solid var(--orange)">
-            ⚠ Tokens opgeslagen in localStorage van je browser.
-          </p>
-          <div class="field"><label>Moneybird API Token</label><div class="status-bar ok" style="margin:0"><span class="dot"></span> Veilig opgeslagen in Cloudflare Worker</div></div>
-          <div class="field"><label>Moneybird Administratie ID</label><input type="text" id="s-mb-admin"></div>
-          <div class="flex mt2">
-            <button class="btn btn-primary" onclick="saveSettings()">Opslaan</button>
-            <button class="btn btn-secondary" onclick="testApi()">Testen</button>
-            <span id="settings-status" style="font-size:12px;color:var(--text-dim)"></span>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-title">Leveranciers</div>
-          <p style="font-size:12px;color:var(--text-dim);margin-bottom:1rem">Beheer leverancierscontacten per categorie.</p>
-          <div id="leveranciers-beheer"></div>
-          <button class="btn btn-secondary btn-sm mt1" onclick="voegLeverancierToe()">+ Leverancier toevoegen</button>
-        </div>
       </div>
-      <div>
-        <div class="card" data-recht="moneybird">
-          <div class="card-title">Grootboekrekeningen</div>
-          <div id="ledger-list" style="font-size:12px;color:var(--text-dim)">Laden...</div>
-          <button class="btn btn-secondary btn-sm mt1" onclick="loadLedgers()">Herladen</button>
-        </div>
-        <div class="card">
-          <div class="card-title">Materiaaltoeslagen</div>
-          <div class="grid2">
-            <div class="field">
-              <label>Lak (€/m²)</label>
-              <input type="number" id="s-toeslag-lak" value="50" step="5">
-            </div>
-            <div class="field">
-              <label>Spuitwerk (€/m²)</label>
-              <input type="number" id="s-toeslag-spuit" value="80" step="5">
-            </div>
-          </div>
-          <button class="btn btn-secondary btn-sm" onclick="saveToeslagen()">Opslaan</button>
-          <span id="toeslag-status" style="font-size:12px;color:var(--text-dim);margin-left:8px"></span>
-        </div>
-        <div class="card" id="uurtarief-kaart">
-          <div class="card-title">Uurtarieven</div>
-          <p style="font-size:12px;color:var(--text-dim);margin-bottom:1rem">€ per uur excl. btw, per teamlid; het standaardtarief geldt voor iedereen zonder eigen tarief. Gebruikt in de nacalculatie (projectvenster) en als startwaarde van nieuwe uurregels in de calculatie. Hier pas je ze altijd aan.</p>
-          <div class="grid2" id="uurtarief-velden"></div>
-          <button class="btn btn-secondary btn-sm" onclick="saveUurtarieven()">Opslaan</button>
-          <span id="uurtarief-status" style="font-size:12px;color:var(--text-dim);margin-left:8px"></span>
-          <div id="uurtarief-calcmelding" style="font-size:12.5px;margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"></div>
-        </div>
-        <div class="card" id="sjabloon-kaart" style="display:none">
-          <div class="card-title">Projectsjabloon</div>
-          <p style="font-size:12px;color:var(--text-dim);margin-bottom:1rem">De standaardketen voor een nieuw project: fases, taken (met activiteit en een aandeel van het budget in %) en afhankelijkheden met wachttijd, bv. de levertijd van materiaal. Bij "Gewonnen → project" en "Direct project" wordt dit sjabloon voorgesteld; je kunt het dan nog aanpassen of overslaan. Het budget komt uit de calculatie en de datums rekenen terug vanaf de leverdatum. Alleen eigenaar en beheer kunnen het sjabloon wijzigen.</p>
-          <div id="sjabloon-inhoud"></div>
-        </div>
-        <div class="card">
-          <div class="card-title">Gearchiveerde schermen</div>
-          <p style="font-size:12px;color:var(--text-dim);margin-bottom:var(--space-4)">
-            Schermen die uit de hoofdbalk zijn gehaald maar nog volledig werken. Open ze hier wanneer nodig.
-          </p>
-          <div class="flex">
-            <button class="btn btn-secondary btn-sm" onclick="showTab('verwerk',this)">Nieuwe factuur</button>
-            <button class="btn btn-secondary btn-sm" onclick="showTab('controle',this)">Factuur controle</button>
-          </div>
-        </div>
+    </details>
+    <details class="ins-groep" id="ins-g-koppelingen" data-ins-groep>
+      <summary><span class="ins-titel">Koppelingen</span><span class="ins-sub">API-tokens van Moneybird</span></summary>
+      <div class="ins-body">
+    <div class="card" data-recht="moneybird">
+      <div class="card-title">API Tokens</div>
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:1rem;background:var(--orange-light);padding:10px 12px;border-radius:6px;border-left:3px solid var(--orange)">
+        ⚠ Tokens opgeslagen in localStorage van je browser.
+      </p>
+      <div class="field"><label>Moneybird API Token</label><div class="status-bar ok" style="margin:0"><span class="dot"></span> Veilig opgeslagen in Cloudflare Worker</div></div>
+      <div class="field"><label>Moneybird Administratie ID</label><input type="text" id="s-mb-admin"></div>
+      <div class="flex mt2">
+        <button class="btn btn-primary" onclick="saveSettings()">Opslaan</button>
+        <button class="btn btn-secondary" onclick="testApi()">Testen</button>
+        <span id="settings-status" style="font-size:12px;color:var(--text-dim)"></span>
       </div>
     </div>
-  </div>
-
-  <!-- ── CN ANALYSE TAB ── -->
-  <!-- ═══ TAB: CN (GEARCHIVEERD) ═══ -->
-  <!-- Klantlocatie-analyse: geen menu-ingang meer (verwijderd uit "Gearchiveerde schermen" in
-       Instellingen). Code blijft intact — niet verwijderen, alleen niet meer bereikbaar via UI. -->
-  <div id="tab-cn" class="tab-content">
-    <div class="card" style="max-width:900px">
+      </div>
+    </details>
+    <details class="ins-groep" id="ins-g-archief" data-ins-groep>
+      <summary><span class="ins-titel">Archief</span><span class="ins-sub">Gearchiveerde schermen, klantanalyse, verhuizen</span></summary>
+      <div class="ins-body">
+    <div class="card">
+      <div class="card-title">Gearchiveerde schermen</div>
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:var(--space-4)">
+        Schermen die uit de hoofdbalk zijn gehaald maar nog volledig werken. Open ze hier wanneer nodig.
+      </p>
+      <div class="flex">
+        <button class="btn btn-secondary btn-sm" onclick="showTab('verwerk',this)">Nieuwe factuur</button>
+        <button class="btn btn-secondary btn-sm" onclick="showTab('controle',this)">Factuur controle</button>
+      </div>
+    </div>
+    <div class="card ins-breed" style="max-width:900px">
       <div class="card-title">Klantanalyse — keukens & commodes per vestiging <span style="font-size:11px;font-weight:400;color:var(--text-dim)">(gearchiveerd)</span></div>
       <p style="font-size:12px;color:var(--text-dim);margin-bottom:1rem">Zoek op (deel van) een bedrijfsnaam. Alle overeenkomende contacten worden samengevoegd.</p>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
@@ -1680,14 +1711,12 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
         </div>
       </div>
     </div>
-
-    <div id="cn-contacten-wrap" style="display:none;max-width:900px" class="card">
+    <div id="cn-contacten-wrap" style="display:none;max-width:900px" class="card ins-breed">
       <div class="card-title">Gevonden contacten <span id="cn-contact-count" style="font-weight:400;color:var(--text-dim);font-size:13px"></span></div>
       <p style="font-size:12px;color:var(--text-dim);margin-bottom:10px">Klik om een contact uit te sluiten.</p>
       <div id="cn-chips" style="display:flex;flex-wrap:wrap;gap:8px"></div>
     </div>
-
-    <div id="cn-resultaten" style="display:none">
+    <div id="cn-resultaten" class="ins-breed" style="display:none">
       <div class="card" style="max-width:900px">
         <div class="card-title">Samenvatting</div>
         <div id="cn-summary" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-top:8px"></div>
@@ -1723,7 +1752,64 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
         </table>
       </div>
     </div>
+    <div class="card" id="verhuis-kaart" style="display:none"><div class="card-title">Verhuizen naar het nieuwe adres</div><div id="verhuis-plek"></div></div>
+      </div>
+    </details>
+    </div>
+    <script>
+    // Instellingen in groepen: open/dicht per groep onthouden, zoeken over de kaarten, en een groep verdwijnt zolang al haar kaarten weg zijn
+    // (rol/recht via .mt-rol-verborgen, of code die style.display='none' zet: #upd-kaart, #tgk-kaart, #sjabloon-kaart, #verhuis-kaart, …).
+    (function(){
+      var wrap=document.getElementById('ins-wrap'), zoek=document.getElementById('ins-zoek'), geen=document.getElementById('ins-geen'); if(!wrap||!zoek) return;
+      var SLEUTEL='mt_ins_groepen', groepen=[].slice.call(wrap.querySelectorAll('details[data-ins-groep]')), bezig=false, zochtEerder=false, gepland=false;
+      function opgeslagen(){ try{ return JSON.parse(localStorage.getItem(SLEUTEL)||'{}')||{}; }catch(e){ return {}; } }
+      function bewaar(){ var o={}; groepen.forEach(function(g){ o[g.id]=g.open; }); try{ localStorage.setItem(SLEUTEL,JSON.stringify(o)); }catch(e){} }
+      function kaarten(g){ return [].slice.call(g.querySelector('.ins-body').children).filter(function(k){ return k.tagName!=='SCRIPT'; }); }
+      function weg(k){ return k.classList.contains('mt-rol-verborgen')||k.style.display==='none'; }
+      function term(){ return (zoek.value||'').trim().toLowerCase(); }
+      function teken(){
+        var q=term(), totaal=0, st=opgeslagen();
+        bezig=true;
+        groepen.forEach(function(g){
+          var n=0, ks=kaarten(g).filter(function(k){ return !weg(k); });
+          ks.forEach(function(k){
+            var ok=!q||(k.textContent||'').toLowerCase().indexOf(q)>=0;
+            k.classList.toggle('ins-weg',!ok); if(ok) n++;
+          });
+          g.hidden=!ks.length||(!!q&&!n);
+          if(q&&n) g.open=true;
+          else if(!q&&zochtEerder) g.open=!!st[g.id];
+          totaal+=n;
+        });
+        zochtEerder=!!q;
+        geen.hidden=!(q&&!totaal);
+        bezig=false;
+      }
+      var st0=opgeslagen(); groepen.forEach(function(g){ g.open=!!st0[g.id]; g.addEventListener('toggle',function(){ if(!bezig&&!term()) bewaar(); }); });
+      zoek.addEventListener('input',teken);
+      // kaarten die later zichtbaar of weg worden (rol bekend, Toggl-status, sjabloonrecht, proefvlag): alleen directe kaarten in een groep tellen
+      var mo=new MutationObserver(function(lijst){
+        var raak=lijst.some(function(m){ var t=m.target; return m.type==='attributes' ? !!(t.parentNode&&t.parentNode.classList&&t.parentNode.classList.contains('ins-body')) : (t.classList&&t.classList.contains('ins-body')); });
+        if(!raak||gepland) return;
+        gepland=true; setTimeout(function(){ gepland=false; teken(); mo.takeRecords(); },0);
+      });
+      mo.observe(wrap,{subtree:true,childList:true,attributes:true,attributeFilter:['style','class']});
+      // Vanuit andere code naar een kaart springen (uurtarieven, projectsjabloon): eerst de groep openen, zoekfilter weg.
+      window.insToonKaart=function(id){
+        var k=document.getElementById(id), g=k&&k.closest('details[data-ins-groep]'); if(!g) return;
+        if(term()){ zoek.value=''; teken(); }
+        if(!g.open){ g.open=true; bewaar(); }
+      };
+      teken();
+    })();
+    </script>
+
   </div>
+
+  <!-- ═══ TAB: CN (GEARCHIVEERD) ═══ -->
+  <!-- Klantlocatie-analyse: geen menu-ingang meer. De kaarten (ids cn-*) staan sinds de groepen-indeling in Instellingen ▸ Archief
+       (#ins-g-archief); cnAnalyse() blijft ongewijzigd. Dit lege tabblad blijft staan voor showTab('cn'). -->
+  <div id="tab-cn" class="tab-content"></div>
 
   <!-- ═══ TAB: AGENDA (Toggl week-kalender) ═══ -->
   <div id="tab-agenda" class="tab-content">
@@ -8880,7 +8966,7 @@ let _sjEd=null;   // {id, s (werkkopie), nieuw}
 function sjabloonInstellingenOpen(){
   if(!sjabloonMag()) return;
   tbDoTab('instellingen');
-  setTimeout(()=>{ const k=document.getElementById('sjabloon-kaart'); if(k&&k.scrollIntoView) k.scrollIntoView({behavior:'smooth',block:'start'}); },120);
+  setTimeout(()=>{ if(window.insToonKaart) insToonKaart('sjabloon-kaart'); const k=document.getElementById('sjabloon-kaart'); if(k&&k.scrollIntoView) k.scrollIntoView({behavior:'smooth',block:'start'}); },120);
 }
 function sjabloonKaartTeken(){
   const kaart=document.getElementById('sjabloon-kaart'), el=document.getElementById('sjabloon-inhoud'); if(!kaart||!el) return;
@@ -10515,7 +10601,7 @@ if(typeof window!=='undefined'&&window.addEventListener) window.addEventListener
 function uurtarievenOpen(){
   if(!uurtarievenMag('wijzigen')) return;
   tbDoTab('instellingen');
-  setTimeout(()=>{ const k=document.getElementById('uurtarief-kaart'); if(k) k.scrollIntoView({behavior:'smooth',block:'center'}); const i=document.getElementById('s-tarief-std'); if(i){ try{ i.focus({preventScroll:true}); }catch(e){ i.focus(); } } },120);
+  setTimeout(()=>{ if(window.insToonKaart) insToonKaart('uurtarief-kaart'); const k=document.getElementById('uurtarief-kaart'); if(k) k.scrollIntoView({behavior:'smooth',block:'center'}); const i=document.getElementById('s-tarief-std'); if(i){ try{ i.focus({preventScroll:true}); }catch(e){ i.focus(); } } },120);
 }
 function uurtariefCalcMelding(){
   const el=document.getElementById('uurtarief-calcmelding'); if(!el) return;
