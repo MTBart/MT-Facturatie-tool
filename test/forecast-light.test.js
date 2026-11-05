@@ -614,4 +614,10 @@ atest('uit beeld: rollback schrijft niet over een item dat een collega intussen 
   assert.ok(/Niet teruggezet: intussen gewijzigd door Collega Voorbeeld: offerte 300000000951, item p:A/.test(fout.message), fout.message);
   assert.ok(/Teruggezet: 1 van 2\./.test(fout.message) && !/al uitgezette prognose-items zijn teruggezet/.test(fout.message), 'zin noemt alleen wat echt teruggezet is: ' + fout.message);
 });
+// Regressie: de basisopmaak van het paneel stond alleen in het telefoonblok, waardoor Te controleren op de computer onderaan de pagina belandde.
+test('paneel: basisopmaak staat buiten het telefoonblok', () => {
+  const bron = require('fs').readFileSync(require('path').join(__dirname, '..', 'mt-forecast-light.js'), 'utf8'), m = bron.indexOf('@media (max-width:700px){');
+  assert.ok(m > 0 && bron.indexOf('.mtl-sheet{position:fixed') > 0 && bron.indexOf('.mtl-sheet{position:fixed') < m, 'paneel');
+  assert.ok(bron.indexOf('.mtl-popbg{position:fixed') > 0 && bron.indexOf('.mtl-popbg{position:fixed') < m, 'achtergrond');
+});
 kette.then(() => console.log(`\n${n} tests geslaagd${process.exitCode ? ' (met fouten)' : ''}`));
