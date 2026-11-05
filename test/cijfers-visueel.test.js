@@ -144,4 +144,32 @@ test('omzetzin: voor, achter, gelijk en niet te vergelijken, in woorden', () => 
   assert.strictEqual(C.cumulZin([null], null, 0, 2026).richting, null);
 });
 
-console.log(`${n} tests gedaan`);
+test('kostenzin: alleen uit de cijfers, met woorden van het oordeel, geen oorzaak', () => {
+  zet(); const o = vgl('M', 2).onderdelen.find(x => x.id === 'materiaal'); st.bm.materiaal = { van: 14, tot: 18 };
+  const o2 = vgl('M', 2).onderdelen.find(x => x.id === 'materiaal'), z = C.kostenZin(o2);
+  assert.ok(/^Materiaal is 26,5% van de omzet/.test(z), z); assert.ok(/in 2025/.test(z) && /boven de branche/.test(z) && /duidelijk slechter/.test(z), z);
+  assert.ok(!/omdat|doordat|komt door|oorzaak/i.test(z));
+  const z0 = C.kostenZin(o); assert.ok(/in 2025 \(in lijn\)/.test(z0) && !/branche/.test(z0), z0);
+  st.maanden = st.maanden.filter(m => !m.id.startsWith('2025-') && !m.id.startsWith('2024-')); const z1 = C.kostenZin(vgl('M', 2, { bm: {} }).onderdelen.find(x => x.id === 'materiaal'));
+  assert.ok(/Geen vergelijking mogelijk/.test(z1) && /geen gegevens 2025/.test(z1), z1);
+  assert.strictEqual(C.kostenZin({ v: null }), 'Geen cijfers voor deze periode.');
+});
+(async () => {
+  try {
+    zet(); const lopen = []; let actief = 0, maxActief = 0;
+    st.bron = { haal: async u => { lopen.push(u); actief++; maxActief = Math.max(maxActief, actief); await new Promise(r => setTimeout(r, 2)); actief--;
+      if (/2026-03/.test(u)) throw new Error('stuk'); if (/2026-05/.test(u)) return { error: 'nee' }; return { items: [{ tegenpartij: 'Nep A', bedrag: 100 }, { tegenpartij: 'Nep B', bedrag: 50 }, { tegenpartij: 'Nep A', bedrag: 25 }], meer: 0 }; } };
+    const p1 = C._laadKosten('materiaal'), p2 = C._laadKosten('materiaal'); await Promise.all([p1, p2]);
+    assert.strictEqual(lopen.length, 10, 'één verzoek per afgesloten maand, geen tweede ronde'); assert.strictEqual(maxActief, 1, 'achter elkaar, geen storm');
+    assert.ok(lopen.every(u => /reeks=kosten&categorie=materiaal/.test(u)));
+    assert.strictEqual(st.kTop.laden, false); assert.strictEqual(st.kTop.fouten, 2); assert.strictEqual(st.kTop.onvolledig, true);
+    assert.deepStrictEqual(st.kTop.items.map(x => [x.naam, x.v]), [['Nep A', 125 * 8], ['Nep B', 50 * 8]]);
+    // annuleren: de lopende ronde stopt na het wegzetten
+    lopen.length = 0; st.bron.haal = async u => { lopen.push(u); await new Promise(r => setTimeout(r, 2)); if (lopen.length === 3) st.kTop = null; return { items: [] }; };
+    st.kTop = null; await C._laadKosten('uitbesteed'); assert.strictEqual(lopen.length, 3, 'gestopt na annuleren'); assert.strictEqual(st.kTop, null);
+    // alles mislukt: geen blijvende laadstand
+    st.bron.haal = async () => { throw new Error('x'); }; await C._laadKosten('personeel'); assert.strictEqual(st.kTop.laden, false); assert.strictEqual(st.kTop.fouten, 10); assert.strictEqual(st.kTop.items.length, 0);
+    n++; console.log('ok  - kosten-leveranciers: één ronde, achter elkaar, annuleerbaar, fouten en onvolledig zonder blijvende laadstand');
+  } catch (e) { console.log('FOUT - kosten-leveranciers\n' + (e.stack || e)); process.exitCode = 1; }
+  console.log(`${n} tests gedaan`);
+})();

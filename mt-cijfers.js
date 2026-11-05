@@ -21,7 +21,7 @@
   const WEERGAVEN = [['omzet_kosten', 'Omzet en kosten'], ['brutomarge', 'Brutomarge'], ['kosten_pct', 'Kosten vs branche'], ['opnames', 'Opnames'], ['kas', 'Kas'], ['waterval', 'Waterval']];
   const REEKS_NAAR = { omzet_kosten: 'omzet_kosten', omzet: 'omzet_kosten', kosten: 'omzet_kosten', resultaat: 'omzet_kosten', brutomarge: 'brutomarge', kosten_pct: 'kosten_pct', opnames: 'opnames', kas: 'kas', waterval: 'waterval' };
   const st = C._st = { el: null, bron: null, mag: false, wie: '', maanden: [], cats: [], bm: {}, ontbrekend: [], laden: false, rondes: 0, fout: null, prognose: null, kasProg: null,
-    jaar: null, stapelSel: null, zoom: 'M', weergave: 'omzet_kosten', eerlijk: true, vergelijk: 0, vgl: { j1: true, j2: true, b: true }, statusOpen: false, tabel: false, vast: null, hover: null, paneel: null, paneelEl: null, paneelNieuw: false, openerFk: null, top: null, sel: null, focusCat: null, horizon: 'kort', opHorizon: null, correctieVan: null, prive: [], vandaag: null, nietIngedeeld: [], bes: { data: null, cfg: null, laden: false, fout: null, cache: null }, besZoom: null };
+    jaar: null, stapelSel: null, kUit: null, kTop: null, zoom: 'M', weergave: 'omzet_kosten', eerlijk: true, vergelijk: 0, vgl: { j1: true, j2: true, b: true }, statusOpen: false, tabel: false, vast: null, hover: null, paneel: null, paneelEl: null, paneelNieuw: false, openerFk: null, top: null, sel: null, focusCat: null, horizon: 'kort', opHorizon: null, correctieVan: null, prive: [], vandaag: null, nietIngedeeld: [], bes: { data: null, cfg: null, laden: false, fout: null, cache: null }, besZoom: null };
   const ls = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { } } };
   const mobiel = () => { try { return root.matchMedia && root.matchMedia('(max-width: 760px)').matches; } catch (e) { return false; } };
 
@@ -156,14 +156,15 @@
 }
 /* kleur: vaste kleur per categorie (klassen mtd-k0..k6), resultaat en oordelen; donkere modus als eigen stappen (gevalideerd met het validatiescript van de dataviz-skill) */
 .mtd{--k0:#2a78d6;--k1:#eb6834;--k2:#1baf7a;--k3:#eda100;--k4:#e87ba4;--k5:#6250d6;--k6:#8c918a;--kres:#118048;--kverlies:#c4322a;--mtd-goed:#1a6e3b;--mtd-goed-bg:#e3f3e8;--mtd-let:#8f5508;--mtd-let-bg:#fcefd9;--mtd-slecht:#b42a23;--mtd-slecht-bg:#fce6e4;--mtd-band:#dbe6ee;--mtd-hoofd:#17643f}
-:root[data-theme="dark"] .mtd{color-scheme:dark;--surface:#1c221f;--canvas:#141916;--ink:#eef1ee;--ink-2:#c0c8c2;--ink-3:#a3ada6;--line:#323b36;--n-150:#242b27;--n-200:#2b332e;--n-300:#38423c;--border-strong:#55605a;--info:#8db3d4;--info-50:#22303b;--primary:#59c28b;--k0:#3987e5;--k1:#d95926;--k2:#199e70;--k3:#c98500;--k4:#d55181;--k5:#9085e9;--k6:#8c918a;--kres:#3fa874;--kverlies:#e66767;--mtd-goed:#6fd29b;--mtd-goed-bg:#1b3a29;--mtd-let:#e8ae4d;--mtd-let-bg:#3a2d12;--mtd-slecht:#ff9088;--mtd-slecht-bg:#44211e;--mtd-band:#2e3f4c;--mtd-hoofd:#59c28b;--success:#6fd29b;--error:#ff9088;--warning:#e8ae4d}
+:root[data-theme="dark"] .mtd{color-scheme:dark;--surface:#1c221f;--canvas:#141916;--ink:#eef1ee;--ink-2:#c0c8c2;--ink-3:#a3ada6;--line:#323b36;--n-150:#242b27;--n-200:#2b332e;--n-300:#38423c;--border-strong:#55605a;--info:#8db3d4;--info-50:#22303b;--primary:#59c28b;--card:#1c221f;--k0:#3987e5;--k1:#d95926;--k2:#199e70;--k3:#c98500;--k4:#d55181;--k5:#9085e9;--k6:#8c918a;--kres:#3fa874;--kverlies:#e66767;--mtd-goed:#6fd29b;--mtd-goed-bg:#1b3a29;--mtd-let:#e8ae4d;--mtd-let-bg:#3a2d12;--mtd-slecht:#ff9088;--mtd-slecht-bg:#44211e;--mtd-band:#2e3f4c;--mtd-hoofd:#59c28b;--success:#6fd29b;--error:#ff9088;--warning:#e8ae4d}
+:root[data-theme="dark"] .mtd .mtc-knop,:root[data-theme="dark"] .mtd .mtc-groep button{color:var(--ink)}:root[data-theme="dark"] .mtd .mtc-waarsch{background:var(--mtd-let-bg);color:var(--ink)}:root[data-theme="dark"] .mtd .mtc-knop.aan{background:var(--info-50);border-color:var(--info)}
 .mtd-k0{--k:var(--k0)}.mtd-k1{--k:var(--k1)}.mtd-k2{--k:var(--k2)}.mtd-k3{--k:var(--k3)}.mtd-k4{--k:var(--k4)}.mtd-k5{--k:var(--k5)}.mtd-k6{--k:var(--k6)}.mtd-kres{--k:var(--kres)}.mtd-kverlies{--k:var(--kverlies)}
 .mtd-sw{display:inline-block;width:12px;height:12px;border-radius:2px;background:var(--k,#8c918a);flex:0 0 auto}.mtd-sw.verlies{background:repeating-linear-gradient(135deg,var(--kverlies) 0 3px,transparent 3px 5px);border:1px solid var(--kverlies)}.mtd-sw.lijn{height:0;width:14px;border-radius:0;background:none;border-top:3px solid var(--ink,#1b211e)}
 .mtd-oordeel{display:inline-flex;align-items:center;gap:6px;min-height:24px;padding:0 8px;border-radius:4px;font-size:13px;font-weight:500;background:var(--n-150,#f1ede5);color:var(--ink-2,#596059)}
 .mtd-oordeel.goed{background:var(--mtd-goed-bg);color:var(--mtd-goed)}.mtd-oordeel.let-op{background:var(--mtd-let-bg);color:var(--mtd-let)}.mtd-oordeel.slecht{background:var(--mtd-slecht-bg);color:var(--mtd-slecht)}
 .mtd-oordeelrij{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
 .mtd-oordeelrij>div{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border:1px solid var(--line,#dfd8cb);border-radius:6px;background:var(--surface,#fff)}
-.mtd-or-l{font-size:12px;font-weight:500;color:var(--ink-2,#596059)}.mtd-or-t{font-size:13px;color:var(--ink-2,#596059)}
+.mtd-oordeelrij .mtd-oordeel{align-self:flex-start}.mtd-or-l{font-size:12px;font-weight:500;color:var(--ink-2,#596059)}.mtd-or-t{font-size:13px;color:var(--ink-2,#596059)}
 /* periodetabel: kolommen in de breedte, scrollt alleen binnen de tabel */
 .mtd-pt{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}
 .mtd-pt table{border-collapse:separate;border-spacing:0;font-size:13px;width:100%}
@@ -190,7 +191,7 @@
 .mtd-sdetail{display:flex;gap:10px}.mtd-sh{margin:6px 0 0;font-size:13px;font-weight:600}
 .mtd-s100s{display:flex;flex-direction:column;gap:6px}
 .mtd-s100{display:grid;grid-template-columns:96px minmax(0,1fr) auto;align-items:center;gap:10px}.mtd-s100-n{font-size:13px;font-weight:500}.mtd-s100-t{font-size:12px;color:var(--mtd-slecht)}
-.mtd-s100-b{display:flex;gap:2px;height:26px;min-width:0}.mtd-s100-d{display:flex;align-items:center;justify-content:center;min-width:2px;background:var(--k);color:#fff;font-size:11px;font-weight:600;border-radius:2px;overflow:hidden}.mtd-s100-d.mtd-k3{color:#0b0b0b}
+.mtd-s100-b{display:flex;gap:2px;height:26px;min-width:0}.mtd-s100-d{display:flex;align-items:center;justify-content:center;min-width:2px;background:var(--k);color:#fff;font-size:11px;font-weight:600;border-radius:2px;overflow:hidden}.mtd-s100-d.mtd-k1,.mtd-s100-d.mtd-k2,.mtd-s100-d.mtd-k3,.mtd-s100-d.mtd-k4,.mtd-s100-d.mtd-k6,:root[data-theme="dark"] .mtd .mtd-s100-d{color:#0b0b0b}
 .mtd-s100-leeg{grid-column:2/4;font-size:12px;color:var(--ink-3,#646a64)}
 .mtd-sdetail .mtd-pt th:first-child,.mtd-sdetail .mtd-pt thead th{background:var(--n-150,#f1ede5)}
 .mtd-pt td .mtd-oordeel{min-height:20px;font-size:12px;padding:0 6px}
@@ -200,6 +201,28 @@
 .mtd-cumzin{display:flex;align-items:center;gap:10px;margin:0;font-size:16px;line-height:22px;font-weight:600;color:var(--ink,#1b211e)}
 .mtd-cumzin .pijl{display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:28px;border-radius:4px;font-size:14px;background:var(--n-150,#f1ede5);color:var(--ink-2,#596059)}
 .mtd-cumzin.voor .pijl{background:var(--mtd-goed-bg);color:var(--mtd-goed)}.mtd-cumzin.achter .pijl{background:var(--mtd-slecht-bg);color:var(--mtd-slecht)}
+/* brutomarge-grafiek en kosten tegenover de branche */
+.mtd{--mtd-goed-f:#1f8a4c;--mtd-let-f:#b86a00;--mtd-slecht-f:#d1382e}
+:root[data-theme="dark"] .mtd{--mtd-goed-f:#3fa874;--mtd-let-f:#e8ae4d;--mtd-slecht-f:#e66767}
+.mtd-band{fill:var(--mtd-band)}.mtd-bandlijn{stroke:var(--info,#3e5c76);stroke-width:2;stroke-dasharray:6 3}.mtd-bandtekst{font-size:11px;fill:var(--ink-2,#596059)}
+.mtd-mb{fill:var(--info,#3e5c76)}.mtd-mb.goed{fill:var(--mtd-goed-f)}.mtd-mb.let-op{fill:var(--mtd-let-f)}.mtd-mb.slecht{fill:var(--mtd-slecht-f)}.mtd-mb.lopend{opacity:.5;stroke:var(--ink-2,#596059);stroke-dasharray:3 2}.mtd-mb.sel{stroke:var(--ink,#1b211e);stroke-width:2}
+.mtd-mbtekst{font-size:12px;font-weight:700;text-anchor:middle;fill:var(--ink-2,#596059)}.mtd-mbtekst.goed{fill:var(--mtd-goed)}.mtd-mbtekst.let-op{fill:var(--mtd-let)}.mtd-mbtekst.slecht{fill:var(--mtd-slecht)}
+.mtd-kolsel{fill:rgba(120,130,125,.10)}
+.mtd-kb{display:flex;flex-direction:column;gap:20px}.mtd-kb-groep{display:flex;flex-direction:column}.mtd-kb-gkop{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;padding-bottom:6px;border-bottom:1px solid var(--line,#dfd8cb)}
+.mtd-kb-rij{border-bottom:1px solid var(--n-200,#ece7de)}.mtd-kb-rij.fokus .mtd-kb-kop{box-shadow:inset 3px 0 0 var(--ink,#1b211e)}
+.mtd-kb-kop{display:grid;grid-template-columns:minmax(140px,200px) 60px minmax(120px,1fr) minmax(0,1.2fr);align-items:center;gap:6px 14px;width:100%;min-height:48px;padding:8px 6px;border:0;background:none;color:inherit;font:inherit;font-size:13px;text-align:left;cursor:pointer}
+.mtd-kb-kop:hover{background:var(--n-150,#f1ede5)}.mtd-kb-kop:focus-visible{outline:2px solid var(--primary,#17643f);outline-offset:-2px}
+.mtd-kb-naam{display:inline-flex;align-items:center;gap:8px;font-weight:500}.mtd-kb-pijl{width:10px;color:var(--ink-3,#646a64)}
+.mtd-kb-waarde{font-family:var(--mono,monospace);font-variant-numeric:tabular-nums;font-weight:600;text-align:right}
+.mtd-kb-spoor{position:relative;height:22px;background:var(--n-150,#f1ede5);border-radius:3px}
+.mtd-kb-balk{position:absolute;top:6px;height:10px;border-radius:2px;background:var(--k,var(--info,#3e5c76))}
+.mtd-kb-band{position:absolute;top:2px;height:18px;background:var(--mtd-band);border-left:2px solid var(--info,#3e5c76);border-right:2px solid var(--info,#3e5c76);box-sizing:border-box}.mtd-kb-streep{position:absolute;top:1px;height:20px;width:0;border-left:3px solid var(--info,#3e5c76)}
+.mtd-kb-oordeel{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;min-width:0}.mtd-kb-br,.mtd-kb-geen{font-size:12px;color:var(--ink-2,#596059)}.mtd-kb-geen{color:var(--ink-3,#646a64)}
+.mtd-kb-uit{padding:6px 6px 16px 28px;display:flex;flex-direction:column;gap:12px}.mtd-kb-uit[hidden]{display:none}
+.mtd-kb-zin{margin:0;font-size:14px;line-height:20px;color:var(--ink,#1b211e)}
+.mtd-kb-vgl{display:flex;flex-wrap:wrap;gap:8px 24px}.mtd-kb-vgl>div{display:flex;align-items:center;gap:8px}
+.mtd-lev{display:flex;flex-direction:column;gap:8px}.mtd-lev .mtd-sh{margin:0}.mtd-pr-b>div.mtd-kcat{background:var(--k,var(--info,#3e5c76))}.mtd-pr-b>div.mtd-kcat.grijs{background:#b8b2a4}
+@media(max-width:760px){.mtd-kb-kop{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:'naam waarde' 'spoor spoor' 'oordeel oordeel'}.mtd-kb-naam{grid-area:naam}.mtd-kb-waarde{grid-area:waarde}.mtd-kb-spoor{grid-area:spoor}.mtd-kb-oordeel{grid-area:oordeel}.mtd-kb-uit{padding-left:6px}}
 @media(prefers-reduced-motion:reduce){.mtd-tegel{transition:none}}
 `;
     document.head.appendChild(s);
@@ -987,7 +1010,8 @@
   C.oordeel = function (v, ref, hogerIsGoed) {
     if (v == null || !isFinite(v) || ref == null) return null;
     let lo, hi; if (typeof ref === 'number') { if (!isFinite(ref)) return null; lo = hi = ref; } else if (ref.van != null && ref.tot != null) { lo = ref.van; hi = ref.tot; } else if (ref.pct != null) { lo = hi = ref.pct; } else return null;
-    const pp = v > hi ? v - hi : v < lo ? v - lo : 0, abs = Math.abs(pp), beter = hogerIsGoed ? pp > 0 : pp < 0;
+    let pp = v > hi ? v - hi : v < lo ? v - lo : 0; if (Math.abs(pp) < 0.05) pp = 0;   // afgerond: geen 0,0 punt boven
+    const abs = Math.abs(pp), beter = hogerIsGoed ? pp > 0 : pp < 0;
     if (abs <= DREMPEL.INLIJN_PP) return { niveau: 'goed', woord: 'in lijn', pp, beter: false };
     if (beter) return { niveau: 'goed', woord: 'beter', pp, beter: true };
     return abs <= DREMPEL.SLECHT_PP ? { niveau: 'let-op', woord: 'iets slechter', pp, beter: false } : { niveau: 'slecht', woord: 'duidelijk slechter', pp, beter: false };
@@ -1106,6 +1130,121 @@
     return sectie('Waar ging de omzet heen', `Per ${zoomWoord()}, alleen geboekte cijfers (geen prognose) · klik op een kolom voor de vergelijking`, stapelKaart(per),
       ee('span', { class: 'mtc-noot' }, 'De streep is de omzet. Een negatief resultaat staat onder de nullijn en telt niet mee in de stapel; die loopt dan tot de totale kosten. Eerlijk beeld: lonen buiten de W&V tellen mee bij personeel (zoals ingesteld).' + (per.some(isLopend) ? ' * = lopende maand: nog niet compleet, dus vaak nog zonder alle omzet.' : '')));
   }
+  // ── Brutomarge en kosten tegenover de branche: één keuze (gekozen periode, anders het boekjaar t/m nu), oordelen, kostenrijen met uitklap ──
+  const NIVEAU_WOORD = { 'goed': 'Goed', 'let-op': 'Let op', 'slecht': 'Slecht' };
+  // De gekozen periode + de vergelijking daarvan. Zonder keuze: het boekjaar t/m de laatste afgesloten maand (een volledig jaar bij een afgesloten boekjaar).
+  function kiesPeriode() {
+    const lm = laatste(); if (!lm) return null;
+    if (st.sel) { const per = huidigePeriodes(), i = per.findIndex(p => p.id === st.sel.id); if (i >= 0) { const p = per[i]; return { per, i, zoom: st.zoom, p, ytd: false, lm, label: st.zoom === 'M' ? maandLang(p.id) : st.zoom === 'K' ? `${p.label} ${st.jaar}` : (p.label || p.id) }; } }
+    const vol = st.jaar < Number(lm.slice(0, 4)), zoom = vol ? '5J' : 'J', per = C.periodes(st.maanden, zoom, st.jaar, lm, []).map(p => Object.assign(p, { P: C.som(p.ms, st.cats, st.eerlijk) })), i = per.findIndex(p => p.id === String(st.jaar));
+    if (i < 0 || !(per[i].P.maanden > 0)) return null;
+    return { per, i, zoom, p: per[i], ytd: true, lm, label: vol ? String(st.jaar) : `${st.jaar} t/m ${MND[Number(lm.slice(5, 7)) - 1]}` };
+  }
+  const vergelijkVan = kz => C.stapelVergelijk({ per: kz.per, i: kz.i, zoom: kz.zoom, jaar: st.jaar, maanden: st.maanden, cats: st.cats, eerlijk: st.eerlijk, bm: st.bm, lm: kz.lm, offsets: [1, 2] });
+  // Eén zin in woorden over een onderdeel, alleen uit de cijfers (geen uitspraak over de oorzaak).
+  C.kostenZin = function (o) {
+    if (o.v == null) return 'Geen cijfers voor deze periode.';
+    const delen = [], pw = x => Math.abs(x).toLocaleString('nl-NL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' punt';
+    const q = o.vorig[0]; if (q && q.v != null && q.oordeel) delen.push(`${Math.abs(q.pp) < 0.05 ? 'gelijk aan' : pw(q.pp) + (q.pp > 0 ? ' hoger dan' : ' lager dan')} in ${q.jaar} (${q.oordeel.woord})`);
+    const b = o.branche.oordeel; if (b) delen.push(b.pp === 0 ? `binnen de branchemarge (${bmTekst2(o.branche.ref)})` : `${pw(b.pp)} ${b.pp > 0 ? 'boven' : 'onder'} de branche (${b.woord})`);
+    const kop = `${o.naam} is ${pctF(o.v)} van de omzet`;
+    if (!delen.length) return kop + '. Geen vergelijking mogelijk: ' + [...new Set([q && q.reden, o.branche.reden].filter(Boolean))].join('; ') + '.';
+    return kop + ': ' + delen.join(' en ') + '.';
+  };
+  function margeOordeelRij(kz, vg) {
+    const o = vg.onderdelen[0], kaart = (kop, ord, tekst, reden) => ee('div', null, ee('span', { class: 'mtd-or-l' }, kop), ord ? oordeelEl(ord, NIVEAU_WOORD[ord.niveau] + ' · ' + ord.woord) : ee('span', { class: 'mtd-oordeel' }, '— geen oordeel'), ee('span', { class: 'mtd-or-t' }, ord ? tekst : reden || ''));
+    const q = o.vorig[0], br = o.branche;
+    return ee('section', { class: 'mtd-oordeelrij', 'aria-label': 'Oordeel over de brutomarge ' + kz.label },
+      kaart('Tegenover de branche', br.oordeel, `Brutomarge ${pctF(o.v)} · branche ${bmTekst2(br.ref)} · ${br.oordeel ? (br.oordeel.pp === 0 ? 'binnen de band' : puntTekst(br.oordeel.pp)) : ''}`, br.reden),
+      kaart('Tegenover vorig jaar', q && q.oordeel, q ? `${pctF(o.v)} tegenover ${pctF(q.v)} in ${q.jaar} · ${puntTekst(q.pp)}` : '', q ? q.reden : 'geen vorig jaar'));
+  }
+  // Brutomarge per periode: staven op een %-as vanaf 0, branche-band in de grafiek, kleur + teken boven/onder de branche (alleen voor afgesloten periodes).
+  function margeKaart(per) {
+    const lm = laatste(), bm = st.bm.brutomarge, vals = per.map(p => p.P.maanden ? p.P.brutomarge_pct : null), vgl = vergelijkReeks(per, P => P.brutomarge_pct);
+    const br = BR, klein = br < 500, ho = klein ? 240 : 310, ml = klein ? 40 : 52, mr = 10, mt = 28, mb = 26, n = Math.max(1, per.length), bw = (br - ml - mr) / n, x = i => ml + i * bw + bw / 2, w = Math.max(6, Math.min(56, bw * 0.62));
+    const sc = C.schaalVoor([vals, ...vgl.map(r => r.w), bm ? [bm.van, bm.tot, bm.pct] : []], { min: 0 }), y = v => mt + (ho - mt - mb) * (1 - (v - sc.a) / (sc.b - sc.a));
+    const svg = ss('svg', { viewBox: `0 0 ${br} ${ho}`, class: 'mtd-svg', role: 'img', 'aria-label': `Brutomarge per ${zoomWoord()} als percentage van de omzet, met de branche als band` });
+    if (bm && bm.van != null && bm.tot != null) svg.append(ss('rect', { class: 'mtd-band', x: ml, y: y(bm.tot), width: br - ml - mr, height: Math.max(1, y(bm.van) - y(bm.tot)) }, ss('title', null, 'Branche ' + bmTekst2(bm))), klein ? null : ss('text', { x: br - mr - 4, y: y(bm.tot) + 13, 'text-anchor': 'end', class: 'mtd-bandtekst' }, 'branche ' + bmTekst2(bm)));
+    else if (bm && bm.pct != null) svg.append(ss('line', { class: 'mtd-bandlijn', x1: ml, x2: br - mr, y1: y(bm.pct), y2: y(bm.pct) }), ss('text', { x: br - mr - 4, y: y(bm.pct) - 5, 'text-anchor': 'end', class: 'mtd-bandtekst' }, 'branche ' + bmTekst2(bm)));
+    sc.ticks.forEach(tk => svg.append(ss('line', { x1: ml, x2: br - mr, y1: y(tk), y2: y(tk), class: tk === 0 ? 'mtd-as0' : 'mtd-raster' }), ss('text', { x: ml - 6, y: y(tk) + 4, 'text-anchor': 'end', class: 'mtd-astekst' }, tk + '%')));
+    per.forEach((p, i) => { const v = vals[i], gekozen = st.sel && st.sel.id === p.id, naamP = st.zoom === 'M' ? maandLang(p.id) : (p.label || p.id);
+      const ord = v != null && bm && C.periodeAfgesloten(p, st.zoom, lm) ? C.oordeel(v, bm, true) : null;
+      if (gekozen) svg.append(ss('rect', { class: 'mtd-kolsel', x: ml + i * bw, y: mt - 12, width: bw, height: ho - mt - mb + 12 }));
+      if (v != null) { const top = Math.min(y(v), y(0)), h = Math.max(1, Math.abs(y(v) - y(0)));
+        svg.append(ss('rect', { class: 'mtd-mb ' + (ord ? ord.niveau : 'neutraal') + (isLopend(p) ? ' lopend' : '') + (gekozen ? ' sel' : ''), x: x(i) - w / 2, y: top, width: w, height: h, rx: 2 }, ss('title', null, `${naamP}: ${pct(v)}${ord ? ' (' + NIVEAU_WOORD[ord.niveau].toLowerCase() + ', ' + ord.woord + ' tegenover de branche)' : ''}`)));
+        svg.append(ss('text', { x: x(i), y: (v >= 0 ? top : top + h) + (v >= 0 ? -6 : 13), 'text-anchor': 'middle', class: 'mtd-mbtekst ' + (ord ? ord.niveau : '') }, (ord ? OORDEEL_ICOON[ord.niveau] + (bw >= 34 ? ' ' : '') : '') + (bw >= 34 ? Math.round(v) + '%' : ''))); }
+      svg.append(ss('text', { x: x(i), y: ho - mb + 17, 'text-anchor': 'middle', class: 'mtd-xtekst' }, (p.label || p.id) + (isLopend(p) ? '*' : '')));
+      svg.append(ss('rect', { class: 'mtd-hit', x: ml + i * bw, y: mt - 12, width: bw, height: ho - mt - mb + 12, tabindex: '0', role: 'button', 'data-tik': 'periode', 'data-p': p.id, 'data-fk': 'marge-' + i, 'aria-pressed': String(!!gekozen),
+        'aria-label': `${naamP}: brutomarge ${v == null ? 'geen cijfers' : pct(v)}${ord ? ', ' + NIVEAU_WOORD[ord.niveau].toLowerCase() + ', ' + ord.woord + ' tegenover de branche' : ''}. Kiezen voor het oordeel en de kosten hieronder.` }));
+    });
+    vgl.forEach(r => svg.append(ss('path', { d: padD(r.w.map((v, i) => v == null ? null : [x(i), y(v)])), class: 'mtd-l-vgl o' + r.off })));
+    const leg = ee('div', { class: 'mtd-legenda', role: 'list', 'aria-label': 'Legenda' },
+      bm ? [ee('span', { class: 'mtd-leg', role: 'listitem' }, ee('span', { class: 'mtd-oordeel goed' }, '✓'), 'in lijn met of beter dan branche'), ee('span', { class: 'mtd-leg', role: 'listitem' }, ee('span', { class: 'mtd-oordeel let-op' }, '!'), 'iets slechter'), ee('span', { class: 'mtd-leg', role: 'listitem' }, ee('span', { class: 'mtd-oordeel slecht' }, '✕'), 'duidelijk slechter'),
+        ee('span', { class: 'mtd-leg', role: 'listitem' }, ee('span', { class: 'mtd-sw', style: 'background:var(--mtd-band)' }), 'branche ' + bmTekst2(bm) + (bm.bron ? ' (' + bm.bron + ')' : ''))] : ee('span', { class: 'mtc-noot' }, 'Geen branchecijfer ingesteld: de staven zijn neutraal gekleurd.'),
+      vgl.map(r => legendaItem(r.off > 1 ? 'dotted' : 'dashed', String(r.jaar))));
+    return ee('div', { class: 'mtd-chart' }, leg, ee('div', { class: 'mtd-plot' }, svg), ee('span', { class: 'mtc-noot' }, `Brutomarge = omzet − materiaal − uitbesteed werk, als % van de omzet. De as begint bij 0%. Oordeel (✓ ! ✕) alleen voor afgesloten periodes; grijsblauw = nog niet afgesloten of geen branche. Klik op een ${zoomWoord()} om het oordeel en de kosten hieronder te laten volgen.`));
+  }
+
+  // Kosten tegenover de branche: twee groepen, elk met één eigen schaal. Rij uitklapbaar: grootste leveranciers (één ronde, annuleerbaar), vergelijking, zin.
+  const kSleutel = (cat, kz) => [cat, kz.p.id, kz.zoom, kz.ytd ? 'ytd' : 'sel', st.jaar].join('|');
+  async function laadKosten(cat) {
+    const kz = kiesPeriode(); if (!kz) return;
+    const sleutel = kSleutel(cat, kz);
+    if (st.kTop && st.kTop.sleutel === sleutel && st.kTop.laden) return;   // geen tweede ronde terwijl de eerste loopt
+    const ms = kz.p.ms.filter(m => !m.prognose && m.maanden && m.id <= kz.lm).map(m => m.id), top = st.kTop = { sleutel, cat, laden: true, klaar: 0, n: ms.length, items: [], fouten: 0, onvolledig: false }, per = new Map();
+    tekenPaneel();
+    try {
+      for (const ym of ms) {
+        if (st.kTop !== top) return;   // ingeklapt of een andere rij gekozen: stoppen
+        try {
+          const r = await st.bron.haal(`/geld/cijfers/detail?maand=${encodeURIComponent(ym)}&reeks=kosten&categorie=${encodeURIComponent(cat)}`);
+          if (!r || r.error) { top.onvolledig = true; top.fouten++; } else { if (r.meer || r.onvolledig) top.onvolledig = true; for (const x of r.items || []) { const k = String(x.tegenpartij || 'Onbekend'); per.set(k, (per.get(k) || 0) + (Number(x.bedrag) || 0)); } }
+        } catch (e) { top.onvolledig = true; top.fouten++; }
+        top.klaar++; if (st.kTop === top) tekenPaneel();
+      }
+    } finally {
+      if (st.kTop === top) { top.items = [...per.entries()].map(([naam, v]) => ({ naam, v })).filter(x => x.v > 0).sort((a, b) => b.v - a.v); top.laden = false; tekenPaneel(); }   // altijd uit de laadstand
+    }
+  }
+  C._laadKosten = laadKosten;
+  function leveranciersEl(o, kz) {
+    const top = st.kTop && st.kTop.sleutel === kSleutel(o.id, kz) ? st.kTop : null;
+    if (!top) return ee('div', null, ee('p', { class: 'mtc-noot' }, 'Grootste leveranciers worden uit Moneybird opgehaald (alleen lezen).'), ee('button', { class: 'mtc-knop', 'data-kladen': o.id, 'data-fk': 'kladen-' + o.id }, 'Grootste leveranciers tonen'));
+    if (top.laden) return ee('p', { class: 'mtc-noot', role: 'status' }, `Leveranciers ophalen uit Moneybird… ${top.klaar} van ${top.n} maanden`);
+    const opnieuw = top.fouten ? ee('button', { class: 'mtc-knop', 'data-kladen': o.id, 'data-fk': 'kladen-' + o.id }, 'Opnieuw proberen') : null, fout = top.fouten ? ee('p', { class: 'mtc-waarsch' }, `Niet alle maanden konden worden opgehaald (${top.fouten} van ${top.n}); de lijst is onvolledig.`) : null;
+    if (!top.items.length) return ee('div', null, fout, ee('p', { class: 'mtc-noot' }, top.fouten ? 'Geen stukken opgehaald.' : 'Geen losse stukken gevonden in deze periode.'), opnieuw);
+    const P = kz.p.P, totaal = P.kosten[o.id] - (st.eerlijk && o.id === 'personeel' ? P.correctie : 0), gevonden = top.items.reduce((a, x) => a + x.v, 0), v5 = top.items.slice(0, 5), rest = top.items.slice(5), max = v5[0].v, overig = rest.reduce((a, x) => a + x.v, 0);
+    const balk = (naam, v, breed, grijs) => ee('div', { class: 'mtd-pr' }, ee('div', { class: 'mtd-pr-k' }, ee('span', null, naam), ee('span', { class: 'mtd-pr-v' }, kort(v))), ee('div', { class: 'mtd-pr-b' }, ee('div', { class: (grijs ? 'grijs ' : '') + katKl(o.id) + ' mtd-kcat', style: `width:${Math.max(1, Math.round(breed))}%` })));
+    return ee('div', { class: 'mtd-lev' }, ee('h5', { class: 'mtd-sh' }, 'Grootste leveranciers in deze periode'), v5.map(x => balk(x.naam, x.v, x.v / max * 100)), rest.length ? balk(`Overige leveranciers (${rest.length}×)`, overig, 100, true) : null, fout,
+      ee('p', { class: 'mtc-noot' }, `Opgehaald uit Moneybird: ${kort(gevonden)}${totaal > 0 && gevonden < totaal * 0.99 ? ` van ${kort(totaal)} in deze categorie; het verschil is niet als losse factuur, bon of mutatie te zien` : ''}.${st.eerlijk && o.id === 'personeel' && P.correctie ? ` Daarnaast ${kort(P.correctie)} lonen buiten de W&V (eerlijk beeld), niet in deze lijst.` : ''}${top.onvolledig && !top.fouten ? ' Er zijn kleinere posten weggelaten.' : ''}`), opnieuw);
+  }
+  function kostenRij(o, kz, schaal, kost) {
+    const open = st.kUit === o.id, ord = o.branche.oordeel, id = 'kb-uit-' + o.id, bmw = o.branche.ref, pos = v => (Math.max(schaal.min, Math.min(schaal.max, v)) - schaal.min) / (schaal.max - schaal.min) * 100, nul = pos(0), v = o.v;
+    const spoor = ee('div', { class: 'mtd-kb-spoor', 'aria-hidden': 'true' },
+      bmw && bmw.van != null && bmw.tot != null ? ee('span', { class: 'mtd-kb-band', style: `left:${pos(bmw.van).toFixed(1)}%;width:${Math.max(0.8, pos(bmw.tot) - pos(bmw.van)).toFixed(1)}%` }) : bmw && bmw.pct != null ? ee('span', { class: 'mtd-kb-streep', style: `left:${pos(bmw.pct).toFixed(1)}%` }) : null,
+      v != null ? ee('span', { class: 'mtd-kb-balk ' + (v < 0 ? 'mtd-kverlies' : o.id === 'brutomarge' ? 'mtd-kres' : katKl(o.id)), style: `left:${Math.min(nul, pos(v)).toFixed(1)}%;width:${Math.max(0.8, Math.abs(pos(v) - nul)).toFixed(1)}%` }) : null);
+    const kop = ee('button', { class: 'mtd-kb-kop', 'data-kuit': o.id, 'data-fk': 'kb-' + o.id, 'aria-expanded': String(open), 'aria-controls': id },
+      ee('span', { class: 'mtd-kb-naam' }, ee('span', { class: 'mtd-kb-pijl', 'aria-hidden': 'true' }, open ? '▾' : '▸'), ee('span', { class: 'mtd-sw ' + (o.id === 'brutomarge' ? 'mtd-kres' : o.id === 'resultaat' ? 'mtd-kres' : katKl(o.id)) }), o.naam),
+      ee('span', { class: 'mtd-kb-waarde' }, pctF(v)), spoor,
+      ee('span', { class: 'mtd-kb-oordeel' }, ord ? [oordeelEl(ord, NIVEAU_WOORD[ord.niveau] + ' · ' + (ord.pp === 0 ? 'binnen de branche' : puntTekst(ord.pp) + ' ' + (ord.pp > 0 ? 'boven' : 'onder') + ' branche')), bmw ? ee('span', { class: 'mtd-kb-br' }, 'branche ' + bmTekst2(bmw)) : null]
+        : ee('span', { class: 'mtd-kb-geen', title: o.branche.reden }, '— ' + o.branche.reden)));
+    const uit = ee('div', { class: 'mtd-kb-uit', id, hidden: !open }, open ? [
+      ee('p', { class: 'mtd-kb-zin' }, C.kostenZin(o)),
+      ee('div', { class: 'mtd-kb-vgl' }, o.vorig.map(q => ee('div', null, ee('span', { class: 'mtc-noot' }, q.label), ee('strong', null, pctF(q.v)), q.v != null ? [ee('span', { class: 'mtc-noot' }, puntTekst(q.pp)), oordeelEl(q.oordeel)] : ee('span', { class: 'mtc-noot', title: q.reden }, '— ' + q.reden)))),
+      kost ? leveranciersEl(o, kz) : ee('p', { class: 'mtc-noot' }, o.id === 'brutomarge' ? 'Brutomarge = omzet − materiaal − uitbesteed werk; die twee staan bij Kosten.' : 'Resultaat = omzet − alle kosten (zie de rijen bij Kosten).'),
+      kost ? ee('div', { class: 'mtd-tacties' }, ee('button', { class: 'mtc-knop', 'data-kdrill': o.id, 'data-fk': 'kdrill-' + o.id }, 'Bekijk maanden en stukken')) : null] : null);
+    return ee('div', { class: 'mtd-kb-rij' + (open ? ' open' : '') + (st.focusCat === o.id ? ' fokus' : '') }, kop, uit);
+  }
+  function kostenBranche(kz, vg) {
+    const by = id => vg.onderdelen.find(o => o.id === id), groep = (titel, sub, lijst, kost) => {
+      if (!lijst.length) return null; const w = lijst.flatMap(o => [o.v, o.branche.ref && (o.branche.ref.tot != null ? o.branche.ref.tot : o.branche.ref.pct), o.branche.ref && o.branche.ref.van]).filter(q => typeof q === 'number' && isFinite(q));
+      const hi = Math.max(10, Math.max(...w) * 1.15), lo = Math.min(0, ...w) * 1.15, schaal = { min: lo, max: hi };
+      return ee('div', { class: 'mtd-kb-groep', role: 'group', 'aria-label': titel }, ee('div', { class: 'mtd-kb-gkop' }, ee('h4', { class: 'mtd-sh' }, titel), ee('span', { class: 'mtc-noot' }, sub + ' · schaal ' + Math.round(lo) + '% tot ' + Math.round(hi) + '% van de omzet')), lijst.map(o => kostenRij(o, kz, schaal, kost)));
+    };
+    const marge = [by('brutomarge'), by('resultaat')].filter(o => o && o.v != null), kosten = st.cats.map(by).filter(o => o && o.v != null);
+    return ee('div', { class: 'mtd-kb' }, ee('p', { class: 'mtc-noot' }, `${kz.label} · alles als % van de omzet. Balk = eigen cijfer, vlak of streep = branche${st.bmBron === 'standaard' ? ' (standaard CBS-kengetallen)' : ''}. Klik een rij voor de details.`),
+      groep('Marge en resultaat', 'hoger is beter', marge, false), groep('Kosten', 'lager is meestal beter', kosten, true));
+  }
   async function laadTop() {
     if (st.top && st.top.laden) return;   // geen tweede ronde verzoeken terwijl de eerste loopt
     const lm = laatste(), jaar = st.jaar, ms = st.maanden.filter(m => m.maanden && !m.prognose && m.id.startsWith(jaar + '-') && m.id <= lm).map(m => m.id), top = st.top = { jaar, laden: true, items: [], totaal: 0, onvolledig: false, fouten: 0, klaar: 0, n: ms.length }, per = new Map();
@@ -1164,7 +1303,9 @@
     if (tegel && tegel.kpis.length) delen.push(kpiRij(tegel.kpis));
     const oud = g => htmlBlok(grafiekHtml(per, g)), sel = st.sel ? ee('div', { class: 'mtc-noot' }, `Gekozen: ${st.sel.label || st.sel.id} · `, ee('a', { href: '#', 'data-wissel': '1' }, 'terug naar het boekjaar')) : null;
     if (id === 'omzet') { delen.push(sectie('Omzet opgeteld door het jaar', 'Dikke lijn = dit jaar; de gestippelde lijnen zijn eerdere jaren op dezelfde datum', cumulEl(tm)), stapelSectie(per), omzetTabelSectie(tm), ee('div', { class: 'mtd-twee' }, topSectie(), feitenSectie('omzet'))); }
-    else if (id === 'brutomarge') delen.push(sectie('Brutomarge per periode', 'Omzet − materiaal − uitbesteed werk, als % van de omzet', sel, oud('brutomarge')), sectie('Kosten tegenover de branche', null, htmlBlok(bulletHtml())), feitenSectie('brutomarge'));
+    else if (id === 'brutomarge') { const kz = kiesPeriode(), vg = kz ? vergelijkVan(kz) : null;
+      delen.push(kz ? margeOordeelRij(kz, vg) : null, sectie('Brutomarge per periode', 'Omzet − materiaal − uitbesteed werk, als % van de omzet', sel, margeKaart(per)),
+        sectie('Kosten tegenover de branche', 'Twee groepen met elk een eigen schaal · klik een rij voor de details', kz ? kostenBranche(kz, vg) : ee('p', { class: 'mtc-noot' }, 'Geen afgesloten periode met omzet om mee te vergelijken.')), feitenSectie('brutomarge')); }
     else if (id === 'resultaat') delen.push(sectie('Omzet, kosten en resultaat', 'Tik op een staaf of kostendeel voor de stukken in Moneybird', sel, oud('omzet_kosten')), feitenSectie('resultaat'));
     else if (id === 'kas') delen.push(sectie('Kaspositie', null, sel, oud('kas')), sectie('Van omzet naar kas', null, htmlBlok(watervalHtml())), feitenSectie('kas'));
     else if (id === 'opnames') delen.push(sectie('Privé-opnames en aflossing', 'Komen uit het resultaat (of uit de kas als dat niet genoeg is)', sel, oud('opnames')), feitenSectie('opnames'));
@@ -1188,7 +1329,7 @@
     st.paneelNieuw = false; maat();
   }
   function openPaneel(id, opener) { st.paneel = id; st.paneelNieuw = true; st.openerFk = opener ? opener.getAttribute('data-fk') : null; tekenPaneel(); }
-  function sluitPaneel() { st.paneel = null; st.focusCat = null; st.sel = null; tekenPaneel(); verwerkWacht(); const k = st.openerFk; st.openerFk = null; herstelFocus(k, st.el); }
+  function sluitPaneel() { st.paneel = null; st.focusCat = null; st.sel = null; st.kUit = null; st.kTop = null; tekenPaneel(); verwerkWacht(); const k = st.openerFk; st.openerFk = null; herstelFocus(k, st.el); }
   function toetsPaneel(e) {
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); sluitPaneel(); return; }
     if (e.key === 'Tab' && st.paneelEl) { const f = [...st.paneelEl.querySelectorAll('button:not([disabled]),a[href],[tabindex="0"],select,input')].filter(x => x.getClientRects().length); if (!f.length) return; const eerste = f[0], laatste2 = f[f.length - 1];
@@ -1380,8 +1521,9 @@
     return true;
   }
   function klik(e) {
-    const b = e.target.closest('[data-zoom],[data-jaar],[data-eerlijk],[data-vgl],[data-horizon],[data-indeling],[data-wissel],[data-tik],[data-euro],[data-bullet],[data-paneel],[data-sluitpaneel],[data-status],[data-tabel],[data-stapel],[data-drill],[data-topladen],[data-bzoom],[data-naarfin]'); if (!b) { tikOpPositie(e); return; }
+    const b = e.target.closest('[data-zoom],[data-jaar],[data-eerlijk],[data-vgl],[data-horizon],[data-indeling],[data-wissel],[data-tik],[data-euro],[data-bullet],[data-paneel],[data-sluitpaneel],[data-status],[data-tabel],[data-stapel],[data-kuit],[data-kladen],[data-kdrill],[data-drill],[data-topladen],[data-bzoom],[data-naarfin]'); if (!b) { tikOpPositie(e); return; }
     const d = b.dataset;
+    if (d.zoom || d.jaar || d.tik || d.wissel) st.kTop = null;   // andere periode: een lopende leverancierslijst stopt
     if (d.naarfin) { e.preventDefault(); const kn = document.getElementById('tab-btn-geld'); if (kn && typeof root.showTab === 'function') { sluitPaneel(); root.showTab('geld', kn); } return; }
     if (d.bzoom) { if (BES_ZOOM[d.bzoom]) st.besZoom = d.bzoom; return teken(); }   // alleen dit paneel: de keuze van Financiën zelf blijft onaangeroerd
     if (d.paneel) return openPaneel(d.paneel, b);
@@ -1389,6 +1531,9 @@
     if (d.status) { st.statusOpen = !st.statusOpen; teken(); const k = st.statusOpen ? 'status-sluit' : 'status'; herstelFocus(k, st.el); return; }
     if (d.drill) { const [soort, pid] = d.drill.split(':'), p = huidigePeriodes().find(q => q.id === pid); return drill(soort, null, p); }
     if (d.topladen) return laadTop();
+    if (d.kuit) { const open = st.kUit !== d.kuit; st.kUit = open ? d.kuit : null; st.kTop = null; teken(); if (open && st.cats.includes(d.kuit)) laadKosten(d.kuit); return; }
+    if (d.kladen) return laadKosten(d.kladen);
+    if (d.kdrill) { const kz = kiesPeriode(); return drill('kosten', d.kdrill, kz && !kz.ytd ? kz.p : null); }
     if (d.stapel) { st.stapelSel = st.stapelSel === d.stapel ? null : d.stapel; }
     else if (d.zoom) { st.zoom = d.zoom; st.sel = null; st.vast = null; st.stapelSel = null; }
     else if (d.jaar) { st.jaar = Math.max(Number(START.slice(0, 4)), Math.min(Number(st.vandaag.slice(0, 4)), st.jaar + Number(d.jaar))); st.sel = null; st.vast = null; st.top = null; st.stapelSel = null; }
