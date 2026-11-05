@@ -72,9 +72,9 @@ test('meldingen: fail-safe, onbekende bron of tekst is kritiek; alleen de korte 
   assert.strictEqual(W.isKritiek({ bron: 'iets-nieuws', fout: 'onbekende melding' }), true);
   assert.strictEqual(W.isKritiek({ bron: undefined, fout: 'zonder bron' }), true);
   assert.strictEqual(W.isKritiek({ bron: 'limiet', fout: 'x' }), true); assert.strictEqual(W.isKritiek({ bron: 'btw', fout: 'x' }), true);
-  for (const b of ['profiel', 'patronen', 'prognose', 'verkoopfacturen']) assert.strictEqual(W.isKritiek({ bron: b, fout: 'vernieuwen' }), false, b);
+  for (const b of ['prognose', 'verkoopfacturen']) assert.strictEqual(W.isKritiek({ bron: b, fout: 'controleer' }), false, b);
   assert.strictEqual(W.isKritiek({ bron: 'profiel', fout: 'x', onvolledig: true }), true, 'onvolledig is altijd kritiek');
-  const v = W.verdeel([{ bron: 'profiel', fout: 'a' }, { bron: 'nieuw', fout: 'b' }, { bron: 'prognose', fout: 'c' }]); assert.deepStrictEqual(v.kritiek.map(x => x.fout), ['b']); assert.deepStrictEqual(v.info.map(x => x.fout), ['a', 'c']);
+  const v = W.verdeel([{ bron: 'profiel', fout: 'a wordt bijgewerkt' }, { bron: 'nieuw', fout: 'b' }, { bron: 'prognose', fout: 'c' }]); assert.deepStrictEqual(v.kritiek.map(x => x.fout), ['b']); assert.deepStrictEqual(v.info.map(x => x.fout), ['a wordt bijgewerkt', 'c']);
 });
 test('config-meldingen: essentiële configuratie is kritiek en geen "nog in te stellen"; optionele blijft instelpunt', () => {
   const ess = [{ bron: 'config', fout: 'kredietlimiet lopende rekening niet ingesteld' }, { bron: 'config', fout: 'BTW-instellingen: van welke rekening de aangifte betaald wordt is niet ingesteld — lopende rekening aangenomen' }];
@@ -83,7 +83,19 @@ test('config-meldingen: essentiële configuratie is kritiek en geen "nog in te s
   assert.strictEqual(W.isEssentieel(opt), false); assert.strictEqual(W.isInstellen(opt), true);
   assert.strictEqual(W.isInstellen({ bron: 'profiel', fout: 'x' }), false, 'geen config-melding');
 });
-test('alarmdetectie op structuur: mtg-alarm en meldingen zonder info-merk; uitleg nooit', () => {
+test('onvolledig gaat voor: ook een optionele config-melding is dan kritiek en geen instelpunt (ontbrekende weekdag van een pot-inleg)', () => {
+  const x = { onvolledig: true, bron: 'config', rekening: 'pot-1', fout: 'weekdag van de inleg in "Nep-pot" onbekend — stel hem in (nu niet ingepland)' };
+  assert.strictEqual(W.isInstellen(x), false); assert.strictEqual(W.isKritiek(x), true);
+  assert.strictEqual(W.isInstellen({ bron: 'config', fout: 'nog geen spaarpotten ingesteld' }), true, 'zonder onvolledig blijft het een instelpunt');
+  assert.deepStrictEqual(W.verdeel([x]).kritiek, [x]);
+});
+test('verouderd profiel en verouderde patronen zijn kritiek; "wordt bijgewerkt" blijft informatief', () => {
+  for (const x of [{ bron: 'profiel', fout: 'betaalprofiel ouder dan 7 dagen — vernieuwen' }, { bron: 'patronen', fout: 'vaste patronen ouder dan 7 dagen — vernieuwen' },
+    { onvolledig: true, bron: 'profiel', fout: 'betaalprofiel ouder dan 30 dagen — niet gebruikt; vernieuwen' }, { onvolledig: true, bron: 'patronen', fout: 'vaste patronen nog niet berekend — niet ingepland' }]) assert.strictEqual(W.isKritiek(x), true, x.fout);
+  for (const x of [{ bron: 'profiel', fout: 'betaalprofiel wordt bijgewerkt' }, { bron: 'patronen', fout: 'vaste patronen worden nu bijgewerkt (wordt bijgewerkt)' }]) assert.strictEqual(W.isKritiek(x), false, x.fout);
+  assert.strictEqual(W.isKritiek({ onvolledig: true, bron: 'profiel', fout: 'wordt bijgewerkt' }), true, 'onvolledig wint ook hier');
+  assert.strictEqual(W.isKritiek({ bron: 'prognose', fout: 'x' }), false);
+});test('alarmdetectie op structuur: mtg-alarm en meldingen zonder info-merk; uitleg nooit', () => {
   const el = (...klassen) => ({ classList: { contains: k => klassen.includes(k) } }), blok = lijst => ({ querySelectorAll: () => lijst });
   assert.strictEqual(W.alarmen(blok([el('mtg-uitleg'), el('mtg-uitleg')]), true), 0, 'uitleg telt nooit');
   assert.strictEqual(W.alarmen(blok([el('mtg-uitleg', 'mtg-alarm')]), true), 1, 'uitleg met expliciet alarm wel (krap-advies, open vraag)');

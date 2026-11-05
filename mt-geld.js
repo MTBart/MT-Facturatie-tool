@@ -1226,7 +1226,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
   const isDruk = x => x.status === 429 || /\b429\b|retry later|even druk/i.test(x.fout || '');
   // Een ontbrekende essentiële rekeningconfiguratie (btw, kredietlimiet, saldo/ijkpunt, terugboeking) maakt het besteedbaar-getal onbetrouwbaar: dat is geen "nog in te stellen" maar een melding.
   const isEssentieel = x => x.bron === 'config' && /btw|kredietlimiet|ijk|saldo|lopende rekening|terugboek|aangifte/i.test(x.fout || '');
-  const isInstellen = x => x.bron === 'config' && !isDruk(x) && !isEssentieel(x);   // puur optionele instellingen (spaarpotten, weekdag, ...)
+  const isInstellen = x => x.bron === 'config' && x.onvolledig !== true && !isDruk(x) && !isEssentieel(x);   // puur optionele instellingen (spaarpotten, weekdag, ...)
   G._soorten = { isDruk, isInstellen };
   function drukHtml() {
     const w = (st.data.waarschuwingen || []).filter(isDruk);
@@ -1245,8 +1245,11 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
   // Kritiek = raakt direct het geld of de betrouwbaarheid van het getal (onder de kredietlimiet, btw-tekort, rood, een bron die ontbreekt of onvolledig is):
   // die staan altijd zichtbaar boven de tegels. Informatieve punten (vernieuwen, prognose-controles) gaan achter de statusknop.
   // Fail-safe: alles is kritiek, tenzij de soort expliciet op de korte lijst informatieve soorten staat. Een onbekende bron of tekst komt dus altijd in "Direct bekijken".
-  const INFO_BRONNEN = ['profiel', 'patronen', 'prognose', 'verkoopfacturen'];   // vernieuwen, controles in de prognose, factuur zonder datum
-  const isKritiek = x => x.onvolledig === true || !INFO_BRONNEN.includes(x.bron);
+  // onvolledig gaat altijd voor (ook bij een optionele instelling). Een verouderd profiel of verouderde patronen ("vernieuwen") zijn kritiek: de worker rekent dan nog met die oude gegevens;
+  // alleen een melding die niets aan het resultaat verandert ("wordt bijgewerkt") is informatief.
+  const INFO_BRONNEN = ['prognose', 'verkoopfacturen'];   // controles in de prognose, factuur zonder datum
+  const isBijwerken = x => (x.bron === 'profiel' || x.bron === 'patronen') && /wordt bijgewerkt/i.test(x.fout || '');
+  const isKritiek = x => x.onvolledig === true || !(INFO_BRONNEN.includes(x.bron) || isBijwerken(x));
   const verdeel = w => ({ kritiek: w.filter(isKritiek), info: w.filter(x => !isKritiek(x)) });
   G._weergave = { isKritiek, isEssentieel, isInstellen, isAlarm, alarmen, verdeel };   // voor de tests
   function letOpHtml(deel) {   // deel: 'kritiek' (altijd zichtbaar boven de tegels), 'info' (achter de statusknop) of leeg (alles, zoals voorheen)
