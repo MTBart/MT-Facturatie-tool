@@ -13,11 +13,12 @@
   function keuze(){ try{ return localStorage.getItem(K); }catch(e){ return null; } }
   function lees(){ return keuze()!=='oud'; }   // standaard (geen keuze, of geen toegang tot localStorage): nieuw
   function fonts(){ try{ if(document.getElementById('mt-stijl-fonts')) return; var l=document.createElement('link'); l.id='mt-stijl-fonts'; l.rel='stylesheet'; l.href=FONTS; document.head.appendChild(l); }catch(e){} }
-  function toepassen(aan){ var h=document.documentElement; if(aan){ h.setAttribute('data-stijl','nieuw'); fonts(); } else h.removeAttribute('data-stijl'); }
+  function proefAan(){ try{ return localStorage.getItem('mt-proef')==='aan'; }catch(e){ return false; } }   // Proefstijl (aftakking): per gebruiker/toestel, alleen bovenop de nieuwe stijl; attribuut html[data-proef] (mt-stijl-proef.css)
+  function toepassen(aan){ var h=document.documentElement; if(aan){ h.setAttribute('data-stijl','nieuw'); fonts(); if(proefAan()) h.setAttribute('data-proef','1'); else h.removeAttribute('data-proef'); } else { h.removeAttribute('data-stijl'); h.removeAttribute('data-proef'); } }
   try{ var q=new URLSearchParams(location.search).get('stijl'); if(q==='nieuw'||q==='oud'){ try{ localStorage.setItem(K,q); }catch(e){} } }catch(e){}
   toepassen(lees());
-  window.mtStijl={ aan:lees, expliciet:function(){ return keuze()!==null; }, zet:function(aan){ try{ localStorage.setItem(K,aan?'nieuw':'oud'); }catch(e){} toepassen(!!aan); try{ window.dispatchEvent(new Event('mt-stijl')); }catch(e){} } };
-  window.addEventListener('storage',function(e){ if(e.key===K||e.key===null){ toepassen(lees()); try{ window.dispatchEvent(new Event('mt-stijl')); }catch(x){} } });   // twee open tabbladen blijven gelijk
+  window.mtStijl={ proef:proefAan, zetProef:function(aan){ try{ localStorage.setItem('mt-proef',aan?'aan':'uit'); }catch(e){} toepassen(lees()); try{ window.dispatchEvent(new Event('mt-stijl')); }catch(e){} }, aan:lees, expliciet:function(){ return keuze()!==null; }, zet:function(aan){ try{ localStorage.setItem(K,aan?'nieuw':'oud'); }catch(e){} toepassen(!!aan); try{ window.dispatchEvent(new Event('mt-stijl')); }catch(e){} } };
+  window.addEventListener('storage',function(e){ if(e.key===K||e.key==='mt-proef'||e.key===null){ toepassen(lees()); try{ window.dispatchEvent(new Event('mt-stijl')); }catch(x){} } });   // twee open tabbladen blijven gelijk
 })();
 </script>
 <meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self'">
@@ -89,7 +90,7 @@
 <script src="mt-startvenster.js?v=2026-10-15b"></script>
 <!-- Zijbalk van de nieuwe stijl (alleen actief met data-stijl="nieuw"); bouwt op de bestaande .tab-btn-knoppen -->
 <script src="mt-iconen.js?v=2026-11-01a" defer></script>
-<script src="mt-zijbalk.js?v=2026-10-24z" defer></script>
+<script src="mt-zijbalk.js?v=2026-11-05a" defer></script>
 <script src="mt-geld.js?v=2026-10-29a"></script>
 <script src="mt-forecast.js?v=2026-11-02i"></script>
 <script src="mt-forecast-light.js?v=2026-11-02i"></script>
@@ -921,6 +922,8 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-24z">
 <link rel="stylesheet" href="mt-rust.css?v=2026-10-24z">
 <link rel="stylesheet" href="mt-telefoon.css?v=2026-10-23z">
+<!-- Proefstijl (aftakking, aan/uit per gebruiker in Instellingen > Weergave): alles onder html[data-stijl="nieuw"][data-proef]; zonder dat attribuut doet dit bestand niets -->
+<link rel="stylesheet" href="mt-stijl-proef.css?v=2026-11-05a">
 </head>
 <body>
 
@@ -1600,6 +1603,12 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
       <label style="display:flex;align-items:center;gap:8px;margin:0;text-transform:none;letter-spacing:0;font-size:13px;font-weight:500;color:var(--text);cursor:pointer"><input type="checkbox" id="stijl-schakel" onchange="mtStijl.zet(!this.checked)"> Oude stijl gebruiken</label>
       <p style="font-size:12px;color:var(--text-dim);margin:6px 0 0">De nieuwe stijl is de standaard. Hier ga je terug naar de oude weergave (en weer naar de nieuwe). Geldt alleen op deze computer; je collega's zien niets.</p>
     </div>
+    <div class="card" id="proef-kaart">
+      <div class="card-title">Proefstijl (nieuw ontwerp)</div>
+      <label style="display:flex;align-items:center;gap:8px;margin:0;text-transform:none;letter-spacing:0;font-size:13px;font-weight:500;color:var(--text);cursor:pointer"><input type="checkbox" id="proef-schakel" onchange="mtStijl.zetProef(this.checked)"> Proefstijl gebruiken</label>
+      <p style="font-size:12px;color:var(--text-dim);margin:6px 0 0">Een zachter ontwerp om uit te proberen: ronde kaarten, pil-knoppen en een smalle menubalk die je kunt uitklappen. Dezelfde tool en dezelfde gegevens; alleen het uiterlijk verandert. Vink uit om meteen terug te gaan. Geldt alleen op deze computer en werkt alleen in de nieuwe stijl.</p>
+    </div>
+    <script>(function(){ var c=document.getElementById('proef-schakel'); if(!c||!window.mtStijl) return; var s=function(){ c.checked=!!mtStijl.proef(); c.disabled=!mtStijl.aan(); }; s(); window.addEventListener('mt-stijl',s); })();</script>
     <script>(function(){ var c=document.getElementById('stijl-schakel'); if(!c||!window.mtStijl) return; var s=function(){ c.checked=!mtStijl.aan(); }; s(); window.addEventListener('mt-stijl',s); })();</script>
     <div class="card" id="upd-kaart" style="display:none">
       <div class="card-title">Wat is er verbeterd</div>
