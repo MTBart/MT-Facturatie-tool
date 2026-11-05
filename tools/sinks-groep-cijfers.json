@@ -14,18 +14,6 @@
  ],
  "houd": [
   {
-   "fn": "teken",
-   "expr": "balk",
-   "fp": "4d4159ce78",
-   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
-  },
-  {
-   "fn": "teken",
-   "expr": "midden",
-   "fp": "4d4159ce78",
-   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
-  },
-  {
    "fn": "grafiekHtml",
    "expr": "dim",
    "fp": "4ed1d6943c",

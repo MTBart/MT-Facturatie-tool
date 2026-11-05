@@ -9,7 +9,7 @@ let n = 0; const test = (naam, fn) => { try { fn(); n++; console.log('ok  - ' + 
 function zet(opt) {
   const a = Nep.antwoord('2026-11');
   Object.assign(st, { maanden: a.perioden, cats: a.categorieen.map(c => c.id), catNaam: Object.fromEntries(a.categorieen.map(c => [c.id, c.naam])), bm: a.benchmarks, ontbrekend: [], mislukt: [],
-    vandaag: '2026-11-05', jaar: 2026, zoom: 'M', eerlijk: true, vergelijk: 2, sel: null, focusCat: null, prognoseRuw: Nep.prognose().items, kasProg: null }, opt || {});
+    vandaag: '2026-11-05', jaar: 2026, zoom: 'M', eerlijk: true, vgl: { j1: true, j2: true, b: true }, sel: null, focusCat: null, prognoseRuw: Nep.prognose().items, kasProg: null }, opt || {});
 }
 
 test('schaal: alle waarden (ook negatief en groot) liggen binnen de as', () => {
@@ -51,4 +51,31 @@ test('som: boekjaar t/m oktober, prognose telt niet mee', () => {
   assert.strictEqual(P.omzet, [38, 41, 52, 47, 55, 61, 44, 36, 58, 63].reduce((a, b) => a + b, 0) * 1000);
   assert.strictEqual(P.prognose, 0);
 });
+test('tegels: omzet t/m oktober, vergelijking en forecast apart gehouden', () => {
+  zet(); const tg = C._tegels(), o = tg.find(x => x.id === 'omzet');
+  assert.strictEqual(tg.length, 6); assert.strictEqual(o.waarde, '€ 495k'); assert.strictEqual(o.chip.pijl, '▲'); assert.ok(/13,3%/.test(o.chip.tekst));
+  const k = tg.find(x => x.id === 'komende'); assert.strictEqual(k.tot, 140000); assert.ok(k.forecast);
+  assert.strictEqual(tg.find(x => x.id === 'debiteuren').waarde, '—');   // geen bron: geen verzonnen getal
+  assert.strictEqual(tg.A.prognose, 0);
+});
+test('tegels: ontbrekende vorig-jaar-maand geeft geen vergelijking', () => {
+  zet(); st.maanden = st.maanden.filter(m => m.id !== '2025-03'); const o = C._tegels().find(x => x.id === 'omzet');
+  assert.strictEqual(o.chip, null); assert.ok(!o.rijen.some(r => r.soort === 'j1'));
+});
+test('sparkline: alle punten binnen 4..36 op één gedeelde schaal', () => {
+  zet(); for (const t of C._tegels()) { if (!t.spark) continue; for (const d of Object.values(t.spark)) for (const m of d.matchAll(/[ML]([\d.]+) ([\d.-]+)/g)) assert.ok(Number(m[2]) >= 3.9 && Number(m[2]) <= 36.1, t.id + ' ' + m[2]); }
+});
+test('feitzinnen: omzet, bron erbij, uit de gegevens', () => {
+  zet(); const f = C.feiten('omzet'); assert.ok(f.length >= 4); assert.ok(f.every(x => x.t && x.bron));
+  assert.ok(/495k/.test(f[0].t) && /58k/.test(f[0].t) && /13,3%/.test(f[0].t));
+  assert.ok(f.some(x => /augustus/.test(x.t)));
+  assert.ok(f.some(x => /forecast/.test(x.bron)));
+});
+test('feitzinnen: geen forecast-zin zonder forecast', () => { zet({ prognoseRuw: {} }); assert.ok(!C.feiten('omzet').some(x => /forecast/.test(x.bron))); });
+test('status: aandachtspunten en toelichting', () => {
+  zet({ mislukt: ['2025-05'], ontbrekend: ['2025-05'], waarsch: ['Nep-waarschuwing'] }); const s = C.statusItems();
+  assert.ok(s.aandacht.some(x => /2025/.test(x) && /niet worden opgehaald/.test(x))); assert.ok(s.aandacht.includes('Nep-waarschuwing')); assert.ok(s.uitleg.some(x => /Forecast/.test(x)) && s.uitleg.some(x => /Eerlijk beeld/.test(x)));
+  zet({ mislukt: [], ontbrekend: [], waarsch: [] }); assert.strictEqual(C.statusItems().aandacht.length, 0);
+});
+test('vergelijk-schakelaars: onthouden en terugzetten', () => { assert.deepStrictEqual(C.vglLees(C.vglTekst({ j1: true, j2: false, b: true })), { j1: true, j2: false, b: true }); assert.deepStrictEqual(C.vglLees('xx'), { j1: true, j2: true, b: true }); });
 console.log(`${n} tests gedaan`);

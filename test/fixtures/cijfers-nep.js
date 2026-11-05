@@ -10,7 +10,7 @@
     const uit = [];
     for (const j of Object.keys(OMZET).map(Number)) OMZET[j].forEach((k, i) => {
       const id = `${j}-${d2(i + 1)}`; if (id > tot) return;
-      const omzet = k * 1000, mat = Math.round(omzet * 0.31), ub = Math.round(omzet * 0.08), pers = 14500 + (j - 2022) * 500, huis = 2100, ov = 1800 + (i % 3) * 300;
+      const omzet = k * 1000, mat = Math.round(omzet * (0.27 + 0.015 * ((i * 5 + j) % 5) + (j >= 2026 ? -0.02 : 0))), ub = Math.round(omzet * 0.07), pers = 12000 + (j - 2022) * 400, huis = 2100, ov = 1800 + (i % 3) * 300;
       const kosten = { materiaal: mat, uitbesteed: ub, personeel: pers, huisvesting: huis, overig: ov }, kt = mat + ub + pers + huis + ov, res = omzet - kt;
       uit.push({ id, maanden: 1, omzet, kosten, kosten_totaal: kt, correctie: j >= 2025 ? 3200 : 0, correctie_soort: j >= 2025 ? { netto: 2000, loonheffing: 900, pensioen: 300 } : { netto: 0, loonheffing: 0, pensioen: 0 },
         prive: { Eigenaar: 4000 }, aflossing: 1500, kas: { maand: id, lopend: 30000 + (j - 2022) * 6000 + i * 2500 + Math.round(res / 4), met_btw: 42000 + (j - 2022) * 6000 + i * 2500 + Math.round(res / 4) } });
