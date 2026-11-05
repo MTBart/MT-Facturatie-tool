@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-11-05 — Pages opnieuw publiceren: deploy f37cb2f geweigerd omdat 7e4ec6b nog als lopend stond
+- Commit: `9d98294` | Auteur: Bart Witte
+
 ## 2026-11-05 — Pages opnieuw publiceren: deploy van v2.34.6 (7e4ec6b) mislukte, build was geslaagd
 - Commit: `f37cb2f` | Auteur: Bart Witte
 
