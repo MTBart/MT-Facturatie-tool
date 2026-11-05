@@ -21,7 +21,7 @@
   const WEERGAVEN = [['omzet_kosten', 'Omzet en kosten'], ['brutomarge', 'Brutomarge'], ['kosten_pct', 'Kosten vs branche'], ['opnames', 'Opnames'], ['kas', 'Kas'], ['waterval', 'Waterval']];
   const REEKS_NAAR = { omzet_kosten: 'omzet_kosten', omzet: 'omzet_kosten', kosten: 'omzet_kosten', resultaat: 'omzet_kosten', brutomarge: 'brutomarge', kosten_pct: 'kosten_pct', opnames: 'opnames', kas: 'kas', waterval: 'waterval' };
   const st = C._st = { el: null, bron: null, mag: false, wie: '', maanden: [], cats: [], bm: {}, ontbrekend: [], laden: false, rondes: 0, fout: null, prognose: null, kasProg: null,
-    jaar: null, zoom: 'M', weergave: 'omzet_kosten', eerlijk: true, vergelijk: 0, vgl: { j1: true, j2: true, b: true }, statusOpen: false, tabel: false, vast: null, hover: null, paneel: null, paneelEl: null, paneelNieuw: false, openerFk: null, top: null, sel: null, focusCat: null, horizon: 'kort', opHorizon: null, correctieVan: null, prive: [], vandaag: null, nietIngedeeld: [] };
+    jaar: null, zoom: 'M', weergave: 'omzet_kosten', eerlijk: true, vergelijk: 0, vgl: { j1: true, j2: true, b: true }, statusOpen: false, tabel: false, vast: null, hover: null, paneel: null, paneelEl: null, paneelNieuw: false, openerFk: null, top: null, sel: null, focusCat: null, horizon: 'kort', opHorizon: null, correctieVan: null, prive: [], vandaag: null, nietIngedeeld: [], bes: { data: null, cfg: null, laden: false, fout: null, cache: null }, besZoom: null };
   const ls = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { } } };
   const mobiel = () => { try { return root.matchMedia && root.matchMedia('(max-width: 760px)').matches; } catch (e) { return false; } };
 
@@ -130,6 +130,17 @@
 .mtd-pr{display:flex;flex-direction:column;gap:6px}.mtd-pr-k{display:flex;justify-content:space-between;gap:12px;font-size:13px}.mtd-pr-v{font-family:var(--mono,monospace);font-weight:500}.mtd-pr-b{height:6px;border-radius:2px;background:var(--n-150,#f1ede5)}.mtd-pr-b>div{height:6px;border-radius:2px;background:var(--info,#3e5c76)}.mtd-pr-b>div.grijs{background:#b8b2a4}
 .mtd-feit{display:grid;grid-template-columns:20px minmax(0,1fr);gap:10px;color:var(--ink-2,#596059)}.mtd-feit svg{margin-top:2px}.mtd-feit>div{display:flex;flex-direction:column;gap:2px}.mtd-feit>div>span:first-child{color:var(--ink,#1b211e)}
 .mtd-oud .mtc-noot{margin-top:4px}
+.mtd-t-besteedbaar{grid-column:1/-1;order:10}
+.mtd-bes-top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px 32px}
+.mtd-bes-stats{display:grid;grid-template-columns:repeat(3,minmax(150px,auto));gap:8px 32px}
+.mtd-bes-st{display:flex;flex-direction:column;gap:2px;min-width:0}
+.mtd-bes-v{font-family:var(--mono,monospace);font-variant-numeric:tabular-nums;font-size:20px;line-height:26px;font-weight:500}
+.mtd-getal.slecht{color:var(--error,#c4322a)}
+.mtd-bes-grens{stroke:var(--warning,#b7791f);stroke-width:1.5;stroke-dasharray:5 4}
+.mtd-bes-laag{fill:var(--ink,#1b211e);stroke:var(--surface,#fff);stroke-width:2}.mtd-bes-laag.slecht{fill:var(--error,#c4322a)}
+.mtd-staal.grens{border-top:2px dashed var(--warning,#b7791f)}
+.mtd-bes-leg{font-size:12px}
+@media(max-width:760px){.mtd-bes-top{gap:10px}.mtd-bes-stats{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px 12px;width:100%}.mtd-bes-v{font-size:15px;line-height:20px}.mtd-bes-st .mtd-kl{font-size:12px}.mtd-t-besteedbaar .mtd-getal{font-size:30px;line-height:34px}}
 @media(max-width:760px){
 .mtd .mtc-groep button,.mtd .mtc-knop,.mtd-vglknop,.mtd-kn,.mtd-status{min-height:44px}.mtd .mtc-groep button{min-width:44px}.mtd-kn.ico{width:44px}
 .mtd-titel{font-size:22px}
@@ -233,6 +244,7 @@
     css(); teken();
     if (!C._resize && root.addEventListener) { let tm = null; C._resize = true; root.addEventListener('resize', () => { clearTimeout(tm); tm = setTimeout(() => { if (st.el && st.el.isConnected && st.maanden.length && Math.abs(((st.el.clientWidth || 640) - 24) - BR) > 24) teken(); }, 200); }); }
     if (!st.maanden.length && !st.laden) await C.laad();
+    else if (!st.bes.data && !st.bes.laden) besteedLaad();
   };
   C.laad = async function (herbouw) {
     st.laden = true; st.rondes = 0; st.fout = null; const mislukt = new Set();
@@ -252,6 +264,7 @@
     }
     st.laden = false; teken();
     kasPrognose();
+    besteedLaad();
   };
   // Kasprognose uit de geldtijdlijn (zelfde rekenregels), alleen als het geldscherm geladen is.
   async function kasPrognose() {
@@ -552,6 +565,112 @@
     return e;
   }
 
+  // ── Besteedbaar budget: tegel en paneel ──
+  // Alles komt uit het rekenwerk van Financiën (MTGeld.besteedbaar / kasLijn / laagste / drempel), met dezelfde invoer: de tijdlijn, de config en de keuzes die
+  // Financiën per gebruiker onthoudt (noodbuffer, prognose, periode). Hier wordt niets opnieuw berekend; ontbreekt er iets dan staat er "—" met de reden.
+  const BES_ZOOM = { week: 14, maand: 31, kwartaal: 92, jaar: 365 };
+  const rond2 = n => Math.round(n * 100) / 100;
+  const dagenTss = (a, b) => Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 864e5);
+  const datKort = d => `${Number(d.slice(8))} ${MND[Number(d.slice(5, 7)) - 1]}`;
+  const datLang = d => `${['zo', 'ma', 'di', 'wo', 'do', 'vr', 'za'][new Date(d + 'T00:00:00Z').getUTCDay()]} ${datKort(d)} ${d.slice(0, 4)}`;
+  const zoomNaam = z => z === 'week' ? '2 weken' : z;
+  C.besteedModel = function (data, cfg, o) {
+    o = o || {}; const G = root.MTGeld, leeg = reden => ({ ok: false, reden });
+    if (!G || typeof G.besteedbaar !== 'function' || typeof G.kasLijn !== 'function' || typeof G.laagste !== 'function' || typeof G.drempel !== 'function') return leeg('Financiën-rekenmodule niet geladen');
+    if (!data) return leeg(o.laden ? 'laden…' : o.fout ? 'tijdlijn niet geladen' : 'nog niet geladen');
+    if (!data.saldo || !data.vandaag) return leeg('tijdlijn onvolledig');
+    if (!cfg) return leeg('instellingen van Financiën niet geladen');
+    try {
+      const zoom = BES_ZOOM[o.zoom] ? o.zoom : 'maand', nood = !!o.nood, prognose = o.prognose !== false;
+      const d = typeof G.metScenario === 'function' ? G.metScenario(data, {}) : data, bes = G.besteedbaar(d, cfg, { nood });
+      if (!bes) return leeg('lopende rekening onbekend');
+      const lijn = G.kasLijn(d, cfg, { prognose, nood}); if (!lijn || lijn.onbekend) return leeg('lopende rekening onbekend');
+      const low = G.laagste(lijn, C._dag(d.vandaag, BES_ZOOM[zoom])), onder = G.drempel(d, cfg);
+      return { ok: true, d, bes, lijn, low, onder, ruimte: low ? rond2(low.saldo - onder) : null, nood, prognose, zoom, vandaag: d.vandaag, heeftProg: (d.events || []).some(e => e.zekerheid === 'prognose'), grens: typeof G.drempelSoort === 'function' ? G.drempelSoort(d, cfg) : null };
+    } catch (e) { return leeg('berekening mislukt'); }
+  };
+  function besZoom() { const z = st.besZoom || ls.get('mtg:zoom:' + st.wie); return BES_ZOOM[z] ? z : 'maand'; }
+  // De tegel: kale getallen (voor de tests) en wat de tegel erbij zegt.
+  function besteedTegelModel() {
+    const b = st.bes, o = { nood: ls.get('mtg:nood:' + st.wie) === '1', prognose: ls.get('mtg:prognose:' + st.wie) !== '0', zoom: besZoom(), laden: b.laden, fout: b.fout };
+    const sleutel = [o.nood, o.prognose, o.zoom, o.laden, o.fout, !!root.MTGeld].join('|');
+    if (!b.cache || b.cache.data !== b.data || b.cache.cfg !== b.cfg || b.cache.sleutel !== sleutel) b.cache = { data: b.data, cfg: b.cfg, sleutel, m: C.besteedModel(b.data, b.cfg, o) };
+    const m = b.cache.m;
+    if (!m.ok) return { id: 'besteedbaar', label: 'Besteedbaar budget', waarde: '—', sub: m.reden, ok: false, klik: false, m, rijen: [], chip: null };
+    const bes = m.bes, low = m.low, ruimte = m.ruimte, rijen = [];
+    rijen.push({ l: 'Laagste punt' + (m.heeftProg && m.prognose ? ' (incl. prognose)' : ''), v: low ? eur(low.saldo) : '—', s: low ? `${datKort(low.datum)} · komende ${zoomNaam(m.zoom)}` : 'geen verwachting beschikbaar', goed: low ? low.saldo >= m.onder : null });
+    rijen.push({ l: 'Ruimte op laagste punt', v: ruimte == null ? '—' : eur(ruimte), s: m.onder > 0 ? 'tot de fictieve buffer' : 'tot nul', goed: ruimte == null ? null : ruimte >= 0 });
+    rijen.push({ l: 'Lopende rekening', v: eur(bes.lopend), s: bes.btwTekort > 0 ? `btw nog te betalen ${eur(bes.btwTekort)}` : 'geen open btw', goed: null });
+    const chip = ruimte == null ? null : { pijl: ruimte >= 0 ? '▲' : '▼', tekst: ruimte >= 0 ? `${eur(ruimte)} ruimte op het laagste punt` : `${eur(-ruimte)} tekort op het laagste punt`, goed: ruimte >= 0 };
+    return { id: 'besteedbaar', label: 'Besteedbaar budget' + (m.nood ? ' (incl. noodbuffer)' : ''), waarde: eur(bes.besteedbaar), raw: bes.besteedbaar, sub: 'lopende rekening min de btw die je nog moet betalen' + (m.nood ? ', plus de noodbuffer' : ''), ok: true, klik: true, m, rijen, chip, rood: bes.besteedbaar < 0 };
+  }
+  C.besteedTegel = besteedTegelModel;
+  async function besteedLaad() {
+    const b = st.bes; if (b.laden || !st.bron || !st.vandaag) return;
+    b.laden = true; b.fout = null;
+    try {
+      const v = st.vandaag, [d, c] = await Promise.all([st.bron.haal(`/geld/tijdlijn?van=${C._dag(v, -35)}&tot=${C._dag(v, 364)}&historie=1`), st.bron.haal('/geld/config')]);   // dezelfde verzoeken als Financiën
+      if (!d || d.error) throw new Error(d && d.error || 'geen antwoord');
+      b.data = d; b.cfg = c && c.config ? c.config : null;
+    } catch (e) { b.fout = (e && e.message) || String(e); }
+    b.laden = false; if (st.el && st.el.isConnected) teken();
+  }
+  const trap = (lijst, x, y) => lijst.map((p, i) => (i ? `H${x(p.datum).toFixed(1)}V${y(p.saldo).toFixed(1)}` : `M${x(p.datum).toFixed(1)} ${y(p.saldo).toFixed(1)}`)).join('');
+  // Het verloop: tot vandaag de lopende rekening (doorgetrokken), daarna het besteedbaar budget zoals Financiën het verwacht (gestippeld).
+  function besteedGrafiek(m, o) {
+    o = o || {}; const br = o.breedte || BR, klein = br < 500, ho = o.hoog || (klein ? 170 : 220), ml = klein ? 44 : 60, mr = 12, mt = 26, mb = 24, n = BES_ZOOM[m.zoom];
+    const vanD = C._dag(m.vandaag, -Math.round(n * 0.25)), totD = C._dag(m.vandaag, n), span = Math.max(1, dagenTss(vanD, totD)), pts = m.lijn.punten.filter(p => p.datum >= vanD && p.datum <= totD);
+    if (pts.length < 2) return ee('div', { class: 'mtc-noot' }, 'Geen gegevens voor deze periode.');
+    const x = dd => ml + dagenTss(vanD, dd) / span * (br - ml - mr);
+    const sc = C.schaalVoor([pts.map(p => p.saldo), m.onder > 0 ? [m.onder] : [], m.low ? [m.low.saldo] : []], {}), y = v => mt + (ho - mt - mb) * (1 - (v - sc.a) / (sc.b - sc.a));
+    const svg = ss('svg', { viewBox: `0 0 ${br} ${ho}`, class: 'mtd-svg', role: 'img', 'aria-label': `Verloop besteedbaar budget, komende ${zoomNaam(m.zoom)}, met de verwachting gestippeld` });
+    sc.ticks.forEach(tk => svg.append(ss('line', { x1: ml, x2: br - mr, y1: y(tk), y2: y(tk), class: tk === 0 ? 'mtd-as0' : 'mtd-raster' }), ss('text', { x: ml - 6, y: y(tk) + 4, 'text-anchor': 'end', class: 'mtd-astekst' }, kort(tk))));
+    const stappen = klein ? 3 : 6;
+    for (let i = 0; i <= stappen; i++) { const dd = C._dag(vanD, Math.round(span * i / stappen)); svg.append(ss('text', { x: x(dd), y: ho - mb + 16, 'text-anchor': i === 0 ? 'start' : i === stappen ? 'end' : 'middle', class: 'mtd-xtekst' + (dd > m.vandaag ? ' fc' : '') }, datKort(dd))); }
+    if (m.onder > 0 && m.onder <= sc.b) svg.append(ss('line', { x1: ml, x2: br - mr, y1: y(m.onder), y2: y(m.onder), class: 'mtd-bes-grens' }), ss('text', { x: br - mr - 2, y: y(m.onder) - 4, 'text-anchor': 'end', class: 'mtd-astekst' }, 'fictieve buffer'));
+    const dx = x(m.vandaag); svg.append(ss('line', { x1: dx, x2: dx, y1: mt - 14, y2: ho - mb, class: 'mtd-scheid' }), ss('text', { x: dx + (dx > br - 150 ? -5 : 5), y: mt - 5, 'text-anchor': dx > br - 150 ? 'end' : 'start', class: 'mtd-scheidtekst' }, 'vanaf hier verwachting'));
+    const ver = pts.filter(p => p.datum <= m.vandaag), toek = pts.filter(p => p.datum >= m.vandaag);
+    if (ver.length > 1) svg.append(ss('path', { d: trap(ver, x, y), class: 'mtd-l-huidig mtd-bes-l' }));
+    if (toek.length > 1) svg.append(ss('path', { d: trap(toek, x, y), class: 'mtd-l-prog' }));
+    if (m.low) svg.append(ss('circle', { cx: x(m.low.datum), cy: y(m.low.saldo), r: 4.5, class: 'mtd-bes-laag' + (m.low.saldo < m.onder ? ' slecht' : '') }));
+    const kruis = ss('line', { class: 'mtd-kruis', y1: mt - 4, y2: ho - mb, visibility: 'hidden' }); svg.append(kruis);
+    const hit = ss('rect', { class: 'mtd-hit', x: ml, y: mt - 16, width: br - ml - mr, height: ho - mt + 16 }); svg.append(hit);
+    const tip = ee('div', { class: 'mtd-tip', role: 'status', hidden: true }), info = ee('div', { class: 'mtd-info', role: 'status' });
+    const vul = p => { const fc = p.datum > m.vandaag, rijen = [{ l: fc || p.datum === m.vandaag ? 'Besteedbaar budget' : 'Lopende rekening', v: eur(p.saldo), stip: fc ? 'prog' : 'huidig' }];
+      if (p.saldo_gepland != null && p.saldo_gepland !== p.saldo) rijen.push({ l: 'Na wat vandaag gepland staat', v: eur(p.saldo_gepland), stip: 'prog' });
+      if (m.low && p.datum === m.low.datum) rijen.push({ l: 'Laagste punt', v: eur(m.low.saldo), d: m.low.saldo < m.onder ? 'onder de grens' : '', goed: m.low.saldo >= m.onder, stip: 'geen' });
+      return [ee('div', { class: 'mtd-tk' }, ee('span', { class: 'mtd-tt' }, datLang(p.datum)), ee('span', { class: 'mtd-tlab' + (fc ? ' fc' : '') }, fc ? 'verwachting' : p.datum === m.vandaag ? 'vandaag' : 'geboekt')), ...rijen.map(rijTip)]; };
+    const dichtbij = cx => { const r = svg.getBoundingClientRect(); if (!r.width) return null; const f = (cx - r.left) / r.width * br, dd = C._dag(vanD, Math.round((f - ml) / (br - ml - mr) * span)); let b = null, bd = 1e9;
+      for (const p of pts) { const k = Math.abs(dagenTss(p.datum, dd)); if (k < bd) { bd = k; b = p; } } return b; };
+    const toon = (p, vast) => { if (!p) return; kruis.setAttribute('x1', x(p.datum)); kruis.setAttribute('x2', x(p.datum)); kruis.setAttribute('visibility', 'visible'); tip.hidden = false; tip.replaceChildren(...vul(p));
+      const fr = (x(p.datum) - ml) / (br - ml - mr); tip.style.left = (x(p.datum) / br * 100) + '%'; tip.style.transform = fr < 0.12 ? 'translateX(8px)' : fr > 0.88 ? 'translateX(calc(-100% - 8px))' : 'translateX(-50%)';
+      if (vast) { info.replaceChildren(...vul(p)); info.classList.add('heeft', 'vast'); } };
+    hit.addEventListener('mousemove', e => toon(dichtbij(e.clientX), false)); hit.addEventListener('click', e => toon(dichtbij(e.clientX), true));
+    const plot = ee('div', { class: 'mtd-plot' }, svg, tip); plot.addEventListener('mouseleave', () => { kruis.setAttribute('visibility', 'hidden'); tip.hidden = true; });
+    const leg = ee('div', { class: 'mtd-legenda mtd-bes-leg' }, legendaItem('huidig', 'lopende rekening tot vandaag'), legendaItem('prog', 'verwachting' + (m.nood ? ', incl. noodbuffer' : '') + (m.heeftProg && m.prognose ? ', incl. prognose' : '')), m.onder > 0 ? legendaItem('grens', 'fictieve buffer') : null);
+    return ee('div', { class: 'mtd-chart' }, plot, o.info ? info : null, leg);
+  }
+  function besteedTegelEl() {
+    const t = besteedTegelModel(), m = t.m;
+    const chip = t.chip ? ee('div', { class: 'mtd-chip ' + (t.chip.goed ? 'goed' : 'slecht') }, ee('span', { 'aria-hidden': 'true' }, t.chip.pijl), ee('span', null, t.chip.tekst)) : null;
+    const stats = t.ok ? ee('div', { class: 'mtd-bes-stats' }, t.rijen.map(r => ee('div', { class: 'mtd-bes-st' }, ee('span', { class: 'mtd-kl' }, r.l), ee('span', { class: 'mtd-bes-v' }, r.v), ee('span', { class: 'mtd-ks ' + (r.goed == null ? '' : r.goed ? 'goed' : 'slecht') }, r.s)))) : null;
+    return ee('div', { class: 'mtd-tegel mtd-t-besteedbaar' + (t.klik ? '' : ' uit'), role: t.klik ? 'button' : 'group', tabindex: t.klik ? '0' : null, 'data-paneel': t.klik ? 'besteedbaar' : null, 'data-fk': 'tegel-besteedbaar',
+      'aria-label': `${t.label} ${t.waarde}${t.chip ? ', ' + t.chip.tekst : ''}. ${t.sub}${t.klik ? '. Open op volledig scherm.' : ''}` },
+      ee('div', { class: 'mtd-t-kop' }, ee('span', { class: 'mtd-t-l' }, t.label, t.ok && m.heeftProg && m.prognose ? ee('span', { class: 'mtd-fc' }, 'incl. prognose') : null), t.klik ? ee('span', { class: 'mtd-vol-ico', 'aria-hidden': 'true' }, '⤢') : null),
+      ee('div', { class: 'mtd-bes-top' }, ee('div', { class: 'mtd-t-w' }, ee('span', { class: 'mtd-getal' + (t.rood ? ' slecht' : '') }, t.waarde), ee('span', { class: 'mtd-sub' }, t.sub), chip), stats),
+      t.ok ? besteedGrafiek(m, { breedte: Math.max(300, BR - (mobiel() ? 32 : 48)), hoog: mobiel() ? 150 : 200 }) : null);
+  }
+  function besteedPaneel(breedte) {
+    const t = besteedTegelModel(), m = t.m, kop = ee('div', { class: 'mtd-pkop' }, ee('div', { class: 'mtd-pkop-l' }, ee('button', { class: 'mtd-kn ico', 'data-sluitpaneel': '1', 'data-fk': 'sluit', 'aria-label': 'Sluiten en terug naar cijfers' }, '✕'),
+      ee('div', null, ee('h1', null, 'Besteedbaar budget'), ee('span', { class: 'mtc-noot' }, m.ok ? `stand van ${datLang(m.vandaag)} · zelfde getal als in Financiën` : 'niet beschikbaar'))),
+      ee('div', { class: 'mtd-pkop-r' }, document.getElementById('tab-btn-geld') && typeof root.showTab === 'function' ? ee('button', { class: 'mtd-kn', 'data-naarfin': '1', 'data-fk': 'naar-fin' }, 'Naar Financiën →') : null));
+    if (!t.ok) return [kop, ee('div', { class: 'mtc-kaart mtc-noot' }, `Het besteedbaar budget kan nu niet worden getoond: ${t.sub}.`)];
+    const zoek = ee('div', { class: 'mtd-bar' }, ee('div', { class: 'mtc-groep', role: 'group', 'aria-label': 'Periode' }, Object.keys(BES_ZOOM).map(z => ee('button', { 'data-bzoom': z, 'data-fk': 'bzoom-' + z, class: m.zoom === z ? 'aan' : '', 'aria-pressed': String(m.zoom === z) }, z))),
+      ee('span', { class: 'mtc-noot' }, `Noodbuffer ${m.nood ? 'telt mee' : 'telt niet mee'} · prognose ${m.prognose ? 'aan' : 'uit'} · zoals ingesteld in Financiën`));
+    const kpis = [{ l: 'Besteedbaar nu', v: t.waarde, s: m.nood ? 'incl. noodbuffer' : 'lopend min btw', goed: t.raw >= 0 }].concat(t.rijen.map(r => ({ l: r.l, v: r.v, s: r.s, goed: r.goed })));
+    return [kop, zoek, kpiRij(kpis), sectie('Verloop besteedbaar budget', `Tot vandaag de lopende rekening, daarna de verwachting (gestippeld) · komende ${zoomNaam(m.zoom)}`, besteedGrafiek(m, { breedte, hoog: 380, info: true }))];
+  }
+
   function teken() {
     if (!st.el) return;
     const fk = focusSleutel(); maat(Math.max(320, (st.el.clientWidth || 640) - 50), 2400);
@@ -563,7 +682,7 @@
     else if (!st.maanden.length) wortel.append(ee('div', { class: 'mtc-kaart mtc-noot' }, 'Cijfers laden…'));
     else {
       const per = huidigePeriodes(), tegels = tegelModel();
-      wortel.append(ee('section', { class: 'mtd-tegels', 'aria-label': 'Kerncijfers' }, tegels.map(tegelEl)), hoofdKaart(per));
+      wortel.append(ee('section', { class: 'mtd-tegels', 'aria-label': 'Kerncijfers' }, tegels.map(tegelEl), besteedTegelEl()), hoofdKaart(per));
     }
     st.el.replaceChildren(wortel);
     gebaren(wortel.querySelector('.mtd-plot'));
@@ -655,7 +774,7 @@
     return ee('div', { class: 'mtd-tabelwrap' }, ee('table', { class: 'mtd-tabel' }, ee('caption', { class: 'sr' }, 'Omzet en resultaat ' + jaarTitel() + ' ' + st.jaar), ee('thead', null, ee('tr', null, kop.map(k => ee('th', { scope: 'col' }, k)))), ee('tbody', null, rijen)));
   }
   // ── Dashboard: volledig-scherm-paneel per tegel ──
-  const PANEEL_TITEL = { omzet: 'Omzet', brutomarge: 'Brutomarge', resultaat: 'Resultaat', komende: 'Komende 3 maanden', kas: 'Kaspositie', opnames: 'Opnames', hoofd: 'Omzet en resultaat' };
+  const PANEEL_TITEL = { besteedbaar: 'Besteedbaar budget', omzet: 'Omzet', brutomarge: 'Brutomarge', resultaat: 'Resultaat', komende: 'Komende 3 maanden', kas: 'Kaspositie', opnames: 'Opnames', hoofd: 'Omzet en resultaat' };
   const ICONEN = { trend: 'M3 17l6-6 4 4 8-8M15 7h6v6', dal: 'M3 7l6 6 4-4 8 8M15 17h6v-6', klok: 'M12 7v5l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z', taart: 'M21 12A9 9 0 1 1 12 3v9z' };
   const mbAdmin = () => { try { const a = typeof root.getAdmin === 'function' ? String(root.getAdmin() || '') : ''; return /^[\w-]+$/.test(a) ? a : ''; } catch (e) { return ''; } };
   const sectie = (titel, sub, ...inhoud) => ee('section', { class: 'mtd-kaart', 'aria-label': titel }, ee('div', { class: 'mtd-kaartkop' }, ee('div', null, ee('h3', null, titel), sub ? ee('span', { class: 'mtc-noot' }, sub) : null)), inhoud);
@@ -758,6 +877,7 @@
 
   function bedieningPaneel() { const b = bediening(); [...b.querySelectorAll('[data-horizon],[data-indeling]')].forEach(e => (e.closest('.mtc-groep') && e.closest('.mtc-groep').getAttribute('aria-label') === 'Horizon advies' ? e.closest('.mtc-groep') : e).remove()); return b; }
   function paneelInhoud(id, breedte) {
+    if (id === 'besteedbaar') return besteedPaneel(breedte);
     const tm = tegelModel(), tegel = tm.find(q => q.id === id), per = huidigePeriodes(), lm = tm.lm || laatste();
     const kop = ee('div', { class: 'mtd-pkop' }, ee('div', { class: 'mtd-pkop-l' }, ee('button', { class: 'mtd-kn ico', 'data-sluitpaneel': '1', 'data-fk': 'sluit', 'aria-label': 'Sluiten en terug naar cijfers' }, '✕'),
       ee('div', null, ee('h1', null, PANEEL_TITEL[id] || id), ee('span', { class: 'mtc-noot' }, id === 'komende' ? 'verwachting uit forecast (niet ontdubbeld met boekingen)' : id === 'hoofd' ? `${st.jaar} · ${jaarTitel()}` : lm ? `${st.jaar} · geboekt t/m ${dagKort(lm)}${id === 'omzet' ? ' · excl. btw' : ''}` : String(st.jaar)))),
@@ -984,8 +1104,10 @@
     return true;
   }
   function klik(e) {
-    const b = e.target.closest('[data-zoom],[data-jaar],[data-eerlijk],[data-vgl],[data-horizon],[data-indeling],[data-wissel],[data-tik],[data-euro],[data-bullet],[data-paneel],[data-sluitpaneel],[data-status],[data-tabel],[data-drill],[data-topladen]'); if (!b) { tikOpPositie(e); return; }
+    const b = e.target.closest('[data-zoom],[data-jaar],[data-eerlijk],[data-vgl],[data-horizon],[data-indeling],[data-wissel],[data-tik],[data-euro],[data-bullet],[data-paneel],[data-sluitpaneel],[data-status],[data-tabel],[data-drill],[data-topladen],[data-bzoom],[data-naarfin]'); if (!b) { tikOpPositie(e); return; }
     const d = b.dataset;
+    if (d.naarfin) { e.preventDefault(); const kn = document.getElementById('tab-btn-geld'); if (kn && typeof root.showTab === 'function') { sluitPaneel(); root.showTab('geld', kn); } return; }
+    if (d.bzoom) { if (BES_ZOOM[d.bzoom]) st.besZoom = d.bzoom; return teken(); }   // alleen dit paneel: de keuze van Financiën zelf blijft onaangeroerd
     if (d.paneel) return openPaneel(d.paneel, b);
     if (d.sluitpaneel) return sluitPaneel();
     if (d.status) { st.statusOpen = !st.statusOpen; teken(); const k = st.statusOpen ? 'status-sluit' : 'status'; herstelFocus(k, st.el); return; }
