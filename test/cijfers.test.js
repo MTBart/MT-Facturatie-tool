@@ -1,0 +1,54 @@
+// Rekenregels en tekenmodel van het cijfers-dashboard (mt-cijfers.js), zonder DOM. Draaien: node test/cijfers.test.js — nep-gegevens.
+'use strict';
+const assert = require('assert');
+const Nep = require('./fixtures/cijfers-nep.js');
+require('../mt-cijfers.js');
+const C = globalThis.MTCijfers, st = C._st;
+let n = 0; const test = (naam, fn) => { try { fn(); n++; console.log('ok  - ' + naam); } catch (e) { console.log('FOUT - ' + naam + '\n' + (e.stack || e)); process.exitCode = 1; } };
+
+function zet(opt) {
+  const a = Nep.antwoord('2026-11');
+  Object.assign(st, { maanden: a.perioden, cats: a.categorieen.map(c => c.id), catNaam: Object.fromEntries(a.categorieen.map(c => [c.id, c.naam])), bm: a.benchmarks, ontbrekend: [], mislukt: [],
+    vandaag: '2026-11-05', jaar: 2026, zoom: 'M', eerlijk: true, vergelijk: 2, sel: null, focusCat: null, prognoseRuw: Nep.prognose().items, kasProg: null }, opt || {});
+}
+
+test('schaal: alle waarden (ook negatief en groot) liggen binnen de as', () => {
+  const sc = C.schaalVoor([[10, 250, null], [-40, 90], [NaN, undefined, 120000]], {});
+  for (const v of [10, 250, -40, 90, 120000, 0]) assert.ok(v >= sc.a && v <= sc.b, `${v} buiten ${sc.a}..${sc.b}`);
+  assert.ok(sc.ticks.length >= 2);
+});
+test('schaal: zonder waarden een bruikbare lege as; min/max forceren', () => {
+  const leeg = C.schaalVoor([[null]], {}); assert.ok(leeg.b > leeg.a);
+  const m = C.schaalVoor([[5, 6]], { min: 0, max: 100 }); assert.ok(m.a <= 0 && m.b >= 100);
+  const geenNul = C.schaalVoor([[500, 600]], { nul: false }); assert.ok(geenNul.a > 0);
+});
+test('verzamel: negeert niet-getallen', () => { assert.deepStrictEqual(C.verzamel([[1, null, 'x', NaN, Infinity], 3, [undefined]]), [1, 3]); });
+
+// Alle y-waarden van lijnen/paden/punten moeten binnen het tekengebied liggen (dit was de schaalfout: de vergelijkjaren en de referentielijn telden niet mee).
+function yWaarden(svg) {
+  const ys = [];
+  for (const m of svg.matchAll(/<path d="([^"]+)"/g)) for (const q of m[1].matchAll(/[ML]([\d.\-]+) ([\d.\-]+)/g)) ys.push(Number(q[2]));
+  for (const m of svg.matchAll(/<circle[^>]* cy="([\d.\-]+)"/g)) ys.push(Number(m[1]));
+  for (const m of svg.matchAll(/<line [^>]*x1="([\d.\-]+)" x2="([\d.\-]+)" y1="([\d.\-]+)" y2="([\d.\-]+)"/g)) if (m[1] !== m[2] && m[3] === m[4]) ys.push(Number(m[3]));
+  return ys;
+}
+const BOVEN = 24, ONDER = 260 - 30;   // MT en HO-MB uit mt-cijfers.js (HO = 260 bij brede grafiek)
+for (const zoom of ['M', 'K']) for (const eerlijk of [true, false]) for (const g of ['omzet_kosten', 'brutomarge', 'kas']) {
+  test(`schaal-bug: ${g} zoom ${zoom} eerlijk ${eerlijk}: niets buiten de grafiek`, () => {
+    zet({ zoom, eerlijk }); const html = C._grafiekHtml(g), ys = yWaarden(html);
+    assert.ok(ys.length > 5, 'er moet iets getekend zijn');
+    for (const y of ys) assert.ok(y >= BOVEN - 0.6 && y <= ONDER + 0.6, `y=${y} buiten ${BOVEN}..${ONDER} in ${g}`);
+  });
+}
+test('schaal-bug: vergelijkjaar met veel hogere waarden dwingt de as mee (omzet)', () => {
+  zet({ zoom: 'M', vergelijk: 2 }); const hoog = st.maanden.find(m => m.id === '2025-06'); const oud = hoog.omzet; hoog.omzet = 900000;
+  try { const ys = yWaarden(C._grafiekHtml('omzet_kosten')); for (const y of ys) assert.ok(y >= BOVEN - 0.6 && y <= ONDER + 0.6, `y=${y}`); }
+  finally { hoog.omzet = oud; }
+});
+
+test('som: boekjaar t/m oktober, prognose telt niet mee', () => {
+  zet(); const ms = st.maanden.filter(m => m.id >= '2026-01' && m.id <= '2026-10'), P = C.som(ms, st.cats, true);
+  assert.strictEqual(P.omzet, [38, 41, 52, 47, 55, 61, 44, 36, 58, 63].reduce((a, b) => a + b, 0) * 1000);
+  assert.strictEqual(P.prognose, 0);
+});
+console.log(`${n} tests gedaan`);

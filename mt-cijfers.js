@@ -194,6 +194,8 @@
     st.sel = null; teken();
   };
   C.horizon = function (h) { st.horizon = h; teken(); };
+  // Voor de tests (zonder DOM): de tekenfuncties op de huidige staat.
+  C._grafiekHtml = (g) => grafiekHtml(huidigePeriodes(), g);
 
   // ── Tekenen ──────────────────────────────────────────────────────────────
   // laatste afgesloten maand: de lopende maand is nog niet compleet en telt niet mee in vergelijkingen en kerncijfers
@@ -253,6 +255,16 @@
   function maat() { const b = (st.el && st.el.clientWidth) || 640; BR = Math.max(320, Math.min(900, b - 24)); HO = BR < 500 ? 230 : 260; }
   function schaal(min, max) { if (min === max) { max = min + 1; } const stap = Math.pow(10, Math.floor(Math.log10((max - min) / 4))), s = [1, 2, 2.5, 5, 10].map(x => x * stap).find(x => (max - min) / x <= 5) || stap * 10;
     const a = Math.floor(min / s) * s, b = Math.ceil(max / s) * s, ticks = []; for (let v = a; v <= b + s / 2; v += s) ticks.push(Math.round(v * 100) / 100); return { a, b, ticks }; }
+  // Eén plek voor de schaal: eerst ALLE getekende waarden verzamelen (staven, lijnen, vergelijkjaren, prognose, referentielijnen),
+  // dan pas de schaal bepalen. Zo loopt er nooit een lijn buiten de grafiek (de vorige schaalfout).
+  C.verzamel = reeksen => { const w = []; for (const r of reeksen) for (const v of (Array.isArray(r) ? r : [r])) if (typeof v === 'number' && isFinite(v)) w.push(v); return w; };
+  C.schaal = schaal;
+  C.schaalVoor = (reeksen, opt) => {
+    opt = opt || {}; const w = C.verzamel(reeksen.concat(opt.nul === false ? [] : [[0]]));
+    if (!w.length) return schaal(0, 1);
+    let lo = Math.min(...w), hi = Math.max(...w); if (opt.min != null) lo = Math.min(lo, opt.min); if (opt.max != null) hi = Math.max(hi, opt.max);
+    return schaal(lo, hi);
+  };
   function assen(sc, y, fmt, n) {
     return sc.ticks.map(t => `<g><line x1="${esc(ML)}" x2="${esc(BR - MR)}" y1="${esc(y(t))}" y2="${esc(y(t))}" stroke="${t === 0 ? '#9aa' : '#e6e6e0'}"/><text x="${esc(ML - 6)}" y="${esc(y(t) + 4)}" text-anchor="end" font-size="11" fill="#888">${esc(fmt(t))}</text></g>`).join('');
   }
@@ -265,17 +277,18 @@
       const pv = C.periodes(st.maanden, st.zoom, j, laatste(), []).map(p => Object.assign(p, { P: C.som(p.ms, st.cats, st.eerlijk) }));
       return { jaar: j, w: pv.map(p => p.P.maanden ? f(p.P) : null) }; }).filter(Boolean);
   }
-  function grafiekHtml(per) {
-    const g = st.weergave;
+  function grafiekHtml(per, g) {
+    g = g || st.weergave;
     if (g === 'kosten_pct') return bulletHtml();
     if (g === 'waterval') return watervalHtml();
     const n = per.length, bw = (BR - ML - MR) / n, x = i => ML + i * bw + bw / 2;
-    st.geo = { weergave: g, n, bw, ids: per.map(p => p.id), segs: [] };   // voor tikken op de x-positie (smalle staven op mobiel)
+    const geo = (st.geos = st.geos || {})[g] = st.geo = { weergave: g, n, bw, ids: per.map(p => p.id), segs: [] };   // voor tikken op de x-positie (smalle staven op mobiel)
     const progStart = per.findIndex(p => p.ms.length && p.ms.every(m => m.prognose));
     let svg = '', leg = [], noot = [];
     if (g === 'omzet_kosten') {
-      const hoog = Math.max(1, ...per.map(p => Math.max(p.P.omzet + p.P.prognose, p.P.kosten_totaal + p.P.prognoseKosten, p.P.prognoseRef))), laag = Math.min(0, ...per.map(p => p.P.resultaat), ...per.map(p => p.P.prognose > 0 && !p.P.geenHistorie ? p.P.omzet + p.P.prognose - p.P.kosten_totaal - p.P.prognoseKosten : 0));   // ook de prognoselijn past op de as
-      const sc = schaal(laag, hoog), y = v => MT + (HO - MT - MB) * (1 - (v - sc.a) / (sc.b - sc.a));
+      const vgl = vergelijkReeks(per, P => P.omzet), progRes = p => p.P.prognose > 0 && !p.P.geenHistorie ? p.P.omzet + p.P.prognose - p.P.kosten_totaal - p.P.prognoseKosten : null;
+      const sc = C.schaalVoor([per.map(p => p.P.omzet + p.P.prognose), per.map(p => p.P.kosten_totaal + p.P.prognoseKosten), per.map(p => p.P.prognoseRef || null), per.map(p => p.P.maanden ? p.P.resultaat : null), per.map(progRes),
+        st.eerlijk ? [] : per.map(p => p.P.maanden && p.P.correctie ? p.P.resultaat - p.P.correctie : null), ...vgl.map(r => r.w)], { min: 0, max: 1 }), y = v => MT + (HO - MT - MB) * (1 - (v - sc.a) / (sc.b - sc.a));   // ook de vergelijkjaren, de prognoselijn en de referentielijn passen op de as
       svg += assen(sc, y, kort);
       per.forEach((p, i) => {
         let top = 0; const P = p.P, w = Math.max(4, bw * 0.62), x0 = x(i) - w / 2, gekozen = st.sel && st.sel.id === p.id;
@@ -305,25 +318,24 @@
       svg += pad(resProg, '#2A4A38', 2, '4 4');
       svg += resProg.map((q, i) => q ? `<circle cx="${esc(q[0])}" cy="${esc(q[1])}" r="4" fill="#fff" stroke="#2A4A38" stroke-width="1.5" stroke-dasharray="2 1.5"><title>${esc('prognose resultaat ≈ ' + eur(per[i].P.omzet + per[i].P.prognose - per[i].P.kosten_totaal - per[i].P.prognoseKosten))}</title></circle>` : '').join('');   // ook één losse prognosemaand zichtbaar
       if (!st.eerlijk) { const ref = per.map((p, i) => p.P.maanden && p.P.correctie ? [x(i), y(p.P.resultaat - p.P.correctie)] : null); if (ref.some(Boolean)) { svg += pad(ref, '#2A4A38', 1.2, '2 3'); noot.push('Dunne stippellijn: resultaat mét de lonen die niet in de W&V staan (eerlijk beeld).'); } }
-      vergelijkReeks(per, P => P.omzet).forEach((r, k) => { svg += pad(r.w.map((v, i) => v == null ? null : [x(i), y(v)]), '#9aa3ad', 1.5, k ? '2 4' : '6 3'); leg.push([`border-top:2px ${k ? 'dotted' : 'dashed'} #9aa3ad;height:0`, `omzet ${r.jaar}`]); });
+      vgl.forEach((r, k) => { svg += pad(r.w.map((v, i) => v == null ? null : [x(i), y(v)]), '#9aa3ad', 1.5, k ? '2 4' : '6 3'); leg.push([`border-top:2px ${k ? 'dotted' : 'dashed'} #9aa3ad;height:0`, `omzet ${r.jaar}`]); });
       leg.unshift(['background:#3f4a56', 'kosten (tik voor de categorie)'], ['border-top:3px solid #1d3557;height:0', 'omzet'], ['border-top:3px solid #2A4A38;height:0', 'resultaat']);
       if (st.eerlijk && per.some(p => p.P.correctie > 0)) leg.splice(3, 0, ['background:repeating-linear-gradient(135deg,#f3e9d2 0 3px,#a5803a 3px 5px)', 'lonen buiten de W&V (eerlijk beeld)']);
       if (per.some(p => p.P.prognose || p.P.prognoseKosten)) leg.push(['background:url(#x);background:repeating-linear-gradient(45deg,#eef1f6 0 3px,#9fb3d6 3px 5px)', 'prognose']);
     } else if (g === 'brutomarge') {
-      const vals = per.map(p => p.P.maanden ? p.P.brutomarge_pct : null), bm = st.bm.brutomarge, top = Math.max(70, ...vals.filter(v => v != null), bm ? (bm.tot || bm.pct || 0) + 10 : 0);
-      const sc = schaal(0, top), y = v => MT + (HO - MT - MB) * (1 - (v - sc.a) / (sc.b - sc.a));         // %-as altijd vanaf 0
+      const vals = per.map(p => p.P.maanden ? p.P.brutomarge_pct : null), bm = st.bm.brutomarge, vgl = vergelijkReeks(per, P => P.brutomarge_pct);
+      const sc = C.schaalVoor([vals, ...vgl.map(r => r.w), bm ? [bm.van, bm.tot, bm.pct].map(v => v == null ? null : v + 10) : []], { min: 0, max: 70 }), y =v => MT + (HO - MT - MB) * (1 - (v - sc.a) / (sc.b - sc.a));         // %-as altijd vanaf 0
       svg += assen(sc, y, v => v + '%');
       if (bm) svg += bm.van != null && bm.tot != null ? `<rect x="${esc(ML)}" y="${esc(y(bm.tot))}" width="${esc(BR - ML - MR)}" height="${esc(y(bm.van) - y(bm.tot))}" fill="#e4e7eb"/>` : `<line x1="${esc(ML)}" x2="${esc(BR - MR)}" y1="${esc(y(bm.pct))}" y2="${esc(y(bm.pct))}" stroke="#7f8a96" stroke-width="2" stroke-dasharray="6 3"/>`;
       per.forEach((p, i) => { const v = vals[i], w = Math.max(4, bw * 0.55);
         if (v != null) svg += `<rect data-tik="periode" data-p="${esc(p.id)}" x="${esc(x(i) - w / 2)}" y="${esc(y(Math.max(0, v)))}" width="${esc(w)}" height="${Math.abs(y(Math.max(0, v)) - y(0))}" fill="${st.sel && st.sel.id === p.id ? '#1d3557' : '#56616d'}"><title>${esc((p.label || p.id) + ': ' + pct(v))}</title></rect>`;
         svg += `<rect data-tik="periode" data-p="${esc(p.id)}" x="${esc(ML + i * bw)}" y="${esc(HO - MB)}" width="${esc(bw)}" height="${esc(MB)}" fill="transparent"/><text x="${esc(x(i))}" y="${esc(HO - MB + 14)}" text-anchor="middle" font-size="11" fill="#666">${esc(p.label || p.id)}</text>`; });
-      vergelijkReeks(per, P => P.brutomarge_pct).forEach((r, k) => { svg += pad(r.w.map((v, i) => v == null ? null : [x(i), y(v)]), '#9aa3ad', 1.5, k ? '2 4' : '6 3'); leg.push([`border-top:2px ${k ? 'dotted' : 'dashed'} #9aa3ad;height:0`, String(r.jaar)]); });
+      vgl.forEach((r, k) => { svg += pad(r.w.map((v, i) => v == null ? null : [x(i), y(v)]), '#9aa3ad', 1.5, k ? '2 4' : '6 3'); leg.push([`border-top:2px ${k ? 'dotted' : 'dashed'} #9aa3ad;height:0`, String(r.jaar)]); });
       leg.unshift(['background:#56616d', 'brutomarge %']); if (bm) leg.push(['background:#e4e7eb', 'branche ' + bmTekst(bm) + (bm.bron ? ' (' + bm.bron + ')' : '')]);
       noot.push('Brutomarge = omzet − materiaal − uitbesteed werk, als % van de omzet. De as begint bij 0%.');
     } else if (g === 'opnames') {
       const namen = [...new Set(per.flatMap(p => Object.keys(p.P.prive)))];
-      const hoog = Math.max(1, ...per.map(p => Math.max(p.P.prive_totaal + p.P.aflossing, p.P.maanden ? p.P.resultaat : 0))), laag = Math.min(0, ...per.map(p => p.P.maanden ? p.P.resultaat : 0));
-      const sc = schaal(laag, hoog), y = v => MT + (HO - MT - MB) * (1 - (v - sc.a) / (sc.b - sc.a)); svg += assen(sc, y, kort);
+      const sc = C.schaalVoor([per.map(p => p.P.prive_totaal + p.P.aflossing), per.map(p => p.P.maanden ? p.P.resultaat : null)], { min: 0, max: 1 }), y = v => MT + (HO - MT - MB) * (1 - (v - sc.a) / (sc.b - sc.a)); svg += assen(sc, y, kort);
       per.forEach((p, i) => { let top = 0; const w = Math.max(4, bw * 0.55), x0 = x(i) - w / 2;
         namen.forEach((nm, k) => { const v = p.P.prive[nm] || 0; if (!(v > 0)) return; svg += `<rect data-tik="prive" data-p="${esc(p.id)}" x="${esc(x0)}" y="${esc(y(top + v))}" width="${esc(w)}" height="${esc(y(top) - y(top + v))}" fill="${esc(['#3f4a56', '#94a0ab', '#6b7682'][k % 3])}"><title>${esc(nm + ': ' + eur(v))}</title></rect>`; top += v; });
         if (p.P.aflossing > 0) svg += `<rect data-tik="aflossing" data-p="${esc(p.id)}" x="${esc(x0)}" y="${esc(y(top + p.P.aflossing))}" width="${esc(w)}" height="${esc(y(top) - y(top + p.P.aflossing))}" fill="url(#mtc-streep)"><title>aflossing ${esc(eur(p.P.aflossing))}</title></rect>`;
@@ -333,13 +345,14 @@
       noot.push('Opnames en aflossing komen uit het resultaat (of uit de kas als het resultaat niet genoeg is).');
     } else if (g === 'kas') {
       const pts = per.map(p => p.P.kas), prog = st.zoom === 'M' && st.jaar === Number(st.vandaag.slice(0, 4)) ? (st.kasProg || []) : [];
-      const alle = pts.filter(Boolean).flatMap(k => [k.lopend, k.met_btw]).concat(prog.flatMap(k => [k.lopend, k.met_btw])).filter(v => v != null);
-      const sc = schaal(Math.min(0, ...alle), Math.max(1, ...alle)), y = v => MT + (HO - MT - MB) * (1 - (v - sc.a) / (sc.b - sc.a)); svg += assen(sc, y, kort);
+      const vgl = vergelijkReeks(per, P => P.kas && P.kas.met_btw);
+      const alle = pts.filter(Boolean).flatMap(k => [k.lopend, k.met_btw]).concat(prog.flatMap(k => [k.lopend, k.met_btw]));
+      const sc = C.schaalVoor([alle, ...vgl.map(r => r.w)], { min: 0, max: 1 }), y = v => MT + (HO - MT - MB) * (1 - (v - sc.a) / (sc.b - sc.a)); svg += assen(sc, y, kort);
       svg += pad(pts.map((k, i) => k && k.met_btw != null ? [x(i), y(k.met_btw)] : null), '#1d3557', 2.5) + pad(pts.map((k, i) => k && k.lopend != null ? [x(i), y(k.lopend)] : null), '#7f8a96', 2);
       if (prog.length) { const xi = id => per.findIndex(p => p.id === id); svg += pad(prog.map(k => xi(k.id) >= 0 && k.met_btw != null ? [x(xi(k.id)), y(k.met_btw)] : null), '#1d3557', 2, '4 4') + pad(prog.map(k => xi(k.id) >= 0 && k.lopend != null ? [x(xi(k.id)), y(k.lopend)] : null), '#7f8a96', 1.5, '4 4'); }
       per.forEach((p, i) => { if (pts[i]) svg += `<circle data-tik="periode" data-p="${esc(p.id)}" cx="${esc(x(i))}" cy="${esc(y(pts[i].met_btw != null ? pts[i].met_btw : pts[i].lopend))}" r="${st.sel && st.sel.id === p.id ? 6 : 4}" fill="#1d3557"><title>${esc((p.label || p.id) + ': lopend + BTW-pot ' + eur(pts[i].met_btw) + ', lopend ' + eur(pts[i].lopend))}</title></circle>`;
         svg += `<rect data-tik="periode" data-p="${esc(p.id)}" x="${esc(ML + i * bw)}" y="${esc(HO - MB)}" width="${esc(bw)}" height="${esc(MB)}" fill="transparent"/><text x="${esc(x(i))}" y="${esc(HO - MB + 14)}" text-anchor="middle" font-size="11" fill="#666">${esc(p.label || p.id)}</text>`; });
-      vergelijkReeks(per, P => P.kas && P.kas.met_btw).forEach((r, k) => { svg += pad(r.w.map((v, i) => v == null ? null : [x(i), y(v)]), '#9aa3ad', 1.5, k ? '2 4' : '6 3'); leg.push([`border-top:2px ${k ? 'dotted' : 'dashed'} #9aa3ad;height:0`, String(r.jaar)]); });
+      vgl.forEach((r, k) => { svg += pad(r.w.map((v, i) => v == null ? null : [x(i), y(v)]), '#9aa3ad', 1.5, k ? '2 4' : '6 3'); leg.push([`border-top:2px ${k ? 'dotted' : 'dashed'} #9aa3ad;height:0`, String(r.jaar)]); });
       leg.unshift(['border-top:3px solid #1d3557;height:0', 'lopend + BTW-pot'], ['border-top:3px solid #7f8a96;height:0', 'lopend']);
       if (prog.length) leg.push(['border-top:2px dashed #1d3557;height:0', 'prognose (geldtijdlijn)']);
       noot.push('Stand op het maandeinde (balans in Moneybird). Een €-as die niet bij 0 begint, staat er niet: de as loopt altijd door 0.');
