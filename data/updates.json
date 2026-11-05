@@ -1,5 +1,18 @@
 [
   {
+    "versie": "2.34.2",
+    "datum": "2026-11-05",
+    "titel": "Cijfers: overzichtelijk dashboard met tegels en een betere grafiek",
+    "voor": "beheer",
+    "punten": [
+      "Bovenaan zes tegels: omzet, brutomarge, resultaat, de verwachting voor de komende 3 maanden, kaspositie en opnames. Elke tegel toont het verloop over het jaar en de vergelijking met vorig jaar, twee jaar terug en de branche. Die vergelijkingen zet je bovenaan aan of uit.",
+      "Klik op een tegel voor het volledige scherm met meer uitleg, grafieken en controleerbare zinnen over wat de cijfers zeggen.",
+      "De grafiek per maand toont vorige jaren als lijnen en de verwachting gestippeld vanaf \"vanaf hier verwachting\". Beweeg erover (of tik op de telefoon) voor de cijfers van die maand. Er is ook een tabelweergave en een volledig scherm.",
+      "Lijnen lopen niet meer uit de grafiek: de schaal past zich aan alle getoonde lijnen aan.",
+      "De losse meldingen tussen de cijfers staan nu achter één knop bovenaan (\"Gegevens t/m ... · aandachtspunten\").",
+      "De verwachting komt uit de forecast en is nog niet vergeleken met wat al gefactureerd is. Dat staat er ook bij."
+    ]
+  },{
     "versie": "2.34.1",
     "datum": "2026-11-04",
     "titel": "Offerte zonder project en Vectorworks-gegevens netter",

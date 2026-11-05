@@ -23,7 +23,7 @@
 </script>
 <meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BACKUP v2.34.0 — M&T Bedrijfstool v2 bèta</title>
+<title>BACKUP v2.34.1 — M&T Bedrijfstool v2 bèta</title>
 <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <!-- msal-browser lokaal gevendord (was jsdelivr @2 = 2.39.0, laatste v2-release).
@@ -927,7 +927,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1 class="mt-merkrij"><svg class="mt-merk" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><rect x="2" y="2" width="96" height="96"/><path d="M55.4 2 V31.3 H34.2 V67.3 H55.4 V98"/></svg><b class="mt-woord">mortise <em>&amp;</em> tenon</b></h1>
-    <span class="header-version">v2.34.0</span>
+    <span class="header-version">v2.34.1</span>
     <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
@@ -1290,7 +1290,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
             <div class="nieuw-lijst" role="menu" onclick="document.getElementById('proj-nieuw-menu').open=false">
               <button type="button" role="menuitem" data-recht="projecten:wijzigen" onclick="openModal()" title="Project zonder lead of offerte (bv. vaste klant of regiewerk); begint in Werkvoorbereiding">Direct project</button>
               <button type="button" role="menuitem" data-recht="projecten:wijzigen" onclick="openLeadModal()" title="Een nieuwe aanvraag: lead met een volgende actie">Lead</button>
-              <button type="button" role="menuitem" data-recht="offertes:wijzigen" onclick="nieuweOfferte()" title="Losse offerte-calculatie (voorcalculatie)">Offerte</button>
+              <button type="button" role="menuitem" data-recht="offertes:wijzigen" onclick="nieuweOfferte(null)" title="Losse offerte-calculatie, nog zonder project (koppelen of een project aanmaken kan later vanuit de offerte)">Offerte</button>
               <button type="button" role="menuitem" data-recht="projecten:wijzigen" onclick="tgOvernemenOpen()" title="Een Toggl-project dat nog bij geen project hoort in de tool zetten">Uit Toggl overnemen</button>
             </div>
           </details>
@@ -6585,6 +6585,24 @@ function _projKlantFilterChip(){
     ln=(lr&&lr.naam)||(vl&&vl.loc_naam)||f.loc; }
   return `<span class="proj-filterchip">Klant: ${esc(kn)}${ln?' › '+esc(ln):''}<button type="button" onclick="projKlantFilterWis()" aria-label="Klantfilter wissen" title="Filter wissen">✕</button></span>`;
 }
+// Losse offertes (nog zonder project) bovenaan de projectenlijst, zodat je ze na wegklikken terugvindt (Bart, 4-11).
+// Zelfde regel als "Losse offertes" in de Controlelijst; wat daar is afgehandeld (historie) staat hier ook niet meer.
+let _projLosseOpen=false;
+function _projLosseOffertes(){
+  let offs={}, besl=new Map();
+  try{ offs=_ctlOffertes()||{}; besl=ctlBesluitActueel(); }catch(e){ return []; }
+  return Object.entries(offs).filter(([k,o])=>o&&typeof o==='object'&&/^OFF-/i.test(k)&&!o.project_code&&!projVind(k)&&_CTL_OPEN(besl.get(k)))
+    .map(([k,o])=>({key:k,titel:String(o.titel||''),datum:String(o._gewijzigd||'').slice(0,10),status:String((o.meta&&o.meta.status)||'')}))
+    .sort((a,b)=>b.datum.localeCompare(a.datum));
+}
+function _projLosseBlok(el,filter){
+  const f=String(filter||'').toLowerCase(), l=_projLosseOffertes().filter(x=>!f||x.titel.toLowerCase().includes(f));
+  if(!l.length||typeof window.openLosseOfferte!=='function') return;
+  const E=_p2El, d=E('details',{class:'proj-losse',style:'margin:2px 0 8px'},E('summary',{style:'cursor:pointer;font-size:12px;font-weight:600;color:var(--text-dim);padding:2px 0',tekst:'Losse offertes ('+l.length+')',title:'Offertes die nog niet aan een project hangen. Koppelen of een project aanmaken doe je vanuit de offerte.'}),
+    l.map(x=>E('div',{class:'factuur-item',klik:()=>openLosseOfferte(x.key)},E('div',{class:'factuur-item-naam',tekst:x.titel||'(zonder titel)'}),E('div',{class:'factuur-item-sub',tekst:[x.status,x.datum].filter(Boolean).join(' · ')||'nog niet gekoppeld'}))));
+  d.open=_projLosseOpen; d.addEventListener('toggle',()=>{ _projLosseOpen=d.open; });
+  el.prepend(d);
+}
 function renderProjectLijst(filter=''){
   const el=document.getElementById('project-lijst');if(!el) return;
   const chip=document.getElementById('project-filterchip'); if(chip) chip.innerHTML=_projKlantFilterChip();
@@ -6598,13 +6616,14 @@ function renderProjectLijst(filter=''){
       <div class="factuur-item-naam" title="${esc(projNaamVol(p))}">${PF&&PF.selectieModus?`<input type="checkbox" class="pf-rij-vink" ${PF.selectie.has(p.code)?'checked':''} onclick="event.stopPropagation()" onchange="MTProjFilter.selecteer(${jsArg(p.code)},this.checked)" aria-label="Selecteren">`:''}${esc(projNaamVol(p))}</div>
       <div class="factuur-item-sub"><span class="factuur-item-klant">${esc(projKlantNaam(p))}</span>${projTag(p)}${p.fase&&window.MTLead?` <span class="fase-chip fase-${esc(p.fase)}">${esc(MTLead.label(p.fase))}</span>`:''}</div>
     </div>`;
-  if(!PF){ el.innerHTML=projSorteerNieuwst(gefilterd).map(rij).join(''); if(typeof vandaagTeken==='function') vandaagTeken(); return; }
+  if(!PF){ el.innerHTML=projSorteerNieuwst(gefilterd).map(rij).join(''); if(!_projKlantFilter) _projLosseBlok(el,filter); if(typeof vandaagTeken==='function') vandaagTeken(); return; }
   _pfStart();
   const taken=_pfTaken(), r=PF.verwerk(gefilterd.map((p,i)=>_pfItem(p,i,taken)),huidigProject&&huidigProject.code), perCode=new Map(gefilterd.map(p=>[p.code,p]));
   if(!r.lijst.length) el.innerHTML='<div class="pf-leeg">Geen projecten met deze filters.</div>';
   else if(r.groepen){ const gk=PF.stand().groep;
     el.innerHTML=r.groepen.map(g=>`<div class="pf-kop${PF.dicht(gk+':'+g.key)?' dicht':''}"><button type="button" aria-expanded="${esc(!PF.dicht(gk+':'+g.key))}" onclick="MTProjFilter.kopWissel(${jsArg(gk+':'+g.key)})">${esc(g.label)} <span class="n">(${esc(g.aantal)})</span></button></div>${PF.dicht(gk+':'+g.key)?'':g.items.map(x=>rij(perCode.get(x.code))).join('')}`).join(''); }
   else el.innerHTML=r.lijst.map(x=>rij(perCode.get(x.code))).join('');
+  if(!_projKlantFilter) _projLosseBlok(el,filter);
   window._pfZichtbaar=r.lijst.map(x=>x.code);
   try{ projOverzichtTeken(); }catch(e){ console.warn('Projectenoverzicht:',e); }
   if(typeof vandaagTeken==='function') vandaagTeken();
@@ -12451,7 +12470,8 @@ function projGegevensVoorstel(proj){
     // Contactpersoon: de naam op de kaart, anders de eerste contactpersoon van het bedrijf in Moneybird (contact_people).
     const cp=(!mb.firstname&&!mb.lastname&&Array.isArray(mb.contact_people))?mb.contact_people.find(x=>x&&(x.firstname||x.lastname)):null, bron=cp||mb;
     if(bron.firstname) uit.voornaam=String(bron.firstname).trim(); if(bron.lastname) uit.achternaam=String(bron.lastname).trim(); }
-  if(proj.product_naam) uit.projectonderdeel=String(proj.product_naam).trim();
+  // Onderdeel = product, maar niet als dat precies de projectnaam is (dan staat in interiorcad twee keer hetzelfde; Bart, 3-11).
+  if(proj.product_naam&&String(proj.product_naam).trim().toLowerCase()!==String(projNaamKort(proj)||'').trim().toLowerCase()) uit.projectonderdeel=String(proj.product_naam).trim();
   const plan=(typeof planVoor==='function')?planVoor(proj.code):null;
   const lev=plan&&Array.isArray(plan.fases)?plan.fases.find(f=>f&&['levering','montage','oplevering'].includes(f.key)&&/^\d{4}-\d{2}-\d{2}$/.test(String(f.eind||''))):null;
   if(lev) uit.leverdatum=lev.eind;
@@ -20591,6 +20611,9 @@ function activiteitOpen(force){
       _calcProjKeuze[projectCode]=key;
       saveCalc('off',{key:key});
       if(typeof renderProjectDetail==='function' && typeof huidigProject!=='undefined' && huidigProject && huidigProject.code===projectCode){
+        // Het calculatiepaneel blijft na de eerste keer bewaard (_PROJ_BLIJVEND) en zou anders het oude "Nog geen calculatie"
+        // blijven tonen: er gebeurde dan niets tot het project opnieuw getekend werd, bv. na een fasewissel (Mathijs, 3-11).
+        const oudPan=document.querySelector('#proj-sectie-inhoud .proj-paneel[data-sectie="calculatie"]'); if(oudPan) delete oudPan.dataset.klaar;
         if(typeof projSectieKies==='function') projSectieKies('calculatie'); else renderProjectDetail(huidigProject);
         setTimeout(()=>{const el=document.getElementById('offerte-calc-'+cid(key))||document.getElementById('offerte-calc-'+cid(projectCode)); if(el) el.scrollIntoView({behavior:'smooth',block:'start'});},200);
       } else { openStandalone(key); }
@@ -20598,6 +20621,13 @@ function activiteitOpen(force){
     }
     const key='OFF-'+Date.now().toString(36).toUpperCase();
     const o=getOfferte(key); o.titel='Nieuwe offerte'; saveCalc('off',{key:key});
+    openStandalone(key);
+    if(typeof renderProjectLijst==='function') renderProjectLijst();   // meteen zichtbaar in "Losse offertes"
+  };
+  // Een losse offerte weer openen vanuit "Losse offertes" in de projectenlijst (nooit een nieuwe aanmaken: getOfferte zou dat doen).
+  window.openLosseOfferte=async function(key){
+    await hydrateCalc();
+    if(!CALC.offertes[key]) return mtDialog.alert({title:'Offerte',message:'Deze offerte bestaat niet meer (of is intussen aan een project gekoppeld).'});
     openStandalone(key);
   };
   // Vanuit een geopende mail (inbox) → nieuwe offerte-calculatie met die mail als context.

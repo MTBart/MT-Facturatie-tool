@@ -5,6 +5,21 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-11-05 — Cijfers: Codex-review verwerkt (feitzinnen, schaal, grootste klanten, forecast-label)
+- Commit: `b808b78` | Auteur: Bart Witte
+
+## 2026-11-05 — Cijfers: Opnames-tegel in plaats van lege Debiteuren-tegel
+- Commit: `53714cf` | Auteur: Bart Witte
+
+## 2026-11-05 — Cijfers: nieuw dashboard (tegels, statusknop, hoofdgrafiek, volledig-scherm-panelen, telefoonlayout)
+- Commit: `281d56b` | Auteur: Bart Witte
+
+## 2026-11-05 — Cijfers: schaal centraal (alle getekende waarden eerst verzamelen), test met nep-gegevens
+- Commit: `c7ee00f` | Auteur: Bart Witte
+
+## 2026-11-04 — Release v2.34.1: + Nieuw > Offerte altijd losse offerte, vak "Losse offertes" in de projectenlijst, nieuwe calculatie bij open project zichtbaar, VW projectgegevens (leverdatum "23 november", onderdeel leeg als gelijk aan naam); backup = v2.34.0
+- Commit: `3544f46` | Auteur: Bart Witte
+
 ## 2026-11-04 — Merge vw-gegevens: VW projectgegevens, calculatie-fix, losse offertes
 - Commit: `c7d77ee` | Auteur: Bart Witte
 
