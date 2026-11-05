@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-11-05 — Release v2.34.6: tegel Besteedbaar budget in Cijfers, Financiën in de stijl van Cijfers met statusknop en uitklapbare blokken; backup = v2.34.5
+- Commit: `7e4ec6b` | Auteur: Bart Witte
+
 ## 2026-11-05 — Merge financien-stijl: tegel Besteedbaar budget en restyle Financien
 - Commit: `dc3a54c` | Auteur: Bart Witte
 
