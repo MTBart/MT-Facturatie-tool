@@ -6,20 +6,22 @@
   // Seizoensvorm (jan..dec) in duizenden euro omzet per jaar; verzonnen.
   const OMZET = { 2022: [20, 22, 26, 25, 28, 30, 24, 18, 29, 31, 28, 25], 2023: [25, 27, 32, 31, 34, 37, 29, 22, 35, 38, 34, 30], 2024: [29, 33, 38, 40, 42, 47, 35, 28, 44, 48, 46, 41], 2025: [34, 37, 45, 44, 49, 52, 40, 31, 50, 55, 53, 47], 2026: [38, 41, 52, 47, 55, 61, 44, 36, 58, 63, 21] };
   const d2 = n => String(n).padStart(2, '0');
-  function maanden(tot) {
+  // o.inhuur: categorie "Vaste inhuur" (4000 per maand, afgetrokken van personeel: het totaal blijft gelijk)
+  function maanden(tot, o) {
     const uit = [];
     for (const j of Object.keys(OMZET).map(Number)) OMZET[j].forEach((k, i) => {
       const id = `${j}-${d2(i + 1)}`; if (id > tot) return;
       const omzet = k * 1000, mat = Math.round(omzet * (0.27 + 0.015 * ((i * 5 + j) % 5) + (j >= 2026 ? -0.02 : 0))), ub = Math.round(omzet * 0.07), pers = 12000 + (j - 2022) * 400, huis = 2100, ov = 1800 + (i % 3) * 300;
-      const kosten = { materiaal: mat, uitbesteed: ub, personeel: pers, huisvesting: huis, overig: ov }, kt = mat + ub + pers + huis + ov, res = omzet - kt;
+      const ih = o && o.inhuur ? 4000 : 0, kosten = Object.assign({ materiaal: mat, uitbesteed: ub, personeel: pers - ih, huisvesting: huis, overig: ov }, o && o.inhuur ? { inhuur: ih } : {}), kt = mat + ub + pers + huis + ov, res = omzet - kt;
       uit.push({ id, maanden: 1, omzet, kosten, kosten_totaal: kt, correctie: j >= 2025 ? 3200 : 0, correctie_soort: j >= 2025 ? { netto: 2000, loonheffing: 900, pensioen: 300 } : { netto: 0, loonheffing: 0, pensioen: 0 },
         prive: { Eigenaar: 4000 }, aflossing: 1500, kas: { maand: id, lopend: 30000 + (j - 2022) * 6000 + i * 2500 + Math.round(res / 4), met_btw: 42000 + (j - 2022) * 6000 + i * 2500 + Math.round(res / 4) } });
     });
     return uit;
   }
   // Antwoord zoals de worker het geeft; "tot" = laatste maand met gegevens (de lopende maand is deels gevuld).
-  function antwoord(tot) {
-    return { perioden: maanden(tot || '2026-11'), categorieen: CATS, benchmarks: { brutomarge: { van: 50, tot: 56, bron: 'CBS' }, resultaat: { van: 10, tot: 13, bron: 'CBS' } }, benchmarks_bron: 'standaard',
+  function antwoord(tot, o) {
+    const cats = o && o.inhuur ? CATS.slice(0, 3).concat([{ id: 'inhuur', naam: 'Vaste inhuur' }], CATS.slice(3)) : CATS;
+    return { perioden: maanden(tot || '2026-11', o), categorieen: cats, benchmarks: { brutomarge: { van: 50, tot: 56, bron: 'CBS' }, resultaat: { van: 10, tot: 13, bron: 'CBS' } }, benchmarks_bron: 'standaard',
       ontbrekend: [], compleet: true, correctie_van: '2025-01', indeling_voorstel: 0, niet_ingedeeld: [], waarschuwingen: [], equity_niet_ingedeeld: [], mislukt: [] };
   }
   // Prognose-items (termijnen incl. btw) voor de komende maanden.
