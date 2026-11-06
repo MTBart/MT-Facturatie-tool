@@ -778,7 +778,7 @@
   function besteedPaneel(breedte) {
     const t = besteedTegelModel(), m = t.m, kop = ee('div', { class: 'mtd-pkop' }, ee('div', { class: 'mtd-pkop-l' }, ee('button', { class: 'mtd-kn ico', 'data-sluitpaneel': '1', 'data-fk': 'sluit', 'aria-label': 'Sluiten en terug naar cijfers' }, '✕'),
       ee('div', null, ee('h1', null, 'Besteedbaar budget'), ee('span', { class: 'mtc-noot' }, m.ok ? `stand van ${datLang(m.vandaag)} · zelfde getal als in Financiën` : 'niet beschikbaar'))),
-      ee('div', { class: 'mtd-pkop-r' }, document.getElementById('tab-btn-geld') && typeof root.showTab === 'function' ? ee('button', { class: 'mtd-kn', 'data-naarfin': '1', 'data-fk': 'naar-fin' }, 'Naar Financiën →') : null));
+      ee('div', { class: 'mtd-pkop-r' }, document.getElementById('tab-btn-geld') && document.getElementById('tab-btn-geld').style.display !== 'none' && typeof root.showTab === 'function' ? ee('button', { class: 'mtd-kn', 'data-naarfin': '1', 'data-fk': 'naar-fin' }, 'Naar Financiën →') : null));
     if (!t.ok) return [kop, ee('div', { class: 'mtc-kaart mtc-noot' }, `Het besteedbaar budget kan nu niet worden getoond: ${t.sub}.`)];
     const zoek = ee('div', { class: 'mtd-bar' }, ee('div', { class: 'mtc-groep', role: 'group', 'aria-label': 'Periode' }, Object.keys(BES_ZOOM).map(z => ee('button', { 'data-bzoom': z, 'data-fk': 'bzoom-' + z, class: m.zoom === z ? 'aan' : '', 'aria-pressed': String(m.zoom === z) }, z))),
       ee('span', { class: 'mtc-noot' }, `Noodbuffer ${m.nood ? 'telt mee' : 'telt niet mee'} · prognose ${m.prognose ? 'aan' : 'uit'} · zoals ingesteld in Financiën`));
