@@ -330,7 +330,7 @@
       if (!r || r.error) { st.fout = (r && r.error) || 'geen antwoord'; break; }
       st.maanden = r.perioden || []; st.cats = (r.categorieen || []).map(c => c.id).filter(c => c !== 'inhuur' || st.maanden.some(m => ((m.kosten || {}).inhuur || 0) !== 0)); st.catNaam = Object.fromEntries((r.categorieen || []).map(c => [c.id, c.naam]));
       st.bm = r.benchmarks || {}; st.bmBron = r.benchmarks_bron; st.ontbrekend = r.ontbrekend || []; st.correctieVan = r.correctie_van; st.voorstel = r.indeling_voorstel || 0;
-      st.nietIngedeeld = r.niet_ingedeeld || []; st.waarsch = r.waarschuwingen || []; st.equityOver = r.equity_niet_ingedeeld || [];
+      st.nietIngedeeld = r.niet_ingedeeld || []; st.waarsch = r.waarschuwingen || []; st.inhuurAfw = (r.inhuur && r.inhuur.afwijkingen) || []; st.equityOver = r.equity_niet_ingedeeld || [];
       (r.mislukt || []).forEach(m => mislukt.add(m)); st.mislukt = [...mislukt].filter(m => st.ontbrekend.includes(m)).sort();
       teken();
       // stoppen als alles wat nog ontbreekt al eens mislukte (Moneybird gaf het niet): niet blijven proberen
@@ -545,6 +545,7 @@
     if ((st.mislukt || []).length) aandacht.push(`${st.mislukt.length} ${pl(st.mislukt.length, 'maand kon', 'maanden konden')} niet worden opgehaald (${st.mislukt.map(maandNaam).join(', ')}) — probeer later opnieuw.`);
     if (st.fout && st.maanden.length) aandacht.push('Laatste aanvulling mislukte: ' + st.fout);
     for (const w of st.waarsch || []) { const x = typeof w === 'string' ? w : w && (w.tekst || w.melding || w.bericht); if (x) aandacht.push(String(x)); }
+    for (const x of (st.inhuurAfw || []).slice(0, 6)) aandacht.push(`Vaste inhuur ${maandNaam(x.maand)}: ${kort(x.factuur - (x.verschoven || 0))} aan factuurregels is niet verschoven, want het W&V-grootboek staat die maand lager (${kort(x.wv)}).`);
     if ((st.nietIngedeeld || []).length) aandacht.push(`Niet ingedeeld: ${st.nietIngedeeld.map(x => typeof x === 'string' ? x : (x && (x.naam || x.ledger)) || '').filter(Boolean).join(', ')}.`);
     const pr = C.prognose(st.maanden, st.prognoseRuw, st.vandaag, st.eerlijk, st.cats), zonderOmzet = pr.maanden.filter(m => m.kosten_ref && !m.omzet);
     if (pr.maanden.some(m => m.geen_historie)) aandacht.push('Onvoldoende historie voor een prognose van kosten en resultaat: alleen de verwachte omzet staat in de forecast.');

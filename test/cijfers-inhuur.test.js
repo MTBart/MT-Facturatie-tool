@@ -46,5 +46,10 @@ const vergelijk = () => { const per = C.periodes(st.maanden, 'J', 2026, '2026-10
     assert.ok(!(await laad(oud)).includes('inhuur'), 'categorie genoemd, maar maandrecords zonder veld: geen crash, niet getoond');
     assert.ok((await laad(Nep.antwoord('2026-11', { inhuur: true }))).includes('inhuur'));
   });
+  await test('aandachtspunt: een begrensde maand staat met maand en niet-verschoven bedrag in het statuspaneel', () => {
+    zet({ inhuur: true }); st.inhuurAfw = []; assert.ok(!C.statusItems().aandacht.some(t => /Vaste inhuur/.test(t)));
+    st.inhuurAfw = [{ maand: '2026-03', ledger: '700200', factuur: 900, wv: 300, verschoven: 300 }];
+    const t = C.statusItems().aandacht.find(x => /Vaste inhuur/.test(x)); assert.ok(t && /600/.test(t) && /mrt|maart/i.test(t), t);
+  });
   console.log(`\n${n} tests geslaagd`);
 })();

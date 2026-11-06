@@ -4022,6 +4022,7 @@ async function geldCijferData(env, get, budget, maanden, cfg, ledgers, w, herbou
 // Vaste inhuur: de regels van één leverancier op de ingestelde grootboeken, per maand (documentdatum, zoals de W&V). Eigen KV-cache per jaar
 // ({ sleutel, as_of, herbouw?, maanden: { MM: { grootboek: bedrag } } }): een afgesloten jaar blijft staan (mits gebouwd na afloop van dat jaar), het lopende jaar
 // geldt één dag. De sleutel vervalt zodra contact of grootboeken wijzigen. Een onvolledige lijst wordt niet opgeslagen: dat jaar staat dan in onvolledig en verschuift niet.
+const GELD_INHUUR_V = 2;   // versie van de inhuurcache; een oudere (andere selectieregels) wordt altijd opnieuw opgehaald
 const GELD_INHUUR_STATES = ['open', 'late', 'pending_payment', 'paid'];
 const geldInhuurLeds = (ih, idl) => ih ? ih.ledgers.filter(l => idl.cat[l] && idl.cat[l] !== 'inhuur') : [];
 const geldInhuurContact = d => d.contact_id != null ? d.contact_id : d.contact && d.contact.id;
@@ -4044,12 +4045,12 @@ async function geldInhuurData(env, get, budget, maanden, cfg, w, herbouwJaar) {
   const vandaag = geldVandaag(), sleutel = `${ih.contact_id}|${[...ih.ledgers].sort().join(',')}`, uit = { maand: {}, onvolledig: new Set() };
   for (const j of [...new Set(maanden.map(m => m.slice(0, 4)))]) {
     let c = await kvJson(env, `${GELD_CIJ}inhuur:${j}`);
-    const vers = c && c.sleutel === sleutel && c.maanden && (j === vandaag.slice(0, 4) ? c.as_of === vandaag : String(c.as_of || '') > j + '-12-31') && !(j === herbouwJaar && c.herbouw !== vandaag);
+    const vers = c && c.v === GELD_INHUUR_V && c.sleutel === sleutel && c.maanden && (j === vandaag.slice(0, 4) ? c.as_of === vandaag : String(c.as_of || '') > j + '-12-31') && !(j === herbouwJaar && c.herbouw !== vandaag);
     if (!vers) {
       const w2 = [], l = await geldLijst(get, `documents/purchase_invoices?filter=period:${j}0101..${j}1231,contact_id:${ih.contact_id},state:${GELD_INHUUR_STATES.join('|')}`, w2, 'vaste inhuur');
       const r = l.onvolledig ? null : geldInhuurRegels(l.lijst, ih);
       if (!r) { uit.onvolledig.add(j); w.push({ onvolledig: true, bron: 'vaste inhuur ' + j, fout: (w2[0] && w2[0].fout) || 'onvolledig', status: w2[0] && w2[0].status }); continue; }
-      c = { v: 1, sleutel, as_of: vandaag, herbouw: j === herbouwJaar ? vandaag : undefined, maanden: r };
+      c = { v: GELD_INHUUR_V, sleutel, as_of: vandaag, herbouw: j === herbouwJaar ? vandaag : undefined, maanden: r };
       try { await kvZet(env, `${GELD_CIJ}inhuur:${j}`, c); } catch (e) { w.push({ bron: 'cijfers-opslag', fout: String(e.message || e).slice(0, 80) }); }
     }
     for (const [mm, o] of Object.entries(c.maanden)) uit.maand[`${j}-${mm}`] = o;
@@ -4230,7 +4231,7 @@ async function geldCijfersRoute(p, env, url, R, json) {
   const ih = await geldInhuurData(env, get, budget, maanden, cfg, w, herbouwJaar);   // eerst: kost één verzoek per jaar en moet compleet zijn voor de verschuiving
   const { recs, ontbrekend, mislukt } = await geldCijferData(env, get, budget, maanden, cfg, ledgers, w, herbouwJaar);
   const r = geldCijferReeksen(recs, maanden, per, idl, ledgers, cc, cfg, ih);
-  if (r.inhuur_afwijkingen.length) w.push({ onvolledig: true, bron: 'vaste inhuur', fout: `factuurregels hoger dan het W&V-grootboek in ${[...new Set(r.inhuur_afwijkingen.map(x => x.maand))].sort().slice(0, 6).join(', ')}: het deel erboven is niet verschoven` });
+  if (r.inhuur_afwijkingen.length) w.push({ bron: 'vaste inhuur', fout: `factuurregels hoger dan het W&V-grootboek in ${[...new Set(r.inhuur_afwijkingen.map(x => x.maand))].sort().slice(0, 6).join(', ')}: het deel erboven is niet verschoven` });
   const ni = Object.entries(r.niet_ingedeeld).map(([id, x]) => ({ ledger: id, naam: (ledgers[id] || {}).naam || id, bedrag: x }));
   return json({ per, van: maanden[0], tot: maanden[maanden.length - 1], perioden: r.perioden, categorieen: GELD_CATS.map(([id, naam]) => ({ id, naam })),
     benchmarks: cc.benchmarks || GELD_CIJ_BRANCHE, benchmarks_bron: cc.benchmarks ? 'instelling' : 'standaard', correctie_van: cc.correctie_van || `${huidig.slice(0, 4)}-01`,

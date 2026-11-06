@@ -118,7 +118,10 @@ const { pathToFileURL } = require('url');
   // 9. begrensd (factuurregels > W&V) via de route en het detail; document zonder contact of state
   const wvLaag = { [M3]: { [LD]: 300, [LM]: 200, [LK]: 50 }, [M4]: wv[M4] }, bg = maakOmgeving(aan, { wv: wvLaag }), rb = await hoofd(bg), b3 = P(rb, M3);
   assert.strictEqual(b3.kosten.inhuur, 300); assert.strictEqual(b3.kosten.uitbesteed, 0); assert.ok(b3.kosten.uitbesteed >= 0 && b3.kosten_totaal === 550, 'totaal gelijk, niets negatief');
-  assert.ok(rb.x.waarschuwingen.some(x => x.onvolledig && x.bron === 'vaste inhuur')); assert.strictEqual(rb.x.inhuur.begrensd, true); assert.strictEqual(rb.x.inhuur.afwijkingen[0].maand, M3);
+  assert.ok(rb.x.waarschuwingen.some(x => x.bron === 'vaste inhuur' && !x.onvolledig), 'aandachtsregel zonder onvolledig'); assert.ok(!rb.x.waarschuwingen.some(x => x.onvolledig), 'geen onvolledig-waarschuwing: de Koersmeter blijft oordelen'); assert.strictEqual(rb.x.compleet, true);
+  { const o2 = maakOmgeving(aan); await hoofd(o2); const sl = `geld:cijfers:inhuur:${Y}`, c = JSON.parse(o2.m.get(sl)); assert.strictEqual(c.v, 2);
+    o2.m.set(sl, JSON.stringify(Object.assign(c, { v: 1 }))); const voor = o2.tel.ink.length; await hoofd(o2); assert.strictEqual(o2.tel.ink.length, voor + 1, 'cache met oudere versie wordt opnieuw opgehaald'); assert.strictEqual(JSON.parse(o2.m.get(sl)).v, 2);
+    await hoofd(o2); assert.strictEqual(o2.tel.ink.length, voor + 1, 'daarna weer uit de cache'); } assert.strictEqual(rb.x.inhuur.begrensd, true); assert.strictEqual(rb.x.inhuur.afwijkingen[0].maand, M3);
   const e1 = await d(bg, 'inhuur'), e2 = await d(bg, 'uitbesteed');
   assert.strictEqual(e1.totaal_wv, 300); assert.strictEqual(e1.onvolledig, true, 'niet exact toe te wijzen: onvolledig');
   assert.strictEqual(e2.totaal_wv, 0); assert.strictEqual(e2.onvolledig, true); assert.strictEqual(e1.totaal_wv + e2.totaal_wv, 300, 'samen het grootboek (W&V)');
