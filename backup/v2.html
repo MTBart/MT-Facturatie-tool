@@ -24,7 +24,7 @@
 </script>
 <meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BACKUP v2.34.5 — M&T Bedrijfstool v2 bèta</title>
+<title>BACKUP v2.34.6 — M&T Bedrijfstool v2 bèta</title>
 <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <!-- msal-browser lokaal gevendord (was jsdelivr @2 = 2.39.0, laatste v2-release).
@@ -94,14 +94,14 @@
 <!-- Zijbalk van de nieuwe stijl (alleen actief met data-stijl="nieuw"); bouwt op de bestaande .tab-btn-knoppen -->
 <script src="mt-iconen.js?v=2026-11-01a" defer></script>
 <script src="mt-zijbalk.js?v=2026-11-05a" defer></script>
-<script src="mt-geld.js?v=2026-10-29a"></script>
+<script src="mt-geld.js?v=2026-11-05d"></script>
 <script src="mt-forecast.js?v=2026-11-02i"></script>
 <script src="mt-forecast-light.js?v=2026-11-05a"></script>
 <script src="mt-koers.js?v=2026-10-23a"></script>
 <script src="mt-schulden.js?v=2026-10-12a"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
 <script src="mt-verhuis.js?v=2026-10-23k7"></script>
-<script src="mt-cijfers.js?v=2026-11-05b"></script>
+<script src="mt-cijfers.js?v=2026-11-05e"></script>
 <script src="mt-rapport.js?v=2026-11-05a"></script>
 <script src="mt-calcopslag.js?v=2026-10-23a"></script>
 <script src="calc-engine.js"></script>
@@ -950,7 +950,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1 class="mt-merkrij"><svg class="mt-merk" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><rect x="2" y="2" width="96" height="96"/><path d="M55.4 2 V31.3 H34.2 V67.3 H55.4 V98"/></svg><b class="mt-woord">mortise <em>&amp;</em> tenon</b></h1>
-    <span class="header-version">v2.34.5</span>
+    <span class="header-version">v2.34.6</span>
     <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
@@ -17360,7 +17360,7 @@ function rapportOpen(){
   const el=document.getElementById('rapport-root'); if(!el||!window.MTRapport) return;
   if(!window.MTRol||!MTRol.me){ if(!rapportOpen._wacht){ rapportOpen._wacht=true; window.addEventListener('mt-rol',()=>{ rapportOpen._wacht=false; geldTabZet(); },{once:true}); } el.innerHTML='<div class="dos-meta">Laden…</div>'; return; }
   if(!geldNieuw()||!MTRol.magGeld()){ el.innerHTML='<div class="card">Rapporten zijn alleen voor eigenaren en de administratie.</div>'; return; }
-  if(el.dataset.gestart){ MTRapport.laad(); return; }
+  if(el.dataset.gestart){ MTRapport.laad(); try{ if(window.MTCijfers&&MTCijfers.ververs) MTCijfers.ververs(); }catch(e){} return; }
   el.dataset.gestart='1';
   MTRapport.start(el,{bron:{haal:geldHaal},magWijzigen:MTRol.magGeld('wijzigen'),magVragen:!(window.MTKijk&&MTKijk.aan),wie:(typeof mtMijEmail==='function'&&mtMijEmail())||'',opBadge:rapportBadge});
 }

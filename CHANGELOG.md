@@ -5,11 +5,44 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-11-06 — Merge rapporten-plek: Rapporten vooraan, Financiën alleen voor Bart, nieuwe grafieken Cijfers
+- Commit: `f889cfe` | Auteur: Bart Witte
+
+## 2026-11-06 — Rapporten op de plek van Financiën, tabknop Financiën tijdelijk alleen voor Bart
+- Commit: `1d939e7` | Auteur: Bart Witte
+
+## 2026-11-06 — Merge cijfers-visueel: grafieken, kwartaal in de breedte, stapelgrafiek en oordelen
+- Commit: `73ca908` | Auteur: Bart Witte
+
+## 2026-11-05 — Pages opnieuw publiceren: derde poging voor v2.34.6 na vastgelopen deploy 7e4ec6b
+- Commit: `847750a` | Auteur: Bart Witte
+
+## 2026-11-05 — Cijfers: 429 alleen via status of HTTP 429, wachttimer in st en opgeruimd, credit is geen verlies in de 100%-balk
+- Commit: `f2efd8a` | Auteur: Bart Witte
+
+## 2026-11-05 — Cijfers: rapportsectie kosten opent Brutomarge met rij open, eerlijke 100%-balk, leveranciers laden met 429-wachttijd en cache, tooltip dekt label niet af
+- Commit: `6f2e223` | Auteur: Bart Witte
+
+## 2026-11-05 — Cijfers: geen punten-verschil tonen bij in lijn met de branche
+- Commit: `b0a3c40` | Auteur: Bart Witte
+
 ## 2026-11-05 — Pages opnieuw publiceren: deploy f37cb2f geweigerd omdat 7e4ec6b nog als lopend stond
 - Commit: `9d98294` | Auteur: Bart Witte
 
+## 2026-11-05 — Cijfers: brutomarge met branche-band en oordeelrij, kosten tegenover de branche in twee groepen met uitklap per rij
+- Commit: `ed8ae1c` | Auteur: Bart Witte
+
+## 2026-11-05 — Cijfers: omzetlijn met jaarlabels, dominante lijn voor dit jaar en een zin voor of achter op vorig jaar
+- Commit: `1745a8a` | Auteur: Bart Witte
+
+## 2026-11-05 — Cijfers: stapelgrafiek Waar ging de omzet heen met vergelijking tegenover vorige jaren en branche, oordeelconstanten
+- Commit: `23d424f` | Auteur: Bart Witte
+
 ## 2026-11-05 — Pages opnieuw publiceren: deploy van v2.34.6 (7e4ec6b) mislukte, build was geslaagd
 - Commit: `f37cb2f` | Auteur: Bart Witte
+
+## 2026-11-05 — Cijfers: één periodetabel die Maand/Kwartaal/Jaar volgt, vaste categoriekleuren en tokens met donkere modus
+- Commit: `a5a81eb` | Auteur: Bart Witte
 
 ## 2026-11-05 — Release v2.34.6: tegel Besteedbaar budget in Cijfers, Financiën in de stijl van Cijfers met statusknop en uitklapbare blokken; backup = v2.34.5
 - Commit: `7e4ec6b` | Auteur: Bart Witte

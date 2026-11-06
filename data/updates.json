@@ -1,5 +1,15 @@
 [
   {
+    "versie": "2.34.7",
+    "datum": "2026-11-06",
+    "titel": "Rapporten vooraan en duidelijkere grafieken in Cijfers",
+    "voor": "geld",
+    "punten": [
+      "Rapporten staat nu op de plek van Financiën en is de startpagina. Financiën is tijdelijk verborgen tot de indeling beter is; Forecast blijft gewoon staan.",
+      "De periodetabel staat nu in de breedte, net als in Forecast, en Per maand toont echt de maanden. Een stapelgrafiek laat per maand zien waar de omzet heen ging.",
+      "Brutomarge en de kosten tegenover de branche zijn grafischer, met duidelijk goed of niet goed tegenover de branche en voorgaande jaren. Kostenposten kun je openklikken voor de uitsplitsing."
+    ]
+  },{
     "versie": "2.34.6",
     "datum": "2026-11-05",
     "titel": "Tegel Besteedbaar budget en Financiën in een nieuwe stijl",
