@@ -29,7 +29,7 @@ const { pathToFileURL } = require('url');
       const u = decodeURIComponent(String(url)), ok = x => ({ ok: true, status: 200, headers: new Map(), json: async () => x, text: async () => JSON.stringify(x) });
       if (u.includes('ledger_accounts')) return ok(ledgerLijst);
       let mm = /reports\/profit_loss\?period=(\d{4})(\d{2})/.exec(u);
-      if (mm) { const r = wv[`${mm[1]}-${mm[2]}`] || {}, tot = Object.values(r).reduce((a, x) => a + x, 0), omzet = r[LD] ? 5000 : 0;
+      if (mm) { const r = (opties.wv || wv)[`${mm[1]}-${mm[2]}`] || {}, tot = Object.values(r).reduce((a, x) => a + x, 0), omzet = r[LD] ? 5000 : 0;
         return ok({ total_revenue: String(omzet), net_profit: String(omzet - tot), gross_profit: '0', revenue_by_ledger_account: { ledger_accounts: omzet ? [{ ledger_account_id: LO, value: String(omzet) }] : [] },
           direct_costs_by_ledger_account: { ledger_accounts: [LD, LM].filter(l => r[l]).map(l => ({ ledger_account_id: l, value: String(r[l]) })) }, expenses_by_ledger_account: { ledger_accounts: r[LK] ? [{ ledger_account_id: LK, value: String(r[LK]) }] : [] } }); }
       if (u.includes('reports/balance_sheet')) return ok({});
@@ -71,7 +71,7 @@ const { pathToFileURL } = require('url');
   assert.strictEqual(a3.kosten_totaal, u3.kosten_totaal, 'totaal kosten gelijk'); assert.strictEqual(a3.resultaat, u3.resultaat, 'resultaat gelijk'); assert.strictEqual(a3.wijkt_af, u3.wijkt_af);
   assert.strictEqual(a3.brutomarge, u3.brutomarge + 900, 'brutomarge stijgt met de verschoven inhuur'); assert.ok(a3.brutomarge_pct > u3.brutomarge_pct);
   const a4 = P(ra, M4); assert.strictEqual(a4.kosten.inhuur, 800, 'concept-factuur telt niet'); assert.strictEqual(a4.kosten.uitbesteed, 0);
-  assert.deepStrictEqual(ra.x.inhuur, { aan: true, onvolledig: [], afwijkingen: [] });
+  assert.deepStrictEqual(ra.x.inhuur, { aan: true, begrensd: false, onvolledig: [], afwijkingen: [] });
   ok('instelling aan: alleen contact + grootboek verschuift, creditnota telt, totaal/resultaat gelijk, brutomarge stijgt');
 
   // 3. per jaar en cache
@@ -110,10 +110,25 @@ const { pathToFileURL } = require('url');
   const zonder = W.geldCijferReeksen(recs, [M3], 'maand', idl, ledgers, cc, {}, undefined).perioden[0];
   assert.strictEqual(zonder.kosten.inhuur, 0); assert.strictEqual(zonder.kosten.uitbesteed, 300);
   const neg = W.geldCijferReeksen(recs, [M3], 'maand', idl, ledgers, cc, {}, { maand: { [M3]: { [LD]: 500 } }, onvolledig: new Set() });
-  assert.strictEqual(neg.perioden[0].kosten.uitbesteed, -200, 'niet afkappen'); assert.strictEqual(neg.perioden[0].kosten.inhuur, 500); assert.strictEqual(neg.perioden[0].kosten_totaal, 400); assert.strictEqual(neg.perioden[0].resultaat, 4600);
-  assert.strictEqual(neg.inhuur_afwijkingen.length, 1, 'meer factuurregels dan W&V wordt gemeld');
-  ok('oude data zonder inhuur crasht niet; negatieve categorie wordt niet afgekapt en meldt de afwijking');
+  assert.strictEqual(neg.perioden[0].kosten.uitbesteed, 0, 'positief bedrag verschuift hooguit tot het W&V-grootboek'); assert.strictEqual(neg.perioden[0].kosten.inhuur, 300); assert.strictEqual(neg.perioden[0].kosten_totaal, 400); assert.strictEqual(neg.perioden[0].resultaat, 4600);
+  assert.deepStrictEqual(neg.inhuur_afwijkingen.map(x => [x.maand, x.factuur, x.wv, x.verschoven]), [[M3, 500, 300, 300]], 'het deel erboven wordt gemeld');
+  const cr = W.geldCijferReeksen(recs, [M3], 'maand', idl, ledgers, cc, {}, { maand: { [M3]: { [LD]: -50 } }, onvolledig: new Set() });
+  assert.strictEqual(cr.perioden[0].kosten.inhuur, -50, 'creditregels verschuiven gewoon mee'); assert.strictEqual(cr.perioden[0].kosten.uitbesteed, 350); assert.strictEqual(cr.inhuur_afwijkingen.length, 0);  ok('oude data zonder inhuur crasht niet; begrenzing op het W&V-grootboek, creditregels schuiven mee');
 
+  // 9. begrensd (factuurregels > W&V) via de route en het detail; document zonder contact of state
+  const wvLaag = { [M3]: { [LD]: 300, [LM]: 200, [LK]: 50 }, [M4]: wv[M4] }, bg = maakOmgeving(aan, { wv: wvLaag }), rb = await hoofd(bg), b3 = P(rb, M3);
+  assert.strictEqual(b3.kosten.inhuur, 300); assert.strictEqual(b3.kosten.uitbesteed, 0); assert.ok(b3.kosten.uitbesteed >= 0 && b3.kosten_totaal === 550, 'totaal gelijk, niets negatief');
+  assert.ok(rb.x.waarschuwingen.some(x => x.onvolledig && x.bron === 'vaste inhuur')); assert.strictEqual(rb.x.inhuur.begrensd, true); assert.strictEqual(rb.x.inhuur.afwijkingen[0].maand, M3);
+  const e1 = await d(bg, 'inhuur'), e2 = await d(bg, 'uitbesteed');
+  assert.strictEqual(e1.totaal_wv, 300); assert.strictEqual(e1.onvolledig, true, 'niet exact toe te wijzen: onvolledig');
+  assert.strictEqual(e2.totaal_wv, 0); assert.strictEqual(e2.onvolledig, true); assert.strictEqual(e1.totaal_wv + e2.totaal_wv, 300, 'samen het grootboek (W&V)');
+  for (const [naam, wijzig] of [['zonder contact-id', f => { delete f.contact_id; delete f.contact; }], ['zonder state', f => { delete f.state; }]]) {
+    const kopie = JSON.parse(JSON.stringify(facturen)); wijzig(kopie[0]); const bak = facturen.slice(); facturen.length = 0; facturen.push(...kopie);
+    try { const o = maakOmgeving(aan, { negeerContactfilter: true }), rr = await hoofd(o);
+      assert.strictEqual(P(rr, M3).kosten.inhuur, 0, naam + ': geen verschuiving'); assert.strictEqual(P(rr, M3).kosten.uitbesteed, 1300); assert.ok(rr.x.waarschuwingen.some(x => x.onvolledig && /vaste inhuur/.test(x.bron))); assert.deepStrictEqual(rr.x.inhuur.onvolledig, [Y]); assert.ok(!o.m.has('geld:cijfers:inhuur:' + Y)); }
+    finally { facturen.length = 0; facturen.push(...bak); }
+  }
+  ok('begrensde maand (route + detail) en document zonder contact-id of state: fail-closed');
   // 8. configuratie
   assert.strictEqual(W.geldCijferCfgNorm({ inhuur: { contact_id: 'abc', ledgers: [LD] } }).inhuur, null); assert.strictEqual(W.geldCijferCfgNorm({ inhuur: { contact_id: CA, ledgers: ['x'] } }).inhuur, null);
   assert.deepStrictEqual(W.geldCijferCfgNorm({ inhuur: { contact_id: CA, ledgers: [LD, LD, LM], naam: ' X ' } }).inhuur, { contact_id: CA, ledgers: [LD, LM], naam: 'X' });

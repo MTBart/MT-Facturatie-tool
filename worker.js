@@ -3778,7 +3778,7 @@ function geldOntvangstAudit(body) {
 //   geld:cijfers:ledgers                            grootboekrekeningen (naam, soort), een dag geldig
 // Per verzoek hooguit GELD_CIJ_PER_VERZOEK maanden (subrequest-budget); het antwoord zegt welke nog ontbreken.
 const GELD_CIJ = 'geld:cijfers:', GELD_CIJ_START = '2022-01', GELD_CIJ_PER_VERZOEK = 6, GELD_CIJ_MB_PER_MAAND = 6, GELD_CIJ_MAX_FACT = 500;   // per maand: W&V, balans, bank, inkoopfacturen, bonnen (+ reserve)
-const GELD_CATS = [['materiaal', 'Materiaal'], ['uitbesteed', 'Uitbesteed werk'], ['personeel', 'Personeel en inhuur'], ['inhuur', 'Vaste inhuur'], ['huisvesting', 'Huisvesting en energie'],
+const GELD_CATS = [['materiaal', 'Materiaal'], ['uitbesteed', 'Uitbesteed werk'], ['personeel', 'Lonen en personeel'], ['inhuur', 'Vaste inhuur'], ['huisvesting', 'Huisvesting en energie'],
   ['vervoer', 'Vervoer'], ['machines', 'Machines en gereedschap'], ['kantoor', 'Kantoor en ICT'], ['verzekeringen', 'Verzekeringen'], ['advies', 'Advies en administratie'],
   ['financiering', 'Financiering'], ['overig', 'Overig']];
 const GELD_CAT_IDS = new Set(GELD_CATS.map(x => x[0]));
@@ -4024,10 +4024,14 @@ async function geldCijferData(env, get, budget, maanden, cfg, ledgers, w, herbou
 // geldt één dag. De sleutel vervalt zodra contact of grootboeken wijzigen. Een onvolledige lijst wordt niet opgeslagen: dat jaar staat dan in onvolledig en verschuift niet.
 const GELD_INHUUR_STATES = ['open', 'late', 'pending_payment', 'paid'];
 const geldInhuurLeds = (ih, idl) => ih ? ih.ledgers.filter(l => idl.cat[l] && idl.cat[l] !== 'inhuur') : [];
-const geldInhuurDoc = (d, ih) => { const id = d.contact_id != null ? d.contact_id : d.contact && d.contact.id; return (id == null || String(id) === ih.contact_id) && (d.state == null || GELD_INHUUR_STATES.includes(d.state)); };
+const geldInhuurContact = d => d.contact_id != null ? d.contact_id : d.contact && d.contact.id;
+const geldInhuurDoc = (d, ih) => { const id = geldInhuurContact(d); return id != null && String(id) === ih.contact_id && d.state != null && GELD_INHUUR_STATES.includes(d.state); };   // fail-closed: zonder contact of state telt een document niet mee
+// Wat van het factuurbedrag werkelijk mag verschuiven: een positief bedrag hooguit tot wat het W&V-grootboek die maand kent; creditregels (negatief) altijd.
+const geldInhuurEff = (b, wvb) => b > 0 ? Math.min(b, Math.max(0, wvb)) : b;
 function geldInhuurRegels(lijst, ih) {
   const uit = {}, doel = new Set(ih.ledgers);
   for (const d of lijst) {
+    if (geldInhuurContact(d) == null || d.state == null) return null;   // contact of state onbekend: niet stil weglaten, het jaar is onvolledig
     if (!geldInhuurDoc(d, ih)) continue;
     const mm = /^\d{4}-(\d{2})-\d{2}/.exec(String(d.date || '')); if (!mm) return null;   // zonder datum is de maand onbekend: niet stil weglaten
     for (const x of d.details || []) { const led = String(x.ledger_account_id || ''); if (!doel.has(led)) continue;
@@ -4054,7 +4058,7 @@ async function geldInhuurData(env, get, budget, maanden, cfg, w, herbouwJaar) {
 }
 // Maandrecords → reeksen per maand/kwartaal/jaar, met de indeling, de correctie en de branche.
 // ih = vaste inhuur (geldInhuurData): de bedragen verschuiven van hun categorie naar inhuur; totaal en resultaat blijven gelijk (ook wijkt_af),
-// een categorie mag daardoor door een boekverschil negatief worden (niet afkappen).
+// een positief bedrag verschuift hooguit tot wat het W&V-grootboek die maand kent (geldInhuurEff), zodat geen categorie door inhuur negatief wordt.
 function geldCijferReeksen(recs, maanden, per, idl, ledgers, cc, cfg, ih) {
   const pat = cc.loonpatronen || GELD_CIJ_LOONPATRONEN, corrVan = cc.correctie_van || `${geldVandaag().slice(0, 4)}-01`;
   const sleutel = m => per === 'jaar' ? m.slice(0, 4) : per === 'kwartaal' ? `${m.slice(0, 4)}-K${Math.ceil(Number(m.slice(5)) / 3)}` : m;
@@ -4073,8 +4077,9 @@ function geldCijferReeksen(recs, maanden, per, idl, ledgers, cc, cfg, ih) {
     }
     const im = ih && !ih.onvolledig.has(m.slice(0, 4)) ? ih.maand[m] : null;
     if (im) for (const [led, b] of Object.entries(im)) if (b && ihLeds.has(led)) {
-      P.kosten[idl.cat[led]] -= b; P.kosten.inhuur += b;
-      const wvb = (r.kosten || {})[led] || 0; if (b - wvb > 1) afwijkingen.push({ maand: m, ledger: led, factuur: geldRond(b), wv: geldRond(wvb) });   // meer regels dan de W&V kent
+      const wvb = (r.kosten || {})[led] || 0, e = geldInhuurEff(b, wvb);
+      P.kosten[idl.cat[led]] -= e; P.kosten.inhuur += e;
+      if (b - e > 0.005) afwijkingen.push({ maand: m, ledger: led, factuur: geldRond(b), wv: geldRond(wvb), verschoven: geldRond(e) });   // meer regels dan de W&V kent: het deel erboven verschuift niet
     }
     if (m >= corrVan) {                                          // alleen het deel dat nog niet in de W&V staat
       const ps = geldLoonPosten(r, pat, eig, lc);
@@ -4115,7 +4120,8 @@ async function geldCijferDetail(env, get, w, ym, reeks, cat, cfg, ledgers, idl, 
     return { items, totaal_wv: null, correctie: { betaald: geldRond(som), al_in_wv: geldRond(Math.min(som, inWv)), telt: geldRond(corr), per_soort: geldRondSoorten(per, corr) } };
   }
   // Vaste inhuur: alleen de regels van dat contact op de ingestelde grootboeken; bij de oorspronkelijke categorie vallen ze weg (alleen als de verschuiving is toegepast).
-  const ihCfg = cfg.cijfers && cfg.cijfers.inhuur, ihLeds = new Set(geldInhuurLeds(ihCfg, idl)), ihToegepast = !!(reeks === 'kosten' && ihCfg && ih && !ih.onvolledig.has(ym.slice(0, 4))), ihMaand = ihToegepast ? ih.maand[ym] || {} : {};
+  const ihCfg = cfg.cijfers && cfg.cijfers.inhuur, ihLeds = new Set(geldInhuurLeds(ihCfg, idl)), ihToegepast = !!(reeks === 'kosten' && ihCfg && ih && rec && !ih.onvolledig.has(ym.slice(0, 4))), ihBruto = ihToegepast ? ih.maand[ym] || {} : {}, ihMaand = {}, ihBegrensd = new Set();
+  if (ihToegepast) for (const led of ihLeds) { const e = geldInhuurEff(ihBruto[led] || 0, ((rec && rec.kosten) || {})[led] || 0); ihMaand[led] = e; if (Math.abs((ihBruto[led] || 0) - e) > 0.005) ihBegrensd.add(led); }
   if (reeks === 'kosten' && cat === 'inhuur') {
     if (!ihCfg) return { items, totaal_wv: 0 };
     if (!ihToegepast) return { items, totaal_wv: null, onvolledig: true };
@@ -4123,7 +4129,7 @@ async function geldCijferDetail(env, get, w, ym, reeks, cat, cfg, ledgers, idl, 
     for (const d of l.lijst) { if (!geldInhuurDoc(d, ihCfg)) continue;
       const som = (d.details || []).filter(x => ihLeds.has(String(x.ledger_account_id))).reduce((a, x) => a + geldRegelBedrag(x), 0);
       if (som) items.push({ soort: 'inkoopfactuur', id: String(d.id), nummer: String(d.reference || ''), datum: d.date || null, tegenpartij: naam(d.contact), bedrag: geldRond(som), url: geldUrl('documents', d.id) }); }
-    return { items, totaal_wv: geldRond([...ihLeds].reduce((a, id) => a + (ihMaand[id] || 0), 0)), onvolledig: l.onvolledig };
+    return { items, totaal_wv: geldRond([...ihLeds].reduce((a, id) => a + (ihMaand[id] || 0), 0)), onvolledig: l.onvolledig || ihBegrensd.size > 0 };   // begrensd: de regels zijn niet exact aan het verschoven deel toe te wijzen
   }
   const doel = new Set(reeks === 'kosten' ? Object.keys(idl.cat).filter(id => idl.cat[id] === cat) : reeks === 'prive' ? idl.prive.map(p => p.ledger) : reeks === 'aflossing' ? idl.aflossing : []);
   if (!doel.size) return { items, totaal_wv: 0 };
@@ -4132,7 +4138,7 @@ async function geldCijferDetail(env, get, w, ym, reeks, cat, cfg, ledgers, idl, 
     reeks === 'kosten' ? geldLijst(get, `documents/receipts?filter=period:${per}`, w, 'bonnetjes') : null]);
   for (const d of [...(ink ? ink.lijst : []), ...(bon ? bon.lijst : [])]) {
     const weg = ihToegepast && ink && ink.lijst.includes(d) && geldInhuurDoc(d, ihCfg);
-    const som = (d.details || []).filter(x => doel.has(String(x.ledger_account_id)) && !(weg && ihLeds.has(String(x.ledger_account_id)))).reduce((a, x) => a + geldRegelBedrag(x), 0);
+    const som = (d.details || []).filter(x => doel.has(String(x.ledger_account_id)) && !(weg && ihLeds.has(String(x.ledger_account_id)) && !ihBegrensd.has(String(x.ledger_account_id)))).reduce((a, x) => a + geldRegelBedrag(x), 0);
     if (som) items.push({ soort: ink && ink.lijst.includes(d) ? 'inkoopfactuur' : 'bonnetje', id: String(d.id), nummer: String(d.reference || ''), datum: d.date || null, tegenpartij: naam(d.contact), bedrag: geldRond(som), url: geldUrl('documents', d.id) });
   }
   for (const m of mu.lijst) for (const b of (m.ledger_account_bookings || [])) if (doel.has(String(b.ledger_account_id))) {
@@ -4140,7 +4146,7 @@ async function geldCijferDetail(env, get, w, ym, reeks, cat, cfg, ledgers, idl, 
     items.push({ soort: 'bankmutatie', id: String(m.id), datum: m.date, tegenpartij: String(m.contra_account_name || '').slice(0, 60), omschrijving: String(m.message || '').slice(0, 100), bedrag: geldRond(-x), url: geldUrl('financial_mutations', m.id) });
   }
   const totaal = rec ? geldRond(reeks === 'kosten' ? [...doel].reduce((a, id) => a + ((rec.kosten || {})[id] || 0) - (ihLeds.has(id) ? ihMaand[id] || 0 : 0), 0) : [...doel].reduce((a, id) => a - ((rec.bank || {})[id] || 0), 0)) : null;
-  return { items, totaal_wv: totaal, onvolledig: mu.onvolledig || !!(ink && ink.onvolledig) || !!(bon && bon.onvolledig) };
+  return { items, totaal_wv: totaal, onvolledig: mu.onvolledig || !!(ink && ink.onvolledig) || !!(bon && bon.onvolledig) || [...doel].some(id => ihBegrensd.has(id)) };
 }
 // Controle van het eerlijke beeld voor één jaar, per maand: betaald per soort, al in de W&V (welke grootboeken), telt,
 // uitgesloten als eigenaar, en de uitgaande betalingen die (nog) niet herkend worden — om de instelling te controleren.
@@ -4224,12 +4230,13 @@ async function geldCijfersRoute(p, env, url, R, json) {
   const ih = await geldInhuurData(env, get, budget, maanden, cfg, w, herbouwJaar);   // eerst: kost één verzoek per jaar en moet compleet zijn voor de verschuiving
   const { recs, ontbrekend, mislukt } = await geldCijferData(env, get, budget, maanden, cfg, ledgers, w, herbouwJaar);
   const r = geldCijferReeksen(recs, maanden, per, idl, ledgers, cc, cfg, ih);
+  if (r.inhuur_afwijkingen.length) w.push({ onvolledig: true, bron: 'vaste inhuur', fout: `factuurregels hoger dan het W&V-grootboek in ${[...new Set(r.inhuur_afwijkingen.map(x => x.maand))].sort().slice(0, 6).join(', ')}: het deel erboven is niet verschoven` });
   const ni = Object.entries(r.niet_ingedeeld).map(([id, x]) => ({ ledger: id, naam: (ledgers[id] || {}).naam || id, bedrag: x }));
   return json({ per, van: maanden[0], tot: maanden[maanden.length - 1], perioden: r.perioden, categorieen: GELD_CATS.map(([id, naam]) => ({ id, naam })),
     benchmarks: cc.benchmarks || GELD_CIJ_BRANCHE, benchmarks_bron: cc.benchmarks ? 'instelling' : 'standaard', correctie_van: cc.correctie_van || `${huidig.slice(0, 4)}-01`,
     indeling_voorstel: Object.values(idl.bron).filter(x => x === 'voorstel').length, prive_namen: idl.prive.map(x => x.naam), niet_ingedeeld: ni,
     prive_bron: idl.prive_bron, equity_niet_ingedeeld: idl.prive_bron === 'voorstel' ? idl.equity_over : [], mislukt,
-    inhuur: ih ? { aan: true, onvolledig: [...ih.onvolledig].sort(), afwijkingen: r.inhuur_afwijkingen.slice(0, 20) } : { aan: false },
+    inhuur: ih ? { aan: true, begrensd: r.inhuur_afwijkingen.length > 0, onvolledig: [...ih.onvolledig].sort(), afwijkingen: r.inhuur_afwijkingen.slice(0, 20) } : { aan: false },
     ontbrekend, compleet: !ontbrekend.length && !(ih && ih.onvolledig.size), waarschuwingen: w, verzoeken: GELD.budget - budget.rest });
 }
 
