@@ -24,7 +24,7 @@
 </script>
 <meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BACKUP v2.34.6 — M&T Bedrijfstool v2 bèta</title>
+<title>BACKUP v2.34.7 — M&T Bedrijfstool v2 bèta</title>
 <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <!-- msal-browser lokaal gevendord (was jsdelivr @2 = 2.39.0, laatste v2-release).
@@ -93,7 +93,7 @@
 <script src="mt-startvenster.js?v=2026-10-15b"></script>
 <!-- Zijbalk van de nieuwe stijl (alleen actief met data-stijl="nieuw"); bouwt op de bestaande .tab-btn-knoppen -->
 <script src="mt-iconen.js?v=2026-11-01a" defer></script>
-<script src="mt-zijbalk.js?v=2026-11-05a" defer></script>
+<script src="mt-zijbalk.js?v=2026-11-06a" defer></script>
 <script src="mt-geld.js?v=2026-11-05d"></script>
 <script src="mt-forecast.js?v=2026-11-02i"></script>
 <script src="mt-forecast-light.js?v=2026-11-05a"></script>
@@ -101,7 +101,7 @@
 <script src="mt-schulden.js?v=2026-10-12a"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
 <script src="mt-verhuis.js?v=2026-10-23k7"></script>
-<script src="mt-cijfers.js?v=2026-11-05e"></script>
+<script src="mt-cijfers.js?v=2026-11-06a"></script>
 <script src="mt-rapport.js?v=2026-11-05a"></script>
 <script src="mt-calcopslag.js?v=2026-10-23a"></script>
 <script src="calc-engine.js"></script>
@@ -950,7 +950,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1 class="mt-merkrij"><svg class="mt-merk" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><rect x="2" y="2" width="96" height="96"/><path d="M55.4 2 V31.3 H34.2 V67.3 H55.4 V98"/></svg><b class="mt-woord">mortise <em>&amp;</em> tenon</b></h1>
-    <span class="header-version">v2.34.6</span>
+    <span class="header-version">v2.34.7</span>
     <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
@@ -977,10 +977,10 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <script>(function(){ var b=document.getElementById('stijl-terug'); if(b) b.addEventListener('click',function(){ if(window.mtStijl) mtStijl.zet(true); }); })();</script>
 
 <div class="tabs-wrap">
+  <button class="tab-btn" id="tab-btn-rapporten" style="display:none" onclick="showTab('rapporten',this)">Rapporten<span id="rapport-badge" hidden style="margin-left:6px;background:#B4412F;color:#fff;border-radius:10px;padding:0 7px;font-size:11px;font-weight:600"></span></button>
   <button class="tab-btn" id="tab-btn-geld" style="display:none" onclick="showTab('geld',this)">Financiën</button>
   <button class="tab-btn" id="tab-btn-forecast" style="display:none" onclick="showTab('forecast',this)">Forecast</button>
   <button class="tab-btn active" id="tab-btn-dashboard-oud" style="display:none" data-recht="moneybird" onclick="showTab('dashboard',this)">Oud dashboard</button>
-  <button class="tab-btn" id="tab-btn-rapporten" style="display:none" onclick="showTab('rapporten',this)">Rapporten<span id="rapport-badge" hidden style="margin-left:6px;background:#B4412F;color:#fff;border-radius:10px;padding:0 7px;font-size:11px;font-weight:600"></span></button>
   <button class="tab-btn" data-recht="inbox" onclick="showTab('inbox',this)">Inbox</button>
   <button class="tab-btn" onclick="showTab('attentie',this)">⚠ Vereist aandacht<span id="attentie-badge" class="tab-badge" style="display:none"></span></button>
   <button class="tab-btn" data-recht="projecten" onclick="showTab('projecten',this)">Projecten<span id="vandaag-badge" class="tab-badge" style="display:none" title="Acties van vandaag of te laat, en leads zonder volgende actie"></span></button>
@@ -3802,7 +3802,7 @@ const mtRoute={
         const mag=typeof _routeMag==='function'?_routeMag(btn):'ja';
         if(mag==='wacht'){ this._wacht=r; return; }
         if(mag==='nee') return;
-        if(btn) btn.click(); else showTab(r.tab,r.tab==='forecastplus'?document.getElementById('tab-btn-geld'):undefined);   // uitgebreide forecast: onder Financiën (eigen rechtencontrole in forecastOpen)
+        if(btn) btn.click(); else showTab(r.tab,r.tab==='forecastplus'?forecastPlusKnop():undefined);   // uitgebreide forecast: onder Financiën (eigen rechtencontrole in forecastOpen)
       }
       if(r.leadNieuw){
         // Eén keer per mail per paginalaad (vernieuwen of terug/vooruit mag geen tweede formulier openen); de URL wordt meteen een gewone Projecten-URL.
@@ -17318,8 +17318,8 @@ function startTabZet(){
   const kies=!!(MTRol.me&&MTRol.me.rol)&&geldNieuw();
   const zichtbaar=b=>!!b&&b.style.display!=='none'&&!b.classList.contains('mt-rol-verborgen');
   const knop=n=>[...document.querySelectorAll('.tabs-wrap .tab-btn')].find(b=>(b.getAttribute('onclick')||'').includes("showTab('"+n+"'"));
-  const g=document.getElementById('tab-btn-geld'), a=knop('agenda');
-  if(kies&&MTRol.magGeld()){ if(zichtbaar(g)) showTab('geld',g); }
+  const g=document.getElementById('tab-btn-geld'), r=document.getElementById('tab-btn-rapporten'), a=knop('agenda');
+  if(kies&&MTRol.magGeld()){ if(zichtbaar(r)) showTab('rapporten',r); else if(zichtbaar(g)) showTab('geld',g); }
   else if(kies&&zichtbaar(a)){
     const ik=(typeof mtMijEmail==='function'&&mtMijEmail())||'', lid=MT_TEAM.find(m=>m.email.toLowerCase()===ik);
     _agenda.view='capaciteit'; _agenda.weekStart=agMaandag(new Date());   // de capaciteitsplanning voor het team (stap 2); Planning blijft één klik verder
@@ -17332,10 +17332,13 @@ function startTabZet(){
 // Alleen als de worker de geldtijdlijn kent (kolom `geld` in /me) én je dat recht hebt; dan vervangt het
 // tabblad Geld de oude cashflow op het dashboard (die wordt alleen verborgen). Oude worker → alles als vroeger.
 const geldNieuw=()=>!!(window.MTRol&&MTRol.me&&MTRol.me.rechten&&('geld' in MTRol.me.rechten));
+// Bart 6-11: Rapporten staat op de plek van Financiën; de tabknop Financiën blijft tijdelijk alleen voor Bart tot de indeling beter is.
+// Geen beveiliging: de rechten blijven gelijk en de acties vanuit een project (prognose, factuurplanning) blijven werken.
+const financienZichtbaar=()=>typeof mtMijEmail==='function'&&mtMijEmail()==='bart@mortiseandtenon.nl';
 function geldTabZet(){
   const b=document.getElementById('tab-btn-geld'); if(!b) return;
   const ja=geldNieuw()&&MTRol.magGeld();
-  b.style.display=ja?'':'none';
+  b.style.display=ja&&financienZichtbaar()?'':'none';
   const t=document.getElementById('tab-geld'); if(t&&t.classList.contains('active')&&ja) geldOpen();
   forecastTabZet(ja);
   rapportTabZet(ja);
@@ -17389,7 +17392,8 @@ function forecastTabZet(ja){
   const t=document.getElementById('tab-forecast'); if(t&&t.classList.contains('active')&&ja) forecastLightOpen();
   const p=document.getElementById('tab-forecastplus'); if(p&&p.classList.contains('active')&&ja) forecastOpen();
 }
-function forecastUitgebreidOpen(){ showTab('forecastplus',document.getElementById('tab-btn-geld')); }
+const forecastPlusKnop=()=>document.getElementById(financienZichtbaar()?'tab-btn-geld':'tab-btn-forecast');
+function forecastUitgebreidOpen(){ showTab('forecastplus',forecastPlusKnop()); }
 document.addEventListener('click',ev=>{ const k=ev.target&&ev.target.closest&&ev.target.closest('#geld-root [data-forecastplus]'); if(k){ ev.preventDefault(); ev.stopPropagation(); forecastUitgebreidOpen(); } },true);
 function forecastLightOpen(){
   const el=document.getElementById('forecastlight-root'); if(!el||!window.MTForecastLight||!window.MTForecast) return;
@@ -17447,13 +17451,16 @@ async function geldOfferteBedrag(pr){
   const e=await r.json(); const v=parseFloat(e&&(e.total_price_incl_tax_base!=null?e.total_price_incl_tax_base:e.total_price_incl_tax));
   return isFinite(v)&&v>0?Math.round(v*100)/100:null;
 }
+// Naar Financiën vanuit een actie: ook zonder zichtbare tabknop (Financiën is tijdelijk verborgen), wel alleen met het recht.
+const geldActieMag=()=>geldNieuw()&&MTRol.magGeld();
+function geldTabNaar(){ const b=document.getElementById('tab-btn-geld'); if(b&&b.style.display!=='none') b.click(); else showTab('geld'); }
 // Vanuit het projectscherm: naar Geld en de prognose van dit project openen.
 function geldPrognoseOpen(code){
   const p=projVind(code); if(!p) return;
-  const b=document.getElementById('tab-btn-geld'); if(!b||b.style.display==='none') return;
+  if(!geldActieMag()) return;
   const open=()=>{ const x=geldProjecten().find(q=>q.project_id===p.project_id); MTGeld.prognoseBewerk('p:'+p.project_id,x||null); };
   const el=document.getElementById('geld-root');
-  if(el&&el.dataset.gestart&&MTGeld._st&&MTGeld._st.data){ b.click(); setTimeout(open,50); } else { geldOpen._na=open; b.click(); }
+  if(el&&el.dataset.gestart&&MTGeld._st&&MTGeld._st.data){ geldTabNaar(); setTimeout(open,50); } else { geldOpen._na=open; geldTabNaar(); }
 }
 // Offerte-weergave van een project: compact blokje "Facturatie verwacht" (termijnen + verwachte factuurmaand, wijzigbaar met het recht
 // geld/wijzigen). Dezelfde component en dezelfde opslag als de Factuurplanning in Financiën; een klik op het blokje opent Financiën op dit project.
@@ -17466,10 +17473,10 @@ function geldFactuurBlokVul(proj,id){
 // Naar Financiën, de Factuurplanning gefilterd op dit project en in beeld.
 function geldFactuurplanningOpen(code){
   const p=projVind(code); if(!p) return;
-  const b=document.getElementById('tab-btn-geld'); if(!b||b.style.display==='none') return;
+  if(!geldActieMag()) return;
   const open=()=>MTGeld.planFocus('p:'+p.project_id);
   const el=document.getElementById('geld-root');
-  if(el&&el.dataset.gestart&&MTGeld._st&&MTGeld._st.data){ b.click(); setTimeout(open,50); } else { geldOpen._na=open; b.click(); }
+  if(el&&el.dataset.gestart&&MTGeld._st&&MTGeld._st.data){ geldTabNaar(); setTimeout(open,50); } else { geldOpen._na=open; geldTabNaar(); }
 }
 // Rij in het projectoverzicht (alleen met recht geld): "Prognose: gaat zeker door".
 let _geldProgCache=null;

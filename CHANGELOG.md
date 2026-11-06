@@ -5,6 +5,24 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-11-06 — Merge inhuur-apart: Vaste inhuur als eigen kostencategorie
+- Commit: `c9b0737` | Auteur: Bart Witte
+
+## 2026-11-06 — Vaste inhuur: cacheversie 2, begrensde maand als aandachtspunt zonder onvolledig
+- Commit: `4103eb9` | Auteur: Bart Witte
+
+## 2026-11-06 — Vaste inhuur: verschuiving begrensd op het W&V-grootboek, selectie fail-closed, label Lonen en personeel
+- Commit: `cb7339a` | Auteur: Bart Witte
+
+## 2026-11-06 — Vaste inhuur apart in Cijfers: scherm (kleur, branche personeel+inhuur, teksten), nep-fixture, test, ?v=2026-11-06b
+- Commit: `38a5b7f` | Auteur: Bart Witte
+
+## 2026-11-06 — Vaste inhuur apart in Cijfers: worker (categorie inhuur, config, eigen jaarcache, verschuiving, detail) + test
+- Commit: `c90e041` | Auteur: Bart Witte
+
+## 2026-11-06 — Release v2.34.7: Rapporten op de plek van Financiën, Financiën tijdelijk alleen voor Bart, nieuwe grafieken in Cijfers; backup = v2.34.6
+- Commit: `c0a0551` | Auteur: Bart Witte
+
 ## 2026-11-06 — Merge rapporten-plek: Rapporten vooraan, Financiën alleen voor Bart, nieuwe grafieken Cijfers
 - Commit: `f889cfe` | Auteur: Bart Witte
 

@@ -26,7 +26,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>BACKUP v2.34.6 — M&T Mobiel</title>
+<title>BACKUP v2.34.7 — M&T Mobiel</title>
 <link rel="manifest" href="manifest-mobiel.json">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jost:ital,wght@0,500;1,400&display=swap">
 <link rel="stylesheet" href="mt-merk.css?v=2026-10-24-logo">
@@ -2525,7 +2525,8 @@ async function rolLaadMobiel() {
   try { if (window.MTVandaag) MTVandaag.teken(); } catch (e) {}   // Vandaag: de knoppen volgens de rol
   try { if (typeof currentSheetProject !== 'undefined' && currentSheetProject) renderSheetTasks(); } catch (e) {}   // ronde 9: de takenknoppen volgens de rol
   // Geld (geldtijdlijn) staat in de cockpit (responsive): alleen een knop voor wie het recht heeft, op een worker die het kent.
-  const gk = document.getElementById('geldKnop'); if (gk) gk.style.display = me.rechten && ('geld' in me.rechten) && MTRol.magGeld() ? '' : 'none';
+  // Bart 6-11: Financiën is tijdelijk alleen voor Bart zichtbaar, tot de indeling beter is (zelfde regel als v2.html); Forecast blijft op het recht.
+  const gk = document.getElementById('geldKnop'); if (gk) gk.style.display = me.rechten && ('geld' in me.rechten) && MTRol.magGeld() && String((_msAccount && _msAccount.username) || '').toLowerCase() === 'bart@mortiseandtenon.nl' ? '' : 'none';
   if (gk && gk.style.display === '') geldBadgeLaad();   // ongelezen ochtendmeldingen van de Koersmeter
   bovenRijBijwerken();
   const act = document.querySelector('.bottom-nav .nav-btn.active');
