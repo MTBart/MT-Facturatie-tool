@@ -1,0 +1,252 @@
+// Visuele cijfers: periodetabel, stapel-rekening, oordelen, omzetzin, kostenvergelijking (mt-cijfers.js), zonder DOM. Draaien: node test/cijfers-visueel.test.js â€” nep-gegevens.
+'use strict';
+const assert = require('assert'), fs = require('fs');
+const Nep = require('./fixtures/cijfers-nep.js');
+require('../mt-cijfers.js');
+const C = globalThis.MTCijfers, st = C._st;
+let n = 0; const test = (naam, fn) => { try { fn(); n++; console.log('ok  - ' + naam); } catch (e) { console.log('FOUT - ' + naam + '\n' + (e.stack || e)); process.exitCode = 1; } };
+
+function zet(opt) {
+  const a = Nep.antwoord('2026-11');
+  Object.assign(st, { maanden: a.perioden, cats: a.categorieen.map(c => c.id), catNaam: Object.fromEntries(a.categorieen.map(c => [c.id, c.naam])), bm: a.benchmarks, ontbrekend: [], mislukt: [],
+    vandaag: '2026-11-05', jaar: 2026, zoom: 'M', eerlijk: true, vgl: { j1: true, j2: true, b: true }, sel: null, stapelSel: null, kCache: {}, kTop: null, kUit: null, focusCat: null, prognoseRuw: Nep.prognose().items, kasProg: null }, opt || {});
+}
+const tabel = (zoom, extra) => C.periodeTabelModel(Object.assign({ maanden: st.maanden, cats: st.cats, eerlijk: true, zoom, jaar: 2026, jaren: [2026, 2025, 2024], lm: '2026-10', rest: { '2026-11': 15000, '2026-12': 20000 }, meet: P => P.omzet }, extra || {}));
+const OM = { 2026: [38, 41, 52, 47, 55, 61, 44, 36, 58, 63], 2025: [34, 37, 45, 44, 49, 52, 40, 31, 50, 55, 53, 47] };
+
+// â”€â”€ periodetabel â”€â”€
+test('periodetabel: Maand geeft 12 kolommen jan..dec, Kwartaal 4 kolommen K1..K4', () => {
+  zet(); const m = tabel('M'), k = tabel('K');
+  assert.deepStrictEqual(m.kolommen.map(x => x.label), ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec']);
+  assert.deepStrictEqual(k.kolommen.map(x => x.label), ['K1', 'K2', 'K3', 'K4']);
+  assert.strictEqual(m.rijen.length, 3); assert.ok(m.rijen.every(r => r.cellen.length === 12)); assert.ok(k.rijen.every(r => r.cellen.length === 4));
+});
+test('periodetabel: de tabel volgt de knop (zoom K telt de maanden van het kwartaal op)', () => {
+  zet(); const k = tabel('K'), r = k.rijen[0];
+  assert.strictEqual(r.cellen[0].v, (38 + 41 + 52) * 1000); assert.strictEqual(r.cellen[1].v, (47 + 55 + 61) * 1000);
+  assert.strictEqual(k.rijen[1].cellen[3].v, (55 + 53 + 47) * 1000);
+});
+test('periodetabel: afgesloten maanden tellen, de lopende maand niet; verwacht staat apart', () => {
+  zet(); const r = tabel('M').rijen[0];
+  assert.strictEqual(r.cellen[9].v, 63000); assert.strictEqual(r.cellen[10].v, null, 'november is lopend: niet geboekt meetellen');
+  assert.strictEqual(r.cellen[10].fc, 15000); assert.strictEqual(r.cellen[11].fc, 20000); assert.strictEqual(r.cellen[0].fc, 0);
+  assert.strictEqual(r.cellen[10].reden, 'nog niet afgesloten');
+});
+test('periodetabel: "â€”" met reden bij ontbrekende data, nooit 0', () => {
+  zet(); st.maanden = st.maanden.filter(m => m.id !== '2025-03'); const t = tabel('M'), c = t.rijen[1].cellen[2];
+  assert.strictEqual(c.v, null); assert.strictEqual(c.reden, 'niet opgehaald'); assert.ok(t.rijen[0].cellen[2].v > 0);
+  assert.strictEqual(t.verschil.cellen[2].d, null); assert.ok(/geen gegevens 2025/.test(t.verschil.cellen[2].reden));
+});
+test('periodetabel: verschil alleen op afgesloten periodes (kwartaal)', () => {
+  zet(); const t = tabel('K'), v = t.verschil;
+  assert.ok(v.cellen[0].d != null && Math.abs(v.cellen[0].d - ((131 - 116) / 116 * 100)) < 1e-9, 'K1: ' + v.cellen[0].d);
+  assert.strictEqual(v.cellen[3].d, null, 'K4 is nog niet afgesloten'); assert.ok(/alleen afgesloten|nog niet/.test(v.cellen[3].reden));
+  const q3 = t.rijen[0].cellen[2]; assert.strictEqual(q3.vol, true); assert.strictEqual(t.rijen[0].cellen[3].v, 63000); assert.strictEqual(t.rijen[0].cellen[3].vol, false, 'K4 is deels geboekt');
+});
+test('periodetabel: totaal t/m laatste afgesloten maand en eerlijk vergeleken met vorig jaar', () => {
+  zet(); const t = tabel('M'), som = a => a.reduce((x, y) => x + y, 0);
+  assert.strictEqual(t.totaalLabel, 't/m okt'); assert.strictEqual(t.rijen[0].totaal.v, som(OM[2026]) * 1000);
+  assert.strictEqual(t.rijen[1].totaal.v, som(OM[2025].slice(0, 10)) * 1000, 'vorig jaar t/m dezelfde maand');
+  assert.ok(Math.abs(t.verschil.totaal.d - (som(OM[2026]) - som(OM[2025].slice(0, 10))) / som(OM[2025].slice(0, 10)) * 100) < 1e-9);
+});
+test('periodetabel: ontbrekende maand in vergelijkjaar geeft geen totaal-vergelijking', () => {
+  zet(); st.maanden = st.maanden.filter(m => m.id !== '2025-07'); const t = tabel('M');
+  assert.strictEqual(t.rijen[1].totaal.v, null); assert.strictEqual(t.verschil.totaal.d, null); assert.ok(t.verschil.totaal.reden);
+});
+test('periodetabel: zonder afgesloten maand geen cijfers en geen verschil', () => {
+  zet(); const t = tabel('M', { lm: null, rest: {} });
+  assert.ok(t.rijen.every(r => r.cellen.every(c => c.v == null))); assert.strictEqual(t.verschil.cellen[0].d, null); assert.strictEqual(t.totaalLabel, 'Jaar');
+});
+test('periodetabel jaren-vorm: kolommen zijn jaren, verschil met het jaar ervoor alleen bij afgesloten jaren', () => {
+  zet(); st.zoom = '5J'; const per = C.periodes(st.maanden, '5J', 2026, '2026-10', []).map(p => Object.assign(p, { P: C.som(p.ms, st.cats, true) }));
+  const t = C.periodeTabelJaren(per, { zoom: '5J', lm: '2026-10', meet: P => P.omzet });
+  assert.deepStrictEqual(t.kolommen.map(k => k.label), ['2022', '2023', '2024', '2025', '2026']);
+  assert.strictEqual(t.verschil.cellen[0].d, null); assert.ok(t.verschil.cellen[2].d > 0); assert.strictEqual(t.verschil.cellen[4].d, null, '2026 is nog niet volledig');
+  assert.strictEqual(t.rijen[0].cellen[4].vol, false);
+  const tj = C.periodeTabelJaren(C.periodes(st.maanden, 'J', 2026, '2026-10', []).map(p => Object.assign(p, { P: C.som(p.ms, st.cats, true) })), { zoom: 'J', lm: '2026-10', meet: P => P.omzet });
+  assert.ok(tj.verschil.cellen[4].d != null, 'jaar t/m nu: alle jaren t/m dezelfde maand, dus wel vergelijkbaar');
+});
+test('categoriekleuren: vast per categorie, resultaat apart, onbekende categorie krijgt een eigen plek', () => {
+  assert.strictEqual(C.katKlasse('materiaal', []), 'mtd-k0'); assert.strictEqual(C.katKlasse('overig', ['x']), 'mtd-k4'); assert.strictEqual(C.katKlasse('resultaat', []), 'mtd-kres');
+  const cats = ['materiaal', 'vervoer', 'overig', 'kantoor']; assert.strictEqual(C.katKlasse('vervoer', cats), 'mtd-k5'); assert.strictEqual(C.katKlasse('kantoor', cats), 'mtd-k6');
+  assert.strictEqual(C.katKlasse('materiaal', cats), C.katKlasse('materiaal', ['a']));
+});
+
+// ── oordeel en stapel ──
+const perM = (zoom, jaar) => C.periodes(st.maanden, zoom, jaar || 2026, '2026-10', []).map(p => Object.assign(p, { P: C.som(p.ms, st.cats, true) }));
+const vgl = (zoom, i, extra) => C.stapelVergelijk(Object.assign({ per: perM(zoom), i, zoom, jaar: 2026, maanden: st.maanden, cats: st.cats, eerlijk: true, bm: st.bm, lm: '2026-10', offsets: [1, 2] }, extra || {}));
+test('oordeel: drempels uit één constante, woord + niveau, hoger/lager is goed', () => {
+  assert.deepStrictEqual([C.DREMPEL.INLIJN_PP, C.DREMPEL.SLECHT_PP], [1, 5]);
+  assert.strictEqual(C.oordeel(53, { van: 50, tot: 56 }, true).woord, 'in lijn');
+  assert.strictEqual(C.oordeel(60, { van: 50, tot: 56 }, true).woord, 'beter'); assert.strictEqual(C.oordeel(60, { van: 50, tot: 56 }, true).niveau, 'goed');
+  assert.strictEqual(C.oordeel(47, { van: 50, tot: 56 }, true).niveau, 'let-op');
+  assert.strictEqual(C.oordeel(40, { van: 50, tot: 56 }, true).niveau, 'slecht');
+  assert.strictEqual(C.oordeel(35, 28, false).niveau, 'slecht', 'kosten veel hoger = slecht'); assert.strictEqual(C.oordeel(20, 28, false).niveau, 'goed');
+  assert.strictEqual(C.oordeel(28.9, { pct: 28 }, false).woord, 'in lijn');
+});
+test('oordeel: geen oordeel zonder waarde of referentie', () => {
+  assert.strictEqual(C.oordeel(null, 5, true), null); assert.strictEqual(C.oordeel(5, null, true), null); assert.strictEqual(C.oordeel(5, {}, true), null); assert.strictEqual(C.oordeel(NaN, 5, true), null);
+});
+test('stapel: de som van de delen is de omzet, per periode, ook per kwartaal en jaar', () => {
+  zet(); for (const [zoom, j] of [['M', 2026], ['K', 2025], ['5J', 2026]]) {
+    const m = C.stapelModel(zoom === '5J' ? C.periodes(st.maanden, '5J', 2026, '2026-10', []).map(p => Object.assign(p, { P: C.som(p.ms, st.cats, true) })) : perM(zoom, j), st.cats);
+    for (const k of m.kolommen.filter(x => !x.geen)) { assert.ok(Math.abs(k.som - k.omzet) < 1e-6, `${zoom} ${k.id}: ${k.som} != ${k.omzet}`); assert.ok(Math.abs(k.delen.reduce((a, d) => a + d.pct, 0) - 100) < 1e-6); }
+  }
+});
+test('stapel: alleen geboekte cijfers; periode zonder boeking is leeg', () => {
+  zet(); const m = C.stapelModel(perM('M'), st.cats); assert.strictEqual(m.kolommen[11].geen, true);
+  assert.strictEqual(m.kolommen[0].geen, false);
+});
+test('stapel: negatief resultaat staat onder de nullijn en maakt de stapel niet vals', () => {
+  zet(); const mm = st.maanden.find(x => x.id === '2026-03'); mm.omzet = 20000;
+  const k = C.stapelModel(perM('M'), st.cats).kolommen[2]; assert.ok(k.resultaat < 0); assert.ok(k.onder && k.onder.y1 === k.resultaat && k.onder.y0 === 0);
+  assert.ok(!k.boven.some(s => s.id === 'resultaat'), 'geen resultaatdeel boven de nul'); assert.ok(Math.abs(k.top - (k.omzet - k.resultaat)) < 1e-6, 'stapel loopt tot de kosten');
+  assert.ok(k.top > k.omzet); assert.ok(Math.abs(k.som - k.omzet) < 1e-6);
+  const m = C.stapelModel(perM('M'), st.cats); assert.strictEqual(m.min, k.resultaat);
+});
+test('stapel: een creditpost (negatieve kosten) wordt niet als stuk getekend maar blijft in de som', () => {
+  zet(); const mm = st.maanden.find(x => x.id === '2026-02'); mm.kosten.overig = -500;
+  const k = C.stapelModel(perM('M'), st.cats).kolommen[1]; assert.ok(!k.boven.some(s => s.id === 'overig')); assert.strictEqual(k.credit, 500); assert.ok(Math.abs(k.som - k.omzet) < 1e-6);
+});
+test('stapelvergelijk: afgesloten periode vergelijkt met twee vorige jaren en de branche', () => {
+  zet(); const v = vgl('M', 2), bm = v.onderdelen.find(o => o.id === 'brutomarge');
+  assert.strictEqual(v.afgesloten, true); assert.strictEqual(v.vorig.length, 2); assert.ok(bm.vorig.every(q => q.v != null && q.oordeel));
+  assert.ok(Math.abs(bm.v - 66.5) < 0.05); assert.strictEqual(bm.branche.oordeel.niveau, 'goed'); assert.strictEqual(bm.branche.oordeel.beter, true);
+});
+test('stapelvergelijk: branche ontbreekt voor een categorie = "—" met reden, geen oordeel', () => {
+  zet(); const mat = vgl('M', 2).onderdelen.find(o => o.id === 'materiaal');
+  assert.strictEqual(mat.branche.oordeel, null); assert.ok(/geen branchecijfer voor materiaal/.test(mat.branche.reden));
+  const b0 = vgl('M', 2, { bm: {} }).onderdelen.find(o => o.id === 'brutomarge'); assert.strictEqual(b0.branche.oordeel, null); assert.ok(b0.branche.reden);
+  const mat2 = vgl('M', 2, { bm: { materiaal: { van: 24, tot: 28 } } }).onderdelen.find(o => o.id === 'materiaal'); assert.ok(mat2.branche.oordeel);
+});
+test('stapelvergelijk: ontbrekend vorig jaar of niet afgesloten periode = "—" met reden, nooit 0', () => {
+  zet(); st.maanden = st.maanden.filter(m => m.id !== '2025-03'); const v = vgl('M', 2), q = v.vorig[0];
+  assert.strictEqual(q.u, undefined); assert.ok(/geen gegevens 2025/.test(q.reden)); assert.ok(v.onderdelen.every(o => o.vorig[0].v === null && o.vorig[0].oordeel === null && o.vorig[0].reden));
+  assert.ok(v.onderdelen.every(o => o.vorig[1].v != null), '2024 blijft wel beschikbaar');
+  zet(); const lopend = vgl('M', 10); assert.strictEqual(lopend.afgesloten, false); assert.ok(/nog niet afgesloten/.test(lopend.reden));
+  assert.ok(lopend.onderdelen.every(o => o.vorig.every(q => q.v === null && /nog niet afgesloten/.test(q.reden)) && /nog niet afgesloten/.test(o.branche.reden) && o.branche.oordeel === null));
+  assert.strictEqual(vgl('K', 3).afgesloten, false);
+});
+test('stapelvergelijk: jaar-vorm vergelijkt met voorgaande jaren; 2026 t/m nu is vergelijkbaar, 5 jaar niet', () => {
+  zet(); const per = C.periodes(st.maanden, 'J', 2026, '2026-10', []).map(p => Object.assign(p, { P: C.som(p.ms, st.cats, true) }));
+  const v = C.stapelVergelijk({ per, i: per.length - 1, zoom: 'J', jaar: 2026, maanden: st.maanden, cats: st.cats, eerlijk: true, bm: st.bm, lm: '2026-10', offsets: [1, 2] });
+  assert.strictEqual(v.afgesloten, true); assert.ok(v.vorig.every(q => q.u)); assert.strictEqual(v.vorig[0].jaar, 2025);
+  const per5 = C.periodes(st.maanden, '5J', 2026, '2026-10', []).map(p => Object.assign(p, { P: C.som(p.ms, st.cats, true) }));
+  assert.strictEqual(C.stapelVergelijk({ per: per5, i: per5.length - 1, zoom: '5J', jaar: 2026, maanden: st.maanden, cats: st.cats, eerlijk: true, bm: st.bm, lm: '2026-10', offsets: [1, 2] }).afgesloten, false);
+});
+
+test('omzetzin: voor, achter, gelijk en niet te vergelijken, in woorden', () => {
+  const c0 = [10000, 25000, 40000], c1 = [9000, 20000, 30000];
+  const z = C.cumulZin(c0, c1, 3, 2026); assert.strictEqual(z.richting, 1); assert.ok(/Eind maart/.test(z.tekst) && /voor op 2025/.test(z.tekst) && /33,3%/.test(z.tekst) && /10\.000/.test(z.tekst), z.tekst);
+  const a = C.cumulZin([1, 2, 20], [5, 6, 40], 3, 2026); assert.strictEqual(a.richting, -1); assert.ok(/achter op 2025/.test(a.tekst));
+  assert.strictEqual(C.cumulZin([1, 2, 30], [5, 6, 30], 3, 2026).richting, 0);
+  const g = C.cumulZin(c0, [9000, null, null], 3, 2026); assert.strictEqual(g.richting, null); assert.ok(/Geen vergelijking met 2025/.test(g.tekst) && !/voor|achter/.test(g.tekst));
+  assert.strictEqual(C.cumulZin([null], null, 0, 2026).richting, null);
+});
+
+test('kostenzin: alleen uit de cijfers, met woorden van het oordeel, geen oorzaak', () => {
+  zet(); const o = vgl('M', 2).onderdelen.find(x => x.id === 'materiaal'); st.bm.materiaal = { van: 14, tot: 18 };
+  const o2 = vgl('M', 2).onderdelen.find(x => x.id === 'materiaal'), z = C.kostenZin(o2);
+  assert.ok(/^Materiaal is 26,5% van de omzet/.test(z), z); assert.ok(/in 2025/.test(z) && /boven de branche/.test(z) && /duidelijk slechter/.test(z), z);
+  assert.ok(!/omdat|doordat|komt door|oorzaak/i.test(z));
+  const z0 = C.kostenZin(o); assert.ok(/in 2025 \(in lijn\)/.test(z0) && !/branche/.test(z0), z0);
+  st.maanden = st.maanden.filter(m => !m.id.startsWith('2025-') && !m.id.startsWith('2024-')); const z1 = C.kostenZin(vgl('M', 2, { bm: {} }).onderdelen.find(x => x.id === 'materiaal'));
+  assert.ok(/Geen vergelijking mogelijk/.test(z1) && /geen gegevens 2025/.test(z1), z1);
+  assert.strictEqual(C.kostenZin({ v: null }), 'Geen cijfers voor deze periode.');
+});
+test('rapportsectie (C.toon): kosten met categorie opent Brutomarge met die rij open en focus; andere routes blijven kloppen', () => {
+  const cats = ['materiaal', 'uitbesteed', 'personeel'], d = g => C.toonDoel(g, cats);
+  const k = d({ reeks: 'kosten', categorie: 'personeel' }); assert.deepStrictEqual([k.paneel, k.kUit, k.fokus, k.weergave], ['brutomarge', 'personeel', 'kb-personeel', 'omzet_kosten']);
+  assert.strictEqual(d({ reeks: 'kosten', categorie: 'onbekend' }).paneel, 'brutomarge'); assert.strictEqual(d({ reeks: 'kosten', categorie: 'onbekend' }).kUit, null, 'onbekende categorie: geen rij open');
+  assert.strictEqual(d({ reeks: 'kosten' }).paneel, null, 'zonder categorie houdt de sectie haar huidige paneel');
+  assert.strictEqual(d({ reeks: 'omzet' }).paneel, null); assert.strictEqual(d({ reeks: 'resultaat', categorie: 'personeel' }).paneel, 'resultaat');
+  const m = d({ reeks: 'brutomarge' }); assert.deepStrictEqual([m.paneel, m.kUit], ['brutomarge', null]);
+  const kp = d({ reeks: 'kosten_pct', categorie: 'materiaal' }); assert.deepStrictEqual([kp.paneel, kp.kUit], ['brutomarge', 'materiaal']);
+  assert.strictEqual(d({ reeks: 'opnames' }).paneel, 'opnames'); assert.strictEqual(d({ reeks: 'kas' }).paneel, 'kas'); assert.strictEqual(d({ reeks: 'waterval' }).paneel, 'kas');
+  assert.strictEqual(d({ reeks: 'iets-anders' }).weergave, 'omzet_kosten'); assert.strictEqual(d({ reeks: 'opnames', categorie: 'materiaal' }).kUit, null, 'alleen in het Brutomarge-paneel een rij openklappen');
+});
+test('100%-balk: schaal is het hoogste totaal; verlies en credit apart; delen blijven % van de omzet', () => {
+  const P = (omzet, kosten) => ({ omzet, kosten, kosten_totaal: Object.values(kosten).reduce((a, x) => a + x, 0) });
+  const verlies = C.stapelBalk(P(1000, { materiaal: 500, uitbesteed: 100, personeel: 700 }), ['materiaal', 'uitbesteed', 'personeel']);
+  assert.ok(Math.abs(verlies.tot - 130) < 1e-9); assert.ok(Math.abs(verlies.overschot - 30) < 1e-9); assert.ok(Math.abs(verlies.verlies - 30) < 1e-9); assert.ok(Math.abs(verlies.resultaat + 30) < 1e-9);
+  assert.ok(!verlies.delen.some(d => d.id === 'resultaat'), 'negatief resultaat is geen deel van de balk'); assert.strictEqual(verlies.credit, 0);
+  assert.ok(Math.abs(verlies.delen.reduce((a, d) => a + d.pct, 0) - 130) < 1e-9);
+  const winst = C.stapelBalk(P(1000, { materiaal: 300, uitbesteed: 100, personeel: 400 }), ['materiaal', 'uitbesteed', 'personeel']);
+  assert.ok(Math.abs(winst.tot - 100) < 1e-9 && winst.overschot < 1e-9 && winst.verlies === 0); assert.ok(winst.delen.some(d => d.id === 'resultaat'));
+  assert.strictEqual(C.balkSchaal([winst, verlies, null]), verlies.tot); assert.strictEqual(C.balkSchaal([winst]), 100); assert.strictEqual(C.balkSchaal([null]), 100);
+  const credit = C.stapelBalk(P(1000, { materiaal: 300, uitbesteed: -20, personeel: 400 }), ['materiaal', 'uitbesteed', 'personeel']);
+  assert.ok(Math.abs(credit.credit - 2) < 1e-9); assert.ok(Math.abs(credit.tot - 102) < 1e-9); assert.ok(Math.abs(credit.overschot - 2) < 1e-9); assert.strictEqual(C.stapelBalk({ omzet: 0, kosten: {}, kosten_totaal: 0 }, []), null);
+});
+test('credit is geen verlies: eigen deel voorbij de streep, verlies-arcering alleen bij kosten boven de omzet', () => {
+  const P = (omzet, kosten) => ({ omzet, kosten, kosten_totaal: Object.values(kosten).reduce((a, x) => a + x, 0) }), cats = ['materiaal', 'uitbesteed', 'personeel'];
+  const credit = C.stapelBalk(P(1000, { materiaal: 300, uitbesteed: -20, personeel: 400 }), cats);
+  assert.ok(Math.abs(credit.overCredit - 2) < 1e-9); assert.strictEqual(credit.overVerlies, 0); assert.strictEqual(credit.verlies, 0); assert.ok(Math.abs(credit.overschot - 2) < 1e-9);
+  const beide = C.stapelBalk(P(1000, { materiaal: 700, uitbesteed: -50, personeel: 450 }), cats);
+  assert.ok(Math.abs(beide.verlies - 10) < 1e-9 && Math.abs(beide.credit - 5) < 1e-9); assert.ok(Math.abs(beide.overVerlies - 10) < 1e-9 && Math.abs(beide.overCredit - 5) < 1e-9); assert.ok(Math.abs(beide.overschot - (beide.overVerlies + beide.overCredit)) < 1e-9, 'voorbij de streep: credit plus verlies');
+  const verlies = C.stapelBalk(P(1000, { materiaal: 500, uitbesteed: 100, personeel: 700 }), cats); assert.strictEqual(verlies.overCredit, 0); assert.ok(Math.abs(verlies.overVerlies - 30) < 1e-9);
+  const winst = C.stapelBalk(P(1000, { materiaal: 300, uitbesteed: 100, personeel: 400 }), cats); assert.strictEqual(winst.overVerlies, 0); assert.strictEqual(winst.overCredit, 0);
+  const u1 = C.balkUitleg([winst]); assert.ok(!/verlies|credit/i.test(u1), u1); assert.ok(/100% omzet/.test(u1));
+  const u2 = C.balkUitleg([credit, null]); assert.ok(/credit/i.test(u2) && /geen verlies/.test(u2) && !/Rode arcering/.test(u2), u2);
+  const u3 = C.balkUitleg([verlies]); assert.ok(/Rode arcering/.test(u3) && /verlies/.test(u3) && !/credit/i.test(u3), u3); assert.ok(/credit/i.test(C.balkUitleg([beide])) && /Rode arcering/.test(C.balkUitleg([beide])));
+});
+(async () => {
+  const echteNu = C._nu; let nu = 1000000; C._nu = () => nu; const wacht = () => new Promise(r => setTimeout(r, 1));
+  const ok = u => ({ items: [{ tegenpartij: 'Nep A', bedrag: 100 }, { tegenpartij: 'Nep B', bedrag: 50 }, { tegenpartij: 'Nep A', bedrag: 25 }], meer: 0 });
+  const bron = (fn, log) => ({ haal: async u => { log.push(u); await wacht(); return fn(u, log.length); } });
+  try {
+    // 1) één ronde, achter elkaar; twee niet-opeenvolgende fouten stoppen de ronde niet
+    zet(); let lopen = [], actief = 0, maxActief = 0;
+    st.bron = { haal: async u => { lopen.push(u); actief++; maxActief = Math.max(maxActief, actief); await wacht(); actief--; if (/2026-03/.test(u)) throw new Error('stuk'); if (/2026-05/.test(u)) return { error: 'nee' }; return ok(u); } };
+    await Promise.all([C._laadKosten('materiaal'), C._laadKosten('materiaal')]);
+    assert.strictEqual(lopen.length, 10, 'één verzoek per afgesloten maand, geen tweede ronde'); assert.strictEqual(maxActief, 1); assert.ok(lopen.every(u => /reeks=kosten&categorie=materiaal/.test(u)));
+    let c = st.kTop; assert.strictEqual(c.laden, false); assert.strictEqual(c.fouten, 2); assert.strictEqual(c.onvolledig, true); assert.strictEqual(c.ok.size, 8);
+    assert.deepStrictEqual(c.items.map(x => [x.naam, x.v]), [['Nep A', 125 * 8], ['Nep B', 50 * 8]]);
+    // 2) opnieuw proberen haalt alleen de ontbrekende maanden; daarna alles uit de cache
+    lopen = []; st.bron = bron(ok, lopen); await C._laadKosten('materiaal');
+    assert.deepStrictEqual(lopen.map(u => /maand=([\d-]+)/.exec(u)[1]).sort(), ['2026-03', '2026-05']); assert.strictEqual(st.kTop.ok.size, 10); assert.strictEqual(st.kTop.onvolledig, false); assert.strictEqual(st.kTop.items[0].v, 125 * 10);
+    lopen.length = 0; await C._laadKosten('materiaal'); assert.strictEqual(lopen.length, 0, 'volledig: geen nieuwe verzoeken');
+    // 3) periodewissel: eigen cache, de oude blijft; annuleren stopt de ronde, wat er is blijft bewaard
+    st.sel = C.periodes(st.maanden, 'K', 2026, '2026-10', [])[0]; st.zoom = 'K'; st.sel = Object.assign(st.sel, { P: C.som(st.sel.ms, st.cats, true) }); lopen.length = 0;
+    await C._laadKosten('materiaal'); assert.strictEqual(lopen.length, 3, 'K1 = 3 maanden, eigen cache'); assert.strictEqual(Object.keys(st.kCache).length, 2);
+    st.sel = null; st.zoom = 'M';
+    lopen = []; st.kCache = {}; st.bron = { haal: async u => { lopen.push(u); await wacht(); if (lopen.length === 3) st.kTop = null; return ok(u); } };
+    await C._laadKosten('uitbesteed'); assert.strictEqual(lopen.length, 3, 'gestopt na annuleren'); const cc = Object.values(st.kCache)[0]; assert.strictEqual(cc.laden, false); assert.strictEqual(cc.ok.size, 3, 'bewaard');
+    lopen.length = 0; st.bron = bron(ok, lopen); await C._laadKosten('uitbesteed'); assert.strictEqual(lopen.length, 7, 'hervat met de ontbrekende maanden');
+    // 4) 429 in de vorm van geldHaal ({error:'HTTP 429', ...json}): ronde stopt, wachttijd uit retry_after, wat binnen is blijft staan, opnieuw pas na de wachttijd
+    st.kCache = {}; lopen = []; st.bron = bron((u, k) => k === 4 ? { error: 'HTTP 429', retry_after: 7 } : ok(u), lopen);
+    await C._laadKosten('personeel'); c = st.kTop; assert.strictEqual(lopen.length, 4, 'gestopt bij de 429'); assert.strictEqual(c.limiet, true); assert.strictEqual(c.wachtTot, nu + 7000); assert.strictEqual(c.ok.size, 3); assert.strictEqual(c.onvolledig, true); assert.strictEqual(c.items.length, 2);
+    lopen.length = 0; await C._laadKosten('personeel'); assert.strictEqual(lopen.length, 0, 'binnen de wachttijd geen verzoek');
+    nu += 8000; lopen.length = 0; st.bron = bron(ok, lopen); await C._laadKosten('personeel'); assert.strictEqual(lopen.length, 7, 'na de wachttijd alleen de ontbrekende maanden'); assert.strictEqual(st.kTop.onvolledig, false); assert.strictEqual(st.kTop.limiet, false);
+    // 5) 429 als exception met status/retryAfter, en zonder wachttijd (vaste wachttijd)
+    st.kCache = {}; lopen = []; st.bron = bron((u, k) => { if (k === 2) { const e = new Error('x'); e.status = 429; e.retryAfter = 12; throw e; } return ok(u); }, lopen);
+    await C._laadKosten('personeel'); assert.strictEqual(st.kTop.wachtTot, nu + 12000); assert.strictEqual(lopen.length, 2);
+    st.kCache = {}; lopen = []; st.bron = bron((u, k) => k === 1 ? { error: 'HTTP 429' } : ok(u), lopen); await C._laadKosten('personeel'); assert.strictEqual(st.kTop.wachtTot, nu + 30000, 'vaste wachttijd');
+    st.kCache = {}; lopen = []; st.bron = bron((u, k) => k === 1 ? { error: 'Retry-After: 45 seconden' } : ok(u), lopen); await C._laadKosten('personeel'); assert.strictEqual(lopen.length, 10, 'tekst zonder 429 is een gewone fout');
+    // 6) twee fouten achter elkaar stoppen de ronde; een gewone fout daarna mag opnieuw
+    st.kCache = {}; lopen = []; st.bron = bron(() => { throw new Error('x'); }, lopen); await C._laadKosten('personeel'); c = st.kTop;
+    assert.strictEqual(lopen.length, 2); assert.strictEqual(c.gestopt, true); assert.strictEqual(c.laden, false); assert.strictEqual(c.fouten, 2); assert.strictEqual(c.items.length, 0);
+    st.kCache = {}; lopen = []; st.bron = bron((u, k) => k === 1 || k === 3 || k === 5 ? { error: 'nee' } : ok(u), lopen); await C._laadKosten('personeel'); assert.strictEqual(lopen.length, 10, 'fouten die niet opeenvolgen stoppen niet'); assert.strictEqual(st.kTop.fouten, 3);
+    // 7) rate-limit alleen via status, "HTTP 429" aan het begin, een veld of "even druk"; een los getal 429 in een tekst is een gewone fout
+    const limiet = async fout => { st.kCache = {}; lopen = []; st.bron = bron((u, k) => k === 2 ? fout : ok(u), lopen); await C._laadKosten('personeel'); return st.kTop.limiet; };
+    assert.strictEqual(await limiet({ error: 'fout bij boeking #429' }), false, 'los getal 429 is een gewone fout'); assert.strictEqual(lopen.length, 10);
+    assert.strictEqual(await limiet({ error: 'Factuur 4290 niet gevonden (HTTP 429 is niet de reden)' }), false);
+    assert.strictEqual(await limiet({ error: 'HTTP 429' }), true); assert.strictEqual(await limiet({ error: 'HTTP 429 Too Many Requests' }), true);
+    assert.strictEqual(await limiet({ error: 'Moneybird is even druk, probeer het zo opnieuw' }), true); assert.strictEqual(await limiet({ error: 'x', status: 429 }), true); assert.strictEqual(await limiet({ error: 'x', retryAfter: 9 }), true);
+    assert.strictEqual(st.kTop.wachtTot, nu + 9000);
+    // 8) wachttimer in st: alleen geldig voor hetzelfde paneel en dezelfde rij; opgeruimd bij sluiten, periodewissel en rijwissel
+    st.paneel = null; st.kUit = 'personeel'; st.kCache = {}; lopen = []; st.bron = bron((u, k) => k === 2 ? { error: 'HTTP 429', retry_after: 5 } : ok(u), lopen);   // geen paneel: de test heeft geen DOM
+    await C._laadKosten('personeel'); const c8 = st.kTop; st.paneel = 'brutomarge'; assert.ok(st.kTimer && st.kTimer.c === c8, 'timer in st'); assert.strictEqual(C._kTimerGeldig(c8), true);
+    st.kUit = 'materiaal'; assert.strictEqual(C._kTimerGeldig(c8), false, 'andere rij'); st.kUit = 'personeel'; st.paneel = 'kas'; assert.strictEqual(C._kTimerGeldig(c8), false, 'ander paneel'); st.paneel = 'brutomarge';
+    st.kTop = null; assert.strictEqual(C._kTimerGeldig(c8), false, 'periodewissel zet kTop op null'); st.kTop = c8;
+    C._wisKTimer(); assert.strictEqual(st.kTimer, null); assert.strictEqual(C._kTimerGeldig(c8), false);
+    st.paneel = null; st.kCache = {}; lopen = []; st.bron = bron((u, k) => k === 2 ? { error: 'HTTP 429', retry_after: 5 } : ok(u), lopen); await C._laadKosten('personeel'); assert.ok(st.kTimer); st.paneel = 'brutomarge';
+    C._sluitPaneel(); assert.strictEqual(st.kTimer, null, 'sluiten ruimt de timer op'); assert.strictEqual(st.paneel, null);
+    st.paneel = null; st.kUit = 'personeel'; st.kCache = {}; st.bron = bron((u, k) => k === 2 ? { error: 'HTTP 429', retry_after: 5 } : ok(u), []); await C._laadKosten('personeel'); assert.ok(st.kTimer);
+    C._pauze = 0; st.el = null; st.bron = { haal: async p => p.startsWith('/geld/prognose') ? Nep.prognose() : Nep.antwoord('2026-11') }; await C.laad(); assert.strictEqual(st.kTimer, null, 'C.laad ruimt de timer op'); assert.deepStrictEqual(st.kCache, {});
+    const src = fs.readFileSync(require('path').join(__dirname, '..', 'mt-cijfers.js'), 'utf8');
+    assert.ok(/C\.mount = async function \(el, opt\) \{\r?\n\s*wisKTimer\(\);/.test(src), 'remount ruimt de timer op');
+    assert.ok(/d\.zoom \|\| d\.jaar \|\| d\.tik \|\| d\.wissel\) \{ st\.kTop = null; wisKTimer\(\); \}/.test(src), 'periodewissel ruimt de timer op');
+    n++; console.log('ok  - kosten-leveranciers: één ronde, cache per periode, 429 met wachttijd, hervatten, annuleren, twee fouten achter elkaar');
+  } catch (e) { console.log('FOUT - kosten-leveranciers\n' + (e.stack || e)); process.exitCode = 1; }
+  C._nu = echteNu; console.log(`${n} tests gedaan`);
+})();
