@@ -1,5 +1,16 @@
 [
   {
+    "versie": "2.34.9",
+    "datum": "2026-11-09",
+    "titel": "Toggl koppelen werkt weer na een nieuwe sleutel",
+    "voor": "iedereen",
+    "punten": [
+      "Heb je in Toggl een nieuwe API-sleutel gemaakt? Koppel hem via de Toggl-knop en kies Vervangen.",
+      "Bart koppelt eerst zijn eigen nieuwe sleutel, daarna kan iedereen opnieuw koppelen.",
+      "Lukt het niet, dan zegt de tool nu precies waarom in plaats van \"Toggl is niet bereikbaar\"."
+    ]
+  },
+  {
     "versie": "2.34.8",
     "datum": "2026-11-06",
     "titel": "Vaste inhuur apart in Cijfers",

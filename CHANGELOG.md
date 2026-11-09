@@ -5,6 +5,18 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-11-09 — Merge toggl-koppel: koppelen via de tool na sleutelreset
+- Commit: `ed3ab30` | Auteur: Bart Witte
+
+## 2026-11-09 — Toggl koppelen: alleen vaste eigenaren als beheersleutel, geen sleutelcache (Codex)
+- Commit: `fbcc772` | Auteur: Bart Witte
+
+## 2026-11-09 — Toggl koppelen: na sleutelreset volstaat opnieuw koppelen in de tool
+- Commit: `362e7e6` | Auteur: Bart Witte
+
+## 2026-11-06 — Release v2.34.8: Vaste inhuur als eigen kostencategorie in Cijfers, los van de lonen; backup = v2.34.7
+- Commit: `d59dcd0` | Auteur: Bart Witte
+
 ## 2026-11-06 — Merge inhuur-apart: Vaste inhuur als eigen kostencategorie
 - Commit: `c9b0737` | Auteur: Bart Witte
 
