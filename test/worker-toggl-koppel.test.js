@@ -6,7 +6,7 @@ const { pathToFileURL } = require('url');
 
 (async () => {
   const bron = fs.readFileSync(path.join(__dirname, '..', 'worker.js'), 'utf8')
-    + '\nexport { valideerFocus, beheerFocusKandidaten, focusNamen, versleutel };\nexport function _reset() { _beheerFocus = null; _namenCache.projecten = null; _sleutelCache.clear(); }\n';
+    + '\nexport { valideerFocus, beheerFocusKandidaten, focusNamen, versleutel };\nexport function _reset() { _namenCache.projecten = null; _sleutelCache.clear(); }\n';
   const tmp = path.join(os.tmpdir(), `mt-worker-toggl-koppel-${process.pid}.mjs`); fs.writeFileSync(tmp, bron, 'utf8');
   let W; try { W = await import(pathToFileURL(tmp).href); } finally { try { fs.unlinkSync(tmp); } catch { } }
   const { valideerFocus, beheerFocusKandidaten, focusNamen, versleutel, _reset } = W;
@@ -30,7 +30,7 @@ const { pathToFileURL } = require('url');
     return new Response('[]');
   };
   const KEK = Buffer.alloc(32, 7).toString('base64');
-  const envMet = extra => ({ MT_ROLLEN: kv(), SLEUTEL_KEK: KEK, TOGGL_FOCUS_KEY: 'sleutel-oud-ingetrokken-1', ...(extra || {}) });
+  const envMet = extra => ({ MT_ROLLEN: kv(), SLEUTEL_KEK: KEK, TOGGL_FOCUS_KEY: 'sleutel-oud-ingetrokken-1', OWNER_OIDS: 'oid-baas', ...(extra || {}) });
   const koppelEigenaar = async (env, oid, sleutel) => {
     await env.MT_ROLLEN.put('user:' + oid, JSON.stringify({ oid, role: 'eigenaar', active: true, email: 'baas@example.org' }));
     await env.MT_ROLLEN.put('sleutel:' + oid, JSON.stringify({ focus: { ...(await versleutel(env, oid, 'focus', sleutel)), naam: 'Baas' } }));
@@ -74,7 +74,7 @@ const { pathToFileURL } = require('url');
   });
 
   await test('kandidaten: eerst gekoppelde eigenaarssleutel, dan secret; niet de eigen oid', async () => {
-    const env = envMet({ OWNER_OIDS: 'oid-baas' }); await koppelEigenaar(env, 'oid-baas', 'sleutel-baas-nieuw-0001');
+    const env = envMet(); await koppelEigenaar(env, 'oid-baas', 'sleutel-baas-nieuw-0001');
     assert.deepStrictEqual(await beheerFocusKandidaten(env), ['sleutel-baas-nieuw-0001', 'sleutel-oud-ingetrokken-1']);
     assert.deepStrictEqual(await beheerFocusKandidaten(env, 'OID-BAAS'), ['sleutel-oud-ingetrokken-1']);
   });
@@ -84,6 +84,19 @@ const { pathToFileURL } = require('url');
     const m = await focusNamen(env);
     assert.strictEqual(m.get('7'), 'Project zeven');
   });
+
+  await test('ontkoppelen door de eigenaar werkt meteen door (geen cache)', async () => {
+    const env = envMet(); await koppelEigenaar(env, 'oid-baas', 'sleutel-baas-nieuw-0001');
+    assert.strictEqual((await valideerFocus(env, 'sleutel-collega-0000001', 'collega@example.org', 'oid-collega')).fout, undefined);
+    await env.MT_ROLLEN.delete('sleutel:oid-baas'); _reset();
+    assert.strictEqual((await valideerFocus(env, 'sleutel-collega-0000001', 'collega@example.org', 'oid-collega')).fout, 'beheer-sleutel');
+  });
+
+  await test('eigenaar via Beheer (niet in OWNER_OIDS) levert geen beheersleutel', async () => {
+    const env = envMet({ OWNER_OIDS: '' }); await koppelEigenaar(env, 'oid-baas', 'sleutel-baas-nieuw-0001');
+    assert.deepStrictEqual(await beheerFocusKandidaten(env), ['sleutel-oud-ingetrokken-1']);
+  });
+
 
   console.log(`\n${n} tests geslaagd`);
 })();

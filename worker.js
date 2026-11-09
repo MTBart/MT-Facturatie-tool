@@ -1153,15 +1153,13 @@ function isServerSleutel(env, sleutel) {
   return Object.keys(env).some(k => /^TOGGL_(FOCUS_)?KEY(_|$)/.test(k) && env[k] === sleutel);
 }
 // Beheersleutels voor Focus-opzoekwerk (gebruikerslijst, project- en taaknamen): eerst de in de tool
-// gekoppelde sleutel van een eigenaar, daarna het worker-secret TOGGL_FOCUS_KEY. Zo is na een
-// sleutelreset bij Toggl "opnieuw koppelen in de tool" genoeg; geen wrangler nodig.
+// gekoppelde sleutel van een vaste eigenaar (OWNER_OIDS; niet via Beheer toe te kennen of te verlopen),
+// daarna het worker-secret TOGGL_FOCUS_KEY. Zo is na een sleutelreset bij Toggl "opnieuw koppelen in de
+// tool" genoeg; geen wrangler nodig. Bewust geen eigen cache: ontkoppelen werkt meteen door.
 async function beheerFocusKandidaten(env, behalveOid) {
-  const oids = new Map();   // lowercase -> oid zoals in KV
-  for (const o of ownerOids(env)) oids.set(o, o);
-  try { for (const g of await lijstKV(env, 'user:')) if (g && g.oid && g.role === 'eigenaar' && g.active !== false) oids.set(String(g.oid).toLowerCase(), String(g.oid)); } catch {}
   const uit = [], niet = String(behalveOid || '').toLowerCase();
-  for (const [laag, oid] of oids) {
-    if (laag === niet) continue;
+  for (const oid of ownerOids(env)) {
+    if (oid === niet) continue;
     const rec = await leesSleutelRec(env, oid).catch(() => null);
     const t = rec && rec.focus ? await ontsleutel(env, oid, 'focus', rec.focus).catch(() => null) : null;
     if (t && !uit.includes(t)) uit.push(t);
@@ -1169,20 +1167,13 @@ async function beheerFocusKandidaten(env, behalveOid) {
   if (env.TOGGL_FOCUS_KEY && !uit.includes(env.TOGGL_FOCUS_KEY)) uit.push(env.TOGGL_FOCUS_KEY);
   return uit;
 }
-// GET met de eerste beheersleutel die Toggl accepteert (401/403 → volgende); de werkende 10 min
-// onthouden. null = geen beheersleutel, anders het laatste antwoord.
-let _beheerFocus = null;   // {sleutel, t}
+// GET met de eerste beheersleutel die Toggl accepteert (401/403 → volgende).
+// null = geen beheersleutel, anders het laatste antwoord.
 async function focusBeheerFetch(env, url) {
-  const haal = s => togglFetch(url, { headers: { Authorization: `Bearer ${s}` } });
-  if (_beheerFocus && Date.now() - _beheerFocus.t < 10 * 60 * 1000) {
-    const r = await haal(_beheerFocus.sleutel);
-    if (r.status !== 401 && r.status !== 403) return r;
-    _beheerFocus = null;
-  }
   let laatste = null;
   for (const s of await beheerFocusKandidaten(env)) {
-    const r = await haal(s);
-    if (r.status !== 401 && r.status !== 403) { _beheerFocus = { sleutel: s, t: Date.now() }; return r; }
+    const r = await togglFetch(url, { headers: { Authorization: `Bearer ${s}` } });
+    if (r.status !== 401 && r.status !== 403) return r;
     laatste = r;
   }
   return laatste;
