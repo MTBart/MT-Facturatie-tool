@@ -1152,18 +1152,54 @@ async function teVaakGeprobeerd(env, oid) {
 function isServerSleutel(env, sleutel) {
   return Object.keys(env).some(k => /^TOGGL_(FOCUS_)?KEY(_|$)/.test(k) && env[k] === sleutel);
 }
+// Beheersleutels voor Focus-opzoekwerk (gebruikerslijst, project- en taaknamen): eerst de in de tool
+// gekoppelde sleutel van een vaste eigenaar (OWNER_OIDS; niet via Beheer toe te kennen of te verlopen),
+// daarna het worker-secret TOGGL_FOCUS_KEY. Zo is na een sleutelreset bij Toggl "opnieuw koppelen in de
+// tool" genoeg; geen wrangler nodig. Bewust geen eigen cache: ontkoppelen werkt meteen door.
+async function beheerFocusKandidaten(env, behalveOid) {
+  const uit = [], niet = String(behalveOid || '').toLowerCase();
+  for (const oid of ownerOids(env)) {
+    if (oid === niet) continue;
+    const rec = await leesSleutelRec(env, oid).catch(() => null);
+    const t = rec && rec.focus ? await ontsleutel(env, oid, 'focus', rec.focus).catch(() => null) : null;
+    if (t && !uit.includes(t)) uit.push(t);
+  }
+  if (env.TOGGL_FOCUS_KEY && !uit.includes(env.TOGGL_FOCUS_KEY)) uit.push(env.TOGGL_FOCUS_KEY);
+  return uit;
+}
+// GET met de eerste beheersleutel die Toggl accepteert (401/403 → volgende).
+// null = geen beheersleutel, anders het laatste antwoord.
+async function focusBeheerFetch(env, url) {
+  let laatste = null;
+  for (const s of await beheerFocusKandidaten(env)) {
+    const r = await togglFetch(url, { headers: { Authorization: `Bearer ${s}` } });
+    if (r.status !== 401 && r.status !== 403) return r;
+    laatste = r;
+  }
+  return laatste;
+}
 // Focus-sleutel: geldig in onze werkruimte + van deze gebruiker (e-mail ↔ Toggl-gebruiker ↔ eigen uren).
-async function valideerFocus(env, sleutel, email) {
+async function valideerFocus(env, sleutel, email, oid) {
   const auth = { Authorization: `Bearer ${sleutel}` };
   const O = `${FOCUS_API}organizations/${FOCUS_ORG}/workspaces/${FOCUS_WS}/`;
   const r = await togglFetch(O + 'tracking/current', { headers: auth });
   if (r.status === 401 || r.status === 403) return { fout: 'sleutel-ongeldig' };
   if (r.status !== 200 && r.status !== 204) return { fout: 'toggl-onbereikbaar' };
-  const ru = await togglFetch(`${FOCUS_API}organizations/${FOCUS_ORG}/users`, { headers: { Authorization: `Bearer ${env.TOGGL_FOCUS_KEY || sleutel}` } });
-  if (!ru.ok) return { fout: 'toggl-onbereikbaar' };
-  const lijst = await ru.json().catch(() => []);
-  const users = Array.isArray(lijst) ? lijst : (lijst && Array.isArray(lijst.data) ? lijst.data : []);
-  const ik = users.find(u => String(u.email || '').toLowerCase() === email);
+  // Gebruiker opzoeken: eerst met de eigen sleutel, lukt dat niet (geen rechten of niet in de lijst)
+  // dan met een beheersleutel. undefined = lijst niet gekregen, null = gekregen maar e-mail ontbreekt.
+  const U = `${FOCUS_API}organizations/${FOCUS_ORG}/users`;
+  const zoek = async res => {
+    if (!res || !res.ok) return undefined;
+    const lijst = await res.json().catch(() => null);
+    const users = Array.isArray(lijst) ? lijst : (lijst && Array.isArray(lijst.data) ? lijst.data : null);
+    return users ? (users.find(u => String(u.email || '').toLowerCase() === email) || null) : undefined;
+  };
+  let ik = await zoek(await togglFetch(U, { headers: auth }));
+  if (!ik) {
+    const rb = await focusBeheerFetch(env, U), ib = await zoek(rb);
+    if (ib) ik = ib;
+    else if (ik === undefined && ib === undefined) return { fout: rb && rb.status !== 401 && rb.status !== 403 ? 'toggl-onbereikbaar' : 'beheer-sleutel' };
+  }
   if (!ik) return { fout: 'email-niet-in-toggl' };
   const tgUserId = ik.user_account_id != null ? ik.user_account_id : (ik.id != null ? ik.id : null);
   const naam = clip(ik.name || ik.fullname || ik.full_name || ik.email, 80);
@@ -1179,8 +1215,9 @@ async function valideerFocus(env, sleutel, email) {
     bevestigd = ids.size === 1;
   }
   // Onbevestigd (nog geen eigen uren) én gelijk aan een sleutel die de worker al als secret heeft
-  // (de gedeelde of die van een collega) → weigeren: dat is nooit "je eigen" sleutel.
-  if (!bevestigd && isServerSleutel(env, sleutel)) return { fout: 'sleutel-van-ander' };
+  // (de gedeelde of die van een collega) of aan de gekoppelde sleutel van een eigenaar → weigeren:
+  // dat is nooit "je eigen" sleutel.
+  if (!bevestigd && (isServerSleutel(env, sleutel) || (await beheerFocusKandidaten(env, oid)).includes(sleutel))) return { fout: 'sleutel-van-ander' };
   return { naam, tgUserId, bevestigd };
 }
 // Track-sleutel (v9, gaat er op termijn uit): /me moet ons e-mailadres zijn.
@@ -1229,7 +1266,7 @@ async function handleMijnToggl(request, env, ik, payload, json) {
   if ((focus && !SLEUTEL_RE.test(focus)) || (track && !SLEUTEL_RE.test(track))) return json({ error: 'sleutel-vorm' }, 400);
   const uit = {};
   try {
-    if (focus) { const v = await valideerFocus(env, focus, email); if (v.fout) return json({ error: v.fout, soort: 'focus' }, v.fout === 'toggl-onbereikbaar' ? 502 : 400); uit.focus = v; }
+    if (focus) { const v = await valideerFocus(env, focus, email, payload.oid); if (v.fout) return json({ error: v.fout, soort: 'focus' }, v.fout === 'toggl-onbereikbaar' ? 502 : 400); uit.focus = v; }
     if (track) { const v = await valideerTrack(track, email); if (v.fout) return json({ error: v.fout, soort: 'track' }, v.fout === 'toggl-onbereikbaar' ? 502 : 400); uit.track = v; }
   } catch (e) { return json({ error: 'toggl-onbereikbaar' }, 502); }
   const rec = (await kvJson(env, 'sleutel:' + payload.oid)) || {};
@@ -1253,22 +1290,20 @@ const _namenCache = { projecten: null, t: 0, taken: new Map() };
 async function focusNamen(env) {
   if (_namenCache.projecten && Date.now() - _namenCache.t < 10 * 60 * 1000) return _namenCache.projecten;
   const m = new Map();
-  if (env.TOGGL_FOCUS_KEY) {
-    for (let page = 1; page <= 10; page++) {
-      const r = await togglFetch(`${FOCUS_API}organizations/${FOCUS_ORG}/workspaces/${FOCUS_WS}/projects?page=${page}&per_page=100`, { headers: { Authorization: `Bearer ${env.TOGGL_FOCUS_KEY}` } }).catch(() => null);
-      if (!r || !r.ok) break;
-      const j = await r.json().catch(() => ({})); const d = Array.isArray(j) ? j : (j.data || []);
-      d.forEach(p => m.set(String(p.id), clip(p.name, 120)));
-      if (d.length < 100) break;
-    }
+  for (let page = 1; page <= 10; page++) {
+    const r = await focusBeheerFetch(env, `${FOCUS_API}organizations/${FOCUS_ORG}/workspaces/${FOCUS_WS}/projects?page=${page}&per_page=100`).catch(() => null);
+    if (!r || !r.ok) break;
+    const j = await r.json().catch(() => ({})); const d = Array.isArray(j) ? j : (j.data || []);
+    d.forEach(p => m.set(String(p.id), clip(p.name, 120)));
+    if (d.length < 100) break;
   }
   _namenCache.projecten = m; _namenCache.t = Date.now();
   return m;
 }
 async function focusTaakNaam(env, id) {
-  if (id == null || !env.TOGGL_FOCUS_KEY) return null;
+  if (id == null) return null;
   const c = _namenCache.taken.get(String(id)); if (c && Date.now() - c.t < 10 * 60 * 1000) return c.naam;
-  const r = await togglFetch(`${FOCUS_API}organizations/${FOCUS_ORG}/workspaces/${FOCUS_WS}/tasks/${encodeURIComponent(id)}`, { headers: { Authorization: `Bearer ${env.TOGGL_FOCUS_KEY}` } }).catch(() => null);
+  const r = await focusBeheerFetch(env, `${FOCUS_API}organizations/${FOCUS_ORG}/workspaces/${FOCUS_WS}/tasks/${encodeURIComponent(id)}`).catch(() => null);
   const naam = r && r.ok ? clip((await r.json().catch(() => ({}))).name, 120) : null;
   _namenCache.taken.set(String(id), { naam, t: Date.now() });
   return naam;
