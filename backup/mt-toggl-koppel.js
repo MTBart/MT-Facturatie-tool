@@ -19,6 +19,7 @@
     'sleutel-vorm': 'Dit lijkt geen Toggl-sleutel (minstens 16 tekens, zonder spaties).',
     'geen-sleutel': 'Plak eerst je sleutel.',
     'toggl-onbereikbaar': 'Toggl is nu niet bereikbaar. Probeer het zo opnieuw.',
+    'beheer-sleutel': 'De tool kan je Toggl-account nu niet opzoeken. Vraag Bart eerst zijn eigen Toggl opnieuw te koppelen; probeer het daarna nog eens.',
     'te-vaak': 'Te veel pogingen. Probeer het over een uur opnieuw.',
     'geen-versleuteling': 'Koppelen is nog niet ingesteld door de beheerder (SLEUTEL_KEK).',
     'geen-rollen-opslag': 'Koppelen is nog niet ingesteld door de beheerder (KV MT_ROLLEN).',

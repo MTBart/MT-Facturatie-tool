@@ -1,5 +1,16 @@
 [
   {
+    "versie": "2.35.0",
+    "datum": "2026-11-10",
+    "titel": "Projectlabel printen",
+    "voor": "iedereen",
+    "punten": [
+      "Open een project, klik op ⋯ naast Gegevens en kies Label printen.",
+      "Op het label staan klant, project, datum gereed en een opmerking die je zelf intikt (of leeg laat om te schrijven).",
+      "Kies in het printvenster één keer de Godex DT4; het aantal labels vul je daar ook in."
+    ]
+  },
+  {
     "versie": "2.34.9",
     "datum": "2026-11-09",
     "titel": "Toggl koppelen werkt weer na een nieuwe sleutel",
