@@ -43,6 +43,7 @@
 <script src="mt-project.js?v=2026-10-15b"></script>
 <script src="mt-lead.js?v=2026-10-13b"></script>
 <script src="mt-vw.js?v=2026-10-13b"></script>
+<script src="mt-label.js?v=2026-11-10a"></script>
 <!-- Herbruikbare <dialog>-flows (Promise-gebaseerd) als vervanger voor de
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
@@ -76,7 +77,7 @@
 <script src="mt-taakpaneel.js?v=2026-10-24z"></script>
 <script src="mt-taaktabel.js?v=2026-10-23z"></script>
 <script src="mt-voortgang.js?v=2026-10-23z"></script>
-<script src="mt-projectkop.js?v=2026-10-23z"></script>
+<script src="mt-projectkop.js?v=2026-11-10a"></script>
 <script src="mt-projectpaneel.js?v=2026-10-23z"></script>
 <script src="mt-planblokpaneel.js?v=2026-10-23z"></script>
 <script src="mt-planinrichting.js?v=2026-10-24z"></script>
@@ -4210,7 +4211,7 @@ try{ MTProjectKop.init({ doc:document, planning:MTPlanning,
   week:ymd=>(window.MTVW&&MTVW.isoWeek?MTVW.isoWeek(ymd):null), vandaag:()=>MTPlanning.vandaagYmd(),
   meter:pkMeter, meterLaad:code=>projMeterLaad(code), naarMeter:code=>projSectieKies('planning'),
   volgende:code=>MTProjectKop.volgende(projTaken(code)), naamVan:d=>_capNaamVan(d), openTaak:(code,id,el)=>MTTaakPaneel.open(code,id,{terug:el}),
-  kopieerLink:code=>projKopieerLink(code), vwExport:code=>projVwExport(code), verwijder:code=>verwijderProject(code),
+  kopieerLink:code=>projKopieerLink(code), labelPrint:code=>projLabelPrint(code), vwExport:code=>projVwExport(code), verwijder:code=>verwijderProject(code),
   openGegevens:code=>projGegevensOpen(code), mag:{ fase:()=>_leadMag(), wijzig:()=>_leadMag() }, toast:(t,o,l,lb)=>MTCapaciteitNieuw.toast(t,o,l,lb), naWijziging:()=>_vgHerteken() }); }catch(e){ console.warn('Projectkop init:',e); }
 // Het paneel Gegevens (samenhang S2, mt-projectpaneel.js): de projectgegevens en, voor een lead, de leadgegevens, bewerkbaar op de plek zelf. Schrijven via projGegevensZet en leadVeldZet (per veld een stempel, zichtbaar conflict).
 try{ MTProjectPaneel.init({ doc:document, model:pgModel, klaar:()=>!!PROJECT_CODES, ruw:()=>(localStorage.getItem('mt_projecten')||''), mag:()=>_leadMag(),
@@ -12667,6 +12668,17 @@ async function projVwExport(code){
     if(!r.ok) throw new Error('HTTP '+r.status);
     mtDialog.alert({title:'Projectgegevens',message:naam+' staat in 03_Vectorworks. Importeer hem in interiorcad ▸ Projectgegevens ▸ Importeer.'});
   }catch(e){ _projDownload(naam,xml); mtDialog.alert({title:'Projectgegevens',message:'Opslaan in de projectmap lukte niet ('+(e.message||e)+'); '+naam+' is gedownload.'}); }
+}
+// Projectlabel op de Godex DT4 (90 x 50 mm, mt-label.js): klant, korte projectnaam, leverdatum ("Datum gereed") en een opmerking die je vooraf
+// kunt invullen (leeg = ruimte om te schrijven). Print via de gewone printerdriver; het aantal kies je in het printvenster.
+async function projLabelPrint(code){
+  const p=projVind(code); if(!p||!window.MTLabel) return;
+  const g=p.gegevens||{};
+  if(!g.leverdatum&&!await mtDialog.confirm({title:'Label printen',message:'Dit project heeft nog geen leverdatum; "Datum gereed" blijft leeg op het label. Toch printen?',okLabel:'Printen'})) return;
+  const opm=await mtDialog.prompt({title:'Label printen',message:'Opmerking op het label (mag leeg blijven):',defaultValue:'',placeholder:'bv. Kast 2 van 3',okLabel:'Printen'});
+  if(opm===null) return;
+  try{ await MTLabel.print({klant:projKlantNaam(p),project:projNaamKort(p),leverdatum:g.leverdatum||'',opmerking:opm,nummer:projHoofdNr(p)}); }
+  catch(e){ mtDialog.alert({title:'Label printen',message:'Printen lukte niet ('+((e&&e.message)||e)+').'}); }
 }
 // ── Project overnemen uit Toggl (v2.14.1, Bart: "andersom werken") ──
 // Een actief Toggl-project dat nog bij geen project hoort (geen tg_project_id; de naam wijst via de resolver ook niet naar

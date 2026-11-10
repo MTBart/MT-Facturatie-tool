@@ -7,7 +7,7 @@
  * - Urenmeter: een compacte versie die ALLEEN LEEST. Hij berekent met de bestaande meter (D.meter) en laadt de uren uit Toggl zelf (D.meterLaad), met een eigen laad- en foutstatus,
  *   zodat hij niet pas klopt nadat Planning is geopend. De waarschuwing bij 90% en 100% van het budget staat hier ook.
  * - Volgende actie: de taak die nu bezig is, anders de eerstvolgende open taak (klik = taakpaneel).
- * - ⋯-menu: Kopieer link, Projectgegevens voor Vectorworks, Verwijderen (rood, alleen hier). Een rol zonder recht ziet de acties niet.
+ * - ⋯-menu: Kopieer link, Label printen (Godex, mt-label.js), Projectgegevens voor Vectorworks, Verwijderen (rood, alleen hier). Een rol zonder recht ziet de acties niet.
  * Tekent met DOM-calls, nooit met opgebouwde HTML. Alles van buiten via init(deps).
  * ========================================================================== */
 (function (root) {
@@ -109,7 +109,7 @@
   }
   // ⋯-menu: zeldzame en gevaarlijke acties
   function menuDeel(code) {
-    const items = [{ k: 'link', l: 'Kopieer link', aan: true }, { k: 'vw', l: 'Projectgegevens voor Vectorworks', aan: mag('wijzig') }, { k: 'weg', l: 'Verwijderen…', aan: mag('wijzig'), gevaar: true }].filter(x => x.aan);
+    const items = [{ k: 'link', l: 'Kopieer link', aan: true }, { k: 'label', l: 'Label printen', aan: !!D.labelPrint }, { k: 'vw', l: 'Projectgegevens voor Vectorworks', aan: mag('wijzig') }, { k: 'weg', l: 'Verwijderen…', aan: mag('wijzig'), gevaar: true }].filter(x => x.aan);
     const knop = el('button', { type: 'button', klass: 'pk-meer', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-label': 'Meer acties voor dit project', title: 'Meer acties' }, ico(IC_MEER));
     const lijst = el('div', { klass: 'pk-menu', role: 'menu', hidden: true }, items.map(x => el('button', { type: 'button', role: 'menuitem', klass: 'pk-item' + (x.gevaar ? ' pk-gevaar' : ''), tekst: x.l, 'data-actie': x.k })));
     const sluit = (focus) => { lijst.hidden = true; knop.setAttribute('aria-expanded', 'false'); if (focus) knop.focus(); };
@@ -126,7 +126,7 @@
       const b = ev.target.closest('.pk-item'); if (!b) return; ev.stopPropagation(); sluit(false);
       const a = b.getAttribute('data-actie');
       if ((a === 'vw' || a === 'weg') && !mag('wijzig')) { toast(GEEN_RECHT, null, true); return; }
-      if (a === 'link' && D.kopieerLink) await D.kopieerLink(code); else if (a === 'vw' && D.vwExport) await D.vwExport(code); else if (a === 'weg' && D.verwijder) await D.verwijder(code);
+      if (a === 'link' && D.kopieerLink) await D.kopieerLink(code); else if (a === 'label' && D.labelPrint) await D.labelPrint(code); else if (a === 'vw' && D.vwExport) await D.vwExport(code); else if (a === 'weg' && D.verwijder) await D.verwijder(code);
     });
     if (!S.sluitKoppeld && dom().addEventListener) { S.sluitKoppeld = true; dom().addEventListener('click', () => { dom().querySelectorAll('.pk-menu').forEach(m => { if (!m.hidden) { m.hidden = true; const k = m.parentNode && m.parentNode.querySelector('.pk-meer'); if (k) k.setAttribute('aria-expanded', 'false'); } }); }); }
     return el('span', { klass: 'pk-menuwrap' }, knop, lijst);
