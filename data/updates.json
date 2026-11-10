@@ -1,5 +1,16 @@
 [
   {
+    "versie": "2.35.1",
+    "datum": "2026-11-10",
+    "titel": "Projectlabel in een nieuw jasje",
+    "voor": "iedereen",
+    "punten": [
+      "Het label heeft nu vakken zoals een bladkader, met ons logo en het projectnummer bovenaan.",
+      "Bij Datum gereed staat ook het weeknummer.",
+      "Teksten staan in het midden en worden vanzelf kleiner als ze anders niet passen."
+    ]
+  },
+  {
     "versie": "2.35.0",
     "datum": "2026-11-10",
     "titel": "Projectlabel printen",
