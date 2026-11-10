@@ -1,5 +1,16 @@
 [
   {
+    "versie": "2.35.2",
+    "datum": "2026-11-10",
+    "titel": "Projectlabel precies op het etiket",
+    "voor": "iedereen",
+    "punten": [
+      "Het label ligt beter op het etiket van de Godex.",
+      "Nog een paar mm scheef? Kies bij een project ⋯ en dan Label afstellen. Vul in hoeveel mm naar rechts en omhoog, dan komt er meteen een testlabel uit.",
+      "De afstelling geldt per computer."
+    ]
+  },
+  {
     "versie": "2.35.1",
     "datum": "2026-11-10",
     "titel": "Projectlabel in een nieuw jasje",
