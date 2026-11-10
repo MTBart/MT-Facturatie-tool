@@ -50,7 +50,7 @@
     '@page{size:90mm 50mm;margin:0}',
     'html,body{margin:0;padding:0;background:#fff;color:#000}',
     '*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}',
-    '.lbl{width:90mm;height:50mm;padding:2.5mm;font-family:"Segoe UI",Arial,Helvetica,sans-serif;overflow:hidden;page-break-after:always;break-after:page}',
+    '.lbl{width:90mm;height:50mm;padding:3.5mm;font-family:"Segoe UI",Arial,Helvetica,sans-serif;overflow:hidden;page-break-after:always;break-after:page}',
     '.lbl:last-child{page-break-after:auto;break-after:auto}',
     '.kader{width:100%;height:100%;border:0.5mm solid #000;display:grid;grid-template-columns:40mm 1fr 22mm;grid-template-rows:8.5mm 9.5mm 1fr 11.5mm}',
     '.vak{border:0 solid #000;padding:0.9mm 1.6mm 0.6mm;min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column}',
@@ -111,6 +111,27 @@
     return lbl;
   };
 
+  // Afstelling per pc (de Godex legt het beeld niet altijd precies op het etiket): verschuiving in mm, x = naar rechts, y = omhoog.
+  // Standaard de correctie die op de eerste echte print (10-11-2026) is gemeten: het beeld zat ~2 mm te ver naar links en ~4 mm te laag.
+  const AFSTEL_SLEUTEL = 'mt_label_afstelling', AFSTEL_STANDAARD = Object.freeze({ x: 2, y: 4 });
+  const getal = (v, d) => { const n = Number(String(v == null ? '' : v).replace(',', '.')); return Number.isFinite(n) && Math.abs(n) <= 20 ? Math.round(n * 10) / 10 : d; };
+  L.afstelling = () => {
+    try { const j = JSON.parse(root.localStorage.getItem(AFSTEL_SLEUTEL) || 'null'); if (j && typeof j === 'object') return { x: getal(j.x, AFSTEL_STANDAARD.x), y: getal(j.y, AFSTEL_STANDAARD.y) }; } catch (e) {}
+    return { x: AFSTEL_STANDAARD.x, y: AFSTEL_STANDAARD.y };
+  };
+  // tekst "2 4" of "2,5 -1" → {x, y}; null als het geen twee getallen tussen -20 en 20 zijn
+  L.leesAfstelling = tekst => {
+    const d = String(tekst == null ? '' : tekst).trim().split(/[\s;\/]+/).filter(Boolean);
+    if (d.length !== 2) return null;
+    const x = getal(d[0], null), y = getal(d[1], null);
+    return x == null || y == null ? null : { x, y };
+  };
+  L.zetAfstelling = a => { try { root.localStorage.setItem(AFSTEL_SLEUTEL, JSON.stringify({ x: a.x, y: a.y })); return true; } catch (e) { return false; } };
+  // De marges (boven, rechts, onder, links) in mm binnen de pagina: normaal 3,5 rondom; de afstelling schuift het kader binnen de pagina
+  // (nooit buiten de pagina, want wat buiten de pagina valt print de driver niet). Minimaal 0,5 mm.
+  L.marges = a => { const m = v => Math.max(0.5, Math.round(v * 10) / 10); return [m(3.5 - a.y), m(3.5 - a.x), m(3.5 + a.y), m(3.5 + a.x)]; };
+  L.afstellingTekst = a => String(a.x).replace('.', ',') + ' ' + String(a.y).replace('.', ',');
+
   // Print een of meer labels. lijst = [{klant, project, leverdatum, opmerking, nummer}], opts.doc = het hoofddocument (test).
   // → Promise die klaar is zodra het printvenster is geopend (en weer dicht, waar de browser dat meldt).
   L.print = (lijst, opts) => new Promise((klaar, fout) => {
@@ -126,7 +147,8 @@
     d.open(); d.close();
     d.title = 'Label ' + (items[0].nummer || items[0].project || '');
     const st = d.createElement('style'); st.textContent = CSS; d.head.appendChild(st);
-    items.forEach(g => L.passen(d.body.appendChild(L.bouw(d, g))));
+    const af = (opts && opts.afstelling) || L.afstelling();
+    items.forEach(g => { const lbl = L.bouw(d, g); lbl.style.padding = L.marges(af).map(m => m + 'mm').join(' '); L.passen(d.body.appendChild(lbl)); });
     let weg = false;
     const ruim = () => { if (weg) return; weg = true; setTimeout(() => { try { f.remove(); } catch (e) {} }, 500); klaar(); };
     w.addEventListener('afterprint', ruim);
