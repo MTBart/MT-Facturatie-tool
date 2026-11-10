@@ -112,8 +112,8 @@
   };
 
   // Afstelling per pc (de Godex legt het beeld niet altijd precies op het etiket): verschuiving in mm, x = naar rechts, y = omhoog.
-  // Standaard de correctie die op de eerste echte print (10-11-2026) is gemeten: het beeld zat ~2 mm te ver naar links en ~4 mm te laag.
-  const AFSTEL_SLEUTEL = 'mt_label_afstelling', AFSTEL_STANDAARD = Object.freeze({ x: 2, y: 4 });
+  // Standaard de correctie die op de eerste twee echte prints (10-11-2026) is gemeten: het beeld zat ~3-5 mm te ver naar links en ~2-4 mm te laag.
+  const AFSTEL_SLEUTEL = 'mt_label_afstelling', AFSTEL_STANDAARD = Object.freeze({ x: 4, y: 3 });
   const getal = (v, d) => { const n = Number(String(v == null ? '' : v).replace(',', '.')); return Number.isFinite(n) && Math.abs(n) <= 20 ? Math.round(n * 10) / 10 : d; };
   L.afstelling = () => {
     try { const j = JSON.parse(root.localStorage.getItem(AFSTEL_SLEUTEL) || 'null'); if (j && typeof j === 'object') return { x: getal(j.x, AFSTEL_STANDAARD.x), y: getal(j.y, AFSTEL_STANDAARD.y) }; } catch (e) {}
