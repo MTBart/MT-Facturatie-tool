@@ -11,10 +11,11 @@
  *   ├─────────────────────┬─────────────────────┤
  *   │ DATUM GEREED  + wk  │ OPMERKING           │
  *   └─────────────────────┴─────────────────────┘
+ * Waardes staan gecentreerd in hun vak en worden kleiner gezet tot ze passen (L.passen meet in de browser).
  * Alleen zwart (thermisch), lijnen van 0,3 mm, geen vlakken. Opmerking leeg = ruimte om met de hand te schrijven.
  * Printen gaat via de gewone Windows-driver van de Godex: een verborgen iframe met een pagina van precies 90 x 50 mm (@page) en
  * window.print(). Geen extra software nodig. Kies in het printvenster één keer de Godex; Chrome onthoudt dat.
- * Tekent met DOM-calls, nooit met opgebouwde HTML (check-sinks). Puur deel (gegevens, tekstmaat) is los te testen.
+ * Tekent met DOM-calls, nooit met opgebouwde HTML (check-sinks). Puur deel (gegevens, datum, week) is los te testen.
  * ========================================================================== */
 (function (root) {
   'use strict';
@@ -45,15 +46,6 @@
     return { klant: schoon(g.klant), project: schoon(g.project), datum: L.datumTekst(g.leverdatum), dag: L.dagTekst(g.leverdatum),
       week: L.week(g.leverdatum), opmerking: schoon(g.opmerking), nummer: schoon(g.nummer) };
   };
-  // Lettergrootte in pt: zo groot als past in een vak van `breedteMm` breed, over `regels` regels, tussen `min` en `max`.
-  // Een vette letter is gemiddeld ~0,6 x de lettergrootte breed; 1 pt = 0,353 mm.
-  L.pas = (tekst, breedteMm, regels, min, max) => {
-    const n = Math.max(1, Math.ceil(String(tekst || '').length / (regels || 1)));
-    return Math.max(min, Math.min(max, Math.floor(breedteMm / (n * 0.64 * 0.353))));
-  };
-  // De projectnaam: past hij op één regel van 80 mm, dan groot (tot 20 pt); anders over twee regels, tot 15 pt (de hoogte van het vak).
-  L.projectPt = tekst => { const een = L.pas(tekst, 80, 1, 10, 20); return een >= 15 ? een : L.pas(tekst, 80, 2, 9, 15); };
-
   const CSS = [
     '@page{size:90mm 50mm;margin:0}',
     'html,body{margin:0;padding:0;background:#fff;color:#000}',
@@ -63,27 +55,31 @@
     '.kader{width:100%;height:100%;border:0.5mm solid #000;display:grid;grid-template-columns:40mm 1fr 22mm;grid-template-rows:8.5mm 9.5mm 1fr 11.5mm}',
     '.vak{border:0 solid #000;padding:0.9mm 1.6mm 0.6mm;min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column}',
     '.kop{grid-column:1/3;flex-direction:row;align-items:center;gap:1.8mm;border-bottom-width:0.3mm;border-right-width:0.3mm}',
-    '.nr{grid-column:3;border-bottom-width:0.3mm;align-items:flex-end;text-align:right}',
+    '.nr{grid-column:3;border-bottom-width:0.3mm}',
     '.klant{grid-column:1/4;border-bottom-width:0.3mm}',
     '.proj{grid-column:1/4;border-bottom-width:0.3mm}',
     '.dat{grid-column:1/2;border-right-width:0.3mm}',
     '.opm{grid-column:2/4}',
+    '.wv{flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;text-align:center;overflow:hidden}',
+    '.wv .w{max-width:100%}.wv .een{white-space:nowrap}',
     '.k{font-size:5.5pt;letter-spacing:0.08em;text-transform:uppercase;line-height:1;margin-bottom:0.5mm;white-space:nowrap}',
     '.w{font-weight:700;line-height:1.08;overflow-wrap:anywhere}',
     '.merk{width:5.2mm;height:5.2mm;flex:none;fill:none;stroke:#000;stroke-width:7}',
     '.woord{font-size:10pt;font-weight:500;letter-spacing:0.01em;white-space:nowrap}.woord i{font-weight:400}',
     '.nr .w{font-size:11pt;letter-spacing:0.02em}',
-    '.datrij{display:flex;align-items:baseline;justify-content:space-between;gap:1mm;white-space:nowrap}',
+    '.datrij{display:flex;align-items:baseline;justify-content:center;gap:2.2mm;white-space:nowrap;max-width:100%}',
     '.dag{font-size:7pt;font-weight:400}.wk{font-size:7.5pt;font-weight:600;white-space:nowrap}',
     '.opm .w{font-weight:400;font-size:9pt}',
-    '.leeg{border-bottom:0.2mm dotted #000;height:4.2mm;margin-top:0.6mm}'
+    '.leeg{border-bottom:0.2mm dotted #000;width:100%;height:4mm}'
   ].join('\n');
 
   // Bouw het label in `doc` (het document van de iframe). Geeft het .lbl-element terug.
   L.bouw = (doc, g) => {
     const el = (tag, klass, tekst, ...kids) => { const e = doc.createElement(tag); if (klass) e.className = klass; if (tekst != null) e.textContent = tekst; kids.forEach(k => k && e.appendChild(k)); return e; };
     const vak = (klass, label, ...kids) => el('div', 'vak ' + klass, null, label ? el('div', 'k', label) : null, ...kids);
-    const groot = (tekst, pt) => { const w = el('div', 'w', tekst || ''); w.style.fontSize = pt + 'pt'; return w; };
+    // Een waarde, gecentreerd in de rest van het vak. max/min in pt; een = op één regel houden. passen() maakt hem na het tekenen precies passend.
+    const groot = (tekst, max, min, een) => { const w = el('div', 'w' + (een ? ' een' : ''), tekst || ''); w.style.fontSize = max + 'pt'; w.setAttribute('data-min', min); return w; };
+    const midden = (...kids) => el('div', 'wv', null, ...kids);
     // het beeldmerk: pen-en-gat-doorsnede (zelfde als mt-merk.css)
     const NS = 'http://www.w3.org/2000/svg', svg = doc.createElementNS(NS, 'svg');
     svg.setAttribute('viewBox', '0 0 100 100'); svg.setAttribute('class', 'merk'); svg.setAttribute('aria-hidden', 'true');
@@ -93,13 +89,26 @@
     const woord = el('span', 'woord', 'mortise '); woord.appendChild(el('i', null, '&')); woord.appendChild(doc.createTextNode(' tenon'));
     const kader = el('div', 'kader', null,
       el('div', 'vak kop', null, svg, woord),
-      vak('nr', 'Projectnr', el('div', 'w', g.nummer || '')),
-      vak('klant', 'Klant', groot(g.klant, L.pas(g.klant, 80, 1, 9, 15))),
-      vak('proj', 'Project', groot(g.project, L.projectPt(g.project))),
-      vak('dat', 'Datum gereed', el('div', 'datrij', null, groot(g.datum, L.pas(g.datum, 26, 1, 8, 14)),
-        g.week ? el('span', 'wk', 'wk ' + g.week) : null)),
-      vak('opm', 'Opmerking', g.opmerking ? el('div', 'w', g.opmerking) : el('div', 'leeg')));
+      vak('nr', 'Projectnr', midden(groot(g.nummer, 12, 7, true))),
+      vak('klant', 'Klant', midden(groot(g.klant, 16, 7, true))),
+      vak('proj', 'Project', midden(groot(g.project, 20, 7, false))),
+      vak('dat', 'Datum gereed', midden(el('div', 'datrij', null, groot(g.datum, 14, 7, true), g.week ? el('span', 'wk', 'wk ' + g.week) : null))),
+      vak('opm', 'Opmerking', midden(g.opmerking ? groot(g.opmerking, 11, 6, false) : el('div', 'leeg'))));
     return el('div', 'lbl', null, kader);
+  };
+  // Na het tekenen (het label staat in een document met opmaak): elke waarde in stapjes van 0,5 pt kleiner tot hij in zijn vak past,
+  // in de breedte én de hoogte. Meet in de echte browser, dus met het echte lettertype. Een waarde op één regel past als hij niet
+  // breder is dan het vak; een waarde die mag afbreken (project, opmerking) past als hij niet hoger is dan het vak.
+  L.passen = lbl => {
+    lbl.querySelectorAll('.wv').forEach(vak => {
+      const w = vak.querySelector('.w'); if (!w) return;
+      const min = Number(w.getAttribute('data-min')) || 6;
+      const rij = w.parentNode !== vak ? w.parentNode : w;     // datum + week samen in één rij
+      const te = () => rij.scrollWidth > vak.clientWidth + 0.5 || rij.scrollHeight > vak.clientHeight + 0.5 || w.scrollWidth > w.clientWidth + 0.5;
+      let pt = parseFloat(w.style.fontSize) || 12;
+      for (let i = 0; i < 60 && pt > min && te(); i++) { pt -= 0.5; w.style.fontSize = pt + 'pt'; }
+    });
+    return lbl;
   };
 
   // Print een of meer labels. lijst = [{klant, project, leverdatum, opmerking, nummer}], opts.doc = het hoofddocument (test).
@@ -117,7 +126,7 @@
     d.open(); d.close();
     d.title = 'Label ' + (items[0].nummer || items[0].project || '');
     const st = d.createElement('style'); st.textContent = CSS; d.head.appendChild(st);
-    items.forEach(g => d.body.appendChild(L.bouw(d, g)));
+    items.forEach(g => L.passen(d.body.appendChild(L.bouw(d, g))));
     let weg = false;
     const ruim = () => { if (weg) return; weg = true; setTimeout(() => { try { f.remove(); } catch (e) {} }, 500); klaar(); };
     w.addEventListener('afterprint', ruim);
