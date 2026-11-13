@@ -7210,7 +7210,7 @@ window.forecastLaagOpen = window.forecastLaagOpen || function () {};
    Pas laden bij het openen (zelfde patroon als de Forecast-laag), eigen opslag alleen lokaal in IndexedDB (mt-opname), geen upload, geen taken, geen worker.
    ===================================================================== */
 const OPNAME_CSS = "mt-opname.css?v=2026-11-01e";
-const OPNAME_SCRIPTS = ["mt-opname-kern.js?v=2026-11-01e","mt-opname-export.js?v=2026-11-01e","mt-opname-geo.js?v=2026-11-01e","mt-opname-opslag.js?v=2026-11-01e","mt-opname.js?v=2026-11-01e","mt-opname-model.js?v=2026-11-01e"];
+const OPNAME_SCRIPTS = ["mt-opname-kern.js?v=2026-11-01e","mt-opname-export.js?v=2026-11-01e","mt-opname-geo.js?v=2026-11-01e","mt-opname-opslag.js?v=2026-11-01e","mt-opname.js?v=2026-11-13a","mt-opname-model.js?v=2026-11-01e"];
 let _opnameScripts = null;
 function opnameBetaMag() { try { return !!(window.MTRol && MTRol.me && MTRol.isBeheer()); } catch (e) { return false; } }
 function opnameBetaAan() { try { return localStorage.getItem("mt_opname_beta") === "1"; } catch (e) { return false; } }

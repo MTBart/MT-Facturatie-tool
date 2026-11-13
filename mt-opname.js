@@ -130,8 +130,17 @@
     return (S.urls[fotoId] = URL.createObjectURL(rec.blob));
   };
   // Een knop die de camera (of de galerij) opent: de input zit in het label zelf, zodat Android de native camera start zonder tussenstap.
+  // Op Windows (tablet of laptop) negeert de browser `capture` en opent alleen de Verkenner: daar gebruikt de knop de in-app camera van
+  // mobiel.html (openCamera, getUserMedia), die een gewone File teruggeeft. De galerij-knop blijft overal de bestandskiezer.
+  const binnenCamera = () => typeof root.openCamera === 'function' && !!(root.navigator && root.navigator.mediaDevices && root.navigator.mediaDevices.getUserMedia)
+    && /Windows/i.test((root.navigator && root.navigator.userAgent) || '');
   X.fotoKnop = function (tekst, bijFile, opties) {
     opties = opties || {};
+    if (!opties.galerij && binnenCamera()) {
+      const klaar = async f => { try { await bijFile(f); } catch (e) { X.toast('Foto opslaan mislukt: ' + (e.message || e)); X.opslagFoutZet(e); } };
+      return h('button', { type: 'button', class: (opties.klasse || 'opn-btn opn-btn-groot') + ' opn-fotoknop', 'aria-label': tekst,
+        onclick: () => root.openCamera(r => { const f = r && r.files && r.files[0]; if (f) klaar(f); }) }, h('span', { text: tekst }));
+    }
     const inp = h('input', { type: 'file', accept: 'image/*', capture: opties.galerij ? false : 'environment', class: 'opn-file' });
     inp.addEventListener('change', async () => { const f = inp.files && inp.files[0]; inp.value = ''; if (f) { try { await bijFile(f); } catch (e) { X.toast('Foto opslaan mislukt: ' + (e.message || e)); X.opslagFoutZet(e); } } });
     inp.setAttribute('aria-label', tekst);
