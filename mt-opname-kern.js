@@ -585,9 +585,10 @@
   // Geeft { n, rond, punten (hoek-id naar [x, y] in mm), wanden (id naar { a, b, lengte, gemeten, geschat, hoek }), uitsprongen[], contour[] (segmenten langs de rand), schatting, sluitfout, vorm, bbox }.
   // Het coordinatenstelsel: de eerste wand loopt langs de x-as, y wijst omlaag, de ruimte ligt rechts van de looprichting (met de klok mee).
   const afstandPt = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
-  function schatLengtes(ids, info, gem, rond, vorm) {
-    const n = ids.length, bekend = gem.filter(x => x != null), gemiddeld = bekend.length ? bekend.reduce((s, x) => s + x, 0) / bekend.length : null;
-    const std = i => gem[i] != null ? gem[i] : (n % 2 === 0 && gem[(i + n / 2) % n] != null) ? gem[(i + n / 2) % n] : gemiddeld != null ? gemiddeld : (i % 2 === 0 ? 4000 : 3000);
+  // vs: per wand het grijze voorstel voor de lengte uit de foto (of null). Het telt nooit als meting: het geeft alleen de getekende schatting een betere verhouding dan de standaardmaten.
+  function schatLengtes(ids, info, gem, rond, vorm, vs) {
+    const n = ids.length, bekend = gem.filter(x => x != null), gemiddeld = bekend.length ? bekend.reduce((s, x) => s + x, 0) / bekend.length : null, v = i => (vs && vs[i] != null ? vs[i] : null), over = i => (n % 2 === 0 ? (i + n / 2) % n : -1);
+    const std = i => gem[i] != null ? gem[i] : (over(i) >= 0 && gem[over(i)] != null) ? gem[over(i)] : v(i) != null ? v(i) : (over(i) >= 0 && v(over(i)) != null) ? v(over(i)) : gemiddeld != null ? gemiddeld : (i % 2 === 0 ? 4000 : 3000);
     const L = ids.map((w, i) => std(i)), geschat = gem.map(x => x == null);
     if (!rond || !info.every(i => i.haaks) || (vorm && vorm.status === 'inconsistent')) return { L, geschat, gesloten: false };          // een inconsistente meting wordt niet mooi gemaakt: de sluitfout blijft zichtbaar
     // Alle wanden gemeten maar de rondgang sluit niet precies (en er is geen diagonaal die de vorm vastlegt): voor de tekening de fout gelijk verdelen over de wanden op dezelfde as, als de fout klein is.
@@ -617,7 +618,8 @@
     if (rond && vorm.hoekpunten_mm && vorm.status !== 'inconsistent' && hoekIds.every(h => vorm.hoekpunten_mm[h])) {
       pts = hoekIds.map(h => vorm.hoekpunten_mm[h]); pts.push(pts[0]); vormGeschat = vorm.bepaling !== 'bepaald' && vorm.bepaling !== 'gecontroleerd';
     } else {
-      const sl = schatLengtes(ids, info, gem, rond, vorm); geschat = sl.geschat;
+      const vs = ids.map(w => { const m = maatOp(vind(r.wanden, w), 'lengte'), s = isObj(m) && isObj(m.voorstel) ? m.voorstel.schatting_mm : null; return getal(s) && s >= 300 ? s : null; });
+      const sl = schatLengtes(ids, info, gem, rond, vorm, vs); geschat = sl.geschat;
       pts = rondgang(sl.L, info.map(i => i.graden));
     }
     const gesloten = rond && afstandPt(pts[0], pts[n]) <= T.sluit + 0.5;

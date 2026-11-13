@@ -1,5 +1,19 @@
 [
   {
+    "versie": "2.36.0",
+    "datum": "2026-11-13",
+    "titel": "Opname (beta): draadmodel uit de foto's en meten met de DISTO",
+    "voor": "beheer",
+    "punten": [
+      "Nieuw: Herken wat er op de foto's staat. De AI wijst per wandfoto het kader van de wand, ramen, deuren, stopcontacten en radiatoren aan. Jij vinkt aan wat klopt, daarna staat het in het draadmodel. De maten meet je altijd zelf.",
+      "Meerdere foto's tegelijk kiezen uit de galerij: elke foto wordt de volgende wand.",
+      "Op de Windows-tablet opent Foto maken nu de camera in plaats van de Verkenner.",
+      "Meten met de DISTO in toetsenbordmodus: de maat komt vanzelf binnen, wordt als DISTO-meting bewaard en de app gaat door naar het volgende punt.",
+      "Op een breed scherm staat het beeld groot links en de lijst met meetpunten rechts.",
+      "Proef: DISTO via Bluetooth verbinden, om te zien wat de DISTO nog meer doorgeeft."
+    ]
+  },
+  {
     "versie": "2.35.2",
     "datum": "2026-11-10",
     "titel": "Projectlabel precies op het etiket",

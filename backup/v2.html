@@ -24,7 +24,7 @@
 </script>
 <meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BACKUP v2.35.1 — M&T Bedrijfstool v2 bèta</title>
+<title>BACKUP v2.35.2 — M&T Bedrijfstool v2 bèta</title>
 <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <!-- msal-browser lokaal gevendord (was jsdelivr @2 = 2.39.0, laatste v2-release).
@@ -44,7 +44,7 @@
 <script src="mt-project.js?v=2026-10-15b"></script>
 <script src="mt-lead.js?v=2026-10-13b"></script>
 <script src="mt-vw.js?v=2026-10-13b"></script>
-<script src="mt-label.js?v=2026-11-10c"></script>
+<script src="mt-label.js?v=2026-11-10d"></script>
 <!-- Herbruikbare <dialog>-flows (Promise-gebaseerd) als vervanger voor de
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
@@ -78,7 +78,7 @@
 <script src="mt-taakpaneel.js?v=2026-10-24z"></script>
 <script src="mt-taaktabel.js?v=2026-10-23z"></script>
 <script src="mt-voortgang.js?v=2026-10-23z"></script>
-<script src="mt-projectkop.js?v=2026-11-10a"></script>
+<script src="mt-projectkop.js?v=2026-11-10b"></script>
 <script src="mt-projectpaneel.js?v=2026-10-23z"></script>
 <script src="mt-planblokpaneel.js?v=2026-10-23z"></script>
 <script src="mt-planinrichting.js?v=2026-10-24z"></script>
@@ -951,7 +951,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1 class="mt-merkrij"><svg class="mt-merk" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><rect x="2" y="2" width="96" height="96"/><path d="M55.4 2 V31.3 H34.2 V67.3 H55.4 V98"/></svg><b class="mt-woord">mortise <em>&amp;</em> tenon</b></h1>
-    <span class="header-version">v2.35.1</span>
+    <span class="header-version">v2.35.2</span>
     <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
@@ -4213,7 +4213,7 @@ try{ MTProjectKop.init({ doc:document, planning:MTPlanning,
   week:ymd=>(window.MTVW&&MTVW.isoWeek?MTVW.isoWeek(ymd):null), vandaag:()=>MTPlanning.vandaagYmd(),
   meter:pkMeter, meterLaad:code=>projMeterLaad(code), naarMeter:code=>projSectieKies('planning'),
   volgende:code=>MTProjectKop.volgende(projTaken(code)), naamVan:d=>_capNaamVan(d), openTaak:(code,id,el)=>MTTaakPaneel.open(code,id,{terug:el}),
-  kopieerLink:code=>projKopieerLink(code), labelPrint:code=>projLabelPrint(code), vwExport:code=>projVwExport(code), verwijder:code=>verwijderProject(code),
+  kopieerLink:code=>projKopieerLink(code), labelPrint:code=>projLabelPrint(code), labelAfstel:code=>projLabelAfstel(code), vwExport:code=>projVwExport(code), verwijder:code=>verwijderProject(code),
   openGegevens:code=>projGegevensOpen(code), mag:{ fase:()=>_leadMag(), wijzig:()=>_leadMag() }, toast:(t,o,l,lb)=>MTCapaciteitNieuw.toast(t,o,l,lb), naWijziging:()=>_vgHerteken() }); }catch(e){ console.warn('Projectkop init:',e); }
 // Het paneel Gegevens (samenhang S2, mt-projectpaneel.js): de projectgegevens en, voor een lead, de leadgegevens, bewerkbaar op de plek zelf. Schrijven via projGegevensZet en leadVeldZet (per veld een stempel, zichtbaar conflict).
 try{ MTProjectPaneel.init({ doc:document, model:pgModel, klaar:()=>!!PROJECT_CODES, ruw:()=>(localStorage.getItem('mt_projecten')||''), mag:()=>_leadMag(),
@@ -12681,6 +12681,19 @@ async function projLabelPrint(code){
   if(opm===null) return;
   try{ await MTLabel.print({klant:projKlantNaam(p),project:projNaamKort(p),leverdatum:g.leverdatum||'',opmerking:opm,nummer:projHoofdNr(p)}); }
   catch(e){ mtDialog.alert({title:'Label printen',message:'Printen lukte niet ('+((e&&e.message)||e)+').'}); }
+}
+// Label afstellen (per pc, in deze browser): schuift het hele label een paar mm, als de Godex het beeld niet precies op het etiket legt.
+async function projLabelAfstel(code){
+  if(!window.MTLabel) return;
+  const nu=MTLabel.afstelling();
+  const t=await mtDialog.prompt({title:'Label afstellen',message:'Hoeveel mm moet het label verschuiven? Eerst naar rechts, dan omhoog, met een spatie ertussen.\nMin = naar links of omlaag. Voorbeeld: 2 4\nGeldt alleen op deze computer.',defaultValue:MTLabel.afstellingTekst(nu),okLabel:'Opslaan en testlabel printen'});
+  if(t===null) return;
+  const a=MTLabel.leesAfstelling(t);
+  if(!a) return mtDialog.alert({title:'Label afstellen',message:'Vul twee getallen in tussen -20 en 20, bijvoorbeeld: 2 4'});
+  MTLabel.zetAfstelling(a);
+  const p=projVind(code);
+  try{ await MTLabel.print({klant:p?projKlantNaam(p):'Testlabel',project:p?projNaamKort(p):'Afstellen',leverdatum:p?((p.gegevens||{}).leverdatum||''):'',opmerking:'Testlabel: '+MTLabel.afstellingTekst(a)+' mm',nummer:p?projHoofdNr(p):''}); }
+  catch(e){ mtDialog.alert({title:'Label afstellen',message:'Printen lukte niet ('+((e&&e.message)||e)+').'}); }
 }
 // ── Project overnemen uit Toggl (v2.14.1, Bart: "andersom werken") ──
 // Een actief Toggl-project dat nog bij geen project hoort (geen tg_project_id; de naam wijst via de resolver ook niet naar

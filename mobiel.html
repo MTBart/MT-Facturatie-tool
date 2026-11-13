@@ -7209,8 +7209,13 @@ window.forecastLaagOpen = window.forecastLaagOpen || function () {};
    "Nieuwe opname testen" in Meer aan staat (localStorage mt_opname_beta). De bestaande Opname/Capture/Rapportage blijven ongemoeid en standaard.
    Pas laden bij het openen (zelfde patroon als de Forecast-laag), eigen opslag alleen lokaal in IndexedDB (mt-opname), geen upload, geen taken, geen worker.
    ===================================================================== */
-const OPNAME_CSS = "mt-opname.css?v=2026-11-01e";
-const OPNAME_SCRIPTS = ["mt-opname-kern.js?v=2026-11-01e","mt-opname-export.js?v=2026-11-01e","mt-opname-geo.js?v=2026-11-01e","mt-opname-opslag.js?v=2026-11-01e","mt-opname.js?v=2026-11-13a","mt-opname-model.js?v=2026-11-01e"];
+const OPNAME_CSS = "mt-opname.css?v=2026-11-13b";
+const OPNAME_SCRIPTS = ["mt-opname-kern.js?v=2026-11-13b","mt-opname-export.js?v=2026-11-01e","mt-opname-geo.js?v=2026-11-01e","mt-opname-opslag.js?v=2026-11-01e","mt-opname.js?v=2026-11-13b","mt-opname-model.js?v=2026-11-13b","mt-opname-ai.js?v=2026-11-13b","mt-opname-disto.js?v=2026-11-13b"];
+// Herkenning uit de wandfoto's (mt-opname-ai.js): het verzoek gaat via de eigen worker naar de AI, met de login van de gebruiker. Alleen na een tik op de knop in de opname.
+async function opnameHerken(verzoek) {
+  const r = await window.fetchMetAuth(WORKER + "?target=claude", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(verzoek) });
+  return { status: r.status, tekst: await r.text() };
+}
 let _opnameScripts = null;
 function opnameBetaMag() { try { return !!(window.MTRol && MTRol.me && MTRol.isBeheer()); } catch (e) { return false; } }
 function opnameBetaAan() { try { return localStorage.getItem("mt_opname_beta") === "1"; } catch (e) { return false; } }
@@ -7250,7 +7255,7 @@ function opnameLaagInit() {
     geblokkeerd.forEach(el => { el.inert = true; });
     try { history.pushState({ opnameLaag: 1 }, ""); histActief = true; } catch (e) { histActief = false; }
     bezig = false;
-    try { await MTOpname.start(laag, { projecten: opnameProjecten, door: () => String((window.MTRol && MTRol.me && MTRol.me.naam) || ""), sluit: () => sluit() }); }
+    try { await MTOpname.start(laag, { projecten: opnameProjecten, door: () => String((window.MTRol && MTRol.me && MTRol.me.naam) || ""), sluit: () => sluit(), herken: opnameHerken }); }
     catch (e) { showToast("Opname starten mislukt: " + (e.message || e)); sluit(); }
   }
   function dicht() {

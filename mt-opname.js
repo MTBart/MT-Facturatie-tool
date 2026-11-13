@@ -1,6 +1,7 @@
 // mt-opname.js — de nieuwe opname-module (brok 2, beta): start, fotoronde, lijst, rondje controle en afronden. Het draadmodel en de wandfoto met lijnenoverlay staan in
 // mt-opname-model.js. Alles wat gemeten wordt rekent de kern (mt-opname-kern.js); de projectie en de wandlijnen komen uit mt-opname-geo.js; opslag is alleen lokaal in
-// IndexedDB (mt-opname-opslag.js). Geen upload, geen taken, geen worker. Bouwt uitsluitend met DOM-methoden (textContent), nooit innerHTML.
+// IndexedDB (mt-opname-opslag.js). Geen upload van de opname en geen taken. De enige uitzondering op "alles blijft op het toestel" is de herkenning uit de foto's (mt-opname-ai.js): die stuurt,
+// alleen na een tik op de knop, een verkleinde wandfoto via de worker naar de AI. Bouwt uitsluitend met DOM-methoden (textContent), nooit innerHTML.
 // Lazy: mobiel.html laadt deze bestanden pas bij het openen van de beta-laag (zelfde patroon als mt-forecast-light.js).
 (function (root) {
   'use strict';
@@ -141,12 +142,18 @@
       return h('button', { type: 'button', class: (opties.klasse || 'opn-btn opn-btn-groot') + ' opn-fotoknop', 'aria-label': tekst,
         onclick: () => root.openCamera(r => { const f = r && r.files && r.files[0]; if (f) klaar(f); }) }, h('span', { text: tekst }));
     }
-    const inp = h('input', { type: 'file', accept: 'image/*', capture: opties.galerij ? false : 'environment', class: 'opn-file' });
-    inp.addEventListener('change', async () => { const f = inp.files && inp.files[0]; inp.value = ''; if (f) { try { await bijFile(f); } catch (e) { X.toast('Foto opslaan mislukt: ' + (e.message || e)); X.opslagFoutZet(e); } } });
+    // opties.meerdere (alleen bij de galerij): de bestandskiezer laat dan meer foto's tegelijk kiezen; bij meer dan één gaat de hele reeks naar die functie.
+    const inp = h('input', { type: 'file', accept: 'image/*', capture: opties.galerij ? false : 'environment', multiple: !!(opties.galerij && opties.meerdere), class: 'opn-file' });
+    inp.addEventListener('change', async () => {
+      const fs = Array.from(inp.files || []); inp.value = ''; if (!fs.length) return;
+      try { if (opties.meerdere && fs.length > 1) await opties.meerdere(fs); else await bijFile(fs[0]); } catch (e) { X.toast('Foto opslaan mislukt: ' + (e.message || e)); X.opslagFoutZet(e); }
+    });
     inp.setAttribute('aria-label', tekst);
     return h('div', { class: (opties.klasse || 'opn-btn opn-btn-groot') + ' opn-fotoknop' }, h('span', { text: tekst }), inp);
   };
   X.opslagFoutZet = e => { S.opslagFout = (e && e.message) || String(e); X.foutBalk(); };
+  // Een reeks foto's in de volgorde waarin ze gemaakt zijn (tijdstip van het bestand, bij gelijke tijd op naam): zo volgt een reeks uit de galerij de ronde door de kamer.
+  X.fotoVolgorde = files => Array.from(files || []).map((f, i) => ({ f, i })).sort((a, b) => ((a.f.lastModified || 0) - (b.f.lastModified || 0)) || String(a.f.name || '').localeCompare(String(b.f.name || ''), undefined, { numeric: true }) || (a.i - b.i)).map(x => x.f);
 
   // ── Navigatie ──
   const SCHERMEN = X.schermen = X.schermen || {};
@@ -195,7 +202,7 @@
 
   // ── Scherm: lijst ──
   SCHERMEN.lijst = function (c) {
-    c.appendChild(X.kop('Opname (beta)', 'Alleen op dit toestel, niets wordt geüpload', { terugLabel: 'Sluiten' }));
+    c.appendChild(X.kop('Opname (beta)', 'Alleen op dit toestel opgeslagen', { terugLabel: 'Sluiten' }));
     const body = h('div', { class: 'opn-body' });
     body.appendChild(h('div', { class: 'opn-kaart opn-uitleg' },
       h('div', { class: 'opn-kaart-titel', text: 'Nieuwe opname in testfase' }),
@@ -411,12 +418,30 @@
       S.fotoWand = nieuw ? 'nieuw' : (rond ? wand : 'nieuw'); X.teken();
     };
     body.appendChild(X.fotoKnop(rec ? 'Opnieuw fotograferen' : 'Foto maken', vervang, { klasse: 'opn-btn opn-btn-groot ' + (rec ? 'opn-btn-licht' : 'opn-btn-primair') }));
-    body.appendChild(X.fotoKnop('Of kies een foto uit de galerij', vervang, { galerij: true, klasse: 'opn-btn opn-btn-licht' }));
+    // Meer foto's in één keer (galerij of Verkenner): op volgorde van opnametijd, elke foto wordt de volgende wand. De eerste vult de wand die nog geen foto heeft.
+    const magReeks = !rond && !rec;
+    const reeks = async files => {
+      const fs = X.fotoVolgorde(files); let eerste = nieuw ? null : huidig, n = 0;
+      X.toast(fs.length + ' foto\'s bewaren...');
+      for (const f of fs) {
+        const bestaand = eerste; eerste = null;
+        const wand = bestaand || maakWand();
+        try { await X.opslaanFoto(f, { wand }); n++; }
+        catch (e) { if (!bestaand) { const w = K.verwijderLaatsteWand(S.rec.opname, r.id); if (w.opname) X.wijzig(w); } S.fotoWand = 'nieuw'; X.teken(); throw new Error((n ? 'na ' + n + ' foto\'s ging het mis: ' : '') + (e.message || e)); }
+      }
+      S.fotoWand = 'nieuw'; X.teken();
+      X.toast(n + ' foto\'s toegevoegd, elk als een wand. Klopt de volgorde niet? Tik een wand aan en vervang de foto.');
+    };
+    body.appendChild(X.fotoKnop(magReeks ? 'Of kies foto\'s uit de galerij (meerdere tegelijk mag)' : 'Of kies een foto uit de galerij', vervang, { galerij: true, meerdere: magReeks ? reeks : null, klasse: 'opn-btn opn-btn-licht' }));
+    if (magReeks) body.appendChild(h('p', { class: 'opn-hint', text: 'Meerdere tegelijk: ze komen op volgorde van opnametijd en elke foto wordt de volgende wand, met de klok mee.' }));
     // nog een foto van hetzelfde vlak: een extra foto bij deze wand, nooit een nieuwe wand
     const extraBij = nieuw ? (wanden.length && X.wandFotoRec(wanden[wanden.length - 1]) ? wanden[wanden.length - 1] : null) : (rec ? huidig : null);
     if (extraBij) {
       if (nieuw) body.appendChild(h('p', { class: 'opn-hint', text: 'De foto hierboven wordt een nieuwe wand. Is het nog dezelfde wand als wand ' + (wanden.indexOf(extraBij) + 1) + '? Kies dan hieronder: dat wordt een extra foto, geen nieuwe wand.' }));
-      body.appendChild(X.fotoKnop('Extra foto van wand ' + (wanden.indexOf(extraBij) + 1) + ' (geen nieuwe wand)', async f => { await X.opslaanFoto(f, { wand: extraBij, soort: 'extra' }); S.fotoWand = nieuw ? 'nieuw' : extraBij; X.toast('Extra foto bij wand ' + (wanden.indexOf(extraBij) + 1) + ' bewaard.'); X.teken(); }, { klasse: 'opn-btn opn-btn-licht' }));
+      const extraNr = wanden.indexOf(extraBij) + 1, naExtra = tekst => { S.fotoWand = nieuw ? 'nieuw' : extraBij; X.toast(tekst); X.teken(); };
+      body.appendChild(X.fotoKnop('Extra foto van wand ' + extraNr + ' (geen nieuwe wand)', async f => { await X.opslaanFoto(f, { wand: extraBij, soort: 'extra' }); naExtra('Extra foto bij wand ' + extraNr + ' bewaard.'); }, { klasse: 'opn-btn opn-btn-licht' }));
+      body.appendChild(X.fotoKnop('Extra foto\'s van wand ' + extraNr + ' uit de galerij', async f => { await X.opslaanFoto(f, { wand: extraBij, soort: 'extra' }); naExtra('Extra foto bij wand ' + extraNr + ' bewaard.'); },
+        { galerij: true, klasse: 'opn-btn opn-btn-licht', meerdere: async files => { let n = 0; for (const f of X.fotoVolgorde(files)) { await X.opslaanFoto(f, { wand: extraBij, soort: 'extra' }); n++; } naExtra(n + ' extra foto\'s bij wand ' + extraNr + ' bewaard.'); } }));
     }
     // de hoek met de vorige wand
     if (!rond && nr >= 2) body.appendChild(X.hoekRij(wanden[nr - 2], { kop: nieuw && wanden.length >= 3 ? 'Hoek na wand ' + (nr - 1) + ' (naar wand ' + nr + ', of terug naar wand 1)' : 'Hoek tussen wand ' + (nr - 1) + ' en wand ' + nr }));
@@ -630,7 +655,7 @@
   }
 
   // ── Opstarten ──
-  // host: { projecten(): [{code, naam, nr}], door(): naam, sluit(): void }
+  // host: { projecten(): [{code, naam, nr}], door(): naam, sluit(): void, herken(verzoek): Promise<{status, tekst}> (optioneel: de AI-aanroep voor mt-opname-ai.js) }
   M.start = async function (el, host) {
     S.host = host || {}; S.el = el; X.leeg(el);
     el.classList.add('opn');

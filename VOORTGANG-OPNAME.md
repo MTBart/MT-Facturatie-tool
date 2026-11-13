@@ -227,3 +227,25 @@ Zes punten uit de Codex-review op 63baf57. Geen uitbreidingen, geen release, nie
 - Foto's onder een id zonder opname-record (weesfoto's uit een eerdere, mislukte, niet-atomaire import) worden bij een nieuwe import onder dezelfde id overschreven door de foto's uit de export (dezelfde bron). Niet apart afgehandeld.
 - Bij een rolintrekking terwijl een opslagfout openstaat blijft de laag bewust open (geen verlies boven afsluiten); de foutbalk zegt wat er mis is.
 - Niet getest in een echte browser met twee tabbladen (alleen de nagebootste opslag); wel de echte opslagcode en de echte schermcode.
+
+## v2.36.0 (13-11-2026): herkenning uit de foto's, DISTO en breed scherm
+
+Aanleiding: Bart testte de opname op de Windows-tablet met de DISTO X4 en wil een rustige app met het draadmodel centraal, waarin de AI het voorwerk doet en de DISTO de maten levert.
+
+- **Meerdere foto's tegelijk** (`mt-opname.js`): de galerij-knop in de fotoronde laat een reeks kiezen; op volgorde van opnametijd wordt elke foto de volgende wand (`X.fotoVolgorde`).
+- **Herkenning uit de foto's** (`mt-opname-ai.js`, nieuw): per wandfoto een voorstel van de AI (via de worker, `?target=claude`, model in `AI.MODEL`): het kader van de wand (vier hoeken),
+  openingen, wat vast zit en wat los staat. De opnemer vinkt aan wat klopt; pas dan worden het onderdelen. Drie groepen: de ruimte zelf, constructief vast, los (alleen genoteerd in
+  `layout[ruimte][wand].ai`). Er komt nooit een maat uit de foto: een geschatte wandlengte is het grijze voorstel (`K.zetVoorstel`, nu voor het eerst gebruikt) en de plattegrond gebruikt
+  dat alleen voor de getekende schatting (`schatLengtes`). Buiten de werkzone is een herkend object "gezien" (geen vragen) tot de opnemer "Toch meten" kiest.
+  De plek op de foto staat in `layout.ai_vormen` (fracties van het beeld) en wordt opnieuw naar het wandvlak gerekend als de hoeken wijzigen (`X.aiHerplaats`).
+  Dit is de enige plek waar iets het toestel verlaat: een verkleinde kopie van de wandfoto, zonder naam van project, klant of ruimte, en alleen na een tik op de knop.
+- **DISTO in toetsenbordmodus** (`mt-opname-model.js`): een snelle reeks toetsen met Enter wordt als DISTO-meting bewaard (`bron: 'disto'`, `X.isDistoReeks`); daarnaast een keuze
+  "Ik meet met: DISTO of Rolmaat" per toestel (`mt_opname_meetbron`). Bij focus staat de oude waarde geselecteerd, zodat een nieuwe meting hem vervangt.
+- **DISTO via Bluetooth, proef** (`mt-opname-disto.js`, nieuw): een kijkvenster (Web Bluetooth) dat laat zien wat de DISTO in app-modus stuurt. Slaat niets op. Bedoeld om vast te stellen
+  of de X4 de helling en andere waarden doorgeeft; daarna volgt de echte koppeling. De X4 heeft geen USB en slaat geen foto's van de richtkijker op.
+- **Breed scherm** (`mt-opname.css`, `X.kolommen`): vanaf 900 px vult de opname het hele scherm, met het beeld (draadmodel of wandfoto) groot links en de vraag plus de lijst
+  "Meetpunten op deze wand" rechts. Met de muis over een regel licht de lijn op de foto op. Op een telefoon blijft alles onder elkaar.
+- Tests: `node test/opname-ai.test.js`. De echte AI-aanroep is alleen met een nagebootst antwoord getest (in de browser, hele stroom); de eerste echte foto's zijn de proef op de som.
+
+Nog niet (volgende stappen, in deze volgorde besproken met Bart): de opname op kantoor terugkijken (vraagt opslag buiten het toestel), een export waarmee de ruimte in Vectorworks
+is na te bouwen, en de DISTO-koppeling in app-modus (helling per meting) zodra de proef laat zien wat de X4 stuurt.

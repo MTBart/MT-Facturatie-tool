@@ -1,7 +1,8 @@
 // mt-opname-model.js — het hoofdscherm van de nieuwe opname (brok 2): het super simpele 3D-draadmodel van de ruimte (eigen SVG-projectie, draaibaar met één vinger) en het
 // wandscherm met de foto en de lijnenoverlay waarop de maten één voor één worden ingevuld. De actieve maatlijn is rood; invullen en op de pijl volgende gaat naar de volgende lijn.
 // De wandlijnen komen uit mt-opname-geo.js (homografie van de vier getikte wandhoeken); welke maten gevraagd worden en in welke volgorde bepaalt alleen de kern (route).
-// Geen automatische beeldherkenning: wat op de foto staat hebben de hoeken en tikken van de opnemer bepaald, de getallen komen uit de invoer.
+// Wat op de foto staat hebben de hoeken en tikken van de opnemer bepaald, of het is een voorstel uit de herkenning (mt-opname-ai.js) dat de opnemer heeft nagekeken. De getallen komen
+// altijd uit de invoer: met de hand of van de DISTO (toetsenbordmodus; een snelle reeks toetsen met Enter wordt als DISTO-meting herkend).
 (function (root) {
   'use strict';
   const M = root.MTOpname, X = M.X, K = X.K, G = X.G, h = X.h, sv = X.sv, S = X.S, COL = X.COL, lijst = X.lijst, SCHERMEN = X.schermen;
@@ -44,11 +45,34 @@
     return { v };
   };
   X.leesMm = leesMm;
+  // ── Waarmee wordt gemeten: de DISTO of de rolmaat (de bron van een maat) ──
+  // De keuze geldt per toestel. Los daarvan herkent de app een DISTO in toetsenbordmodus zelf: die tikt de hele maat als een snelle reeks toetsen met Enter erachter, veel sneller dan een mens.
+  X.meetBron = () => { let b = S.meetBron || null; if (!b) { try { b = root.localStorage.getItem('mt_opname_meetbron'); } catch (e) { b = null; } } return b === 'disto' ? 'disto' : 'hand'; };
+  X.zetMeetBron = b => { S.meetBron = b === 'disto' ? 'disto' : 'hand'; try { root.localStorage.setItem('mt_opname_meetbron', S.meetBron); } catch (e) { /* de keuze geldt dan alleen voor deze sessie */ } };
+  // tijden: de tijdstippen (ms) van de getikte tekens sinds het veld leeg was; enter: het tijdstip van Enter; lengte: het aantal tekens in het veld. Een DISTO-reeks: minstens drie tekens,
+  // het hele veld komt uit deze reeks, geen pauze van meer dan 180 ms en gemiddeld hooguit 110 ms per toets (een mens haalt dat niet op een schermtoetsenbord).
+  X.isDistoReeks = function (tijden, enter, lengte) {
+    const t = lijst(tijden); if (t.length < 3 || t.length !== lengte || !(enter >= t[t.length - 1])) return false;
+    const alle = t.concat([enter]); let max = 0;
+    for (let i = 1; i < alle.length; i++) { const d = alle[i] - alle[i - 1]; if (!(d >= 0)) return false; if (d > max) max = d; }
+    return max <= 180 && (enter - t[0]) / t.length <= 110;
+  };
+  const nuMs = () => (root.performance && root.performance.now ? root.performance.now() : Date.now());
   function bewaarMaat(stap, invoer) {
+    X._waarschuwde = false;
     if (!X.wijzig(K.zetMaat(S.rec.opname, X.ruimte().id, stap.pad, invoer))) return false;
     const w = K.waarschuwingen(X.ruimte()).find(x => x.code === 'onwaarschijnlijk' && x.pad === stap.pad && !x.bevestigd);
-    if (w) X.toast(w.tekst + ' Bevestig het bij Afronden of meet opnieuw.');
+    if (w) { X._waarschuwde = true; X.toast(w.tekst + ' Bevestig het bij Afronden of meet opnieuw.'); }
     return true;
+  }
+  function meetBronRij() {
+    const rij = h('div', { class: 'opn-meetbron' });
+    const bouw = () => {
+      X.leeg(rij); const b = X.meetBron();
+      rij.appendChild(h('span', { class: 'opn-hint', text: 'Ik meet met' }));
+      for (const [id, tekst] of [['disto', 'DISTO'], ['hand', 'Rolmaat']]) rij.appendChild(h('button', { type: 'button', class: 'opn-chip opn-chip-mini' + (b === id ? ' is-aan' : ''), 'aria-pressed': b === id ? 'true' : 'false', onclick: () => { X.zetMeetBron(id); bouw(); } }, tekst));
+    };
+    bouw(); return rij;
   }
 
   function paneel(stap, o) {
@@ -59,7 +83,7 @@
     p.appendChild(h('div', { class: 'opn-paneel-kop' },
       h('span', { class: 'opn-stapnr', text: o.teller || stap.stap }),
       h('span', { class: 'opn-groeppil opn-groep-' + stap.groep, text: GROEPEN[stap.groep] || '' }),
-      stap.staat !== 'open' ? h('span', { class: 'opn-staatpil opn-staat-' + stap.staat, text: stap.staat === 'gemeten' ? 'gemeten' : stap.staat === 'nvt' ? 'n.v.t.' : 'later' }) : null));
+      stap.staat !== 'open' ? h('span', { class: 'opn-staatpil opn-staat-' + stap.staat, text: stap.staat === 'gemeten' ? 'gemeten' + (maat && maat.bron === 'disto' ? ' · DISTO' : '') : stap.staat === 'nvt' ? 'n.v.t.' : 'later' }) : null));
     p.appendChild(h('div', { class: 'opn-vraag', text: stap.vraag }));
     if (stap.definitie) p.appendChild(h('div', { class: 'opn-def', text: 'Meet de ' + (K.DEFINITIES[stap.definitie] || stap.definitie) }));
     if (stap.uitleg) p.appendChild(h('details', { class: 'opn-uitleg-d' }, h('summary', { text: 'Hoe meet ik dit?' }), h('p', { text: stap.uitleg })));
@@ -94,17 +118,28 @@
     if (vr && vr.voorstel && vr.voorstel.schatting_mm) { const vs = vr.voorstel, mmTxt = X.mm(vs.schatting_mm) + ' mm' + (vs.onzekerheid_mm ? ' (± ' + X.mm(vs.onzekerheid_mm) + ')' : '');
       p.appendChild(h('p', { class: 'opn-voorstel', text: (vs.bron === 'bronstandaard' ? 'Bronstandaard: ' + mmTxt + '. Een algemene startwaarde, niet uit de foto.' : vs.bron === 'foto-interpretatie' ? 'Foto-interpretatie: ongeveer ' + mmTxt + '. De voorkant van een uitsprong staat voor het wandvlak, dus de verhouding op de foto kan afwijken.' : 'Schatting uit de foto: ' + mmTxt + '.') + ' Dit is geen meting.' })); }
     const inp = h('input', { type: 'text', inputmode: 'decimal', class: 'opn-groot-veld', placeholder: '', autocomplete: 'off', enterkeyhint: 'next', 'aria-label': stap.label + ' in millimeter', value: huidig });
-    const doe = () => {
+    const tikken = [];                                                    // tijdstippen van de getikte tekens sinds het veld leeg was (om een DISTO-reeks te herkennen)
+    const doe = viaEnter => {
       const l = leesMm(inp.value); if (l.fout) { meld(l.fout); inp.focus(); return; }
       meld('');
-      if (maat && maat.staat === 'gemeten' && Number(maat.waarde) === l.v) { o.volgende(stap); return; }          // ongewijzigd: niets opnieuw vastleggen
-      if (bewaarMaat(stap, { staat: 'gemeten', waarde: l.v, bron: 'hand' })) o.volgende(stap);
+      const disto = viaEnter === true && X.isDistoReeks(tikken, nuMs(), String(inp.value).trim().length), bron = disto ? 'disto' : X.meetBron();
+      tikken.length = 0;
+      if (maat && maat.staat === 'gemeten' && Number(maat.waarde) === l.v && (maat.bron === bron || !disto)) { o.volgende(stap); return; }          // ongewijzigd: niets opnieuw vastleggen
+      if (!bewaarMaat(stap, { staat: 'gemeten', waarde: l.v, bron })) return;
+      if (disto && !X._waarschuwde) X.toast('DISTO: ' + X.mm(l.v) + ' mm bewaard bij ' + String(stap.label || '').replace(/^[A-Z]+\d* /, '') + '.');
+      o.volgende(stap);
     };
-    inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); doe(); } });
-    inp.addEventListener('focus', () => setTimeout(() => { try { inp.scrollIntoView({ block: 'center' }); } catch (e) {} }, 80));
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); doe(true); return; }
+      if (e.key && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) { if (!inp.value || (inp.selectionStart === 0 && inp.selectionEnd === inp.value.length)) tikken.length = 0; tikken.push(nuMs()); }
+      else if (e.key !== 'Shift') tikken.length = 0;
+    });
+    // bij focus staat de oude waarde geselecteerd: een nieuwe meting (ook van de DISTO) vervangt hem dan, in plaats van erachter te komen
+    inp.addEventListener('focus', () => { try { inp.select(); } catch (e) {} setTimeout(() => { try { inp.scrollIntoView({ block: 'center' }); } catch (e) {} }, 80); });
     p.appendChild(h('div', { class: 'opn-invoerrij' }, inp, h('span', { class: 'opn-eenheid', text: 'mm' }), h('button', { type: 'button', class: 'opn-pijlknop', 'aria-label': 'Volgende', onclick: doe }, '→')));
     p.appendChild(fout);
     p.appendChild(onderrij(stap, o, inp, meld, false));
+    p.appendChild(meetBronRij());
     if (o.focus !== false && !huidig) setTimeout(() => { try { inp.focus(); } catch (e) {} }, 60);
     return p;
   }
@@ -197,6 +232,16 @@
     c.appendChild(bg); return bg;
   };
 
+  // ── Brede schermen (tablet liggend, laptop): het beeld groot links, de vragen en lijsten rechts ernaast ──
+  // Op een telefoon zijn de twee kolommen onzichtbaar (display: contents in de css) en staat alles onder elkaar zoals altijd.
+  X.breed = () => (root.innerWidth || 0) >= 900;
+  X.kolommen = function (body, isBeeld) {
+    const links = h('div', { class: 'opn-kol-beeld' }), rechts = h('div', { class: 'opn-kol-zij' });
+    for (const k of Array.from(body.childNodes)) (isBeeld(k) ? links : rechts).appendChild(k);
+    body.appendChild(links); body.appendChild(rechts); body.classList.add('opn-tweekolom'); return body;
+  };
+  const heeftKlasse = (...namen) => k => !!(k && k.classList && namen.some(n => k.classList.contains(n)));
+
   // ════════════════════════ Scherm: het draadmodel ════════════════════════
   const VB = { w: 390, h: 340 };
   // Werkzone: de wand(en) waar het meubel komt; aantikken in het model of op de plattegrond (meerdere mag)
@@ -232,7 +277,7 @@
     body.appendChild(h('div', { class: 'opn-legenda' },
       leg(COL.rood, 'nog te meten'), leg(COL.donker, 'gemeten'), leg(COL.oranje, 'later'), leg(COL.accent, 'werkzone'), leg(COL.blauw, 'uitsprong of nis'), h('span', { class: 'opn-leg opn-leg-st', text: 'gestippeld = schatting' })));
     body.appendChild(X.planBlok(r, { titel: kiezen ? 'Tik de wanden voor het meubel' : 'Plattegrond', opWand: kiezen ? zetWerkzone : (w => X.openWand(w, null)), kies: kiezen }));
-    if (kiezen) { c.appendChild(body); return; }
+    if (kiezen) { c.appendChild(X.kolommen(body, heeftKlasse('opn-model-vak', 'opn-legenda', 'opn-planblok'))); return; }
     // onderdeel: volgende, ruimte-maten, plint
     const actief = S.modelStap && lijst(rt.stappen).find(s => s.id === S.modelStap);
     if (actief) {
@@ -248,6 +293,8 @@
         vlg ? h('div', null, h('div', { class: 'opn-label', text: 'Volgende vraag · ' + vlg.stap }), h('div', { class: 'opn-vraag', text: (vlg.wand ? X.wandNaam(vlg.wand) + ': ' : '') + vlg.label }),
           h('button', { type: 'button', class: 'opn-btn opn-btn-groot opn-btn-primair', onclick: () => X.naarStap(vlg) }, 'Verder meten →'))
           : h('div', null, h('div', { class: 'opn-vraag', text: 'Alles is gemeten of uitgesteld.' }), h('button', { type: 'button', class: 'opn-btn opn-btn-groot opn-btn-primair', onclick: () => X.ga('afronden') }, 'Naar afronden'))));
+      // herkenning uit de foto's (mt-opname-ai.js): een voorstel voor wat er op de wanden zit; ontbreekt die module of de koppeling, dan is er geen kaart
+      const hk = X.herkenKaart ? X.herkenKaart() : null; if (hk) body.appendChild(hk);
       // de werkzone
       body.appendChild(h('div', { class: 'opn-kaart opn-plintkaart' },
         h('div', null, h('div', { class: 'opn-kaart-titel', text: 'Werkzone' }), h('div', { class: 'opn-rij-sub', text: zone.length ? zone.map(w => K.wandNaam(w).toLowerCase()).join(', ') : 'Nog niet gekozen: tik de wand(en) waar het meubel komt' })),
@@ -271,8 +318,9 @@
         h('div', null, h('div', { class: 'opn-kaart-titel', text: 'Plint in de kamer' }), h('div', { class: 'opn-rij-sub', text: pl ? (pl.geen ? 'Geen plint' : X.mm(pl.hoogte) + ' mm, gelijk voor de werkzone-wanden') : 'Nog niet ingevuld, één keer voor alle wanden' })),
         h('button', { type: 'button', class: 'opn-btn opn-btn-klein', text: pl ? 'Wijzigen' : 'Invullen', onclick: plintSheet })));
       body.appendChild(h('button', { type: 'button', class: 'opn-btn opn-btn-licht', text: 'Foto\'s opnieuw bekijken of maken', onclick: () => X.ga('fotos') }));
+      if (X.distoProefKnop) body.appendChild(X.distoProefKnop());
     }
-    c.appendChild(body);
+    c.appendChild(X.kolommen(body, heeftKlasse('opn-model-vak', 'opn-legenda', 'opn-planblok')));
   };
   // Een diagonaal als controle van de vorm (bij een andere vorm dan vier wanden is hij optioneel): kies twee hoeken
   function diagonaalBlad() {
@@ -397,7 +445,7 @@
     let vb, afb, schema = false;
     if (beeld) { vb = { x: 0, y: 0, w: beeld.w, h: beeld.h }; afb = hoekPx ? G.wandAfbeelding(hoekPx) : null; }
     else { const sch = G.schemaHoeken(model.lengte, model.hoogte, BEELD_B); vb = { x: -50, y: -60, w: BEELD_B + 100, h: sch.hoogte + 120 }; afb = G.wandAfbeelding(sch.hoeken); schema = true; }
-    const cssB = Math.min(root.innerWidth || 390, 560), px = vb.w / cssB;
+    const cssB = X.breed() ? Math.max(560, Math.min((root.innerWidth || 1000) * 0.58, 900)) : Math.min(root.innerWidth || 390, 560), px = vb.w / cssB;
     const svg = sv('svg', { viewBox: vb.x + ' ' + vb.y + ' ' + vb.w + ' ' + vb.h, class: 'opn-wand-svg', preserveAspectRatio: 'xMidYMid meet', role: 'group', 'aria-label': 'Wand met maatlijnen' });
     if (beeld) svg.appendChild(sv('image', { href: beeld.url, x: 0, y: 0, width: beeld.w, height: beeld.h, preserveAspectRatio: 'none', 'pointer-events': 'none' }));
     else svg.appendChild(sv('rect', { x: 0, y: 0, width: BEELD_B, height: vb.h - 120, fill: '#faf8f4', stroke: '#bdb4a2', 'stroke-width': 1.5 * px, 'pointer-events': 'none' }));
@@ -417,12 +465,13 @@
     else if (plaatsen) body.appendChild(plaatsBalk());
     else {
       if (foto && !afb) body.appendChild(h('div', { class: 'opn-kaart opn-uitleg' }, h('div', { class: 'opn-kaart-titel', text: 'Eerst de vier hoeken van de wand aanwijzen' }), h('p', { text: 'Tik op de foto de hoeken van de wand: links onder, rechts onder, rechts boven, links boven. Daarna staan de maatlijnen op de foto.' }), h('button', { type: 'button', class: 'opn-btn opn-btn-groot opn-btn-primair', text: 'Hoeken aanwijzen', onclick: startKal })));
-      if (foto && afb) body.appendChild(h('p', { class: 'opn-hint opn-wandhint', text: 'De lijnen worden op het wandvlak berekend; voorwerpen ervoor zijn geen meetreferentie.' }));
+      if (foto && afb) body.appendChild(h('p', { class: 'opn-hint opn-wandhint', text: lay.hoeken_bron === 'foto-voorstel' ? 'Het kader van de wand is een voorstel uit de foto. Klopt het niet met de hoeken van de wand, kies dan Hoeken aanpassen.' : 'De lijnen worden op het wandvlak berekend; voorwerpen ervoor zijn geen meetreferentie.' }));
       if (onbekend) body.appendChild(h('div', { class: 'opn-kaart opn-uitleg' }, h('div', { class: 'opn-kaart-titel', text: 'Een of meer hoeken zijn onbekend' }), h('p', { text: 'Een hoek was buiten beeld of afgedekt. De maatlijnen staan daarom op een schematisch wandaanzicht, niet op de foto. Je kunt de hoeken later alsnog aanwijzen.' }), h('div', { class: 'opn-onderrij' }, h('button', { type: 'button', class: 'opn-btn opn-btn-klein', onclick: () => startKal(true) }, 'Hoeken aanpassen'), h('button', { type: 'button', class: 'opn-btn opn-btn-klein', onclick: () => origineelBlad(fotoRec) }, 'Originele foto bekijken'))));
       else if (!foto) body.appendChild(h('div', { class: 'opn-hint-rij' }, h('span', { text: X.wandFotoRec(w) ? 'De foto van deze wand staat in de opname, maar het beeld is op dit toestel niet te laden. Je werkt nu op het schema.' : 'Schematisch wandaanzicht, nog geen foto van deze wand.' }),
         X.fotoKnop('Foto maken', async f => { await X.opslaanFoto(f, { wand: w }); await laadWandFoto(w); X.teken(); }, { klasse: 'opn-btn opn-btn-klein' })));
       body.appendChild(h('div', { class: 'opn-werkbalk' },
         h('button', { type: 'button', class: 'opn-btn opn-btn-klein', onclick: voegToeSheet }, '+ Toevoegen'),
+        X.herkenBlad && X.herkenMag && X.herkenMag() && X.wandFotoRec(w) ? h('button', { type: 'button', class: 'opn-btn opn-btn-klein', onclick: () => X.herkenBlad([w]) }, 'Herken uit foto') : null,
         (foto && afb) || onbekend ? h('button', { type: 'button', class: 'opn-btn opn-btn-klein', onclick: startKnik }, 'Vorm van de wand') : null,
         h('button', { type: 'button', class: 'opn-btn opn-btn-klein', onclick: hoekSheet }, 'Hoek'),
         foto && afb ? h('button', { type: 'button', class: 'opn-btn opn-btn-klein', onclick: () => startKal(true) }, 'Hoeken aanpassen') : null,
@@ -430,8 +479,9 @@
       // paneel
       if (S.wandKlaar || !actief) body.appendChild(klaarKaart(rt, w));
       else body.appendChild(wandPaneel(actief, stappen, vlg, idx));
+      const pl = puntenLijst(stappen, S.wandKlaar ? null : actief, vm, svg); if (pl) body.appendChild(pl);
     }
-    c.appendChild(body);
+    c.appendChild(X.kolommen(body, heeftKlasse('opn-wandvak')));
     if (S.itemSheet) { const id = S.itemSheet; S.itemSheet = null; itemSheet(id); }
     if (S.hoekSheet) { S.hoekSheet = false; hoekSheet(); }
   };
@@ -447,6 +497,23 @@
       teller: 'stap ' + (idx >= 0 ? idx + 1 : '•') + ' van ' + vlg.length + ' op deze wand', focus: true,
       volgende: id0 => { const n = volgendeNa(actief.id); if (n) { S.stapId = n.id; S.wandKlaar = false; } else { S.stapId = null; S.wandKlaar = true; } X.teken(); },
       vorige: idx > 0 ? () => { S.stapId = vlg[idx - 1].id; S.wandKlaar = false; X.teken(); } : null });
+  }
+  // Alle meetpunten van deze wand in één lijst: wat nog moet (rood), wat gemeten is (met de maat) en wat is uitgesteld. Tikken gaat naar dat punt; wie met de muis (of pen) over een
+  // regel gaat, ziet de bijbehorende lijn op de foto oplichten.
+  function puntenLijst(stappen, actief, vm, svg) {
+    if (!stappen.length) return null;
+    const open = stappen.filter(s => !s.optioneel && !s.afgehandeld).length;
+    const kaart = h('div', { class: 'opn-kaart opn-punten' }, h('div', { class: 'opn-kaart-titel', text: 'Meetpunten op deze wand' + (open ? ' · nog ' + open : ' · klaar') }));
+    const licht = (pad, aan) => { for (const l of svg.querySelectorAll('[data-lijn]')) if (l.getAttribute('data-lijn') === pad) { l.style.stroke = aan ? COL.accent : ''; l.style.strokeWidth = aan ? l.getAttribute('data-dik') : ''; l.style.strokeDasharray = aan ? 'none' : ''; } };
+    for (const s of stappen) {
+      const v = s.pad ? vm.get(s.pad) : null, m = v && v.maat;
+      const waarde = s.staat === 'gemeten' ? (m && m.keuze ? keuzeTekst(m.keuze, s) : m && m.waarde != null ? X.mm(m.waarde) + ' mm' : 'vastgelegd') + (m && m.bron === 'disto' ? ' · DISTO' : '') : s.staat === 'nvt' ? 'n.v.t.' : s.staat === 'later' ? 'later' : s.afgehandeld ? 'klaar' : s.optioneel ? 'optioneel' : 'nog meten';
+      kaart.appendChild(h('button', { type: 'button', class: 'opn-lijstrij opn-puntrij' + (actief && actief.id === s.id ? ' is-actief' : ''), onclick: () => { S.stapId = s.id; S.wandKlaar = false; X.teken(); },
+        onmouseenter: () => s.pad && licht(s.pad, true), onmouseleave: () => s.pad && licht(s.pad, false) },
+        h('span', { class: 'opn-puntnaam' }, h('span', { class: 'opn-stip', style: { background: kleurVan(s.staat, s.conflict, s.optioneel) } }), h('span', { text: s.label })),
+        h('span', { class: 'opn-lijstwaarde opn-staat-' + (s.afgehandeld && s.staat === 'open' ? 'gemeten' : s.staat), text: waarde })));
+    }
+    return kaart;
   }
   function klaarKaart(rt, w) {
     const volgW = rt.maten_wanden.concat(rt.maten_wanden).slice(rt.maten_wanden.indexOf(w) + 1).slice(0, 3).find(x => lijst(rt.stappen).some(s => s.wand === x && !s.optioneel && !s.afgehandeld && s.type !== 'foto' && s.type !== 'rondje'));
@@ -491,7 +558,7 @@
       // meetstand: alleen de ACTIEVE lijn valt op (rood, dik, met label); alle andere lijnen zijn dun en rustig en hebben geen label of eindpunten. Tik een lijn aan om hem actief te maken en zijn maat te zien.
       const kl = act ? COL.rood : st === 'gemeten' ? '#4d524c' : st === 'later' ? '#d9a54e' : st === 'nvt' ? '#cfd2cc' : '#a9ada7';
       const dik = (act ? 4.2 : st === 'gemeten' ? 1.2 : 0.9) * px;
-      g.appendChild(sv('line', { x1: b.a[0], y1: b.a[1], x2: b.b[0], y2: b.b[1], stroke: kl, 'stroke-width': dik, 'stroke-linecap': 'round', 'stroke-dasharray': st === 'gemeten' || act ? null : (st === 'nvt' ? (2 * px) + ' ' + (4 * px) : (6 * px) + ' ' + (4 * px)), 'pointer-events': 'none' }));
+      g.appendChild(sv('line', { class: 'opn-maatlijn', 'data-lijn': l.pad, x1: b.a[0], y1: b.a[1], x2: b.b[0], y2: b.b[1], stroke: kl, 'stroke-width': dik, 'stroke-linecap': 'round', 'stroke-dasharray': st === 'gemeten' || act ? null : (st === 'nvt' ? (2 * px) + ' ' + (4 * px) : (6 * px) + ' ' + (4 * px)), 'pointer-events': 'none', 'data-dik': String(Math.round(4.2 * px * 100) / 100) }));
       if (act) for (const e of [b.a, b.b]) g.appendChild(sv('circle', { cx: e[0], cy: e[1], r: 5 * px, fill: COL.rood, stroke: kl, 'stroke-width': 1.2 * px, 'pointer-events': 'none' }));
       if (stap && !plaats) g.appendChild(sv('line', { x1: b.a[0], y1: b.a[1], x2: b.b[0], y2: b.b[1], stroke: 'rgba(0,0,0,0.001)', 'stroke-width': 30 * px, 'stroke-linecap': 'round', 'pointer-events': 'stroke', style: { cursor: 'pointer' }, 'data-pad': l.pad, onclick: () => { S.stapId = stap.id; S.wandKlaar = false; X.teken(); } }));
       // label: de actieve lijn noemt wat je meet, een gemeten lijn toont zijn maat
@@ -665,6 +732,8 @@
     const k = S.kal, foto = S.wandFoto, kennen = k.punten.filter(Boolean).length;
     if (kennen === 4 && !G.hoekenGeldig(k.punten)) { X.toast('De hoeken kruisen elkaar of liggen op één lijn. Tik een nummer en zet die hoek opnieuw in de loep, of kies Hoek onbekend.'); return; }
     const lay = X.wandLayout(S.wand, true); lay.foto = foto.id; lay.hoeken = k.punten.map(p => p ? [p[0] / foto.w, p[1] / foto.h] : null); lay.onbekend = kennen < 4; lay.tijd = X.nu();
+    delete lay.hoeken_bron;                                              // de opnemer heeft de hoeken nu zelf gezet of bevestigd
+    if (X.aiHerplaats) X.aiHerplaats(S.wand);                            // wat uit de foto herkend is, volgt het nieuwe kader
     S.kal = null; X.bewaar(); X.teken();
   }
   function svgPunt(svg, ev) { const p = svg.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY; const q = p.matrixTransform(svg.getScreenCTM().inverse()); return [q.x, q.y]; }
@@ -762,10 +831,13 @@
     const r = X.ruimte(), e = info.ent, vm = vragenMap(), mod = G.wandModel(r, S.wand, G.kamer(r), X.wandLayout(S.wand)), vorm = mod.vormen.find(v => v.id === id);
     const naam = vorm ? vorm.naam : (e.naam || e.id);
     const kids = [];
+    if (e.herkend) kids.push(h('p', { class: 'opn-voorstel', text: 'Herkend uit de foto, een voorstel. Klopt het niet, haal het dan onderaan weg.' }));
     if (info.lijstNaam === 'openingen') kids.push(h('div', { class: 'opn-veld' }, h('div', { class: 'opn-label', text: 'Wat meet je hier?' }), h('div', { class: 'opn-chips' }, ...Object.keys(K.DEFINITIES).map(d => h('button', { type: 'button', class: 'opn-chip' + (e.definitie === d ? ' is-aan' : ''), 'aria-pressed': e.definitie === d ? 'true' : 'false', onclick: () => { if (X.wijzig(K.zetDefinitie(S.rec.opname, r.id, id, d))) { S.itemSheet = id; X.teken(); } } }, K.DEFINITIES[d])))));
     const stappen = lijst(X.route().stappen).filter(s => s.object === id);
     kids.push(h('div', { class: 'opn-label', text: 'Maten van dit onderdeel' }));
     if (!stappen.length) kids.push(h('p', { class: 'opn-hint', text: 'Voor dit onderdeel worden geen maten gevraagd.' }));
+    // buiten de werkzone alleen gezien (bijvoorbeeld herkend uit de foto): met één tik wordt het toch gemeten
+    if (!stappen.length && info.lijstNaam === 'objecten' && !lijst(r.werkzone).includes(e.wand) && !e.eigen && e.gezien !== 'toch-meten') kids.push(h('div', { class: 'opn-onderrij' }, h('button', { type: 'button', class: 'opn-btn opn-btn-klein', text: 'Toch meten', onclick: () => { if (X.zetVeld('objecten', id, 'gezien', 'toch-meten')) { S.itemSheet = id; X.teken(); } } })));
     for (const s of stappen) { const v = vm.get(s.pad), waarde = s.staat === 'gemeten' ? (v && v.maat && v.maat.keuze ? keuzeTekst(v.maat.keuze) : X.mm(v && v.maat && v.maat.waarde) + ' mm') : s.staat === 'nvt' ? 'n.v.t.' : s.staat === 'later' ? 'later' : 'nog meten';
       kids.push(h('button', { type: 'button', class: 'opn-lijstrij', onclick: () => { X.sluitBlad(); S.stapId = s.id; S.wandKlaar = false; X.teken(); } }, h('span', { text: s.label.replace(/^[A-Z]+\d* /, '') + (s.optioneel ? ' (optioneel)' : '') }), h('span', { class: 'opn-lijstwaarde opn-staat-' + s.staat, text: waarde }))); }
     // close-up foto's (niet verplicht)

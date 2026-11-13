@@ -193,3 +193,34 @@
 .opn-hint-regel{font-weight:600;color:var(--o-ink2)}
 .opn-toestel{margin:8px 0;padding:8px 10px;border-radius:10px;background:#e6edf3;color:#3e5c76;font-size:13px}
 .opn-sluitkaart .opn-statusregel{flex-wrap:wrap;align-items:flex-start}.opn-sluitkaart .opn-pil{white-space:normal;line-height:1.35}
+
+/* ── v2.36: meetbron (DISTO of rolmaat), de lijst met meetpunten, herkenning uit de foto's, DISTO-proef ── */
+.opn-meetbron{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.opn-meetbron .opn-hint{margin:0}
+.opn-chip-mini{min-height:36px;padding:0 12px;font-size:13px}
+.opn-punten{padding-bottom:4px}
+.opn-puntrij{min-height:44px;padding-left:8px;padding-right:8px}
+.opn-puntrij:hover{background:var(--o-sunken)}
+.opn-puntrij.is-actief{background:#fdecea;box-shadow:inset 3px 0 0 var(--o-rood)}
+.opn-puntnaam{display:flex;align-items:center;gap:8px;min-width:0}
+.opn-herkenblad{display:flex;flex-direction:column;gap:10px}
+.opn-herkenkop{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.opn-herkenwand .opn-label{margin-top:10px}
+.opn-herkenwand .opn-chip[disabled]{opacity:.55}
+.opn-bezig{font-style:italic}
+.opn-distolog{font-family:ui-monospace,Consolas,monospace;font-size:12px;line-height:1.45;background:#14181a;color:#d8f5df;border-radius:8px;padding:8px 10px;min-height:120px;max-height:40vh;overflow:auto;white-space:pre-wrap;word-break:break-word}
+
+/* Twee kolommen op een breed scherm (tablet liggend, laptop): het beeld groot links, de vragen en lijsten rechts. Op een telefoon bestaan de kolommen niet (display: contents). */
+.opn-kol-beeld,.opn-kol-zij{display:contents}
+.opn-kol-zij>.opn-voortgang,.opn-kol-zij>.opn-toestel,.opn-kol-zij>.opn-schatting,.opn-kol-zij>.opn-kies{order:-1}
+@media (min-width:900px){
+  .opn{max-width:none;margin:0;border-left:0;border-right:0}
+  .opn-body:not(.opn-tweekolom){width:100%;max-width:760px;margin:0 auto}
+  .opn-body.opn-tweekolom{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(360px,1fr);grid-template-rows:minmax(0,1fr);gap:16px;padding:14px 18px;overflow:hidden}
+  .opn-tweekolom .opn-kol-beeld,.opn-tweekolom .opn-kol-zij{display:flex;flex-direction:column;gap:10px;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding-bottom:16px}
+  .opn-tweekolom .opn-wand-svg{max-height:calc(var(--opn-vh,100vh) - 110px)}
+  .opn-tweekolom .opn-model-svg{max-height:calc(var(--opn-vh,100vh) - 260px)}
+  .opn-blad-bg{align-items:center;justify-content:center}
+  .opn-blad{max-width:720px;border-radius:16px;max-height:92%}
+  .opn-toast{left:auto;right:18px;max-width:440px}
+}
