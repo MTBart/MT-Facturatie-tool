@@ -112,8 +112,9 @@
   };
 
   // Afstelling per pc (de Godex legt het beeld niet altijd precies op het etiket): verschuiving in mm, x = naar rechts, y = omhoog.
-  // Standaard: 4 mm naar rechts (op de eerste prints lag het beeld 3-5 mm te ver links); en 2 mm omhoog: dat valt goed uit of de Godex nu 0 of 4 mm te laag print (na kalibreren 10-11-2026 nog onbekend; de printer zelf staat goed op ^W90 ^Q50,3).
-  const AFSTEL_SLEUTEL = 'mt_label_afstelling', AFSTEL_STANDAARD = Object.freeze({ x: 4, y: 2 });
+  // Standaard: 6 mm naar rechts en 6 mm omhoog. Met die afstelling print het label goed op de Godex (Bart, 16-11-2026); eerder stond de standaard op 4 en 2.
+  // Let op: L.marges begrenst de marge op 0,5 mm, dus bij 6 en 6 worden de marges 0,5 boven en rechts en 9,5 onder en links (de printer zelf staat op ^W90 ^Q50,3).
+  const AFSTEL_SLEUTEL = 'mt_label_afstelling', AFSTEL_STANDAARD = Object.freeze({ x: 6, y: 6 });
   const getal = (v, d) => { const n = Number(String(v == null ? '' : v).replace(',', '.')); return Number.isFinite(n) && Math.abs(n) <= 20 ? Math.round(n * 10) / 10 : d; };
   L.afstelling = () => {
     try { const j = JSON.parse(root.localStorage.getItem(AFSTEL_SLEUTEL) || 'null'); if (j && typeof j === 'object') return { x: getal(j.x, AFSTEL_STANDAARD.x), y: getal(j.y, AFSTEL_STANDAARD.y) }; } catch (e) {}
