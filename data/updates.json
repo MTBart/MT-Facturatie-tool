@@ -1,5 +1,16 @@
 [
   {
+    "versie": "2.36.1",
+    "datum": "2026-11-16",
+    "titel": "Projectlabel: nieuwe standaard voor de plek op het etiket",
+    "voor": "iedereen",
+    "punten": [
+      "Het projectlabel print nu standaard 6 mm naar rechts en 6 mm omhoog. Zo ligt het goed op het etiket van de Godex.",
+      "Heb je op jouw computer al zelf afgesteld? Dan blijft jouw afstelling gelden.",
+      "Aanpassen kan nog steeds bij een project via ⋯ en dan Label afstellen."
+    ]
+  },
+  {
     "versie": "2.36.0",
     "datum": "2026-11-13",
     "titel": "Opname (beta): draadmodel uit de foto's en meten met de DISTO",

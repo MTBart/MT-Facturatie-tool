@@ -5,6 +5,42 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-11-16 — Projectlabel: standaardafstelling naar 6 mm rechts en 6 mm omhoog
+- Commit: `5e06c98` | Auteur: Bart Witte
+
+## 2026-11-13 — Release v2.36.0: opname (beta) met herkenning uit de foto's, DISTO en breed scherm; backup = v2.35.2
+- Commit: `c4ed49e` | Auteur: Claude
+
+## 2026-11-13 — Opname: op Windows opent Foto maken de in-app camera in plaats van de Verkenner
+- Commit: `77ea418` | Auteur: Claude
+
+## 2026-11-10 — Release v2.35.2: projectlabel afstellen per pc, standaard 4 mm rechts en 2 mm omhoog; backup = v2.35.1
+- Commit: `1361d6f` | Auteur: Claude
+
+## 2026-11-10 — Projectlabel: standaardafstelling naar de tweede print (4 mm rechts, 3 mm omhoog)
+- Commit: `03d765f` | Auteur: Claude
+
+## 2026-11-10 — Projectlabel: afstelling per pc (verschuiving in mm) en ruimere marges
+- Commit: `0e3bf61` | Auteur: Claude
+
+## 2026-11-10 — Release v2.35.1: projectlabel als bladkader, gecentreerd en passend; backup = v2.35.0
+- Commit: `9069610` | Auteur: Claude
+
+## 2026-11-10 — Projectlabel: waardes gecentreerd en passend gemaakt door te meten
+- Commit: `f949761` | Auteur: Claude
+
+## 2026-11-10 — Projectlabel als bladkader: vakken met veldnaam, merk, projectnummer en week
+- Commit: `74336d4` | Auteur: Claude
+
+## 2026-11-10 — Release v2.35.0: projectlabel printen op de Godex; backup = v2.34.9
+- Commit: `df88538` | Auteur: Claude
+
+## 2026-11-10 — Projectlabel printen op de Godex DT4 (90 x 50 mm)
+- Commit: `8214f4f` | Auteur: Claude
+
+## 2026-11-09 — Release v2.34.9: Toggl koppelen via de tool na een sleutelreset; backup = v2.34.8
+- Commit: `b6af566` | Auteur: Bart Witte
+
 ## 2026-11-09 — Merge toggl-koppel: koppelen via de tool na sleutelreset
 - Commit: `ed3ab30` | Auteur: Bart Witte
 
