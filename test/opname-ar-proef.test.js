@@ -130,3 +130,40 @@ check('voorbeeld: 5 hoeken, wand 1 ongeveer 4 m', vb.wanden.length === 5 && Math
 
 console.log('\n' + goed + ' tests geslaagd' + (fout ? ', ' + fout + ' FOUT' : ''));
 if (fout) process.exitCode = 1;
+
+// ---------- panorama: projectie, wanden, vakjes en dekking ----------
+{
+  const mul = (a, b) => { const o = new Array(16); for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) { let s2 = 0; for (let k = 0; k < 4; k++) s2 += a[k * 4 + r] * b[c * 4 + k]; o[c * 4 + r] = s2; } return o; };
+  const persp = (fov, asp, n, f) => { const t = 1 / Math.tan(fov / 2); return [t / asp, 0, 0, 0, 0, t, 0, 0, 0, 0, (f + n) / (n - f), -1, 0, 0, 2 * f * n / (n - f), 0]; };
+  const kijk = (o, d) => { const nz = [o[0] - d[0], o[1] - d[1], o[2] - d[2]], l = Math.hypot(...nz), z = nz.map(v => v / l), x0 = [z[2], 0, -z[0]], lx = Math.hypot(...x0), x = x0.map(v => v / lx), y = [z[1] * x[2] - z[2] * x[1], z[2] * x[0] - z[0] * x[2], z[0] * x[1] - z[1] * x[0]];
+    const d3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; return [x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -d3(x, o), -d3(y, o), -d3(z, o), 1]; };
+  const camera = (pos, doel) => ({ pos, dir: [doel[0] - pos[0], doel[1] - pos[1], doel[2] - pos[2]], pv: mul(persp(60 * Math.PI / 180, 0.56, 0.05, 50), kijk(pos, doel)) });
+  const c0 = camera([0, 1.4, 0], [0, 1.4, -3]);
+  const midden = AR.projecteer(c0.pv, 0, 1.4, -3), rechts = AR.projecteer(c0.pv, 0.5, 1.4, -3), boven = AR.projecteer(c0.pv, 0, 2, -3);
+  check('projectie: recht vooruit valt in het midden van het beeld', Math.abs(midden.x - 0.5) < 1e-9 && Math.abs(midden.y - 0.5) < 1e-9);
+  check('projectie: rechts is rechts, boven is boven (y naar beneden)', rechts.x > 0.5 && Math.abs(rechts.y - 0.5) < 1e-9 && boven.y < 0.5);
+  check('projectie: achter de camera geeft niets', AR.projecteer(c0.pv, 0, 1.4, 3) === null);
+  // kamer 4 x 3 m, vloer op 0; telefoon in het midden draait rond
+  const K = [{ x: -2, z: -1.5 }, { x: 2, z: -1.5 }, { x: 2, z: 1.5 }, { x: -2, z: 1.5 }];
+  const W = AR.wanden3d(K, true, 0, 2.6), Wom = AR.wanden3d(K.slice().reverse(), true, 0, 2.6);
+  check('wanden: 4 stuks, normaal wijst de kamer in (beide looprichtingen)', W.length === 4 && [W, Wom].every(ws => ws.every(w => { const mx = w.a.x + w.ux * w.L / 2, mz = w.a.z + w.uz * w.L / 2; return (0 - mx) * w.nx + (0 - mz) * w.nz > 0; })));
+  const C = W.map(w => AR.cellen(w, 0.3));
+  check('vakjes: wand van 4 m bij 2,6 m in 13 x 9 vakjes', C[0].length === 13 * 9 && Math.abs(C[0][C[0].length - 1].u1 - 4) < 1e-9 && Math.abs(C[0][C[0].length - 1].v1 - 2.6) < 1e-9);
+  const frames = [];
+  for (let i = 0; i < 24; i++) for (const hoog of [0.6, 1.4, 2.2]) { const a = i / 24 * 2 * Math.PI; frames.push(camera([0, 1.4, 0], [Math.sin(a) * 3, hoog, -Math.cos(a) * 3])); }
+  frames.forEach((f, i) => AR.dekBij(C, W, f, i));
+  const dek = AR.dekking(C);
+  check('dekking: rondkijken vanuit het midden laat bijna alle wanden zien', dek > 0.9, Math.round(dek * 100) + '%');
+  const C2 = W.map(w => AR.cellen(w, 0.3)); AR.dekBij(C2, W, frames[0], 0);
+  const per = C2.map(cs => cs.filter(c => c.beste >= 0).length);
+  check('dekking: één beeld naar wand 1 dekt alleen wand 1', per[0] > 0 && per[1] === 0 && per[2] === 0 && per[3] === 0, per.join(','));
+  const weg = camera([0, 1.4, -3], [0, 1.4, -6]), C3 = W.map(w => AR.cellen(w, 0.3)); AR.dekBij(C3, W, weg, 0);
+  check('dekking: een beeld dat van de kamer wegkijkt telt niet', AR.dekking(C3) === 0);
+  const langs = camera([1.9, 1.4, 0], [1.9, 1.4, -3]), C4 = W.map(w => AR.cellen(w, 0.3)); AR.dekBij(C4, W, langs, 0);
+  check('dekking: een wand waar je vlak langs kijkt telt niet', C4[1].every(c => c.beste < 0));
+  // affiene afbeelding
+  const m = AR.affien({ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 0, y: 10 }, { x: 5, y: 5 }, { x: 25, y: 5 }, { x: 5, y: 25 });
+  check('affien: schalen en verschuiven', m && Math.abs(m[0] - 2) < 1e-9 && Math.abs(m[3] - 2) < 1e-9 && Math.abs(m[4] - 5) < 1e-9 && Math.abs(m[5] - 5) < 1e-9 && Math.abs(m[1]) < 1e-9 && Math.abs(m[2]) < 1e-9);
+}
+console.log('\n' + goed + ' tests geslaagd (na panorama)' + (fout ? ', ' + fout + ' FOUT' : ''));
+if (fout) process.exitCode = 1;

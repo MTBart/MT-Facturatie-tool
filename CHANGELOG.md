@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-11-17 — Opname AR-proef: duimknop, stabiel hoekpunt en bijna-haakse hoeken haaks
+- Commit: `5d045e1` | Auteur: Bart Witte
+
 ## 2026-11-17 — Opname AR-proef: verborgen hoeken via het plafond aantikken
 - Commit: `a54d783` | Auteur: Bart Witte
 

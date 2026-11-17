@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Rondkijken opname</title>
+<!-- Losse proefpagina (17-11-2026): een AR-opname van de AR-proef terugkijken. De wanden staan met de vastgelegde beelden erop;
+     je loopt door de kamer of kijkt er als in een poppenhuis van boven in. Leest een bestand van de telefoon of de laatste opname
+     op dit apparaat. Stuurt niets weg. -->
+<style>
+/* Indeling: het 3D-beeld vult het scherm; linksboven de plattegrond met de standpunten, onderin de bediening. */
+:root{
+  --bg:#eef1ed; --vlak:#ffffff; --inkt:#16211a; --zacht:#5d6b62; --rand:#cfd6d0;
+  --primair:#17643f; --primair-zacht:#ddefe3; --op-primair:#ffffff; --oranje:#a86504; --kies:#1c5fc4;
+  --letter:"Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue",Arial,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#111713; --vlak:#1a221d; --inkt:#e6ece7; --zacht:#9aa79e; --rand:#33403a; --primair:#5cc08b; --primair-zacht:#1d3a2a; --op-primair:#0c1a12; --oranje:#e3a23c; --kies:#78adff; color-scheme:dark; }
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--inkt);font:15px/1.4 var(--letter);overflow:hidden}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible{outline:3px solid var(--kies);outline-offset:2px}
+#beeld{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;background:#2b302d}
+.laden{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:max(16px, env(safe-area-inset-left, 0px))}
+.laden .kaart{background:var(--vlak);border:1px solid var(--rand);border-radius:14px;padding:18px;max-width:480px;display:flex;flex-direction:column;gap:10px}
+.laden h1{font-size:20px;margin:0}
+.knop{border:1px solid var(--rand);background:var(--vlak);border-radius:12px;padding:11px 16px;min-height:46px}
+.knop.hoofd{background:var(--primair);border-color:var(--primair);color:var(--op-primair);font-weight:650}
+.knop input{position:absolute;width:1px;height:1px;opacity:0}
+.melding{border-radius:10px;padding:10px 12px;background:#fbeed8;color:#7a4b06;font-weight:600}
+#kaartje{position:fixed;left:max(10px, env(safe-area-inset-left, 0px));top:max(10px, env(safe-area-inset-top, 0px));width:min(42vw,240px);background:rgba(255,255,255,.88);border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.3)}
+#kaartje svg{display:block;width:100%;height:auto}
+#kaartje .wand{stroke:#17643f;stroke-width:3;fill:rgba(23,100,63,.08)}
+#kaartje .stip{fill:#1c5fc4;opacity:.55;cursor:pointer}
+#kaartje .ik{fill:#c4322a}
+#kaartje .blik{stroke:#c4322a;stroke-width:2.5}
+.onder{position:fixed;left:0;right:0;bottom:0;padding:10px max(12px, env(safe-area-inset-right, 0px)) max(12px, env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px));display:flex;gap:8px;flex-wrap:wrap;justify-content:center;background:linear-gradient(transparent, rgba(0,0,0,.45))}
+.onder button{min-width:52px;min-height:52px;border-radius:14px;border:1px solid rgba(255,255,255,.6);background:rgba(20,30,24,.6);color:#fff;font-weight:650}
+.onder button.aan{background:#17643f;border-color:#17643f}
+@media (max-width:640px){ #hulp{top:auto!important;bottom:calc(140px + env(safe-area-inset-bottom, 0px));left:max(10px, env(safe-area-inset-left, 0px))} }
+#hulp{position:fixed;right:max(10px, env(safe-area-inset-right, 0px));top:max(10px, env(safe-area-inset-top, 0px));max-width:280px;pointer-events:none;background:rgba(20,30,24,.7);color:#fff;border-radius:12px;padding:10px 12px;font-size:13px}
+#foto{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:16px}
+#foto img{max-width:100%;max-height:82vh;border-radius:8px}
+#foto p{color:#fff;margin:0}
+</style>
+</head>
+<body>
+<canvas id="beeld" aria-label="De opgenomen kamer in 3D"></canvas>
+
+<div class="laden" id="laden">
+  <div class="kaart">
+    <h1>Rondkijken</h1>
+    <p>Kies het bestand dat je op de telefoon met Bewaren of Delen hebt gemaakt. Op de telefoon zelf opent de laatste opname vanzelf.</p>
+    <div class="melding" id="laden-melding" hidden></div>
+    <label class="knop hoofd">Bestand kiezen<input type="file" id="bestand" accept=".json,application/json"></label>
+  </div>
+</div>
+
+<div id="kaartje" hidden><svg id="kaart" role="img" aria-label="Plattegrond met de plekken waar beelden zijn gemaakt"></svg></div>
+<div id="hulp" hidden>Slepen: rondkijken. Pijlen of WASD: lopen. Tik op een blauwe stip in de plattegrond om daar te gaan staan.</div>
+<div class="onder" id="bediening" hidden>
+  <button id="k-links" aria-label="Naar links draaien">⟲</button>
+  <button id="k-vooruit" aria-label="Vooruit">▲</button>
+  <button id="k-achter" aria-label="Achteruit">▼</button>
+  <button id="k-rechts" aria-label="Naar rechts draaien">⟳</button>
+  <button id="k-boven">Van boven</button>
+  <button id="k-foto">Foto hier</button>
+</div>
+<div id="foto" hidden><img id="foto-img" alt="Vastgelegd beeld vanaf deze plek"><p id="foto-tekst"></p><button class="knop" id="k-foto-dicht">Sluiten</button></div>
+
+<script>
+(function () {
+  'use strict';
+  var el = function (id) { return document.getElementById(id); };
+  var data = null, gl = null, prog = null, wanden = [], vloer = null, kleur1 = null;
+  var cam = { modus: 'binnen', x: 0, z: 0, yaw: 0, pitch: -0.05, oogHoogte: 1.5, orbit: { yaw: 0.6, pitch: 0.9, dist: 7, cx: 0, cz: 0 } };
+
+  // ---------- matrices (kolom-volgorde, zoals WebGL) ----------
+  function mul(a, b) { var o = new Float32Array(16); for (var c = 0; c < 4; c++) for (var r = 0; r < 4; r++) { var s = 0; for (var k = 0; k < 4; k++) s += a[k * 4 + r] * b[c * 4 + k]; o[c * 4 + r] = s; } return o; }
+  function perspectief(fov, asp, n, f) { var t = 1 / Math.tan(fov / 2); return new Float32Array([t / asp, 0, 0, 0, 0, t, 0, 0, 0, 0, (f + n) / (n - f), -1, 0, 0, 2 * f * n / (n - f), 0]); }
+  function kijkNaar(o, d, up) {
+    var z = norm([o[0] - d[0], o[1] - d[1], o[2] - d[2]]), x = norm(kruis(up, z)), y = kruis(z, x);
+    return new Float32Array([x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -dot(x, o), -dot(y, o), -dot(z, o), 1]);
+  }
+  function kruis(a, b) { return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]; }
+  function dot(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+  function norm(a) { var l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; }
+
+  // ---------- vloer in driehoeken (oorknippen, werkt ook voor een L-vorm) ----------
+  function driehoeken(P) {
+    var n = P.length, idx = [], i, opp = 0;
+    for (i = 0; i < n; i++) { var q = P[(i + 1) % n]; opp += P[i].x * q.z - q.x * P[i].z; idx.push(i); }
+    if (opp < 0) idx.reverse();
+    function binnen(a, b, c, p) {
+      var d1 = (p.x - b.x) * (a.z - b.z) - (a.x - b.x) * (p.z - b.z), d2 = (p.x - c.x) * (b.z - c.z) - (b.x - c.x) * (p.z - c.z), d3 = (p.x - a.x) * (c.z - a.z) - (c.x - a.x) * (p.z - a.z);
+      return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0));
+    }
+    var uit = [], veilig = 0;
+    while (idx.length > 3 && veilig++ < 500) {
+      var gevonden = false;
+      for (i = 0; i < idx.length; i++) {
+        var a = P[idx[(i - 1 + idx.length) % idx.length]], b = P[idx[i]], c = P[idx[(i + 1) % idx.length]];
+        if ((b.x - a.x) * (c.z - a.z) - (b.z - a.z) * (c.x - a.x) <= 0) continue;
+        var leeg = true;
+        for (var j = 0; j < idx.length && leeg; j++) { var p = P[idx[j]]; if (p !== a && p !== b && p !== c && binnen(a, b, c, p)) leeg = false; }
+        if (!leeg) continue;
+        uit.push(a, b, c); idx.splice(i, 1); gevonden = true; break;
+      }
+      if (!gevonden) break;
+    }
+    if (idx.length === 3) uit.push(P[idx[0]], P[idx[1]], P[idx[2]]);
+    return uit;
+  }
+
+  // ---------- opbouwen ----------
+  function maakTextuur(bron) {
+    var t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bron);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    return t;
+  }
+  function laadPlaatje(url) { return new Promise(function (ok) { var im = new Image(); im.onload = function () { ok(im); }; im.onerror = function () { ok(null); }; im.src = url; }); }
+  function bouwGl() {
+    var cv = el('beeld');
+    gl = cv.getContext('webgl', { antialias: true });
+    if (!gl) throw new Error('deze browser kan geen 3D tekenen (WebGL)');
+    function sh(type, bron) { var s = gl.createShader(type); gl.shaderSource(s, bron); gl.compileShader(s); return s; }
+    prog = gl.createProgram();
+    gl.attachShader(prog, sh(gl.VERTEX_SHADER, 'attribute vec3 p;attribute vec2 t;uniform mat4 m;varying vec2 v;void main(){v=t;gl_Position=m*vec4(p,1.0);}'));
+    gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, 'precision mediump float;uniform sampler2D s;uniform float licht;varying vec2 v;void main(){vec4 c=texture2D(s,v);gl_FragColor=vec4(c.rgb*licht,1.0);}'));
+    gl.linkProgram(prog);
+    var px = document.createElement('canvas'); px.width = px.height = 2; var c2 = px.getContext('2d'); c2.fillStyle = '#c9c3b8'; c2.fillRect(0, 0, 2, 2);
+    kleur1 = maakTextuur(px);
+  }
+  function buffer(arr) { var b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(arr), gl.STATIC_DRAW); return b; }
+  function laad(obj) {
+    if (!obj || obj.soort !== 'mt-ar-panorama' || !Array.isArray(obj.punten) || obj.punten.length < 3 || !Array.isArray(obj.wanden)) throw new Error('dit is geen opname van de AR-proef');
+    data = obj;
+    if (!gl) bouwGl();
+    var P = obj.punten.map(function (p) { return { x: Number(p.x), z: Number(p.z) }; }), y0 = Number(obj.vloerY) || 0, H = Number(obj.hoogte) || 2.6, n = P.length, opp = 0, i;
+    for (i = 0; i < n; i++) { var q = P[(i + 1) % n]; opp += P[i].x * q.z - q.x * P[i].z; }
+    var zin = opp >= 0 ? 1 : -1;
+    wanden = [];
+    var klaar = obj.wanden.map(function (w) {
+      var a = P[w.nr], b = P[(w.nr + 1) % n]; if (!a || !b) return Promise.resolve();
+      var L = Math.hypot(b.x - a.x, b.z - a.z), ux = (b.x - a.x) / L, uz = (b.z - a.z) / L, nx = -uz * zin, nz = ux * zin;
+      // wandbeeld: links = hoek a, boven = plafond. Textuurcoördinaat t = 0 is de bovenrand van het plaatje.
+      var pos = [a.x, y0, a.z, b.x, y0, b.z, b.x, y0 + H, b.z, a.x, y0, a.z, b.x, y0 + H, b.z, a.x, y0 + H, a.z];
+      var uv = [0, 1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 0];
+      var rec = { pb: buffer(pos), tb: buffer(uv), n: 6, tex: kleur1, midden: [(a.x + b.x) / 2, y0 + H / 2, (a.z + b.z) / 2], normaal: [nx, 0, nz] };
+      wanden.push(rec);
+      return laadPlaatje(w.beeld).then(function (im) { if (im) rec.tex = maakTextuur(im); });
+    });
+    var dr = driehoeken(P), vp = [], vt = [];
+    dr.forEach(function (p) { vp.push(p.x, y0, p.z); vt.push(0, 0); });
+    vloer = { pb: buffer(vp), tb: buffer(vt), n: dr.length };
+    // camera in het midden van de kamer, kijkend naar wand 1
+    var cx = P.reduce(function (s, p) { return s + p.x; }, 0) / n, cz = P.reduce(function (s, p) { return s + p.z; }, 0) / n;
+    var mx = (P[0].x + P[1].x) / 2, mz = (P[0].z + P[1].z) / 2;
+    cam.x = cx; cam.z = cz; cam.yaw = Math.atan2(mx - cx, -(mz - cz)); cam.oogHoogte = Math.min(1.5, H - 0.3);
+    cam.orbit.cx = cx; cam.orbit.cz = cz; cam.orbit.dist = Math.max(4, Math.max.apply(null, P.map(function (p) { return Math.hypot(p.x - cx, p.z - cz); })) * 2.4);
+    el('laden').hidden = true; el('kaartje').hidden = false; el('bediening').hidden = false; el('hulp').hidden = false;
+    el('k-foto').hidden = !(obj.beelden && obj.beelden.length);
+    tekenKaart();
+    return Promise.all(klaar).then(teken);
+  }
+
+  // ---------- tekenen ----------
+  function camPos() {
+    var y0 = Number(data.vloerY) || 0;
+    if (cam.modus === 'binnen') return [cam.x, y0 + cam.oogHoogte, cam.z];
+    var o = cam.orbit; return [o.cx + Math.sin(o.yaw) * Math.cos(o.pitch) * o.dist, y0 + Math.sin(o.pitch) * o.dist, o.cz + Math.cos(o.yaw) * Math.cos(o.pitch) * o.dist];
+  }
+  function teken() {
+    if (!data) return;
+    var cv = el('beeld'), dpr = Math.min(2, window.devicePixelRatio || 1), w = Math.round(cv.clientWidth * dpr), h = Math.round(cv.clientHeight * dpr);
+    if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+    gl.viewport(0, 0, w, h); gl.clearColor(0.17, 0.19, 0.18, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); gl.enable(gl.DEPTH_TEST);
+    var oog = camPos(), y0 = Number(data.vloerY) || 0, doel;
+    if (cam.modus === 'binnen') doel = [oog[0] + Math.sin(cam.yaw) * Math.cos(cam.pitch), oog[1] + Math.sin(cam.pitch), oog[2] - Math.cos(cam.yaw) * Math.cos(cam.pitch)];
+    else doel = [cam.orbit.cx, y0 + 0.8, cam.orbit.cz];
+    var hfov = (cam.modus === 'binnen' ? 80 : 60) * Math.PI / 180, vfov = Math.min(105 * Math.PI / 180, 2 * Math.atan(Math.tan(hfov / 2) / (w / h)));
+    if (w > h) vfov = (cam.modus === 'binnen' ? 62 : 45) * Math.PI / 180;
+    var m = mul(perspectief(vfov, w / h, 0.05, 100), kijkNaar(oog, doel, [0, 1, 0]));
+    gl.useProgram(prog);
+    var lp = gl.getAttribLocation(prog, 'p'), lt = gl.getAttribLocation(prog, 't');
+    gl.uniformMatrix4fv(gl.getUniformLocation(prog, 'm'), false, m);
+    function vorm(v, tex, licht) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, v.pb); gl.enableVertexAttribArray(lp); gl.vertexAttribPointer(lp, 3, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, v.tb); gl.enableVertexAttribArray(lt); gl.vertexAttribPointer(lt, 2, gl.FLOAT, false, 0, 0);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex); gl.uniform1i(gl.getUniformLocation(prog, 's'), 0);
+      gl.uniform1f(gl.getUniformLocation(prog, 'licht'), licht);
+      gl.drawArrays(gl.TRIANGLES, 0, v.n);
+    }
+    if (vloer && vloer.n) vorm(vloer, kleur1, 0.9);
+    // poppenhuis: een wand alleen tekenen als je tegen de binnenkant aankijkt; van boven verdwijnen zo de wanden aan jouw kant
+    wanden.forEach(function (wd) {
+      var d = [oog[0] - wd.midden[0], 0, oog[2] - wd.midden[2]];
+      if (dot(d, wd.normaal) < 0) return;
+      vorm(wd, wd.tex, 1);
+    });
+    tekenIk();
+  }
+  var gepland = false;
+  function later() { if (gepland) return; gepland = true; requestAnimationFrame(function () { gepland = false; teken(); }); }
+
+  // ---------- plattegrond met standpunten ----------
+  var kaartSchaal = null;
+  function tekenKaart() {
+    if (!data) return;
+    var P = data.punten, B = (data.beelden || []), svg = el('kaart'), alle = P.map(function (p) { return [p.x, p.z]; }).concat(B.map(function (b) { return [b.pos[0], b.pos[2]]; }));
+    var x0 = Math.min.apply(null, alle.map(function (a) { return a[0]; })), x1 = Math.max.apply(null, alle.map(function (a) { return a[0]; }));
+    var z0 = Math.min.apply(null, alle.map(function (a) { return a[1]; })), z1 = Math.max.apply(null, alle.map(function (a) { return a[1]; }));
+    var W = 240, rand = 14, s = Math.min((W - 2 * rand) / Math.max(x1 - x0, 0.5), (W - 2 * rand) / Math.max(z1 - z0, 0.5)), H = Math.round((z1 - z0) * s + 2 * rand);
+    kaartSchaal = { x0: x0, z0: z0, s: s, rand: rand };
+    var S = function (x, z) { return [(rand + (x - x0) * s).toFixed(1), (rand + (z - z0) * s).toFixed(1)]; };
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    var NS = 'http://www.w3.org/2000/svg';
+    function sv(tag, a) { var e = document.createElementNS(NS, tag); Object.keys(a).forEach(function (k) { e.setAttribute(k, a[k]); }); svg.appendChild(e); return e; }
+    sv('polygon', { 'class': 'wand', points: P.map(function (p) { return S(p.x, p.z).join(','); }).join(' ') });
+    // standpunten die vlak bij elkaar liggen als één stip (anders liggen er tientallen op elkaar)
+    var stippen = [];
+    B.forEach(function (b, i) { if (!stippen.some(function (j) { var c = B[j]; return Math.hypot(c.pos[0] - b.pos[0], c.pos[2] - b.pos[2]) < 0.3; })) stippen.push(i); });
+    stippen.forEach(function (i) { var b = B[i], q = S(b.pos[0], b.pos[2]), c = sv('circle', { 'class': 'stip', cx: q[0], cy: q[1], r: 6 }); c.addEventListener('click', function (e) { e.stopPropagation(); gaNaar(i); }); });
+    ikLaag = sv('g', {});
+    tekenIk();
+  }
+  var ikLaag = null;
+  function tekenIk() {
+    if (!ikLaag || !kaartSchaal) return;
+    while (ikLaag.firstChild) ikLaag.removeChild(ikLaag.firstChild);
+    if (cam.modus !== 'binnen') return;
+    var k = kaartSchaal, S = function (x, z) { return [(k.rand + (x - k.x0) * k.s).toFixed(1), (k.rand + (z - k.z0) * k.s).toFixed(1)]; }, NS = 'http://www.w3.org/2000/svg';
+    var q = S(cam.x, cam.z), r = S(cam.x + Math.sin(cam.yaw) * 0.6, cam.z - Math.cos(cam.yaw) * 0.6);
+    var l = document.createElementNS(NS, 'line'); [['class', 'blik'], ['x1', q[0]], ['y1', q[1]], ['x2', r[0]], ['y2', r[1]]].forEach(function (a) { l.setAttribute(a[0], a[1]); }); ikLaag.appendChild(l);
+    var c = document.createElementNS(NS, 'circle'); [['class', 'ik'], ['cx', q[0]], ['cy', q[1]], ['r', 5]].forEach(function (a) { c.setAttribute(a[0], a[1]); }); c.style.pointerEvents = 'none'; ikLaag.appendChild(c);
+    ikLaag.style.pointerEvents = 'none';
+  }
+  function gaNaar(i) {
+    var b = data.beelden[i]; if (!b) return;
+    cam.modus = 'binnen'; cam.x = b.pos[0]; cam.z = b.pos[2]; cam.yaw = Math.atan2(b.dir[0], -b.dir[2]); cam.pitch = Math.asin(Math.max(-1, Math.min(1, b.dir[1])));
+    el('k-boven').classList.remove('aan'); el('k-boven').textContent = 'Van boven'; later();
+  }
+  el('kaart').addEventListener('click', function (e) {
+    if (!kaartSchaal) return;
+    var r = el('kaart').getBoundingClientRect(), vb = el('kaart').viewBox.baseVal, x = (e.clientX - r.left) / r.width * vb.width, y = (e.clientY - r.top) / r.height * vb.height;
+    cam.modus = 'binnen'; cam.x = kaartSchaal.x0 + (x - kaartSchaal.rand) / kaartSchaal.s; cam.z = kaartSchaal.z0 + (y - kaartSchaal.rand) / kaartSchaal.s;
+    el('k-boven').classList.remove('aan'); el('k-boven').textContent = 'Van boven'; later();
+  });
+
+  // ---------- bediening ----------
+  function loop(stap) { if (cam.modus !== 'binnen') { cam.orbit.dist = Math.max(2, cam.orbit.dist - stap * 2); return later(); } cam.x += Math.sin(cam.yaw) * stap; cam.z -= Math.cos(cam.yaw) * stap; later(); }
+  function draai(d) { if (cam.modus === 'binnen') cam.yaw += d; else cam.orbit.yaw -= d; later(); }
+  var sleep = null;
+  el('beeld').addEventListener('pointerdown', function (e) { el('hulp').hidden = true; sleep = { x: e.clientX, y: e.clientY }; try { el('beeld').setPointerCapture(e.pointerId); } catch (x) {} });
+  el('beeld').addEventListener('pointermove', function (e) {
+    if (!sleep) return;
+    var dx = e.clientX - sleep.x, dy = e.clientY - sleep.y; sleep = { x: e.clientX, y: e.clientY };
+    if (cam.modus === 'binnen') { cam.yaw -= dx * 0.005; cam.pitch = Math.max(-1.3, Math.min(1.3, cam.pitch + dy * 0.005)); }
+    else { cam.orbit.yaw -= dx * 0.006; cam.orbit.pitch = Math.max(0.15, Math.min(1.5, cam.orbit.pitch + dy * 0.005)); }
+    later();
+  });
+  ['pointerup', 'pointercancel'].forEach(function (t) { el('beeld').addEventListener(t, function () { sleep = null; }); });
+  el('beeld').addEventListener('wheel', function (e) { e.preventDefault(); loop(e.deltaY < 0 ? 0.3 : -0.3); }, { passive: false });
+  document.addEventListener('keydown', function (e) {
+    var k = e.key.toLowerCase();
+    if (k === 'arrowup' || k === 'w') loop(0.2); else if (k === 'arrowdown' || k === 's') loop(-0.2);
+    else if (k === 'arrowleft' || k === 'a') draai(0.08); else if (k === 'arrowright' || k === 'd') draai(-0.08);
+    else if (k === 'escape') el('foto').hidden = true;
+  });
+  el('k-vooruit').addEventListener('click', function () { loop(0.3); });
+  el('k-achter').addEventListener('click', function () { loop(-0.3); });
+  el('k-links').addEventListener('click', function () { draai(0.25); });
+  el('k-rechts').addEventListener('click', function () { draai(-0.25); });
+  el('k-boven').addEventListener('click', function () {
+    cam.modus = cam.modus === 'binnen' ? 'boven' : 'binnen';
+    el('k-boven').classList.toggle('aan', cam.modus === 'boven'); el('k-boven').textContent = cam.modus === 'boven' ? 'Naar binnen' : 'Van boven'; later();
+  });
+  // Foto hier: het vastgelegde beeld dat het dichtst bij jouw plek en kijkrichting ligt
+  el('k-foto').addEventListener('click', function () {
+    var B = data.beelden || []; if (!B.length) return;
+    var oog = camPos(), dir = cam.modus === 'binnen' ? [Math.sin(cam.yaw) * Math.cos(cam.pitch), Math.sin(cam.pitch), -Math.cos(cam.yaw) * Math.cos(cam.pitch)] : norm([cam.orbit.cx - oog[0], -0.3, cam.orbit.cz - oog[2]]);
+    var best = -1, bs = Infinity;
+    B.forEach(function (b, i) { var d = Math.hypot(b.pos[0] - oog[0], b.pos[2] - oog[2]), a = Math.acos(Math.max(-1, Math.min(1, dot(norm(b.dir), dir)))); var sc = d + a * 1.5; if (sc < bs) { bs = sc; best = i; } });
+    var b = B[best]; el('foto-img').src = b.beeld; el('foto-tekst').textContent = 'Beeld ' + (best + 1) + ' van ' + B.length; el('foto').hidden = false;
+  });
+  el('k-foto-dicht').addEventListener('click', function () { el('foto').hidden = true; });
+  window.addEventListener('resize', later);
+
+  // ---------- inlezen ----------
+  function fout(t) { el('laden').hidden = false; el('laden-melding').hidden = false; el('laden-melding').textContent = t; }
+  el('bestand').addEventListener('change', function (e) {
+    var f = e.target.files && e.target.files[0]; if (!f) return;
+    f.text().then(function (t) { try { return laad(JSON.parse(t)); } catch (x) { fout('Openen lukte niet: ' + (x && x.message ? x.message : 'onbekend bestand') + '.'); } }, function () { fout('Het bestand kon niet worden gelezen.'); });
+  });
+  function uitIdb() {
+    return new Promise(function (ok) {
+      try {
+        var rq = indexedDB.open('mt-ar', 1);
+        rq.onupgradeneeded = function () { rq.result.createObjectStore('opnames'); };
+        rq.onsuccess = function () { try { var g = rq.result.transaction('opnames').objectStore('opnames').get('laatste'); g.onsuccess = function () { ok(g.result || null); }; g.onerror = function () { ok(null); }; } catch (e) { ok(null); } };
+        rq.onerror = function () { ok(null); };
+      } catch (e) { ok(null); }
+    });
+  }
+  uitIdb().then(function (obj) { if (obj) { try { laad(obj); } catch (e) { fout('De laatste opname op dit apparaat is niet te openen.'); } } });
+  window.kijkProef = { laad: laad, cam: cam, teken: teken };
+})();
+</script>
+</body>
+</html>

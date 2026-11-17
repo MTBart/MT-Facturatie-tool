@@ -93,6 +93,12 @@ dd{margin:0;font-variant-numeric:tabular-nums}
 #ar-laag .onder button.duim{width:96px;height:96px;border-radius:50%;border:5px solid #fff;background:#17643f;font-size:18px;box-shadow:0 2px 10px rgba(0,0,0,.45);touch-action:none}
 #ar-laag .onder button.duim:active{background:#0f4d2f;transform:scale(.96)}
 #ar-laag button:disabled{opacity:.4}
+#ar-dun{position:absolute;right:12px;bottom:calc(140px + env(safe-area-inset-bottom, 0px));width:72px;border-radius:8px;border:2px solid rgba(255,255,255,.8);box-shadow:0 1px 6px rgba(0,0,0,.5)}
+#ar-pano{font-size:14px;font-weight:650;color:#9ff0c0}
+.wandbeelden{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}
+.wandbeelden figure{margin:0;flex:0 0 auto;display:flex;flex-direction:column;gap:4px}
+.wandbeelden img{height:140px;border-radius:8px;border:1px solid var(--rand);background:var(--bg)}
+.wandbeelden figcaption{font-size:13px;color:var(--zacht)}
 #ar-laag.ver #ar-kruis::before,#ar-laag.ver #ar-kruis::after{background:#ffb347}
 </style>
 </head>
@@ -143,13 +149,30 @@ dd{margin:0;font-variant-numeric:tabular-nums}
     </div>
     <textarea id="kopie" hidden readonly aria-label="Uitkomst als tekst"></textarea>
   </section>
+  <section class="kaart" id="s-pano" hidden>
+    <h2>Rondkijken</h2>
+    <p id="pano-tekst"></p>
+    <div class="melding" id="pano-melding" hidden></div>
+    <div class="wandbeelden" id="pano-wanden"></div>
+    <div class="rij">
+      <button class="knop hoofd" id="k-plak">Wanden aan elkaar plakken</button>
+    </div>
+    <div class="rij" id="pano-verder" hidden>
+      <button class="knop hoofd" id="k-kijk">Bekijken in 3D</button>
+      <button class="knop" id="k-bewaar">Bewaren als bestand</button>
+      <button class="knop" id="k-deel">Delen</button>
+    </div>
+    <p class="zacht">Het bestand open je op kantoor op de pagina Rondkijken (opname-ar-kijk.html in dezelfde map). Beelden en bestand blijven op dit apparaat tot je ze zelf deelt.</p>
+  </section>
 </main>
 
 <div id="ar-laag" hidden>
   <div class="boven">
     <div class="kop"><div id="ar-status">AR start…</div><div class="klein"><button id="k-klaar" disabled>Klaar</button><button id="k-stop">Stop</button></div></div>
     <div id="ar-sub"></div>
+    <div id="ar-pano"></div>
   </div>
+  <img id="ar-dun" alt="" hidden>
   <div id="ar-kruis"></div>
   <div id="ar-maatvak"><div id="ar-maat"></div></div>
   <div class="onder">
@@ -293,6 +316,89 @@ var AR = (function () {
   AR.stabiel = function (rij) {
     if (!rij.length) return null;
     return { x: AR.mediaan(rij.map(function (p) { return p.x; })), z: AR.mediaan(rij.map(function (p) { return p.z; })) };
+  };
+  // ---------- panorama: beelden met positie op de wanden ----------
+  // Punt (x, y, z) naar beeldcoördinaten 0..1 (x naar rechts, y naar beneden) met de matrix pv = projectie x inverse van de camerastand.
+  AR.projecteer = function (m, x, y, z) {
+    var cx = m[0] * x + m[4] * y + m[8] * z + m[12], cy = m[1] * x + m[5] * y + m[9] * z + m[13], cw = m[3] * x + m[7] * y + m[11] * z + m[15];
+    if (!(cw > 1e-6)) return null;
+    return { x: (cx / cw + 1) / 2, y: (1 - cy / cw) / 2 };
+  };
+  // Wanden in 3D uit de hoekpunten (meters). Gesloten: ook de wand van de laatste naar de eerste hoek, en 'binnen' volgt uit de
+  // draairichting. Open (tijdens het tikken): 'binnen' is de kant waar de telefoon staat.
+  AR.wanden3d = function (punten, gesloten, vloerY, hoogte, oog) {
+    var n = punten.length, opp = 0, i, uit = [];
+    for (i = 0; i < n; i++) { var q = punten[(i + 1) % n]; opp += punten[i].x * q.z - q.x * punten[i].z; }
+    var m = gesloten ? n : n - 1;
+    for (i = 0; i < m; i++) {
+      var a = punten[i], b = punten[(i + 1) % n], L = Math.hypot(b.x - a.x, b.z - a.z);
+      if (L < 0.05) continue;
+      var ux = (b.x - a.x) / L, uz = (b.z - a.z) / L, nx = -uz, nz = ux;
+      if (gesloten ? opp < 0 : (oog && (oog.x - a.x) * nx + (oog.z - a.z) * nz < 0)) { nx = -nx; nz = -nz; }
+      uit.push({ nr: i, a: { x: a.x, z: a.z }, L: L, ux: ux, uz: uz, nx: nx, nz: nz, y0: vloerY, H: hoogte });
+    }
+    return uit;
+  };
+  // Een wand in vakjes van ongeveer 'maat' meter (breed x hoog). u loopt langs de wand vanaf hoek a, v omhoog vanaf de vloer.
+  AR.cellen = function (w, maat) {
+    var nu = Math.max(1, Math.round(w.L / maat)), nv = Math.max(1, Math.round(w.H / maat)), uit = [];
+    for (var j = 0; j < nv; j++) for (var i = 0; i < nu; i++) uit.push({ u0: w.L * i / nu, u1: w.L * (i + 1) / nu, v0: w.H * j / nv, v1: w.H * (j + 1) / nv, beste: -1, score: 0 });
+    return uit;
+  };
+  AR.wandPunt = function (w, u, v) { return { x: w.a.x + w.ux * u, y: w.y0 + v, z: w.a.z + w.uz * u }; };
+  AR.celHoeken = function (w, c) { return [AR.wandPunt(w, c.u0, c.v0), AR.wandPunt(w, c.u1, c.v0), AR.wandPunt(w, c.u1, c.v1), AR.wandPunt(w, c.u0, c.v1)]; };
+  // Hoe goed een beeld een vakje laat zien (hoger is beter, -1 = niet bruikbaar): het hele vakje in beeld, van de binnenkant,
+  // niet te schuin, niet te ver weg, en liefst midden in beeld.
+  AR.celScore = function (f, w, c) {
+    var hk = AR.celHoeken(w, c), pr = [], i;
+    for (i = 0; i < 4; i++) { var q = AR.projecteer(f.pv, hk[i].x, hk[i].y, hk[i].z); if (!q || q.x < 0.01 || q.x > 0.99 || q.y < 0.01 || q.y > 0.99) return -1; pr.push(q); }
+    var mid = AR.wandPunt(w, (c.u0 + c.u1) / 2, (c.v0 + c.v1) / 2), dx = f.pos[0] - mid.x, dy = f.pos[1] - mid.y, dz = f.pos[2] - mid.z, d = Math.hypot(dx, dy, dz);
+    if (d > 6 || d < 0.15) return -1;
+    var recht = (dx * w.nx + dz * w.nz) / d;   // 1 = recht voor de wand, 0 = er langs
+    if (recht < 0.25) return -1;
+    var px = (pr[0].x + pr[1].x + pr[2].x + pr[3].x) / 4, py = (pr[0].y + pr[1].y + pr[2].y + pr[3].y) / 4;
+    var midden = 1 - Math.max(Math.abs(px - 0.5), Math.abs(py - 0.5)) * 1.2;
+    return recht * midden / Math.max(d, 0.5);
+  };
+  // Staat er een andere wand tussen de camera en dit punt? (van bovenaf gezien; wanden lopen van vloer tot plafond)
+  // Zo komt in een L-vormige kamer de achterkant van de uitstekende hoek niet op de verkeerde wand.
+  AR.verstopt = function (f, wanden, k, p) {
+    var ax = f.pos[0], az = f.pos[2], bx = p.x, bz = p.z;
+    for (var j = 0; j < wanden.length; j++) {
+      if (j === k) continue;
+      var w = wanden[j], cx = w.a.x, cz = w.a.z, dx = w.ux * w.L, dz = w.uz * w.L, rx = bx - ax, rz = bz - az, den = rx * dz - rz * dx;
+      if (Math.abs(den) < 1e-12) continue;
+      var t = ((cx - ax) * dz - (cz - az) * dx) / den, s = ((cx - ax) * rz - (cz - az) * rx) / den;
+      if (t > 0.001 && t < 0.98 && s > 0.002 && s < 0.998) return true;
+    }
+    return false;
+  };
+  // Voor elk vakje het beste beeld bijhouden. Geeft het aandeel vakjes dat in beeld is geweest.
+  AR.dekBij = function (cellenPerWand, wanden, f, idx) {
+    for (var k = 0; k < wanden.length; k++) {
+      var cs = cellenPerWand[k];
+      for (var i = 0; i < cs.length; i++) {
+        var sc = AR.celScore(f, wanden[k], cs[i]);
+        if (sc > cs[i].score && !AR.verstopt(f, wanden, k, AR.wandPunt(wanden[k], (cs[i].u0 + cs[i].u1) / 2, 0))) { cs[i].score = sc; cs[i].beste = idx; }
+      }
+    }
+  };
+  AR.dekking = function (cellenPerWand) {
+    var tot = 0, gezien = 0;
+    cellenPerWand.forEach(function (cs) { cs.forEach(function (c) { tot++; if (c.beste >= 0) gezien++; }); });
+    return tot ? gezien / tot : 0;
+  };
+  // Affiene afbeelding van driehoek s (3 punten) op driehoek d: [a, b, c, d, e, f] zoals canvas setTransform.
+  AR.affien = function (s0, s1, s2, d0, d1, d2) {
+    var den = s0.x * (s1.y - s2.y) + s1.x * (s2.y - s0.y) + s2.x * (s0.y - s1.y);
+    if (Math.abs(den) < 1e-9) return null;
+    function los(v0, v1, v2) {
+      return [(v0 * (s1.y - s2.y) + v1 * (s2.y - s0.y) + v2 * (s0.y - s1.y)) / den,
+        (v0 * (s2.x - s1.x) + v1 * (s0.x - s2.x) + v2 * (s1.x - s0.x)) / den,
+        (v0 * (s1.x * s2.y - s2.x * s1.y) + v1 * (s2.x * s0.y - s0.x * s2.y) + v2 * (s0.x * s1.y - s1.x * s0.y)) / den];
+    }
+    var X = los(d0.x, d1.x, d2.x), Y = los(d0.y, d1.y, d2.y);
+    return [X[0], Y[0], X[1], Y[1], X[2], Y[2]];
   };
   // Sluitcontrole: loop de wanden af met jouw maten en de richtingen uit de camera. Het gat is hoe ver je van het begin uitkomt.
   AR.sluit = function (richtingen, maten) {
@@ -500,6 +606,11 @@ if (typeof module !== 'undefined') module.exports = AR;
   var modus = 'vloer', plafondY = null, plafondMonsters = [], plafondKandidaat = null;
   // De laatste richtpunten met hun tijd: bij het drukken telt de mediaan van de 0,4 s ervoor, niet het trillen van de duim.
   var spoor = [], VER = 2.5;
+  // Panorama: tijdens de opname legt de telefoon vanzelf beelden met hun stand vast (om de 25 cm of 10 graden draaien) en houdt
+  // per vakje van elke wand bij welk beeld het het best laat zien. Groene vakjes zijn in beeld geweest, oranje nog niet.
+  var binding = null, capProg = null, capBuf = null, capFbo = null, capTex = null, capW = 0, capH = 0, capDoek = null;
+  var pano = { aan: false, beelden: [], laatste: null, vorigeDir: null, t: 0, wanden: [], cellen: [], sleutel: '', dekking: 0, klaar: null, dunUrl: null };
+  var MAX_BEELDEN = 500, HOOGTE_STANDAARD = 2.6;
 
   function status(a, b, maat) { el('ar-status').textContent = a || ''; el('ar-sub').textContent = b || ''; el('ar-maat').textContent = maat || ''; }
   function knoppen() { el('k-weg').disabled = !punten.length; el('k-klaar').disabled = punten.length < 3; el('k-modus').textContent = modus === 'vloer' ? 'Plafond' : 'Vloer'; }
@@ -534,7 +645,62 @@ if (typeof module !== 'undefined') module.exports = AR;
     var dx = oog.x - p.x, dz = oog.z - p.z, L = Math.hypot(dx, dz) || 1, nx = -dz / L * breed / 2, nz = dx / L * breed / 2, y0 = p.y, y1 = p.y + hoog;
     out.push(p.x + nx, y0, p.z + nz, p.x - nx, y0, p.z - nz, p.x + nx, y1, p.z + nz, p.x + nx, y1, p.z + nz, p.x - nx, y0, p.z - nz, p.x - nx, y1, p.z - nz);
   }
+  function bouwVanger() {
+    function sh(type, bron) { var x = gl.createShader(type); gl.shaderSource(x, bron); gl.compileShader(x); return x; }
+    capProg = gl.createProgram();
+    gl.attachShader(capProg, sh(gl.VERTEX_SHADER, 'attribute vec2 p;varying vec2 t;void main(){t=p*0.5+0.5;gl_Position=vec4(p,0.0,1.0);}'));
+    gl.attachShader(capProg, sh(gl.FRAGMENT_SHADER, 'precision mediump float;uniform sampler2D s;varying vec2 t;void main(){gl_FragColor=texture2D(s,t);}'));
+    gl.linkProgram(capProg);
+    capBuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, capBuf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+    capDoek = document.createElement('canvas');
+  }
+  // Eén camerabeeld klein (360 breed) uitlezen en als JPEG bewaren, met de stand van de camera erbij.
+  function vangBeeld(v, pv, oog, dir) {
+    var cam = v.camera, tex = binding.getCameraImage(cam);
+    if (!tex) return;
+    var w2 = 360, h2 = Math.max(1, Math.round(360 * cam.height / cam.width));
+    if (!capProg) bouwVanger();
+    if (!capFbo || capW !== w2 || capH !== h2) {
+      if (capFbo) { gl.deleteFramebuffer(capFbo); gl.deleteTexture(capTex); }
+      capTex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, capTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w2, h2, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      capFbo = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, capFbo); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, capTex, 0);
+      capW = w2; capH = h2;
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, capFbo); gl.viewport(0, 0, w2, h2); gl.disable(gl.BLEND);
+    gl.useProgram(capProg); gl.bindBuffer(gl.ARRAY_BUFFER, capBuf);
+    var loc = gl.getAttribLocation(capProg, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex); gl.uniform1i(gl.getUniformLocation(capProg, 's'), 0);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    var px = new Uint8Array(w2 * h2 * 4); gl.readPixels(0, 0, w2, h2, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    gl.bindTexture(gl.TEXTURE_2D, null); gl.bindFramebuffer(gl.FRAMEBUFFER, laag.framebuffer);
+    // de onderste rij van de framebuffer is de onderkant van het beeld: omdraaien voor een gewoon plaatje
+    capDoek.width = w2; capDoek.height = h2;
+    var cx = capDoek.getContext('2d'), id = cx.createImageData(w2, h2), rij = w2 * 4;
+    for (var r = 0; r < h2; r++) id.data.set(px.subarray((h2 - 1 - r) * rij, (h2 - r) * rij), r * rij);
+    cx.putImageData(id, 0, 0);
+    var rec = { pos: [oog.x, oog.y, oog.z], dir: [dir.x, dir.y, dir.z], pv: Array.prototype.slice.call(pv), w: w2, h: h2, blob: null };
+    pano.beelden.push(rec);
+    capDoek.toBlob(function (b) {
+      rec.blob = b;
+      try { if (pano.dunUrl) URL.revokeObjectURL(pano.dunUrl); pano.dunUrl = URL.createObjectURL(b); el('ar-dun').src = pano.dunUrl; el('ar-dun').hidden = false; } catch (e) {}
+    }, 'image/jpeg', 0.65);
+    if (pano.wanden.length) AR.dekBij(pano.cellen, pano.wanden, rec, pano.beelden.length - 1);
+  }
+  function hoek3(a, b) { var d = a.x * b.x + a.y * b.y + a.z * b.z; return Math.acos(Math.max(-1, Math.min(1, d))) / RAD; }
+  var RAD = Math.PI / 180;
+  // Wanden voor de dekking opnieuw opbouwen als er een hoek bij komt of het plafond bekend wordt.
+  function panoWanden(oog) {
+    var H = plafondY != null ? plafondY - vloerY : HOOGTE_STANDAARD, sleutel = punten.length + '|' + H.toFixed(3);
+    if (sleutel === pano.sleutel) return;
+    pano.sleutel = sleutel;
+    pano.wanden = punten.length >= 2 ? AR.wanden3d(punten, false, vloerY, H, oog) : [];
+    pano.cellen = pano.wanden.map(function (w) { return AR.cellen(w, 0.3); });
+    pano.beelden.forEach(function (f, i) { AR.dekBij(pano.cellen, pano.wanden, f, i); });
+  }
   function teken(pv, groepen) {
+    gl.enable(gl.BLEND); gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.useProgram(prog); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
     var loc = gl.getAttribLocation(prog, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 3, gl.FLOAT, false, 0, 0);
     gl.uniformMatrix4fv(locM, false, pv);
@@ -554,6 +720,25 @@ if (typeof module !== 'undefined') module.exports = AR;
     if (!pose) { status('Even zoeken…', 'Beweeg de telefoon rustig. Te donker of een kale witte vloer maakt het moeilijk.'); return; }
     var M = pose.transform.matrix, oog = { x: M[12], y: M[13], z: M[14] }, rich = { x: -M[8], y: -M[9], z: -M[10] };
     oogY = oog.y;
+    // panorama: een beeld vastleggen als de telefoon genoeg verplaatst of gedraaid is en niet te snel beweegt
+    if (pano.aan && vloerY != null) {
+      var nu0 = performance.now(), dirN = rich, snel = pano.vorigeDir ? hoek3(dirN, pano.vorigeDir) > 2.5 : true;
+      pano.vorigeDir = dirN;
+      var genoeg = !pano.laatste || Math.hypot(oog.x - pano.laatste.pos[0], oog.y - pano.laatste.pos[1], oog.z - pano.laatste.pos[2]) > 0.25 ||
+        hoek3(dirN, { x: pano.laatste.dir[0], y: pano.laatste.dir[1], z: pano.laatste.dir[2] }) > 10;
+      if (!snel && genoeg && nu0 - pano.t > 300 && pano.beelden.length < MAX_BEELDEN) {
+        var cv = null; pose.views.forEach(function (v) { if (!cv && v.camera) cv = v; });
+        if (cv) {
+          try { vangBeeld(cv, mul(cv.projectionMatrix, cv.transform.inverse.matrix), oog, dirN); pano.laatste = pano.beelden[pano.beelden.length - 1]; }
+          catch (e) { pano.aan = false; el('ar-pano').textContent = 'Beelden vastleggen lukt niet: ' + String(e && e.message || e).slice(0, 80); }
+          gl.bindFramebuffer(gl.FRAMEBUFFER, laag.framebuffer);
+        }
+        pano.t = nu0;
+      }
+      panoWanden(oog);
+      pano.dekking = AR.dekking(pano.cellen);
+      el('ar-pano').textContent = pano.beelden.length + ' beelden' + (pano.wanden.length ? ' · wanden in beeld ' + Math.round(pano.dekking * 100) + '%' : '');
+    }
     // vloer zoeken: treffers op een vlak dat omhoog wijst en minstens 0,9 m onder de telefoon ligt;
     // plafond (als de telefoon het herkent): een vlak dat omlaag wijst en minstens 0,3 m boven de telefoon ligt
     if (hits && (!punten.length || plafondY == null)) {
@@ -613,9 +798,18 @@ if (typeof module !== 'undefined') module.exports = AR;
       if (richtpunt.plafond) { ring(richt, richtpunt, 0.03, 0.04, y); paal(los, { x: richtpunt.x, y: y, z: richtpunt.z }, oog, yp - y, 0.008); }
     }
     if (plafondKandidaat != null && punten.length) { var lp = punten[punten.length - 1]; ring(richt, lp, 0.045, 0.06, plafondKandidaat); paal(los, { x: lp.x, y: y, z: lp.z }, oog, plafondKandidaat - y, 0.008); }
+    var gedekt = [], open = [];
+    if (pano.aan) pano.wanden.forEach(function (w, k) {
+      pano.cellen[k].forEach(function (c) {
+        var m = 0.012, hk = AR.celHoeken(w, { u0: c.u0 + m, u1: c.u1 - m, v0: c.v0 + m, v1: c.v1 - m }), o = c.beste >= 0 ? gedekt : open;
+        var tx = w.nx * 0.004, tz = w.nz * 0.004;
+        [0, 1, 2, 0, 2, 3].forEach(function (j) { o.push(hk[j].x + tx, hk[j].y, hk[j].z + tz); });
+      });
+    });
     pose.views.forEach(function (v) {
       var vp = laag.getViewport(v); gl.viewport(vp.x, vp.y, vp.width, vp.height);
       teken(mul(v.projectionMatrix, v.transform.inverse.matrix), [
+        { v: gedekt, c: [0.3, 0.85, 0.5, 0.22] }, { v: open, c: [1, 0.6, 0.2, 0.16] },
         { v: vast, c: [0.36, 0.86, 0.55, 0.95] }, { v: los, c: [0.47, 0.68, 1, 0.9] }, { v: palen, c: [1, 1, 1, 0.95] }, { v: plaf, c: [1, 0.72, 0.25, 0.95] },
         { v: richt, c: dichtBijStart ? [0.36, 0.86, 0.55, 1] : ver ? [1, 0.7, 0.28, 1] : [1, 1, 1, 1] }]);
     });
@@ -646,6 +840,8 @@ if (typeof module !== 'undefined') module.exports = AR;
       uitkomst = { punten: punten.slice(), hoogte: oogY != null && vloerY != null ? oogY - vloerY : 0, plafond: plafondY != null && vloerY != null ? plafondY - vloerY : 0,
         tijd: new Date().toLocaleString('nl-NL'), voorbeeld: false, hand: {} };
       bewaar();
+      pano.klaar = pano.beelden.length ? { beelden: pano.beelden.slice(), punten: punten.slice(), vloerY: vloerY, hoogte: plafondY != null ? plafondY - vloerY : HOOGTE_STANDAARD,
+        plafondBekend: plafondY != null, tijd: uitkomst.tijd } : null;
     }
     if (sessie) sessie.end();
   }
@@ -653,21 +849,25 @@ if (typeof module !== 'undefined') module.exports = AR;
     sessie = null; hits = null;
     try { if (wake) wake.release(); } catch (e) {}
     el('ar-laag').hidden = true; document.body.style.background = '';
-    if (uitkomst && !uitkomst.voorbeeld && uitkomst.punten.length >= 3) { el('s-start').hidden = true; toonUitkomst(); el('zeg').textContent = 'Klaar: ' + uitkomst.punten.length + ' hoeken aangetikt. Vul nu je eigen maten in.'; }
+    if (uitkomst && !uitkomst.voorbeeld && uitkomst.punten.length >= 3) { el('s-start').hidden = true; toonUitkomst(); toonPano(); el('zeg').textContent = 'Klaar: ' + uitkomst.punten.length + ' hoeken aangetikt. Vul nu je eigen maten in.'; }
     else if (punten.length) { zegKan('Gestopt met ' + punten.length + (punten.length === 1 ? ' hoek' : ' hoeken') + '; voor een kamer zijn er minstens 3 nodig.'); }
   }
 
   start.addEventListener('click', function () {
     if (sessie) return;
     punten = []; vloerMonsters = []; vloerY = null; richtpunt = null; modus = 'vloer'; plafondY = null; plafondMonsters = []; plafondKandidaat = null; spoor = []; knoppen();
+    pano = { aan: false, beelden: [], laatste: null, vorigeDir: null, t: 0, wanden: [], cellen: [], sleutel: '', dekking: 0, klaar: null, dunUrl: null };
+    el('ar-dun').hidden = true; el('ar-pano').textContent = '';
     el('ar-laag').hidden = false; status('AR start…', '');
-    navigator.xr.requestSession('immersive-ar', { requiredFeatures: ['hit-test'], optionalFeatures: ['dom-overlay', 'local-floor'], domOverlay: { root: el('ar-laag') } }).then(function (s) {
+    navigator.xr.requestSession('immersive-ar', { requiredFeatures: ['hit-test'], optionalFeatures: ['dom-overlay', 'local-floor', 'camera-access'], domOverlay: { root: el('ar-laag') } }).then(function (s) {
       sessie = s;
       if (!gl) bouwGl();
       return Promise.resolve(gl.makeXRCompatible ? gl.makeXRCompatible() : null).then(function () {
         laag = new XRWebGLLayer(s, gl); s.updateRenderState({ baseLayer: laag });
         s.addEventListener('end', opEinde);
         var lagen = s.enabledFeatures ? Array.from(s.enabledFeatures) : [];
+        try { if (lagen.indexOf('camera-access') >= 0 && window.XRWebGLBinding) { binding = new XRWebGLBinding(s, gl); pano.aan = true; } } catch (e) { pano.aan = false; }
+        if (!pano.aan) el('ar-pano').textContent = 'Beelden vastleggen kan hier niet; de hoeken werken wel.';
         if (lagen.length && lagen.indexOf('dom-overlay') < 0) s.addEventListener('select', function () { tik(performance.now()); });
         return s.requestReferenceSpace('local');
       }).then(function (r) { ref = r; return s.requestReferenceSpace('viewer'); })
@@ -693,7 +893,116 @@ if (typeof module !== 'undefined') module.exports = AR;
   el('k-klaar').addEventListener('click', afronden);
   el('k-stop').addEventListener('click', function () { if (sessie) sessie.end(); });
 
-  window.arProef = { AR: AR, uitkomst: function () { return uitkomst; } };
+  // ---------- rondkijken: wanden aan elkaar plakken uit de vastgelegde beelden ----------
+  var PPM = 150;   // pixels per meter in de geplakte wandbeelden
+  var panoBestand = null;
+  function toonPano() {
+    var k = pano.klaar;
+    el('s-pano').hidden = !k;
+    if (!k) return;
+    var W = AR.wanden3d(k.punten, true, k.vloerY, k.hoogte), C = W.map(function (w) { return AR.cellen(w, 0.25); });
+    k.beelden.forEach(function (f, i) { AR.dekBij(C, W, f, i); });
+    k.wanden = W; k.cellen = C;
+    el('pano-tekst').textContent = k.beelden.length + ' beelden vastgelegd tijdens de opname. ' + Math.round(AR.dekking(C) * 100) + '% van de wanden is in beeld geweest' +
+      (k.plafondBekend ? '' : ' (wandhoogte geschat op ' + meter(k.hoogte) + ' m, het plafond is niet gemeten)') + '.';
+    el('pano-wanden').textContent = ''; el('pano-verder').hidden = true; el('pano-melding').hidden = true; el('k-plak').disabled = false;
+  }
+  function laadBeeld(f) {
+    if (f.bitmap) return Promise.resolve(f.bitmap);
+    if (f.blob && window.createImageBitmap) return createImageBitmap(f.blob).then(function (b) { f.bitmap = b; return b; });
+    var src = f.url || (f.blob ? URL.createObjectURL(f.blob) : null);
+    if (!src) return Promise.resolve(null);
+    return new Promise(function (ok) { var im = new Image(); im.onload = function () { f.bitmap = im; ok(im); }; im.onerror = function () { ok(null); }; im.src = src; });
+  }
+  // Teken elk vakje van een wand uit het beeld dat het het best liet zien (twee driehoeken per vakje, affien vervormd).
+  function plakWand(w, cellen, beelden) {
+    var cw = Math.max(1, Math.round(w.L * PPM)), ch = Math.max(1, Math.round(w.H * PPM)), dk = document.createElement('canvas');
+    dk.width = cw; dk.height = ch;
+    var cx = dk.getContext('2d'); cx.fillStyle = '#d9d6cf'; cx.fillRect(0, 0, cw, ch);
+    var nodig = {}; cellen.forEach(function (c) { if (c.beste >= 0) nodig[c.beste] = true; });
+    return Promise.all(Object.keys(nodig).map(function (i) { return laadBeeld(beelden[i]); })).then(function () {
+      cellen.forEach(function (c) {
+        if (c.beste < 0) return;
+        var f = beelden[c.beste], im = f.bitmap; if (!im) return;
+        var iw = im.width, ih = im.height, hk = AR.celHoeken(w, c), src = [], dst = [];
+        for (var j = 0; j < 4; j++) {
+          var q = AR.projecteer(f.pv, hk[j].x, hk[j].y, hk[j].z); if (!q) return;
+          src.push({ x: q.x * iw, y: q.y * ih });
+        }
+        dst = [{ x: c.u0 * PPM, y: (w.H - c.v0) * PPM }, { x: c.u1 * PPM, y: (w.H - c.v0) * PPM }, { x: c.u1 * PPM, y: (w.H - c.v1) * PPM }, { x: c.u0 * PPM, y: (w.H - c.v1) * PPM }];
+        [[0, 1, 2], [0, 2, 3]].forEach(function (t) {
+          var m = AR.affien(src[t[0]], src[t[1]], src[t[2]], dst[t[0]], dst[t[1]], dst[t[2]]); if (!m) return;
+          cx.save(); cx.beginPath();
+          // de driehoek een halve pixel groter knippen, anders blijven er dunne naden zichtbaar
+          var mx = (dst[t[0]].x + dst[t[1]].x + dst[t[2]].x) / 3, my = (dst[t[0]].y + dst[t[1]].y + dst[t[2]].y) / 3;
+          t.forEach(function (j, n) { var d = dst[j], dx = d.x - mx, dy = d.y - my, l = Math.hypot(dx, dy) || 1, px = d.x + dx / l * 0.8, py = d.y + dy / l * 0.8; if (n) cx.lineTo(px, py); else cx.moveTo(px, py); });
+          cx.closePath(); cx.clip();
+          cx.setTransform(m[0], m[1], m[2], m[3], m[4], m[5]); cx.drawImage(im, 0, 0);
+          cx.restore();
+        });
+      });
+      return dk;
+    });
+  }
+  function plakAlles(k) {
+    var uit = [], keten = Promise.resolve();
+    k.wanden.forEach(function (w, i) { keten = keten.then(function () { return plakWand(w, k.cellen[i], k.beelden).then(function (dk) { uit.push(dk); }); }); });
+    return keten.then(function () { return uit; });
+  }
+  function naarDataUrl(blob) { return new Promise(function (ok) { var r = new FileReader(); r.onload = function () { ok(r.result); }; r.onerror = function () { ok(null); }; r.readAsDataURL(blob); }); }
+  el('k-plak').addEventListener('click', function () {
+    var k = pano.klaar; if (!k) return;
+    el('k-plak').disabled = true; el('pano-melding').hidden = false; el('pano-melding').className = 'melding'; el('pano-melding').textContent = 'Bezig met plakken…';
+    plakAlles(k).then(function (doeken) {
+      var strook = el('pano-wanden'); strook.textContent = '';
+      var wanden = doeken.map(function (dk, i) {
+        var url = dk.toDataURL('image/jpeg', 0.78), fig = maak('figure'), im = maak('img'); im.src = url; im.alt = 'Wand ' + (k.wanden[i].nr + 1);
+        fig.appendChild(im); fig.appendChild(maak('figcaption', 'Wand ' + (k.wanden[i].nr + 1) + ' · ' + meter(k.wanden[i].L) + ' m')); strook.appendChild(fig);
+        return { nr: k.wanden[i].nr, L: k.wanden[i].L, beeld: url };
+      });
+      return Promise.all(k.beelden.map(function (f) { return f.blob ? naarDataUrl(f.blob) : Promise.resolve(null); })).then(function (urls) {
+        panoBestand = { soort: 'mt-ar-panorama', versie: 1, tijd: k.tijd, vloerY: k.vloerY, hoogte: k.hoogte, plafondBekend: k.plafondBekend,
+          punten: k.punten.map(function (p) { return { x: p.x, z: p.z }; }), wanden: wanden,
+          beelden: k.beelden.map(function (f, i) { return urls[i] ? { pos: f.pos, dir: f.dir, pv: f.pv, beeld: urls[i] } : null; }).filter(Boolean) };
+        return bewaarIdb(panoBestand);
+      });
+    }).then(function () {
+      el('pano-melding').className = 'melding goed'; el('pano-melding').textContent = 'Klaar. Grijze stukken zijn niet in beeld geweest.';
+      el('pano-verder').hidden = false;
+    }, function (e) {
+      el('pano-melding').textContent = 'Plakken lukte niet: ' + String(e && e.message || e).slice(0, 120); el('k-plak').disabled = false;
+    });
+  });
+  function bewaarIdb(obj) {
+    return new Promise(function (ok) {
+      try {
+        var rq = indexedDB.open('mt-ar', 1);
+        rq.onupgradeneeded = function () { rq.result.createObjectStore('opnames'); };
+        rq.onsuccess = function () { try { var tx = rq.result.transaction('opnames', 'readwrite'); tx.objectStore('opnames').put(obj, 'laatste'); tx.oncomplete = function () { ok(true); }; tx.onerror = function () { ok(false); }; } catch (e) { ok(false); } };
+        rq.onerror = function () { ok(false); };
+      } catch (e) { ok(false); }
+    });
+  }
+  function bestandsBlob() { return new Blob([JSON.stringify(panoBestand)], { type: 'application/json' }); }
+  function bestandsNaam() { return 'opname-ar-' + new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-') + '.json'; }
+  el('k-kijk').addEventListener('click', function () { location.href = 'opname-ar-kijk.html#laatste'; });
+  el('k-bewaar').addEventListener('click', function () {
+    if (!panoBestand) return;
+    var a = document.createElement('a'), u = URL.createObjectURL(bestandsBlob()); a.href = u; a.download = bestandsNaam(); document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(u); }, 20000);
+  });
+  el('k-deel').addEventListener('click', function () {
+    if (!panoBestand) return;
+    try {
+      var bestand = new File([bestandsBlob()], bestandsNaam(), { type: 'application/json' });
+      if (navigator.canShare && navigator.canShare({ files: [bestand] })) navigator.share({ files: [bestand], title: 'Opname' }).catch(function () {});
+      else { el('pano-melding').hidden = false; el('pano-melding').className = 'melding'; el('pano-melding').textContent = 'Delen kan hier niet; gebruik Bewaren als bestand.'; }
+    } catch (e) { el('pano-melding').textContent = 'Delen lukte niet.'; }
+  });
+
+  window.arProef = { AR: AR, uitkomst: function () { return uitkomst; },
+    // proefhaak: een nagebootste opname met beelden laden, zonder AR
+    laadPano: function (k) { pano.klaar = k; toonPano(); return k; } };
   uitkomst = laad();
   if (uitkomst) { toonUitkomst(); el('zeg').textContent = 'De laatste meting van deze telefoon staat hieronder.'; }
 })();
