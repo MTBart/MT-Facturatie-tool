@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>AR-check opname</title>
+<!-- Losse proefpagina (17-11-2026): zoekt uit wat Chrome op deze telefoon in AR toestaat, als voorbereiding op het
+     "wandelende panorama": camerabeelden met positie, diepte en wandvlakken. Bewaart niets en stuurt niets weg. -->
+<style>
+/* Indeling: één kolom. Uitleg en startknop; tijdens AR een balk met wat er gevonden wordt en een knop voor een testbeeld;
+   daarna een lijst met ja/nee per functie en het testbeeld zelf. */
+:root{
+  --bg:#eef1ed; --vlak:#ffffff; --inkt:#16211a; --zacht:#5d6b62; --rand:#cfd6d0;
+  --primair:#17643f; --primair-zacht:#ddefe3; --op-primair:#ffffff;
+  --oranje:#a86504; --oranje-zacht:#fbeed8; --kies:#1c5fc4;
+  --letter:"Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue",Arial,sans-serif;
+  --cijfer:"Cascadia Mono",Consolas,ui-monospace,"Roboto Mono",monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#111713; --vlak:#1a221d; --inkt:#e6ece7; --zacht:#9aa79e; --rand:#33403a;
+    --primair:#5cc08b; --primair-zacht:#1d3a2a; --op-primair:#0c1a12; --oranje:#e3a23c; --oranje-zacht:#3b2c12; --kies:#78adff; color-scheme:dark; }
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--inkt);font:16px/1.45 var(--letter);
+  padding:max(14px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(20px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px))}
+main{max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+h1{font-size:21px;margin:0} h2{font-size:17px;margin:0} p{margin:0}
+.zacht{color:var(--zacht)}
+.kaart{background:var(--vlak);border:1px solid var(--rand);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:10px}
+ol{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:6px}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible{outline:3px solid var(--kies);outline-offset:2px}
+.knop{border:1px solid var(--rand);background:var(--vlak);border-radius:12px;padding:12px 16px;min-height:48px;width:100%}
+.knop.hoofd{background:var(--primair);border-color:var(--primair);color:var(--op-primair);font-weight:650;font-size:17px}
+.knop:disabled{opacity:.45;cursor:default}
+.melding{border-radius:10px;padding:10px 12px;background:var(--oranje-zacht);color:var(--oranje);font-weight:600}
+.melding.goed{background:var(--primair-zacht);color:var(--primair)}
+table{border-collapse:collapse;width:100%;font-size:15px}
+th,td{padding:7px 4px;border-bottom:1px solid var(--rand);text-align:left;vertical-align:top}
+td.ja{color:var(--primair);font-weight:650;white-space:nowrap}
+td.nee{color:var(--oranje);font-weight:650;white-space:nowrap}
+#beeld{max-width:100%;border-radius:10px;border:1px solid var(--rand)}
+#kopie{width:100%;min-height:140px;font:13px var(--cijfer);background:var(--bg);color:var(--inkt);border:1px solid var(--rand);border-radius:10px;padding:8px}
+#ar-laag{position:fixed;inset:0;color:#fff;font:15px/1.35 var(--letter);pointer-events:none}
+#ar-laag .boven{position:absolute;left:0;right:0;top:0;padding:max(12px, env(safe-area-inset-top, 0px)) 14px 12px;background:rgba(10,20,14,.75);white-space:pre-line}
+#ar-laag .onder{position:absolute;left:0;right:0;bottom:0;padding:12px 14px max(14px, env(safe-area-inset-bottom, 0px));display:flex;gap:10px;background:rgba(10,20,14,.55);pointer-events:auto}
+#ar-laag .onder button{flex:1;min-height:56px;border-radius:14px;border:1px solid rgba(255,255,255,.5);background:rgba(255,255,255,.14);color:#fff;font-weight:650;font-size:16px}
+#ar-laag .onder button.hoofd{background:#17643f;border-color:#17643f}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>AR-check: wat kan deze telefoon?</h1>
+    <p class="zacht">Duurt een halve minuut. Zoekt uit of we in onze eigen app tijdens het rondlopen camerabeelden met hun positie kunnen vastleggen. Er wordt niets bewaard of verstuurd.</p>
+  </header>
+
+  <section class="kaart" id="s-start">
+    <ol>
+      <li>Open deze pagina in Chrome en tik op Check starten. Geef toestemming voor de camera.</li>
+      <li>Beweeg de telefoon tien seconden rustig door de kamer, langs vloer en wanden.</li>
+      <li>Tik op Testbeeld, wacht een paar tellen en tik op Klaar.</li>
+      <li>Tik onderaan op Uitkomst kopiëren en stuur de tekst naar Claude.</li>
+    </ol>
+    <div class="melding" id="kan" hidden></div>
+    <button class="knop hoofd" id="k-start" disabled>Check starten</button>
+  </section>
+
+  <section class="kaart" id="s-uit" hidden>
+    <h2>Uitkomst</h2>
+    <table><tbody id="t-uit"></tbody></table>
+    <p class="zacht" id="beeld-tekst"></p>
+    <img id="beeld" alt="Testbeeld uit de AR-camera" hidden>
+    <button class="knop" id="k-kopie">Uitkomst kopiëren</button>
+    <textarea id="kopie" hidden readonly aria-label="Uitkomst als tekst"></textarea>
+    <button class="knop" id="k-opnieuw">Nog een keer</button>
+  </section>
+</main>
+
+<div id="ar-laag" hidden>
+  <div class="boven" id="ar-tekst">Check start…</div>
+  <div class="onder">
+    <button id="k-foto">Testbeeld</button>
+    <button id="k-klaar" class="hoofd">Klaar</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var el = function (id) { return document.getElementById(id); };
+  function maak(tag, tekst, klasse) { var e = document.createElement(tag); if (tekst != null) e.textContent = tekst; if (klasse) e.className = klasse; return e; }
+  var kan = el('kan'), start = el('k-start');
+  function zeg(t, goed) { kan.hidden = false; kan.textContent = t; kan.className = 'melding' + (goed ? ' goed' : ''); }
+  if (!window.isSecureContext) zeg('Dit werkt alleen via een https-adres.');
+  else if (!navigator.xr) zeg('Deze browser kan geen AR. Gebruik Chrome op een Android-telefoon.');
+  else navigator.xr.isSessionSupported('immersive-ar').then(function (ok) {
+    if (ok) { start.disabled = false; zeg('AR is beschikbaar. Tik op Check starten.', true); }
+    else zeg('AR is hier niet beschikbaar. Gebruik Chrome op Android met "Google Play-services voor AR".');
+  }, function () { zeg('Kon niet nagaan of AR werkt in deze browser.'); });
+
+  var sessie = null, gl = null, laag = null, binding = null, ref = null, kijk = null, hits = null;
+  var r = null, wilFoto = false, t0 = 0;
+  function nieuw() {
+    return { browser: navigator.userAgent.replace(/\s+/g, ' ').slice(0, 160), functies: [], frames: 0, duur: 0, hitTreffers: 0,
+      camera: { gezien: false, breedte: 0, hoogte: 0, fout: '' }, foto: null, fotoMs: 0, fotoFout: '',
+      diepte: { gezien: false, breedte: 0, hoogte: 0, midden: null, fout: '' }, vlakken: { gezien: false, vloer: 0, staand: 0, max: 0 },
+      contextKwijt: false, fout: '' };
+  }
+  function tekst() {
+    var c = r.camera, d = r.diepte, v = r.vlakken, fps = r.duur ? (r.frames / (r.duur / 1000)).toFixed(0) : '?';
+    return 'Functies: ' + (r.functies.join(', ') || 'onbekend') + '\nBeelden per seconde: ' + fps +
+      '\nCamerabeeld: ' + (c.gezien ? c.breedte + ' x ' + c.hoogte : 'nee') +
+      '\nDiepte: ' + (d.gezien ? d.breedte + ' x ' + d.hoogte + (d.midden != null ? ', midden ' + d.midden.toFixed(2) + ' m' : '') : 'nee') +
+      '\nVlakken: ' + (v.gezien ? v.vloer + ' liggend, ' + v.staand + ' staand' : 'nee') + '\nVloer- of wandtreffers: ' + r.hitTreffers;
+  }
+  function frame(t, f) {
+    if (!sessie) return;
+    sessie.requestAnimationFrame(frame);
+    r.frames++; r.duur = t - t0;
+    var pose = f.getViewerPose(ref);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, laag.framebuffer);
+    gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+    if (hits) { try { if (f.getHitTestResults(hits).length) r.hitTreffers++; } catch (e) {} }
+    try {
+      if (f.detectedPlanes) {
+        r.vlakken.gezien = true; var lig = 0, sta = 0;
+        f.detectedPlanes.forEach(function (p) { if (p.orientation === 'vertical') sta++; else lig++; });
+        r.vlakken.vloer = Math.max(r.vlakken.vloer, lig); r.vlakken.staand = Math.max(r.vlakken.staand, sta);
+      }
+    } catch (e) {}
+    if (pose) pose.views.forEach(function (v) {
+      // diepte (op de cpu)
+      try {
+        if (f.getDepthInformation) {
+          var di = f.getDepthInformation(v);
+          if (di) { r.diepte.gezien = true; r.diepte.breedte = di.width; r.diepte.hoogte = di.height; try { r.diepte.midden = di.getDepthInMeters(0.5, 0.5); } catch (e) {} }
+        }
+      } catch (e) { r.diepte.fout = String(e && e.message || e).slice(0, 120); }
+      // camerabeeld
+      if (v.camera && binding) {
+        r.camera.gezien = true; r.camera.breedte = v.camera.width; r.camera.hoogte = v.camera.height;
+        if (wilFoto) {
+          wilFoto = false;
+          var tf = performance.now();
+          try {
+            var tex = binding.getCameraImage(v.camera), w = v.camera.width, h = v.camera.height, fb = gl.createFramebuffer();
+            gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+            var px = new Uint8Array(w * h * 4); gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, laag.framebuffer); gl.deleteFramebuffer(fb);
+            var c = document.createElement('canvas'), sc = Math.min(1, 640 / w); c.width = Math.round(w * sc); c.height = Math.round(h * sc);
+            var c0 = document.createElement('canvas'); c0.width = w; c0.height = h;
+            var id = c0.getContext('2d').createImageData(w, h); id.data.set(px); c0.getContext('2d').putImageData(id, 0, 0);
+            var cx = c.getContext('2d'); cx.translate(0, c.height); cx.scale(1, -1); cx.drawImage(c0, 0, 0, c.width, c.height);
+            r.foto = { url: c.toDataURL('image/jpeg', 0.7), breedte: c.width, hoogte: c.height, positie: pose.transform.position };
+            r.fotoMs = Math.round(performance.now() - tf);
+          } catch (e) { r.fotoFout = String(e && e.message || e).slice(0, 160); }
+        }
+      }
+    });
+    el('ar-tekst').textContent = tekst() + (r.foto ? '\nTestbeeld gelukt (' + r.fotoMs + ' ms)' : r.fotoFout ? '\nTestbeeld mislukt: ' + r.fotoFout : '');
+  }
+  start.addEventListener('click', function () {
+    if (sessie) return;
+    r = nieuw(); el('ar-laag').hidden = false;
+    var opties = { requiredFeatures: [], optionalFeatures: ['camera-access', 'depth-sensing', 'hit-test', 'plane-detection', 'dom-overlay', 'local-floor'],
+      depthSensing: { usagePreference: ['cpu-optimized'], dataFormatPreference: ['luminance-alpha', 'float32'] }, domOverlay: { root: el('ar-laag') } };
+    navigator.xr.requestSession('immersive-ar', opties).then(function (s) {
+      sessie = s;
+      r.functies = s.enabledFeatures ? Array.from(s.enabledFeatures) : ['(lijst niet beschikbaar)'];
+      var cv = document.createElement('canvas');
+      cv.addEventListener('webglcontextlost', function () { r.contextKwijt = true; });
+      gl = cv.getContext('webgl2', { xrCompatible: true, alpha: true }) || cv.getContext('webgl', { xrCompatible: true, alpha: true });
+      return Promise.resolve(gl.makeXRCompatible ? gl.makeXRCompatible() : null).then(function () {
+        laag = new XRWebGLLayer(s, gl); s.updateRenderState({ baseLayer: laag });
+        try { if (window.XRWebGLBinding) binding = new XRWebGLBinding(s, gl); } catch (e) { r.camera.fout = String(e && e.message || e).slice(0, 120); }
+        s.addEventListener('end', klaar);
+        return s.requestReferenceSpace('local');
+      }).then(function (rs) { ref = rs; return s.requestReferenceSpace('viewer'); })
+        .then(function (v) { kijk = v; return s.requestHitTestSource ? s.requestHitTestSource({ space: kijk }).catch(function () { return null; }) : null; })
+        .then(function (h) { hits = h; t0 = performance.now(); s.requestAnimationFrame(function (t, f) { t0 = t; frame(t, f); }); });
+    }).catch(function (e) {
+      el('ar-laag').hidden = true; r.fout = String(e && e.message || e); toonUit();
+    });
+  });
+  el('ar-laag').addEventListener('beforexrselect', function (e) { if (e.target && e.target.closest && e.target.closest('button')) e.preventDefault(); });
+  el('k-foto').addEventListener('click', function () { wilFoto = true; });
+  el('k-klaar').addEventListener('click', function () { if (sessie) sessie.end(); });
+  function klaar() { sessie = null; el('ar-laag').hidden = true; toonUit(); }
+
+  function regel(tb, naam, ok, uitleg) {
+    var tr = maak('tr'); tr.appendChild(maak('td', naam)); tr.appendChild(maak('td', ok ? 'ja' : 'nee', ok ? 'ja' : 'nee')); tr.appendChild(maak('td', uitleg || '', 'zacht')); tb.appendChild(tr);
+  }
+  function toonUit() {
+    el('s-start').hidden = true; el('s-uit').hidden = false;
+    var tb = el('t-uit'); tb.textContent = '';
+    if (r.fout) { regel(tb, 'AR starten', false, r.fout); return; }
+    var fps = r.duur ? Math.round(r.frames / (r.duur / 1000)) : 0;
+    regel(tb, 'AR draait', r.frames > 30, r.frames + ' beelden, ' + fps + ' per seconde');
+    regel(tb, 'Plek op vloer of wand vinden', r.hitTreffers > 0, r.hitTreffers + ' keer');
+    regel(tb, 'Camerabeeld met positie', r.camera.gezien, r.camera.gezien ? r.camera.breedte + ' x ' + r.camera.hoogte + ' pixels' : (r.camera.fout || 'niet aangeboden'));
+    regel(tb, 'Testbeeld opslaan', !!r.foto, r.foto ? r.foto.breedte + ' x ' + r.foto.hoogte + ', ' + r.fotoMs + ' ms' : (r.fotoFout || 'niet geprobeerd of niet gelukt'));
+    regel(tb, 'Diepte', r.diepte.gezien, r.diepte.gezien ? r.diepte.breedte + ' x ' + r.diepte.hoogte + (r.diepte.midden != null ? ', midden ' + r.diepte.midden.toFixed(2).replace('.', ',') + ' m' : '') : (r.diepte.fout || 'niet aangeboden'));
+    regel(tb, 'Wanden en vloer als vlak', r.vlakken.gezien && (r.vlakken.vloer + r.vlakken.staand) > 0, r.vlakken.gezien ? r.vlakken.vloer + ' liggend, ' + r.vlakken.staand + ' staand' : 'niet aangeboden');
+    if (r.contextKwijt) regel(tb, 'Beeld stabiel', false, 'de grafische kaart viel even weg');
+    el('beeld').hidden = !r.foto; if (r.foto) el('beeld').src = r.foto.url;
+    el('beeld-tekst').textContent = r.foto ? 'Zo ziet een opgeslagen beeld eruit, op lage kwaliteit zoals voor het rondlopen bedoeld.' : '';
+  }
+  function uitTekst() {
+    if (!r) return 'Nog geen uitkomst.';
+    return 'AR-check opname ' + new Date().toLocaleString('nl-NL') + '\n' + (r.fout ? 'AR starten mislukt: ' + r.fout + '\n' : tekst() + '\n') +
+      'Testbeeld: ' + (r.foto ? r.foto.breedte + ' x ' + r.foto.hoogte + ' in ' + r.fotoMs + ' ms' : 'nee' + (r.fotoFout ? ' (' + r.fotoFout + ')' : '')) +
+      (r.diepte.fout ? '\nDiepte-fout: ' + r.diepte.fout : '') + (r.camera.fout ? '\nCamera-fout: ' + r.camera.fout : '') + (r.contextKwijt ? '\nGrafische kaart viel weg' : '') + '\nBrowser: ' + r.browser;
+  }
+  el('k-kopie').addEventListener('click', function () {
+    var t = uitTekst(), vak = el('kopie');
+    function toonVak() { vak.hidden = false; vak.value = t; vak.focus(); vak.select(); }
+    try { navigator.clipboard.writeText(t).then(function () { el('k-kopie').textContent = 'Gekopieerd'; }, toonVak); } catch (e) { toonVak(); }
+  });
+  el('k-opnieuw').addEventListener('click', function () { el('s-uit').hidden = true; el('s-start').hidden = false; el('k-kopie').textContent = 'Uitkomst kopiëren'; });
+})();
+</script>
+</body>
+</html>

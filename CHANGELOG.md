@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-11-17 — Opname: AR-proef om op een Android-telefoon de hoeken van een kamer aan te tikken
+- Commit: `ddbdd9e` | Auteur: Bart Witte
+
 ## 2026-11-16 — Release v2.36.1: projectlabel standaard 6 mm rechts en 6 mm omhoog; backup = v2.36.0
 - Commit: `86fa523` | Auteur: Bart Witte
 
