@@ -83,6 +83,42 @@ check('haaks zetten laat de schuine wand van 40 graden staan', Math.abs(hz[3] - 
 const ha = AR.haaksAfwijking([90.5, 88, 270.4, 140, 131], 8);
 check('afwijking van haaks over de bijna-haakse hoeken', ha && ha.aantal === 3 && Math.abs(ha.grootst - 2) < 1e-9 && Math.abs(ha.gemiddeld - (0.5 + 2 + 0.4) / 3) < 1e-9);
 
+// Rechtzetten en de schuine wand op de eigen maten zetten
+{
+  // de echte proef van 17-11 (7 hoeken, schuine knik bij H2-H3), met de eigen maten
+  const P = '0.141;-1.344 0.163;-0.736 0.778;-0.391 0.912;-0.413 1.129;2.933 -1.533;3.330 -1.725;-1.217'.split(' ').map(t => { const [a, b] = t.split(';').map(Number); return { x: a, z: b }; });
+  const L = [600, 655, 155, 3427, 2454, 4371, 1792];
+  const rz = AR.rechtzetten(P, 10), kc = AR.kamer(rz.punten);
+  check('proef 17-11: zes wanden haaks gezet, wand 2 schuin', rz.schuin.length === 1 && rz.schuin[0] === 1, rz.haaks.join(','));
+  check('proef 17-11: alle haakse hoeken precies 90 of 270', kc.hoeken.filter((h, i) => i !== 1 && i !== 2).every(h => Math.abs(h - 90) < 1e-6), kc.hoeken.map(h => h.toFixed(1)).join(' '));
+  const f = AR.pasSchuin(kc.wanden.map(w => w.richting), rz.schuin, L), hk = AR.hoekenUitRichtingen(f.richtingen, 1);
+  check('proef 17-11: met eigen maten blijft 42 mm over (de maten passen niet helemaal)', Math.abs(f.gat - 42.3) < 1, f.gat.toFixed(1) + ' mm, H2 ' + hk[1].toFixed(1) + ' H3 ' + hk[2].toFixed(1));
+  check('proef 17-11: binnenhoeken samen 900 graden', Math.abs(hk.reduce((a, b) => a + b, 0) - 900) < 1e-6);
+}
+{
+  // kamer met de knik, haakse hoeken tot 6 graden scheef getikt: rechtzetten + echte maten geeft de echte kamer terug
+  let goed2 = 0, slechtst = 0, hoekFout = 0;
+  for (let t = 0; t < 200; t++) {
+    const pts = inAR(KAMER.map(p => [p[0] + rnd() * 0.2, p[1] + rnd() * 0.2]), 360 * (rnd() + 0.5));
+    const rz = AR.rechtzetten(pts, 10), kc = AR.kamer(rz.punten), ruw = AR.kamer(pts);
+    const opp = (() => { let s2 = 0; const Q = kc.punten; for (let i = 0; i < Q.length; i++) { const q = Q[(i + 1) % Q.length]; s2 += Q[i].x * q.y - q.x * Q[i].y; } return s2; })();
+    const f = AR.pasSchuin(kc.wanden.map(w => w.richting), rz.schuin, MATEN), hk = AR.hoekenUitRichtingen(f.richtingen, opp >= 0 ? 1 : -1);
+    const fout2 = Math.max(...hk.map((h, i) => Math.abs(h - [90, 90, 90, 140, 130][i])));
+    if (rz.schuin.length === 1 && f.gat < 2 && fout2 < 0.1) goed2++;
+    slechtst = Math.max(slechtst, f.gat); hoekFout = Math.max(hoekFout, Math.max(...ruw.hoeken.map((h, i) => Math.abs(h - [90, 90, 90, 140, 130][i]))));
+  }
+  check('kamer met knik, tikfout tot 10 cm: haaks gezet en op maten sluit hij en de knik komt op 140/130 (' + goed2 + ' van 200)', goed2 >= 190, 'getikte hoeken tot ' + hoekFout.toFixed(1) + ' graden scheef, grootste gat ' + slechtst.toFixed(1) + ' mm');
+}
+{
+  // twee schuine wanden (een afgeschuinde rechthoek aan twee kanten): sluit precies
+  const K2 = [[0, 0], [4, 0], [4.6, 0.6], [4.6, 3], [0.8, 3], [0, 2.2]], M2 = [];
+  for (let i = 0; i < K2.length; i++) { const a = K2[i], b = K2[(i + 1) % K2.length]; M2.push(Math.round(Math.hypot(b[0] - a[0], b[1] - a[1]) * 1000)); }
+  const pts = inAR(K2.map(p => [p[0] + rnd() * 0.04, p[1] + rnd() * 0.04]), 17), rz = AR.rechtzetten(pts, 10), kc = AR.kamer(rz.punten);
+  const f = AR.pasSchuin(kc.wanden.map(w => w.richting), rz.schuin, M2);
+  check('twee schuine wanden: beide herkend en de kamer sluit op de maten', rz.schuin.length === 2 && f.gat < 2, 'schuin ' + rz.schuin.join(',') + ', gat ' + f.gat.toFixed(2));
+}
+check('stabiel punt: mediaan negeert een uitschieter van het drukken', (() => { const p = AR.stabiel([{ x: 1, z: 2 }, { x: 1.01, z: 2.01 }, { x: 0.99, z: 1.99 }, { x: 1.4, z: 2.5 }, { x: 1, z: 2 }]); return Math.abs(p.x - 1) < 0.011 && Math.abs(p.z - 2) < 0.011; })());
+
 // knik (hoek tussen twee wanden tijdens het tikken)
 check('knik van een rechte hoek is 90', Math.abs(AR.knik({ x: 0, z: 0 }, { x: 1, z: 0 }, { x: 1, z: 1 }) - 90) < 1e-9);
 

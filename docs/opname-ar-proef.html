@@ -83,10 +83,17 @@ dd{margin:0;font-variant-numeric:tabular-nums}
 #ar-kruis::before{left:21px;top:0;width:2px;height:44px}
 #ar-kruis::after{top:21px;left:0;height:2px;width:44px}
 #ar-maatvak{position:absolute;left:0;right:0;top:calc(50% + 34px);text-align:center}
-#ar-laag .onder{position:absolute;left:0;right:0;bottom:0;padding:12px 14px max(14px, env(safe-area-inset-bottom, 0px));display:flex;gap:10px;background:rgba(10,20,14,.55);pointer-events:auto}
-#ar-laag .onder button{flex:1;min-height:56px;border-radius:14px;border:1px solid rgba(255,255,255,.5);background:rgba(255,255,255,.14);color:#fff;font-weight:650;font-size:16px}
-#ar-laag .onder button.hoofd{background:#17643f;border-color:#17643f}
-#ar-laag .onder button:disabled{opacity:.4}
+#ar-laag .kop{display:flex;align-items:flex-start;gap:10px}
+#ar-laag .kop #ar-status{flex:1}
+#ar-laag .klein{display:flex;gap:8px;pointer-events:auto}
+#ar-laag .klein button{min-height:40px;padding:0 14px;border-radius:12px;border:1px solid rgba(255,255,255,.55);background:rgba(255,255,255,.14);color:#fff;font-weight:650;font-size:15px}
+#ar-laag .klein button#k-klaar{background:#17643f;border-color:#17643f}
+#ar-laag .onder{position:absolute;left:0;right:0;bottom:0;padding:14px 14px max(18px, env(safe-area-inset-bottom, 0px));display:flex;align-items:center;justify-content:space-between;gap:10px;background:rgba(10,20,14,.5);pointer-events:auto}
+#ar-laag .onder button{width:96px;min-height:52px;border-radius:14px;border:1px solid rgba(255,255,255,.5);background:rgba(255,255,255,.14);color:#fff;font-weight:650;font-size:16px}
+#ar-laag .onder button.duim{width:96px;height:96px;border-radius:50%;border:5px solid #fff;background:#17643f;font-size:18px;box-shadow:0 2px 10px rgba(0,0,0,.45);touch-action:none}
+#ar-laag .onder button.duim:active{background:#0f4d2f;transform:scale(.96)}
+#ar-laag button:disabled{opacity:.4}
+#ar-laag.ver #ar-kruis::before,#ar-laag.ver #ar-kruis::after{background:#ffb347}
 </style>
 </head>
 <body>
@@ -100,13 +107,13 @@ dd{margin:0;font-variant-numeric:tabular-nums}
     <h2>Zo werkt het</h2>
     <ol>
       <li>Start AR en beweeg de telefoon rustig over een vrij stuk vloer, tot de vloer gevonden is.</li>
-      <li>Richt het kruisje op de eerste hoek, precies waar de twee wanden en de vloer samenkomen, en tik ergens op het scherm.</li>
+      <li>Richt het kruisje op de eerste hoek, precies waar de twee wanden en de vloer samenkomen, en druk met je duim op de ronde knop Hoek onderin. Het punt van vlak voor het drukken telt, dus het trillen van je duim doet niet mee.</li>
       <li>Loop met de klok mee of ertegenin de kamer rond en tik elke hoek aan. Ook de hoeken van een knik, nis of uitsprong.</li>
       <li>Staat er een keukenblok of bank voor een hoek? Tik op Plafond. De eerste keer richt je recht boven de laatste vloerhoek op de plafondhoek: zo weet de telefoon hoe hoog het plafond is. Daarna tik je verborgen hoeken aan op het plafond; de vloerhoek komt er recht onder. Met Vloer ga je terug.</li>
-      <li>Tik op Klaar, of tik de eerste hoek nog een keer aan.</li>
-      <li>Vul daarna per wand je eigen maat in. Dan zie je hoe goed de hoeken uit de camera kloppen.</li>
+      <li>Tik bovenin op Klaar, of zet de eerste hoek nog een keer.</li>
+      <li>Bijna-haakse hoeken (tot 10° ernaast) worden vanzelf haaks gezet. Vul daarna per wand je eigen maat in: dan wordt de kamer opgebouwd uit jouw maten en draait een schuine wand vanzelf op zijn plek.</li>
     </ol>
-    <p class="zacht">Een hoek via het plafond is minder precies dan op de vloer, zeker ver weg: tik hem aan vanaf een plek waar je er niet te schuin naar kijkt. De lengtes uit de camera zijn een schatting; de hoeken zijn waar het om gaat.</p>
+    <p class="zacht">Hoe dichter bij de hoek, hoe preciezer. Staat het kruisje oranje, dan ben je meer dan 2,5 m van de hoek: loop dichterbij. Een hoek via het plafond is minder precies dan op de vloer. De lengtes uit de camera zijn een schatting; de vorm en de hoeken zijn waar het om gaat.</p>
     <div class="melding" id="ar-kan" hidden></div>
     <div class="rij">
       <button class="knop hoofd" id="k-start" disabled>AR starten</button>
@@ -118,10 +125,10 @@ dd{margin:0;font-variant-numeric:tabular-nums}
 
   <section class="kaart" id="s-uitkomst" hidden>
     <div class="zeg" id="zeg" aria-live="polite"></div>
-    <h2>Plattegrond uit de camera</h2>
+    <h2 id="plan-kop">Plattegrond uit de camera</h2>
     <svg id="plan" role="img" aria-label="Plattegrond uit de aangetikte hoeken"></svg>
     <dl id="feiten"></dl>
-    <h2>Wanden: schatting naast eigen maat</h2>
+    <h2>Wanden: camera naast eigen maat</h2>
     <p class="zacht">Wand 1 loopt van hoek H1 naar H2, wand 2 van H2 naar H3, enzovoort.</p>
     <div class="tabelvak">
       <table>
@@ -140,16 +147,15 @@ dd{margin:0;font-variant-numeric:tabular-nums}
 
 <div id="ar-laag" hidden>
   <div class="boven">
-    <div id="ar-status">AR start…</div>
+    <div class="kop"><div id="ar-status">AR start…</div><div class="klein"><button id="k-klaar" disabled>Klaar</button><button id="k-stop">Stop</button></div></div>
     <div id="ar-sub"></div>
   </div>
   <div id="ar-kruis"></div>
   <div id="ar-maatvak"><div id="ar-maat"></div></div>
   <div class="onder">
-    <button id="k-weg" disabled>Hoek weg</button>
+    <button id="k-weg" disabled>Terug</button>
+    <button id="k-hoek" class="duim" aria-label="Hoek vastleggen">Hoek</button>
     <button id="k-modus">Plafond</button>
-    <button id="k-klaar" class="hoofd" disabled>Klaar</button>
-    <button id="k-stop">Stoppen</button>
   </div>
 </div>
 
@@ -221,6 +227,73 @@ var AR = (function () {
       return Math.abs(d - k * 90) <= tol ? r0 + k * 90 * RAD : r;
     });
   };
+  // Rechtzetten: wanden die binnen 'tol' graden van het haakse raster liggen worden precies haaks gezet. Elke wand blijft door
+  // het midden van zijn aangetikte stuk lopen; de hoeken worden de snijpunten van de wanden. Schuine wanden houden hun richting.
+  AR.rechtzetten = function (punten, tol) {
+    var n = punten.length, r = [], L = [], i;
+    for (i = 0; i < n; i++) { var a = punten[i], b = punten[(i + 1) % n]; r.push(Math.atan2(b.z - a.z, b.x - a.x)); L.push(Math.hypot(b.x - a.x, b.z - a.z)); }
+    var g = AR.haaks(r, tol, L), haaks = g.map(function (x, k) { return x !== r[k]; });
+    var lijnen = g.map(function (t, k) { var a = punten[k], b = punten[(k + 1) % n]; return { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2, dx: Math.cos(t), dz: Math.sin(t) }; });
+    var uit = [];
+    for (i = 0; i < n; i++) {
+      var l1 = lijnen[(i - 1 + n) % n], l2 = lijnen[i], kr = l1.dx * l2.dz - l1.dz * l2.dx, p = punten[i];
+      if (Math.abs(kr) > Math.sin(10 * RAD)) {
+        var t = ((l2.x - l1.x) * l2.dz - (l2.z - l1.z) * l2.dx) / kr;
+        uit.push({ x: l1.x + l1.dx * t, z: l1.z + l1.dz * t });
+      } else {   // twee wanden (bijna) in elkaars verlengde: het punt op de nieuwe wand leggen
+        var s = (p.x - l2.x) * l2.dx + (p.z - l2.z) * l2.dz;
+        uit.push({ x: l2.x + l2.dx * s, z: l2.z + l2.dz * s });
+      }
+    }
+    return { punten: uit, haaks: haaks, schuin: haaks.map(function (h, k) { return h ? -1 : k; }).filter(function (k) { return k >= 0; }) };
+  };
+  // Schuine wanden op jouw maten zetten: draai alleen de schuine wanden zo dat de kamer met jouw maten zo goed mogelijk sluit.
+  // Geeft de nieuwe richtingen en het gat dat overblijft (mm). Met één of twee schuine wanden gaat dat meestal precies.
+  AR.pasSchuin = function (richtingen, schuin, maten) {
+    var r = richtingen.slice(), i, it;
+    function rest() { var x = 0, y = 0; for (var k = 0; k < r.length; k++) { x += Math.cos(r[k]) * maten[k]; y += Math.sin(r[k]) * maten[k]; } return [x, y]; }
+    for (it = 0; it < 60 && schuin.length; it++) {
+      var f = rest(), m = schuin.length, JtJ = [], Jtf = [], a, b;
+      for (a = 0; a < m; a++) { JtJ.push(new Array(m).fill(0)); Jtf.push(0); }
+      var J = schuin.map(function (k) { return [-Math.sin(r[k]) * maten[k], Math.cos(r[k]) * maten[k]]; });
+      for (a = 0; a < m; a++) { Jtf[a] = J[a][0] * f[0] + J[a][1] * f[1]; for (b = 0; b < m; b++) JtJ[a][b] = J[a][0] * J[b][0] + J[a][1] * J[b][1]; }
+      var lam = 1e-3 * (JtJ.reduce(function (s, rij, k) { return s + rij[k]; }, 0) / m + 1);
+      for (a = 0; a < m; a++) JtJ[a][a] += lam;
+      // oplossen (m is klein): Gauss-eliminatie
+      var A = JtJ.map(function (rij, k) { return rij.concat([-Jtf[k]]); });
+      for (a = 0; a < m; a++) {
+        var piv = a; for (b = a + 1; b < m; b++) if (Math.abs(A[b][a]) > Math.abs(A[piv][a])) piv = b;
+        var tmp = A[a]; A[a] = A[piv]; A[piv] = tmp;
+        if (Math.abs(A[a][a]) < 1e-12) continue;
+        for (b = 0; b < m; b++) if (b !== a) { var fct = A[b][a] / A[a][a]; for (var c = a; c <= m; c++) A[b][c] -= fct * A[a][c]; }
+      }
+      var stap = 0;
+      for (a = 0; a < m; a++) { var d = Math.abs(A[a][a]) < 1e-12 ? 0 : A[a][m] / A[a][a]; d = Math.max(-0.2, Math.min(0.2, d)); r[schuin[a]] += d; stap = Math.max(stap, Math.abs(d)); }
+      if (stap < 1e-9) break;
+    }
+    var e = rest();
+    return { richtingen: r, gat: Math.hypot(e[0], e[1]) };
+  };
+  // Binnenhoeken uit de wandrichtingen (niet uit de punten): blijft er een klein gat over, dan scheeft dat niet de hoeken bij het begin.
+  AR.hoekenUitRichtingen = function (richtingen, zin) {
+    var n = richtingen.length;
+    return richtingen.map(function (r, i) {
+      var d = (r - richtingen[(i - 1 + n) % n]) / RAD;
+      while (d > 180) d -= 360; while (d <= -180) d += 360;
+      var h = 180 - zin * d; return h < 0 ? h + 360 : h;
+    });
+  };
+  // Loop de wanden af met richtingen en lengtes (mm) en geef de hoekpunten in meters (begin in 0,0).
+  AR.loop = function (richtingen, maten) {
+    var x = 0, z = 0, uit = [];
+    for (var i = 0; i < richtingen.length; i++) { uit.push({ x: x / 1000, z: z / 1000 }); x += Math.cos(richtingen[i]) * maten[i]; z += Math.sin(richtingen[i]) * maten[i]; }
+    return uit;
+  };
+  // Mediaan van punten (x, z) als stabiel richtpunt: het trillen van het moment van drukken telt niet mee.
+  AR.stabiel = function (rij) {
+    if (!rij.length) return null;
+    return { x: AR.mediaan(rij.map(function (p) { return p.x; })), z: AR.mediaan(rij.map(function (p) { return p.z; })) };
+  };
   // Sluitcontrole: loop de wanden af met jouw maten en de richtingen uit de camera. Het gat is hoe ver je van het begin uitkomt.
   AR.sluit = function (richtingen, maten) {
     var x = 0, y = 0;
@@ -279,10 +352,28 @@ if (typeof module !== 'undefined') module.exports = AR;
     } catch (e) { return null; }
   }
 
+  // Het model achter de uitkomst: de aangetikte hoeken haaks gezet (binnen TOL graden), en zodra alle eigen maten er zijn
+  // de kamer opgebouwd uit jouw maten, met de schuine wanden zo gedraaid dat hij sluit.
+  var TOL = 10;
+  function afwijkingHaaks(h) { return Math.min(Math.abs(h - 90), Math.abs(h - 270)); }
+  function model() {
+    var ruw = AR.kamer(uitkomst.punten), rz = AR.rechtzetten(uitkomst.punten, TOL), kc = AR.kamer(rz.punten), n = kc.wanden.length;
+    var opp = 0, Q = kc.punten; for (var i = 0; i < n; i++) { var q = Q[(i + 1) % n]; opp += Q[i].x * q.y - q.x * Q[i].y; }
+    var zin = opp >= 0 ? 1 : -1, maten = [];
+    for (i = 0; i < n; i++) { if (uitkomst.hand[i] == null) break; maten.push(uitkomst.hand[i]); }
+    var compleet = maten.length === n, fit = null, teken = { punten: kc.punten, wanden: kc.wanden, hoeken: kc.hoeken, oppervlak: kc.oppervlak };
+    if (compleet) {
+      fit = AR.pasSchuin(kc.wanden.map(function (w) { return w.richting; }), rz.schuin, maten);
+      var kv = AR.kamer(AR.loop(fit.richtingen, maten));
+      teken = { punten: kv.punten, wanden: kv.wanden, hoeken: AR.hoekenUitRichtingen(fit.richtingen, zin), oppervlak: kv.oppervlak };
+    }
+    return { ruw: ruw, rz: rz, kc: kc, fit: fit, teken: teken, maten: maten, compleet: compleet };
+  }
   function toonUitkomst() {
     el('s-uitkomst').hidden = !uitkomst;
     if (!uitkomst) return;
-    var k = AR.kamer(uitkomst.punten), n = k.wanden.length, svg = el('plan');
+    var M = model(), k = M.teken, n = k.wanden.length, svg = el('plan');
+    el('plan-kop').textContent = M.compleet ? 'Plattegrond met jouw maten' : 'Plattegrond uit de camera, haaks gezet';
     // plattegrond: wand 1 horizontaal bovenaan
     var r0 = k.wanden[0].richting, co = Math.cos(-r0), si = Math.sin(-r0);
     var P = k.punten.map(function (p) { return { x: p.x * co - p.y * si, y: p.x * si + p.y * co }; });
@@ -290,7 +381,7 @@ if (typeof module !== 'undefined') module.exports = AR;
     if (P[0].y > cy) P = P.map(function (p) { return { x: -p.x, y: -p.y }; });
     var x0 = Math.min.apply(null, P.map(function (p) { return p.x; })), x1 = Math.max.apply(null, P.map(function (p) { return p.x; }));
     var y0 = Math.min.apply(null, P.map(function (p) { return p.y; })), y1 = Math.max.apply(null, P.map(function (p) { return p.y; }));
-    var B = Math.max(300, Math.min(900, Math.round(svg.getBoundingClientRect().width) || 640)), rand = B < 480 ? 56 : 70, s = Math.min((B - 2 * rand) / Math.max(x1 - x0, 1), (B * 0.8 - 2 * rand) / Math.max(y1 - y0, 1)), H = Math.round((y1 - y0) * s + 2 * rand);
+    var B = Math.max(300, Math.min(900, Math.round(svg.getBoundingClientRect().width) || 640)), rand = 76, s = Math.min((B - 2 * rand) / Math.max(x1 - x0, 1), (B * 0.8 - 2 * rand) / Math.max(y1 - y0, 1)), H = Math.round((y1 - y0) * s + 2 * rand);
     var S = function (p) { return { x: rand + (p.x - x0) * s + ((B - 2 * rand) - (x1 - x0) * s) / 2, y: rand + (p.y - y0) * s }; };
     svg.setAttribute('viewBox', '0 0 ' + B + ' ' + H);
     while (svg.firstChild) svg.removeChild(svg.firstChild);
@@ -299,7 +390,7 @@ if (typeof module !== 'undefined') module.exports = AR;
     P.forEach(function (p, i) {
       var a = S(p), b = S(P[(i + 1) % n]), L = Math.hypot(b.x - a.x, b.y - a.y) || 1, ux = (b.x - a.x) / L, uy = (b.y - a.y) / L;
       svg.appendChild(sv('line', { 'class': 'wand', x1: a.x.toFixed(1), y1: a.y.toFixed(1), x2: b.x.toFixed(1), y2: b.y.toFixed(1) }));
-      var h = uitkomst.hand[i], t = (i + 1) + ' · ' + (h != null ? h : '~' + Math.round(k.wanden[i].lengte / 10) * 10), br = t.length * 8.2 + 18;
+      var h = uitkomst.hand[i], t = (i + 1) + ' · ' + (h != null ? h : '~' + Math.round(M.kc.wanden[i].lengte / 10) * 10), br = t.length * 8.2 + 18;
       var lx = (a.x + b.x) / 2 - uy * 24 * buiten, ly = (a.y + b.y) / 2 + ux * 24 * buiten, g = sv('g', { 'class': 'lab' + (h != null ? '' : ' schat') });
       g.appendChild(sv('rect', { x: (lx - br / 2).toFixed(1), y: (ly - 13).toFixed(1), width: br.toFixed(1), height: 26, rx: 13 }));
       g.appendChild(sv('text', { x: lx.toFixed(1), y: (ly + 4.5).toFixed(1), 'text-anchor': 'middle' }, t));
@@ -317,16 +408,23 @@ if (typeof module !== 'undefined') module.exports = AR;
     var dl = el('feiten'); dl.textContent = '';
     function feit(a, b) { dl.appendChild(maak('dt', a)); dl.appendChild(maak('dd', b)); }
     feit('Hoeken', n + (uitkomst.voorbeeld ? ' (voorbeeld, geen echte meting)' : ''));
-    feit('Vloer', (k.oppervlak / 1e6).toFixed(2).replace('.', ',') + ' m² (schatting)');
+    feit('Vloer', (k.oppervlak / 1e6).toFixed(2).replace('.', ',') + ' m²' + (M.compleet ? '' : ' (schatting)'));
     if (uitkomst.hoogte > 0) feit('Telefoon', 'op ' + meter(uitkomst.hoogte) + ' m boven de gevonden vloer');
     if (uitkomst.plafond > 0) feit('Plafond', meter(uitkomst.plafond) + ' m boven de vloer (schatting)');
     var viaPlafond = uitkomst.punten.map(function (p, i) { return p.bron === 'plafond' ? 'H' + (i + 1) : null; }).filter(Boolean);
     if (viaPlafond.length) feit('Via het plafond', viaPlafond.join(', ') + ' (vloerhoek recht onder de plafondhoek)');
-    var ha = AR.haaksAfwijking(k.hoeken, 8);
-    if (ha) feit('Bijna haaks', ha.aantal + ' hoeken; gemiddeld ' + graden(ha.gemiddeld) + ' en hooguit ' + graden(ha.grootst) + ' van haaks af');
+    var gezet = [], afw = 0, nakijken = [];
+    for (var hi = 0; hi < n; hi++) {
+      var d = afwijkingHaaks(M.ruw.hoeken[hi]);
+      if (M.rz.haaks[hi] && M.rz.haaks[(hi - 1 + n) % n]) { gezet.push('H' + (hi + 1)); afw = Math.max(afw, d); }
+      else if (d > TOL && d <= 2 * TOL) nakijken.push('H' + (hi + 1) + ' (' + graden(M.ruw.hoeken[hi]) + ')');
+    }
+    if (gezet.length) feit('Haaks gezet', gezet.join(', ') + '; de camera zat er tot ' + graden(afw) + ' naast');
+    if (M.rz.schuin.length) feit('Schuin', M.rz.schuin.map(function (w) { return 'wand ' + (w + 1); }).join(', '));
+    if (nakijken.length) feit('Nameten', nakijken.join(', ') + ': bijna haaks maar meer dan ' + TOL + '° ernaast');
     // tabel
     var tb = el('t-wanden'); tb.textContent = '';
-    k.wanden.forEach(function (w, i) {
+    M.kc.wanden.forEach(function (w, i) {
       var tr = maak('tr'), inv = maak('input'), td4 = maak('td');
       inv.type = 'text'; inv.inputMode = 'decimal'; inv.autocomplete = 'off'; inv.id = 'hand-' + i; inv.setAttribute('aria-label', 'Zelf gemeten maat van wand ' + (i + 1) + ' in millimeters');
       if (uitkomst.hand[i] != null) inv.value = String(uitkomst.hand[i]);
@@ -347,21 +445,27 @@ if (typeof module !== 'undefined') module.exports = AR;
   function sluitTekst() {
     var vak = el('sluit'); vak.textContent = '';
     if (!uitkomst) return;
-    var k = AR.kamer(uitkomst.punten), n = k.wanden.length, maten = [], i;
-    for (i = 0; i < n; i++) { if (uitkomst.hand[i] == null) break; maten.push(uitkomst.hand[i]); }
-    if (maten.length < n) { vak.appendChild(maak('p', 'Vul alle ' + n + ' wanden in: dan rekent de pagina uit of de hoeken uit de camera met jouw maten een gesloten kamer geven.', 'zacht')); return; }
-    var r = k.wanden.map(function (w) { return w.richting; }), lg = k.wanden.map(function (w) { return w.lengte; }), gat1 = AR.sluit(r, maten), gat2 = AR.sluit(AR.haaks(r, 4, lg), maten);
-    var m1 = maak('div', 'Met de hoeken zoals de camera ze gaf: de kamer sluit op ' + Math.round(gat1) + ' mm.', 'melding' + (gat1 <= 20 ? ' goed' : ''));
-    var m2 = maak('div', 'Als de bijna-haakse hoeken (binnen 4°) precies haaks worden gezet: ' + Math.round(gat2) + ' mm.', 'melding' + (gat2 <= 20 ? ' goed' : ''));
-    vak.appendChild(m1); vak.appendChild(m2);
-    vak.appendChild(maak('p', 'Hoe kleiner, hoe beter de hoeken. Onder 20 mm is de vorm goed genoeg om op door te werken; daarboven klopt een hoek of een maat niet.', 'zacht'));
+    var M = model(), n = M.kc.wanden.length;
+    if (!M.compleet) { vak.appendChild(maak('p', 'Vul alle ' + n + ' wanden in: dan bouwt de pagina de kamer op uit jouw maten en kijkt of hij sluit.', 'zacht')); return; }
+    var gat = M.fit.gat, ruwGat = AR.sluit(M.ruw.wanden.map(function (w) { return w.richting; }), M.maten);
+    vak.appendChild(maak('div', 'Met jouw maten en de haakse hoeken sluit de kamer op ' + Math.round(gat) + ' mm.', 'melding' + (gat <= 20 ? ' goed' : '')));
+    if (M.rz.schuin.length) {
+      var hk = [];
+      M.rz.schuin.forEach(function (w) { [w, (w + 1) % n].forEach(function (c) { var t = 'H' + (c + 1) + ' ' + graden(M.teken.hoeken[c]); if (hk.indexOf(t) < 0) hk.push(t); }); });
+      vak.appendChild(maak('p', 'De schuine ' + (M.rz.schuin.length > 1 ? 'wanden zijn' : 'wand is') + ' op jouw maten gedraaid: ' + hk.join(', ') + '.'));
+    }
+    if (gat > 20) vak.appendChild(maak('p', 'Er blijft ' + Math.round(gat) + ' mm over. Een maat klopt niet helemaal, of een hoek die haaks is gezet is het niet. Meet een diagonaal na om te zien welke.', 'zacht'));
+    vak.appendChild(maak('p', 'Ter vergelijking, met de hoeken zoals de camera ze gaf: ' + Math.round(ruwGat) + ' mm.', 'zacht'));
   }
   function uitkomstTekst() {
     if (!uitkomst) return 'Nog geen uitkomst.';
-    var k = AR.kamer(uitkomst.punten), r = ['AR-proef opname' + (uitkomst.voorbeeld ? ' (voorbeeld)' : '') + ', ' + (uitkomst.tijd || ''), k.wanden.length + ' hoeken, telefoon op ' + meter(uitkomst.hoogte || 0) + ' m'];
-    k.wanden.forEach(function (w, i) { var h = uitkomst.hand[i]; r.push('Wand ' + (i + 1) + ': camera ' + Math.round(w.lengte) + (h != null ? ', zelf ' + h + ', verschil ' + (Math.round(w.lengte) - h) : '') + ', hoek H' + (i + 1) + ' ' + graden(k.hoeken[i])); });
-    var maten = k.wanden.map(function (_, i) { return uitkomst.hand[i]; });
-    if (maten.every(function (v) { return v != null; })) { var rr = k.wanden.map(function (w) { return w.richting; }); r.push('Sluit met eigen maten: ' + Math.round(AR.sluit(rr, maten)) + ' mm; haaks gezet: ' + Math.round(AR.sluit(AR.haaks(rr, 4, k.wanden.map(function (w) { return w.lengte; })), maten)) + ' mm'); }
+    var M = model(), r = ['AR-proef opname' + (uitkomst.voorbeeld ? ' (voorbeeld)' : '') + ', ' + (uitkomst.tijd || ''), M.kc.wanden.length + ' hoeken, telefoon op ' + meter(uitkomst.hoogte || 0) + ' m'];
+    M.kc.wanden.forEach(function (w, i) {
+      var h = uitkomst.hand[i];
+      r.push('Wand ' + (i + 1) + ': camera ' + Math.round(w.lengte) + (h != null ? ', zelf ' + h + ', verschil ' + (Math.round(w.lengte) - h) : '') + (M.rz.haaks[i] ? '' : ', schuin') +
+        ', hoek H' + (i + 1) + ' gemeten ' + graden(M.ruw.hoeken[i]) + ', gezet ' + graden(M.teken.hoeken[i]));
+    });
+    if (M.compleet) r.push('Sluit met eigen maten: ' + Math.round(M.fit.gat) + ' mm (zonder rechtzetten ' + Math.round(AR.sluit(M.ruw.wanden.map(function (w) { return w.richting; }), M.maten)) + ' mm)');
     if (uitkomst.plafond > 0) r.push('Plafond: ' + meter(uitkomst.plafond) + ' m');
     r.push('Punten (m): ' + uitkomst.punten.map(function (p) { return p.x.toFixed(3) + ';' + p.z.toFixed(3) + (p.bron === 'plafond' ? ' (plafond)' : ''); }).join(' '));
     return r.join('\n');
@@ -394,6 +498,8 @@ if (typeof module !== 'undefined') module.exports = AR;
   // Plafondstand: een hoek die op de vloer achter een keukenblok of bank zit, tik je aan op het plafond. De wand loopt recht
   // naar beneden, dus de vloerhoek ligt loodrecht eronder. De plafondhoogte meet je één keer recht boven een vloerhoek.
   var modus = 'vloer', plafondY = null, plafondMonsters = [], plafondKandidaat = null;
+  // De laatste richtpunten met hun tijd: bij het drukken telt de mediaan van de 0,4 s ervoor, niet het trillen van de duim.
+  var spoor = [], VER = 2.5;
 
   function status(a, b, maat) { el('ar-status').textContent = a || ''; el('ar-sub').textContent = b || ''; el('ar-maat').textContent = maat || ''; }
   function knoppen() { el('k-weg').disabled = !punten.length; el('k-klaar').disabled = punten.length < 3; el('k-modus').textContent = modus === 'vloer' ? 'Plafond' : 'Vloer'; }
@@ -473,6 +579,11 @@ if (typeof module !== 'undefined') module.exports = AR;
       richtpunt = null;
       if (punten.length) { var hb = AR.hoogteBoven(oog, rich, punten[punten.length - 1]); if (hb && hb.y - vloerY > 1.8 && hb.y - vloerY < 6 && hb.naast < 0.5) plafondKandidaat = hb.y; }
     }
+    var nu = performance.now();
+    spoor.push({ t: nu, p: richtpunt ? { x: richtpunt.x, z: richtpunt.z, plafond: !!richtpunt.plafond } : null, h: plafondKandidaat });
+    while (spoor.length && spoor[0].t < nu - 1500) spoor.shift();
+    var ver = !!(richtpunt && richtpunt.afstand > VER);
+    el('ar-laag').classList.toggle('ver', ver);
     var dichtBijStart = punten.length >= 3 && richtpunt && AR.afstand(richtpunt, punten[0]) < 0.2;
     // statusregel
     var pl = plafondY != null ? ' · plafond ' + meter(plafondY - vloerY) + ' m' : '';
@@ -487,6 +598,7 @@ if (typeof module !== 'undefined') module.exports = AR;
       if (punten.length >= 2) sub += ' · hoek H' + punten.length + ' ' + graden(AR.knik(punten[punten.length - 2], laatste, richtpunt));
       status('Tik hoek ' + (punten.length + 1) + ' aan', sub + pl, '~' + meter(AR.afstand(laatste, richtpunt)) + ' m');
     }
+    if (ver) el('ar-sub').textContent = 'Ver weg (' + meter(richtpunt.afstand) + ' m): loop dichterbij voor een preciezere hoek.';
     // tekenen: de vloerlijn, en zodra het plafond bekend is ook de plafondlijn en staande lijnen op elke hoek (het draadmodel)
     var y = (vloerY == null ? 0 : vloerY) + 0.003, yp = plafondY == null ? null : plafondY - 0.003, vast = [], los = [], richt = [], palen = [], plaf = [];
     for (var i = 0; i + 1 < punten.length; i++) { strook(vast, punten[i], punten[i + 1], 0.018, y); if (yp != null) strook(plaf, punten[i], punten[i + 1], 0.018, yp); }
@@ -505,20 +617,27 @@ if (typeof module !== 'undefined') module.exports = AR;
       var vp = laag.getViewport(v); gl.viewport(vp.x, vp.y, vp.width, vp.height);
       teken(mul(v.projectionMatrix, v.transform.inverse.matrix), [
         { v: vast, c: [0.36, 0.86, 0.55, 0.95] }, { v: los, c: [0.47, 0.68, 1, 0.9] }, { v: palen, c: [1, 1, 1, 0.95] }, { v: plaf, c: [1, 0.72, 0.25, 0.95] },
-        { v: richt, c: dichtBijStart ? [0.36, 0.86, 0.55, 1] : [1, 1, 1, 1] }]);
+        { v: richt, c: dichtBijStart ? [0.36, 0.86, 0.55, 1] : ver ? [1, 0.7, 0.28, 1] : [1, 1, 1, 1] }]);
     });
   }
 
-  function tik() {
+  // Wat er in de 0,4 s voor het drukken in beeld was (de laatste 40 ms niet: dan beweegt de telefoon al onder de duim).
+  function vlakVoor(T) { return spoor.filter(function (e) { return e.t >= T - 400 && e.t <= T - 40; }); }
+  function tik(T) {
     if (!sessie) return;
     if (vloerY == null) { status('Eerst de vloer', 'Beweeg de telefoon rustig over een vrij stuk vloer.'); return; }
+    var rij = vlakVoor(T || performance.now());
     if (modus === 'plafond' && plafondY == null) {
-      if (plafondKandidaat != null) { plafondY = plafondKandidaat; try { if (navigator.vibrate) navigator.vibrate([20, 40, 20]); } catch (e) {} }
+      var hs = rij.map(function (e) { return e.h; }).filter(function (h) { return h != null; });
+      var h = hs.length >= 3 ? AR.mediaan(hs) : plafondKandidaat;
+      if (h != null) { plafondY = h; try { if (navigator.vibrate) navigator.vibrate([20, 40, 20]); } catch (e) {} }
       return;
     }
-    if (!richtpunt) return;
-    if (punten.length >= 3 && AR.afstand(richtpunt, punten[0]) < 0.2) { afronden(); return; }
-    punten.push(richtpunt.plafond ? { x: richtpunt.x, z: richtpunt.z, bron: 'plafond' } : { x: richtpunt.x, z: richtpunt.z });
+    var ps = rij.map(function (e) { return e.p; }).filter(Boolean), p = ps.length >= 3 ? AR.stabiel(ps) : (richtpunt ? { x: richtpunt.x, z: richtpunt.z } : null);
+    if (!p) return;
+    var viaPlafond = ps.length >= 3 ? ps[ps.length - 1].plafond : !!(richtpunt && richtpunt.plafond);
+    if (punten.length >= 3 && AR.afstand(p, punten[0]) < 0.2) { afronden(); return; }
+    punten.push(viaPlafond ? { x: p.x, z: p.z, bron: 'plafond' } : { x: p.x, z: p.z });
     try { if (navigator.vibrate) navigator.vibrate(25); } catch (e) {}
     knoppen();
   }
@@ -540,14 +659,16 @@ if (typeof module !== 'undefined') module.exports = AR;
 
   start.addEventListener('click', function () {
     if (sessie) return;
-    punten = []; vloerMonsters = []; vloerY = null; richtpunt = null; modus = 'vloer'; plafondY = null; plafondMonsters = []; plafondKandidaat = null; knoppen();
+    punten = []; vloerMonsters = []; vloerY = null; richtpunt = null; modus = 'vloer'; plafondY = null; plafondMonsters = []; plafondKandidaat = null; spoor = []; knoppen();
     el('ar-laag').hidden = false; status('AR start…', '');
     navigator.xr.requestSession('immersive-ar', { requiredFeatures: ['hit-test'], optionalFeatures: ['dom-overlay', 'local-floor'], domOverlay: { root: el('ar-laag') } }).then(function (s) {
       sessie = s;
       if (!gl) bouwGl();
       return Promise.resolve(gl.makeXRCompatible ? gl.makeXRCompatible() : null).then(function () {
         laag = new XRWebGLLayer(s, gl); s.updateRenderState({ baseLayer: laag });
-        s.addEventListener('select', tik); s.addEventListener('end', opEinde);
+        s.addEventListener('end', opEinde);
+        var lagen = s.enabledFeatures ? Array.from(s.enabledFeatures) : [];
+        if (lagen.length && lagen.indexOf('dom-overlay') < 0) s.addEventListener('select', function () { tik(performance.now()); });
         return s.requestReferenceSpace('local');
       }).then(function (r) { ref = r; return s.requestReferenceSpace('viewer'); })
         .then(function (v) { kijk = v; return s.requestHitTestSource({ space: kijk }); })
@@ -565,6 +686,9 @@ if (typeof module !== 'undefined') module.exports = AR;
   // knoppen in de AR-laag tellen niet als tik op een hoek
   el('ar-laag').addEventListener('beforexrselect', function (e) { if (e.target && e.target.closest && e.target.closest('button')) e.preventDefault(); });
   el('k-weg').addEventListener('click', function () { punten.pop(); knoppen(); });
+  // De duimknop reageert al bij het neerzetten van de duim (niet pas bij loslaten), met het punt van vlak daarvoor.
+  el('k-hoek').addEventListener('pointerdown', function (e) { e.preventDefault(); tik(performance.now()); });
+  el('k-hoek').addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tik(performance.now()); } });
   el('k-modus').addEventListener('click', function () { modus = modus === 'vloer' ? 'plafond' : 'vloer'; knoppen(); });
   el('k-klaar').addEventListener('click', afronden);
   el('k-stop').addEventListener('click', function () { if (sessie) sessie.end(); });

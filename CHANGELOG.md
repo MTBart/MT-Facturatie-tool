@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-11-17 — Opname AR-proef: verborgen hoeken via het plafond aantikken
+- Commit: `a54d783` | Auteur: Bart Witte
+
 ## 2026-11-17 — Opname: AR-check, zoekt uit wat Chrome op de telefoon in AR toestaat
 - Commit: `f666367` | Auteur: Bart Witte
 
