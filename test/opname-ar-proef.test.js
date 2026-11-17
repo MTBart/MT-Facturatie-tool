@@ -18,7 +18,28 @@ let s = AR.snijVloer({ x: 0, y: 1.5, z: 0 }, { x: 0, y: -Math.SQRT1_2, z: -Math.
 check('kijkrichting 45 graden omlaag op 1,5 m: vloerpunt 1,5 m vooruit', s && Math.abs(s.z + 1.5) < 1e-9 && Math.abs(s.x) < 1e-9 && s.y === 0);
 check('kijkrichting omhoog: geen vloerpunt', AR.snijVloer({ x: 0, y: 1.5, z: 0 }, { x: 0, y: 0.2, z: -1 }, 0, 12) === null);
 check('vloer verder dan 12 m: geen vloerpunt', AR.snijVloer({ x: 0, y: 1.5, z: 0 }, { x: 0, y: -0.05, z: -1 }, 0, 12) === null);
-check('mediaan', AR.mediaan([3, 1, 2]) === 2 && AR.mediaan([4, 1, 2, 3]) === 2.5 && AR.mediaan([]) === null);
+// Plafond: snijpunt naar boven en de hoogte recht boven een vloerhoek
+s = AR.snijHorizontaal({ x: 0, y: 1.5, z: 0 }, { x: 0, y: Math.SQRT1_2, z: -Math.SQRT1_2 }, 2.6, 12);
+check('kijkrichting 45 graden omhoog, plafond op 2,6 m: plafondpunt 1,1 m vooruit', s && Math.abs(s.z + 1.1) < 1e-9 && s.y === 2.6);
+check('omlaag kijken geeft geen plafondpunt achter je', AR.snijHorizontaal({ x: 0, y: 1.5, z: 0 }, { x: 0, y: -0.5, z: -1 }, 2.6, 12) === null);
+{
+  // vloerhoek op (2, 0, -3); de telefoon staat op (0, 1.45, 0) en kijkt naar de plafondhoek (2, 2.62, -3)
+  const oog = { x: 0, y: 1.45, z: 0 }, doel = { x: 2, y: 2.62, z: -3 }, L = Math.hypot(2, 1.17, 3), d = { x: 2 / L, y: 1.17 / L, z: -3 / L };
+  const h = AR.hoogteBoven(oog, d, { x: 2, z: -3 });
+  check('plafondhoogte recht boven een vloerhoek: 2,62 m', h && Math.abs(h.y - 2.62) < 1e-9 && h.naast < 1e-9, h ? h.y.toFixed(4) + ' naast ' + h.naast.toExponential(1) : 'null');
+  // 1 graad ernaast gericht: de hoogte verschuift maar een beetje
+  const r = 1 * Math.PI / 180, d2 = { x: d.x * Math.cos(r) - d.z * Math.sin(r), y: d.y, z: d.x * Math.sin(r) + d.z * Math.cos(r) }, h2 = AR.hoogteBoven(oog, d2, { x: 2, z: -3 });
+  check('1 graad zijwaarts ernaast: hoogte binnen 1 cm, afwijking naast de hoek zichtbaar', h2 && Math.abs(h2.y - 2.62) < 0.01 && h2.naast > 0.03, h2 ? h2.y.toFixed(4) + ' naast ' + h2.naast.toFixed(3) : 'null');
+  check('recht omhoog kijken geeft geen hoogte', AR.hoogteBoven(oog, { x: 0, y: 1, z: 0 }, { x: 2, z: -3 }) === null);
+  // plafondhoek aantikken: de vloerhoek ligt recht eronder
+  const oog2 = { x: 0.4, y: 1.5, z: 0.2 }, hoek = { x: -1.3, z: -2.2 }, L2 = Math.hypot(hoek.x - oog2.x, 2.62 - 1.5, hoek.z - oog2.z);
+  const sp = AR.snijHorizontaal(oog2, { x: (hoek.x - oog2.x) / L2, y: 1.12 / L2, z: (hoek.z - oog2.z) / L2 }, 2.62, 12);
+  check('hoek via het plafond valt recht boven de echte vloerhoek', sp && Math.abs(sp.x - hoek.x) < 1e-9 && Math.abs(sp.z - hoek.z) < 1e-9);
+  // 2 cm fout in de plafondhoogte geeft bij een hoek op 3 m afstand zo'n 5 cm fout op de vloer
+  const sp2 = AR.snijHorizontaal(oog2, { x: (hoek.x - oog2.x) / L2, y: 1.12 / L2, z: (hoek.z - oog2.z) / L2 }, 2.64, 12);
+  console.log('info - 2 cm fout in de plafondhoogte, hoek op ' + Math.hypot(hoek.x - oog2.x, hoek.z - oog2.z).toFixed(1) + ' m: ' + (AR.afstand(sp2, hoek) * 1000).toFixed(0) + ' mm ernaast op de vloer');
+}
+check('mediaan',AR.mediaan([3, 1, 2]) === 2 && AR.mediaan([4, 1, 2, 3]) === 2.5 && AR.mediaan([]) === null);
 
 // De proefkamer met de knik, precies aangetikt (meters), gedraaid in de AR-ruimte, beide looprichtingen
 const KAMER = [[0, 0], [4, 0], [4, 3], [2.5, 3], [0, 0.9022]], MATEN = [4000, 3000, 1500, 3264, 902];

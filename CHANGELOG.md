@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-11-17 — Opname: AR-check, zoekt uit wat Chrome op de telefoon in AR toestaat
+- Commit: `f666367` | Auteur: Bart Witte
+
 ## 2026-11-17 — Opname: AR-proef om op een Android-telefoon de hoeken van een kamer aan te tikken
 - Commit: `ddbdd9e` | Auteur: Bart Witte
 

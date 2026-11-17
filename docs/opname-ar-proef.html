@@ -102,10 +102,11 @@ dd{margin:0;font-variant-numeric:tabular-nums}
       <li>Start AR en beweeg de telefoon rustig over een vrij stuk vloer, tot de vloer gevonden is.</li>
       <li>Richt het kruisje op de eerste hoek, precies waar de twee wanden en de vloer samenkomen, en tik ergens op het scherm.</li>
       <li>Loop met de klok mee of ertegenin de kamer rond en tik elke hoek aan. Ook de hoeken van een knik, nis of uitsprong.</li>
+      <li>Staat er een keukenblok of bank voor een hoek? Tik op Plafond. De eerste keer richt je recht boven de laatste vloerhoek op de plafondhoek: zo weet de telefoon hoe hoog het plafond is. Daarna tik je verborgen hoeken aan op het plafond; de vloerhoek komt er recht onder. Met Vloer ga je terug.</li>
       <li>Tik op Klaar, of tik de eerste hoek nog een keer aan.</li>
       <li>Vul daarna per wand je eigen maat in. Dan zie je hoe goed de hoeken uit de camera kloppen.</li>
     </ol>
-    <p class="zacht">Staat er een kast voor een hoek, richt dan op de plek op de vloer waar de hoek zou zitten. De lengtes uit de camera zijn een schatting; de hoeken zijn waar het om gaat.</p>
+    <p class="zacht">Een hoek via het plafond is minder precies dan op de vloer, zeker ver weg: tik hem aan vanaf een plek waar je er niet te schuin naar kijkt. De lengtes uit de camera zijn een schatting; de hoeken zijn waar het om gaat.</p>
     <div class="melding" id="ar-kan" hidden></div>
     <div class="rij">
       <button class="knop hoofd" id="k-start" disabled>AR starten</button>
@@ -146,6 +147,7 @@ dd{margin:0;font-variant-numeric:tabular-nums}
   <div id="ar-maatvak"><div id="ar-maat"></div></div>
   <div class="onder">
     <button id="k-weg" disabled>Hoek weg</button>
+    <button id="k-modus">Plafond</button>
     <button id="k-klaar" class="hoofd" disabled>Klaar</button>
     <button id="k-stop">Stoppen</button>
   </div>
@@ -164,6 +166,23 @@ var AR = (function () {
     var t = (vloerY - oog.y) / richting.y;
     if (!(t > 0.05) || t > (max || 12)) return null;
     return { x: oog.x + richting.x * t, y: vloerY, z: oog.z + richting.z * t, afstand: t };
+  };
+  // Snijpunt van de kijkrichting met een horizontaal vlak op hoogte y (vloer of plafond), naar boven of naar beneden.
+  AR.snijHorizontaal = function (oog, richting, y, max) {
+    if (Math.abs(richting.y) < 0.02) return null;
+    var t = (y - oog.y) / richting.y;
+    if (!(t > 0.05) || t > (max || 12)) return null;
+    return { x: oog.x + richting.x * t, y: y, z: oog.z + richting.z * t, afstand: t };
+  };
+  // Hoogte waarop de kijkrichting de loodlijn door punt p (x, z) het dichtst nadert: zo meet je het plafond recht boven een vloerhoek.
+  AR.hoogteBoven = function (oog, richting, p) {
+    var wx = oog.x - p.x, wz = oog.z - p.z, a = richting.x * richting.x + richting.y * richting.y + richting.z * richting.z;
+    var noemer = a - richting.y * richting.y;   // = lengte van de kijkrichting in het platte vlak, in het kwadraat
+    if (noemer < 1e-6) return null;
+    var dw = richting.x * wx + richting.y * (oog.y) + richting.z * wz, s = (richting.y * oog.y - dw) / noemer;
+    if (!(s > 0.05)) return null;
+    var dx = oog.x + richting.x * s - p.x, dz = oog.z + richting.z * s - p.z;
+    return { y: oog.y + richting.y * s, naast: Math.hypot(dx, dz), afstand: s };
   };
   AR.afstand = function (a, b) { return Math.hypot(b.x - a.x, b.z - a.z); };
   // Hoek bij hoekpunt b (van a via b naar c) in graden, 0..180, zonder binnen/buiten.
@@ -253,10 +272,10 @@ if (typeof module !== 'undefined') module.exports = AR;
     try {
       var j = JSON.parse(localStorage.getItem(SLEUTEL) || 'null');
       if (!j || !Array.isArray(j.punten) || j.punten.length < 3) return null;
-      var pts = j.punten.map(function (p) { return { x: Number(p.x), z: Number(p.z) }; });
+      var pts = j.punten.map(function (p) { return p && p.bron === 'plafond' ? { x: Number(p.x), z: Number(p.z), bron: 'plafond' } : { x: Number(p && p.x), z: Number(p && p.z) }; });
       if (!pts.every(function (p) { return isFinite(p.x) && isFinite(p.z); })) return null;
       var hand = {}; Object.keys(j.hand || {}).forEach(function (k) { var v = Math.round(Number(j.hand[k])); if (v >= 10 && v <= 100000) hand[k] = v; });
-      return { punten: pts, hoogte: Number(j.hoogte) || 0, tijd: String(j.tijd || ''), voorbeeld: !!j.voorbeeld, hand: hand };
+      return { punten: pts, hoogte: Number(j.hoogte) || 0, plafond: Number(j.plafond) || 0, tijd: String(j.tijd || ''), voorbeeld: !!j.voorbeeld, hand: hand };
     } catch (e) { return null; }
   }
 
@@ -292,7 +311,7 @@ if (typeof module !== 'undefined') module.exports = AR;
       var bx = d1x / l1 + d2x / l2, by = d1y / l1 + d2y / l2, bl = Math.hypot(bx, by), binnen = k.hoeken[i] <= 180 ? 1 : -1;
       if (bl > 0.05) svg.appendChild(sv('text', { 'class': 'hoek', x: (c.x + bx / bl * 42 * binnen).toFixed(1), y: (c.y + by / bl * 42 * binnen + 5).toFixed(1), 'text-anchor': 'middle' }, graden(k.hoeken[i])));
       svg.appendChild(sv('circle', { 'class': 'punt', cx: c.x.toFixed(1), cy: c.y.toFixed(1), r: 6 }));
-      if (bl > 0.05) svg.appendChild(sv('text', { 'class': 'nr', x: (c.x - bx / bl * 18 * binnen).toFixed(1), y: (c.y - by / bl * 18 * binnen + 4).toFixed(1), 'text-anchor': 'middle' }, 'H' + (i + 1)));
+      if (bl > 0.05) svg.appendChild(sv('text', { 'class': 'nr', x: (c.x - bx / bl * 18 * binnen).toFixed(1), y: (c.y - by / bl * 18 * binnen + 4).toFixed(1), 'text-anchor': 'middle' }, 'H' + (i + 1) + (uitkomst.punten[i].bron === 'plafond' ? '↑' : '')));
     });
     // feiten
     var dl = el('feiten'); dl.textContent = '';
@@ -300,6 +319,9 @@ if (typeof module !== 'undefined') module.exports = AR;
     feit('Hoeken', n + (uitkomst.voorbeeld ? ' (voorbeeld, geen echte meting)' : ''));
     feit('Vloer', (k.oppervlak / 1e6).toFixed(2).replace('.', ',') + ' m² (schatting)');
     if (uitkomst.hoogte > 0) feit('Telefoon', 'op ' + meter(uitkomst.hoogte) + ' m boven de gevonden vloer');
+    if (uitkomst.plafond > 0) feit('Plafond', meter(uitkomst.plafond) + ' m boven de vloer (schatting)');
+    var viaPlafond = uitkomst.punten.map(function (p, i) { return p.bron === 'plafond' ? 'H' + (i + 1) : null; }).filter(Boolean);
+    if (viaPlafond.length) feit('Via het plafond', viaPlafond.join(', ') + ' (vloerhoek recht onder de plafondhoek)');
     var ha = AR.haaksAfwijking(k.hoeken, 8);
     if (ha) feit('Bijna haaks', ha.aantal + ' hoeken; gemiddeld ' + graden(ha.gemiddeld) + ' en hooguit ' + graden(ha.grootst) + ' van haaks af');
     // tabel
@@ -340,7 +362,8 @@ if (typeof module !== 'undefined') module.exports = AR;
     k.wanden.forEach(function (w, i) { var h = uitkomst.hand[i]; r.push('Wand ' + (i + 1) + ': camera ' + Math.round(w.lengte) + (h != null ? ', zelf ' + h + ', verschil ' + (Math.round(w.lengte) - h) : '') + ', hoek H' + (i + 1) + ' ' + graden(k.hoeken[i])); });
     var maten = k.wanden.map(function (_, i) { return uitkomst.hand[i]; });
     if (maten.every(function (v) { return v != null; })) { var rr = k.wanden.map(function (w) { return w.richting; }); r.push('Sluit met eigen maten: ' + Math.round(AR.sluit(rr, maten)) + ' mm; haaks gezet: ' + Math.round(AR.sluit(AR.haaks(rr, 4, k.wanden.map(function (w) { return w.lengte; })), maten)) + ' mm'); }
-    r.push('Punten (m): ' + uitkomst.punten.map(function (p) { return p.x.toFixed(3) + ';' + p.z.toFixed(3); }).join(' '));
+    if (uitkomst.plafond > 0) r.push('Plafond: ' + meter(uitkomst.plafond) + ' m');
+    r.push('Punten (m): ' + uitkomst.punten.map(function (p) { return p.x.toFixed(3) + ';' + p.z.toFixed(3) + (p.bron === 'plafond' ? ' (plafond)' : ''); }).join(' '));
     return r.join('\n');
   }
   el('k-kopie').addEventListener('click', function () {
@@ -368,9 +391,12 @@ if (typeof module !== 'undefined') module.exports = AR;
   // ---------- AR-sessie ----------
   var sessie = null, gl = null, laag = null, prog = null, buf = null, locM = null, locC = null, ref = null, kijk = null, hits = null;
   var vloerMonsters = [], vloerY = null, punten = [], richtpunt = null, oogY = null, wake = null;
+  // Plafondstand: een hoek die op de vloer achter een keukenblok of bank zit, tik je aan op het plafond. De wand loopt recht
+  // naar beneden, dus de vloerhoek ligt loodrecht eronder. De plafondhoogte meet je één keer recht boven een vloerhoek.
+  var modus = 'vloer', plafondY = null, plafondMonsters = [], plafondKandidaat = null;
 
   function status(a, b, maat) { el('ar-status').textContent = a || ''; el('ar-sub').textContent = b || ''; el('ar-maat').textContent = maat || ''; }
-  function knoppen() { el('k-weg').disabled = !punten.length; el('k-klaar').disabled = punten.length < 3; }
+  function knoppen() { el('k-weg').disabled = !punten.length; el('k-klaar').disabled = punten.length < 3; el('k-modus').textContent = modus === 'vloer' ? 'Plafond' : 'Vloer'; }
 
   function bouwGl() {
     var c = document.createElement('canvas');
@@ -422,37 +448,63 @@ if (typeof module !== 'undefined') module.exports = AR;
     if (!pose) { status('Even zoeken…', 'Beweeg de telefoon rustig. Te donker of een kale witte vloer maakt het moeilijk.'); return; }
     var M = pose.transform.matrix, oog = { x: M[12], y: M[13], z: M[14] }, rich = { x: -M[8], y: -M[9], z: -M[10] };
     oogY = oog.y;
-    // vloer zoeken: treffers op een vlak dat omhoog wijst en minstens 0,9 m onder de telefoon ligt
-    if (hits && !punten.length) {
+    // vloer zoeken: treffers op een vlak dat omhoog wijst en minstens 0,9 m onder de telefoon ligt;
+    // plafond (als de telefoon het herkent): een vlak dat omlaag wijst en minstens 0,3 m boven de telefoon ligt
+    if (hits && (!punten.length || plafondY == null)) {
       var res = f.getHitTestResults(hits);
       if (res.length) {
         var hp = res[0].getPose(ref);
-        if (hp) { var H = hp.transform.matrix; if (H[5] > 0.9 && oog.y - H[13] > 0.9) { vloerMonsters.push(H[13]); if (vloerMonsters.length > 60) vloerMonsters.shift(); } }
+        if (hp) {
+          var H = hp.transform.matrix;
+          if (!punten.length && H[5] > 0.9 && oog.y - H[13] > 0.9) { vloerMonsters.push(H[13]); if (vloerMonsters.length > 60) vloerMonsters.shift(); }
+          if (plafondY == null && H[5] < -0.9 && H[13] - oog.y > 0.3) plafondMonsters.push(H[13]);
+        }
       }
-      if (vloerMonsters.length >= 8) vloerY = AR.mediaan(vloerMonsters);
+      if (!punten.length && vloerMonsters.length >= 8) vloerY = AR.mediaan(vloerMonsters);
+      if (plafondY == null && plafondMonsters.length >= 8 && vloerY != null) { var pm = AR.mediaan(plafondMonsters); if (pm - vloerY > 1.8 && pm - vloerY < 6) plafondY = pm; }
     }
-    richtpunt = vloerY == null ? null : AR.snijVloer(oog, rich, vloerY, 12);
+    plafondKandidaat = null;
+    if (vloerY == null) richtpunt = null;
+    else if (modus === 'vloer') richtpunt = AR.snijVloer(oog, rich, vloerY, 12);
+    else if (plafondY != null) {
+      var sp = AR.snijHorizontaal(oog, rich, plafondY, 12);
+      richtpunt = sp && rich.y > 0 ? { x: sp.x, y: vloerY, z: sp.z, plafond: true } : null;
+    } else {
+      richtpunt = null;
+      if (punten.length) { var hb = AR.hoogteBoven(oog, rich, punten[punten.length - 1]); if (hb && hb.y - vloerY > 1.8 && hb.y - vloerY < 6 && hb.naast < 0.5) plafondKandidaat = hb.y; }
+    }
     var dichtBijStart = punten.length >= 3 && richtpunt && AR.afstand(richtpunt, punten[0]) < 0.2;
     // statusregel
+    var pl = plafondY != null ? ' · plafond ' + meter(plafondY - vloerY) + ' m' : '';
     if (vloerY == null) status('Vloer zoeken…', 'Richt op een vrij stuk vloer en beweeg de telefoon rustig heen en weer.');
-    else if (!richtpunt) status('Richt lager', 'Het kruisje moet op de vloer staan.');
+    else if (modus === 'plafond' && plafondY == null && !punten.length) status('Eerst één vloerhoek', 'Tik op Vloer en tik een hoek aan die je op de vloer ziet. Daarna meet je recht erboven het plafond.');
+    else if (modus === 'plafond' && plafondY == null) status('Plafond meten', plafondKandidaat != null ? 'Richt recht boven hoek H' + punten.length + ' op de plafondhoek en tik.' : 'Richt omhoog, recht boven hoek H' + punten.length + '.', plafondKandidaat != null ? meter(plafondKandidaat - vloerY) + ' m' : '');
+    else if (!richtpunt) status(modus === 'vloer' ? 'Richt lager' : 'Richt hoger', modus === 'vloer' ? 'Het kruisje moet op de vloer staan.' + pl : 'Het kruisje moet op het plafond staan.' + pl);
     else if (!punten.length) status('Tik de eerste hoek aan', 'Kruisje precies op de plek waar de wanden en de vloer samenkomen. Telefoon op ' + meter(oog.y - vloerY) + ' m.');
-    else if (dichtBijStart) status('Tik om de kamer te sluiten', punten.length + ' hoeken', '');
+    else if (dichtBijStart) status('Tik om de kamer te sluiten', punten.length + ' hoeken' + pl, '');
     else {
-      var laatste = punten[punten.length - 1], sub = 'Wand ' + punten.length + ' van hoek ' + punten.length + ' naar hoek ' + (punten.length + 1);
+      var laatste = punten[punten.length - 1], sub = (modus === 'plafond' ? 'Via het plafond · ' : '') + 'wand ' + punten.length;
       if (punten.length >= 2) sub += ' · hoek H' + punten.length + ' ' + graden(AR.knik(punten[punten.length - 2], laatste, richtpunt));
-      status('Tik hoek ' + (punten.length + 1) + ' aan', sub, '~' + meter(AR.afstand(laatste, richtpunt)) + ' m');
+      status('Tik hoek ' + (punten.length + 1) + ' aan', sub + pl, '~' + meter(AR.afstand(laatste, richtpunt)) + ' m');
     }
-    // tekenen
-    var y = (vloerY == null ? 0 : vloerY) + 0.003, vast = [], los = [], richt = [], palen = [];
-    for (var i = 0; i + 1 < punten.length; i++) strook(vast, punten[i], punten[i + 1], 0.018, y);
-    if (punten.length && richtpunt) strook(los, punten[punten.length - 1], dichtBijStart ? punten[0] : richtpunt, 0.012, y);
-    punten.forEach(function (p) { paal(palen, { x: p.x, y: y, z: p.z }, oog, 0.35, 0.012); ring(palen, p, 0, 0.03, y); });
-    if (richtpunt) ring(richt, richtpunt, 0.045, 0.06, y);
+    // tekenen: de vloerlijn, en zodra het plafond bekend is ook de plafondlijn en staande lijnen op elke hoek (het draadmodel)
+    var y = (vloerY == null ? 0 : vloerY) + 0.003, yp = plafondY == null ? null : plafondY - 0.003, vast = [], los = [], richt = [], palen = [], plaf = [];
+    for (var i = 0; i + 1 < punten.length; i++) { strook(vast, punten[i], punten[i + 1], 0.018, y); if (yp != null) strook(plaf, punten[i], punten[i + 1], 0.018, yp); }
+    if (punten.length && richtpunt) { strook(los, punten[punten.length - 1], dichtBijStart ? punten[0] : richtpunt, 0.012, y); if (yp != null) strook(los, punten[punten.length - 1], dichtBijStart ? punten[0] : richtpunt, 0.012, yp); }
+    punten.forEach(function (p) {
+      paal(p.bron === 'plafond' ? plaf : palen, { x: p.x, y: y, z: p.z }, oog, yp != null ? yp - y : 0.35, 0.012);
+      ring(p.bron === 'plafond' ? plaf : palen, p, 0, 0.03, y);
+      if (yp != null) ring(plaf, p, 0, 0.03, yp);
+    });
+    if (richtpunt) {
+      ring(richt, richtpunt, 0.045, 0.06, richtpunt.plafond ? yp : y);
+      if (richtpunt.plafond) { ring(richt, richtpunt, 0.03, 0.04, y); paal(los, { x: richtpunt.x, y: y, z: richtpunt.z }, oog, yp - y, 0.008); }
+    }
+    if (plafondKandidaat != null && punten.length) { var lp = punten[punten.length - 1]; ring(richt, lp, 0.045, 0.06, plafondKandidaat); paal(los, { x: lp.x, y: y, z: lp.z }, oog, plafondKandidaat - y, 0.008); }
     pose.views.forEach(function (v) {
       var vp = laag.getViewport(v); gl.viewport(vp.x, vp.y, vp.width, vp.height);
       teken(mul(v.projectionMatrix, v.transform.inverse.matrix), [
-        { v: vast, c: [0.36, 0.86, 0.55, 0.95] }, { v: los, c: [0.47, 0.68, 1, 0.9] }, { v: palen, c: [1, 1, 1, 0.95] },
+        { v: vast, c: [0.36, 0.86, 0.55, 0.95] }, { v: los, c: [0.47, 0.68, 1, 0.9] }, { v: palen, c: [1, 1, 1, 0.95] }, { v: plaf, c: [1, 0.72, 0.25, 0.95] },
         { v: richt, c: dichtBijStart ? [0.36, 0.86, 0.55, 1] : [1, 1, 1, 1] }]);
     });
   }
@@ -460,15 +512,20 @@ if (typeof module !== 'undefined') module.exports = AR;
   function tik() {
     if (!sessie) return;
     if (vloerY == null) { status('Eerst de vloer', 'Beweeg de telefoon rustig over een vrij stuk vloer.'); return; }
+    if (modus === 'plafond' && plafondY == null) {
+      if (plafondKandidaat != null) { plafondY = plafondKandidaat; try { if (navigator.vibrate) navigator.vibrate([20, 40, 20]); } catch (e) {} }
+      return;
+    }
     if (!richtpunt) return;
     if (punten.length >= 3 && AR.afstand(richtpunt, punten[0]) < 0.2) { afronden(); return; }
-    punten.push({ x: richtpunt.x, z: richtpunt.z });
+    punten.push(richtpunt.plafond ? { x: richtpunt.x, z: richtpunt.z, bron: 'plafond' } : { x: richtpunt.x, z: richtpunt.z });
     try { if (navigator.vibrate) navigator.vibrate(25); } catch (e) {}
     knoppen();
   }
   function afronden() {
     if (punten.length >= 3) {
-      uitkomst = { punten: punten.slice(), hoogte: oogY != null && vloerY != null ? oogY - vloerY : 0, tijd: new Date().toLocaleString('nl-NL'), voorbeeld: false, hand: {} };
+      uitkomst = { punten: punten.slice(), hoogte: oogY != null && vloerY != null ? oogY - vloerY : 0, plafond: plafondY != null && vloerY != null ? plafondY - vloerY : 0,
+        tijd: new Date().toLocaleString('nl-NL'), voorbeeld: false, hand: {} };
       bewaar();
     }
     if (sessie) sessie.end();
@@ -483,7 +540,7 @@ if (typeof module !== 'undefined') module.exports = AR;
 
   start.addEventListener('click', function () {
     if (sessie) return;
-    punten = []; vloerMonsters = []; vloerY = null; richtpunt = null; knoppen();
+    punten = []; vloerMonsters = []; vloerY = null; richtpunt = null; modus = 'vloer'; plafondY = null; plafondMonsters = []; plafondKandidaat = null; knoppen();
     el('ar-laag').hidden = false; status('AR start…', '');
     navigator.xr.requestSession('immersive-ar', { requiredFeatures: ['hit-test'], optionalFeatures: ['dom-overlay', 'local-floor'], domOverlay: { root: el('ar-laag') } }).then(function (s) {
       sessie = s;
@@ -508,6 +565,7 @@ if (typeof module !== 'undefined') module.exports = AR;
   // knoppen in de AR-laag tellen niet als tik op een hoek
   el('ar-laag').addEventListener('beforexrselect', function (e) { if (e.target && e.target.closest && e.target.closest('button')) e.preventDefault(); });
   el('k-weg').addEventListener('click', function () { punten.pop(); knoppen(); });
+  el('k-modus').addEventListener('click', function () { modus = modus === 'vloer' ? 'plafond' : 'vloer'; knoppen(); });
   el('k-klaar').addEventListener('click', afronden);
   el('k-stop').addEventListener('click', function () { if (sessie) sessie.end(); });
 
