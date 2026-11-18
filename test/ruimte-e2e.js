@@ -113,6 +113,12 @@ window.renderKamer = function (cam, w, h, fovy) {
   await p.click('#d-plafond'); await p.keyboard.type('2600', { delay: 15 }); await p.keyboard.press('Enter');
   await p.selectOption('#d-diag-van', { index: 0 }); await p.selectOption('#d-diag-naar', { index: 2 }); await p.click('#d-diag'); await p.keyboard.type('5000', { delay: 220 }); await p.keyboard.press('Enter');
   await p.waitForTimeout(300);
+  // controlemaat tape tot tape: W1 1000 mm van H1 naar W3 1000 mm van H4 (tegenover elkaar), verwacht 3000
+  await p.selectOption('#d-cp-wa', { index: 0 }); await p.selectOption('#d-cp-ha', { index: 0 }); await p.fill('#d-cp-aa', '1000');
+  await p.selectOption('#d-cp-wb', { index: 2 }); await p.selectOption('#d-cp-hb', { index: 1 }); await p.fill('#d-cp-ab', '1000');
+  await p.click('#d-cp-m'); await p.keyboard.type('3004', { delay: 15 }); await p.keyboard.press('Enter');
+  const cpt = await p.textContent('#d-controle');
+  check('controlemaat tape tot tape: verwacht 3000, gemeten 3004 (X4)', /W1 \(1000 van H1\) – W3 \(1000 van H4\): gemeten 3004 mm, het model verwacht 3000 mm \(\+4 mm\)/.test(cpt), cpt);
   // haaksheid met een driehoeksmeting (1000 / 1000 / 1414 = 90°)
   await p.selectOption('#d-dh-hoek', { index: 0 }); await p.fill('#d-dh-c', '1414'); await p.click('#k-dh');
   const dh = await p.textContent('#d-dh-uit');

@@ -255,6 +255,14 @@ Nu: per hoek a mm langs de wand ervoor en b mm langs de wand erna een merkteken 
 > 0,5° verschil = open vraag "niet haaks"). De diagonaal blijft mogelijk, maar alleen "als het vrij en strak te meten is". Alternatieven voor later:
 controlemaat tussen twee wandpunten met afstand tot de hoek, of DISTO met DST 360 (P2P).
 
+**B31 · 18-11 · Controlemaat tussen twee merktekens op de wanden (Barts keuze "optie 2"), hoek meten optioneel.** Per tape: wand, vanaf welke hoek,
+afstand tot die hoek; daarnaast de afstand tape tot tape (op gelijke hoogte). `D.puntOpWand`, `D.voegControleToe`, `D.controleMaten` (soort `wandpunten`)
+rekenen de verwachte afstand uit het lijnmodel; > 15 mm verschil = open vraag. Op het telefoonscherm staat dit blok vóór de driehoeksmeting (die
+optioneel blijft, "voor nu zijn hoeken nog niet zo van belang") en vóór de diagonaal. Werkt pas zinvol met ingevulde wandmaten (anders vergelijkt het
+met het camera-model; de app zegt dat erbij).
+*P2P (Bart vroeg):* DISTO X3/X4 → adapter **DST 360**; DISTO X6 → **DST 360-X** (o.a. in het X6 P2P-pakket). Niet uitwisselbaar; bij de leverancier
+navragen. Met P2P is een controlemaat tussen twee willekeurige punten vanaf één standplaats mogelijk.
+
 **Waarneming (geen besluit):** met vier gemeten wandlengtes en haakse hoeken maakt de kaartdrift voor het lijnmodel weinig uit (de richtingen worden
 rechtgezet, de lengtes komen uit de maten). De drift raakt vooral de aansluiting tussen beelden en wanden in het panorama en de camera-plek van details.
 
@@ -278,6 +286,7 @@ rechtgezet, de lengtes komen uit de maten). De drift raakt vooral de aansluiting
 | 18-11 21:50 | Pakket van de proef van 21:26 gedeeld (`ruimte-Test-8-Joe-…zip`), niet in de repo bewaard. | Analyse §5.1, B27. |
 | 18-11 22:00 | "Lijnen trekken gaat het best in één vloeiende beweging langs de vloer; de tekst zegt steeds kijk opzij en omhoog. Eerst een rondje plattegrond, daarna scannen. Kunnen we groothoekfoto's vanuit de app halen als het een echte app wordt?" | B29; P11. |
 | 18-11 22:10 | "Die diagonale meting is onbetrouwbaar: met de lasermeter kom je niet strak in de hoeken." | B30. |
+| 18-11 22:20 | "Optie 2 (controlemaat tussen twee punten op de wanden) voor nu; hoek meten kan ook, hoeken nog niet zo van belang. Is de P2P-adapter dezelfde als voor de DISTO X6?" | B31. |
 | 18-11 | Ontwikkeldocument waarin alles staat, zodat terug te zien is wat waarom veranderde; Astra moet er licht op kunnen laten schijnen. | Dit document. |
 
 ### 5.1 Meetresultaten echte proeven
@@ -485,7 +494,8 @@ Perspectief-correct plakken (homografie per vak i.p.v. affien), automatisch extr
 | 18-11 | `4ea9756` | Ankerposities bewaren en vergelijken, plafond uit plafondfoto | B27 |
 | 18-11 | `33f5f0c` | Sneller opslaan, wegschrijven bij sluiten | B28 |
 | 18-11 | `483a1fb` | Twee fases: plattegrond tikken, dan scannen | B29, P11 |
-| 18-11 | (volgende) | Driehoeksmeting voor haaksheid i.p.v. diagonaal | B30 |
+| 18-11 | `13e9dae` | Driehoeksmeting voor haaksheid i.p.v. diagonaal | B30 |
+| 18-11 | (volgende) | Controlemaat tape tot tape tussen twee wanden | B31 |
 
 Meer detail per brok: `VOORTGANG-OPNAME.md`. Volledige diff: draft-PR #5.
 

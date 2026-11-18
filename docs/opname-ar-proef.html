@@ -200,7 +200,20 @@ dd{margin:0;font-variant-numeric:tabular-nums}
     <p class="bewaard" id="d-bewaard" aria-live="polite"></p>
     <h2>Extra maten</h2>
     <div class="maatrij" id="d-plafond-rij"><span>Plafondhoogte</span><input id="d-plafond" inputmode="decimal" autocomplete="off" aria-label="Plafondhoogte in mm"><span class="info" id="d-plafond-info"></span></div>
-    <h2>Is de hoek haaks? (driehoeksmeting)</h2>
+    <h2>Controlemaat tussen twee wanden (tape tot tape)</h2>
+    <p class="zacht">Plak op twee wanden een stukje tape op dezelfde hoogte (bijv. ±1 m, vrij van meubels). Meet per tape de afstand tot een hoek, en dan de afstand tussen de twee tapes. De app rekent uit wat het model verwacht.</p>
+    <div class="velden">
+      <div class="veld"><label for="d-cp-wa">Tape 1 op wand</label><select id="d-cp-wa"></select></div>
+      <div class="veld"><label for="d-cp-ha">gemeten vanaf hoek</label><select id="d-cp-ha"></select></div>
+      <div class="veld"><label for="d-cp-aa">afstand tot die hoek (mm)</label><input id="d-cp-aa" inputmode="decimal" autocomplete="off"></div>
+      <div class="veld"><label for="d-cp-wb">Tape 2 op wand</label><select id="d-cp-wb"></select></div>
+      <div class="veld"><label for="d-cp-hb">gemeten vanaf hoek</label><select id="d-cp-hb"></select></div>
+      <div class="veld"><label for="d-cp-ab">afstand tot die hoek (mm)</label><input id="d-cp-ab" inputmode="decimal" autocomplete="off"></div>
+      <div class="veld"><label for="d-cp-m">Afstand tape tot tape (mm)</label><input id="d-cp-m" inputmode="decimal" autocomplete="off"></div>
+    </div>
+    <div class="rij"><button class="knop" id="k-cp">Controlemaat bewaren</button></div>
+    <p class="zacht" id="d-cp-melding"></p>
+    <h2>Is de hoek haaks? (driehoeksmeting, optioneel)</h2>
     <p class="zacht">Zet vanuit de hoek op beide wanden een streepje of stukje tape, bijv. op 1000 mm en ±1 m hoogte (boven plint en meubels). Meet de schuine maat tussen de twee tekens: haaks = 1414 mm.</p>
     <div class="velden">
       <div class="veld"><label for="d-dh-hoek">Hoek</label><select id="d-dh-hoek"></select></div>
@@ -2149,6 +2162,20 @@ if (typeof module !== 'undefined') module.exports = AR;
       d.hoeken.forEach(function (h) { var o = maak('option', h.label); o.value = h.id; s.appendChild(o); });
       s.value = oud || (d.hoeken[j * 2] ? d.hoeken[j * 2].id : '');
     });
+    // controlemaat tape tot tape: wanden en hun twee hoeken
+    function vulHoeken(wandSel, hoekSel) {
+      var w = d.wanden.find(function (x) { return x.id === wandSel.value; }), oud = hoekSel.value; hoekSel.textContent = '';
+      if (!w) return;
+      [w.van, w.naar].forEach(function (hid) { var h = d.hoeken.find(function (x) { return x.id === hid; }), o = maak('option', h ? h.label : '?'); o.value = hid; hoekSel.appendChild(o); });
+      if (oud === w.van || oud === w.naar) hoekSel.value = oud;
+    }
+    [['d-cp-wa', 'd-cp-ha', 0], ['d-cp-wb', 'd-cp-hb', 2]].forEach(function (x) {
+      var ws = el(x[0]), oud = ws.value; ws.textContent = '';
+      d.wanden.forEach(function (w) { var o = maak('option', w.label); o.value = w.id; ws.appendChild(o); });
+      ws.value = oud || (d.wanden[x[2] % Math.max(1, d.wanden.length)] || {}).id || '';
+      ws.onchange = function () { vulHoeken(ws, el(x[1])); };
+      vulHoeken(ws, el(x[1]));
+    });
     var dhs = el('d-dh-hoek'), dhOud = dhs.value; dhs.textContent = '';
     d.hoeken.forEach(function (h) { var o = maak('option', h.label); o.value = h.id; dhs.appendChild(o); });
     if (dhOud) dhs.value = dhOud;
@@ -2160,7 +2187,7 @@ if (typeof module !== 'undefined') module.exports = AR;
     });
     var cv = el('d-controle'); cv.textContent = '';
     DS.controleMaten(d, lm).forEach(function (c) {
-      cv.appendChild(maak('p', c.van + '–' + c.naar + ': gemeten ' + c.gemeten + ' mm, het model verwacht ' + c.verwacht + ' mm (' + (c.verschil > 0 ? '+' : '') + c.verschil + ' mm' + (c.model_status === 'geschat' ? ', model nog uit de camera' : '') + ').', Math.abs(c.verschil) > 20 ? 'melding' : 'melding goed'));
+      cv.appendChild(maak('p', c.van + ' – ' + c.naar + ': gemeten ' + c.gemeten + ' mm, het model verwacht ' + c.verwacht + ' mm (' + (c.verschil > 0 ? '+' : '') + c.verschil + ' mm' + (c.model_status === 'geschat' ? ', model nog uit de camera: vul eerst de wandmaten in' : '') + ').', Math.abs(c.verschil) > 15 ? 'melding' : 'melding goed'));
     });
     // details
     var ul = el('d-details'); ul.textContent = '';
@@ -2202,6 +2229,17 @@ if (typeof module !== 'undefined') module.exports = AR;
       var d = dossier(), l = DS.leesMaat(el('d-plafond').value); if (!d || !l) return;
       DS.voegMetingToe(d, { doel: { soort: 'ruimte', id: d.ruimte.id }, veld: 'plafondhoogte', waarde_mm: l.mm, invoer: el('d-plafond').value, eenheid_invoer: l.eenheid, bron: bronVan(el('d-plafond')), sessie: ses && ses.id });
       planBewaar(); toonDossier();
+    });
+    ['d-cp-aa', 'd-cp-ab', 'd-cp-m'].forEach(function (id) { volgToetsen(el(id)); });
+    el('d-cp-m').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); el('k-cp').click(); } });
+    el('k-cp').addEventListener('click', function () {
+      var d = dossier(); if (!d) return;
+      var a = DS.leesMaat(el('d-cp-aa').value), b = DS.leesMaat(el('d-cp-ab').value), m = DS.leesMaat(el('d-cp-m').value), bron = bronVan(el('d-cp-m'));
+      if (!a || !b || !m) { el('d-cp-melding').textContent = 'Vul de twee afstanden tot de hoek en de afstand tape tot tape in (mm).'; return; }
+      if (el('d-cp-wa').value === el('d-cp-wb').value) { el('d-cp-melding').textContent = 'Kies twee verschillende wanden.'; return; }
+      DS.voegControleToe(d, { wand_id: el('d-cp-wa').value, vanaf: el('d-cp-ha').value, afstand_mm: a.mm }, { wand_id: el('d-cp-wb').value, vanaf: el('d-cp-hb').value, afstand_mm: b.mm }, m.mm,
+        { bron: bron, sessie: ses && ses.id, invoer: el('d-cp-m').value, eenheid: m.eenheid });
+      el('d-cp-m').value = ''; el('d-cp-melding').textContent = 'Bewaard.'; planBewaar(); toonDossier();
     });
     ['d-dh-a', 'd-dh-b', 'd-dh-c'].forEach(function (id) { volgToetsen(el(id)); });
     el('d-dh-c').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); el('k-dh').click(); } });

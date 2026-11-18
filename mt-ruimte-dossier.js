@@ -451,11 +451,31 @@
   // Controlematen (bijv. diagonaal H4-H6) naast de waarde die het model verwacht.
   D.controleMaten = function (d, lm) {
     if (!lm) return [];
-    return lijst(d.metingen).filter(m => m.veld === 'diagonaal' && m.doel && m.doel.extra && !lijst(d.metingen).some(x => x.vervangt === m.id)).map(m => {
+    const actueel = m => !lijst(d.metingen).some(x => x.vervangt === m.id);
+    const diag = lijst(d.metingen).filter(m => m.veld === 'diagonaal' && m.doel && m.doel.extra && actueel(m)).map(m => {
       const a = lm.punten.find(p => p.id === m.doel.extra.van), b = lm.punten.find(p => p.id === m.doel.extra.naar);
       const verwacht = a && b ? rond(Math.hypot(b.x - a.x, b.y - a.y), 0) : null;
-      return { meting_id: m.id, van: a && a.label, naar: b && b.label, gemeten: m.waarde_mm, verwacht, verschil: verwacht == null || m.waarde_mm == null ? null : rond(m.waarde_mm - verwacht, 1), status: m.status, model_status: lm.status };
+      return { soort: 'diagonaal', meting_id: m.id, van: a && a.label, naar: b && b.label, gemeten: m.waarde_mm, verwacht, verschil: verwacht == null || m.waarde_mm == null ? null : rond(m.waarde_mm - verwacht, 1), status: m.status, model_status: lm.status };
     });
+    const wandpunten = lijst(d.metingen).filter(m => m.veld === 'controlemaat' && m.doel && m.doel.extra && actueel(m)).map(m => {
+      const e = m.doel.extra, pa = D.puntOpWand(d, lm, e.a.wand_id, e.a.vanaf, e.a.afstand_mm), pb = D.puntOpWand(d, lm, e.b.wand_id, e.b.vanaf, e.b.afstand_mm);
+      const verwacht = pa && pb ? rond(Math.hypot(pb.x - pa.x, pb.y - pa.y), 0) : null, naam = q => { const w = lijst(d.wanden).find(x => x.id === q.wand_id), h = lijst(d.hoeken).find(x => x.id === q.vanaf); return (w ? w.label : '?') + ' (' + q.afstand_mm + ' van ' + (h ? h.label : '?') + ')'; };
+      return { soort: 'wandpunten', meting_id: m.id, van: naam(e.a), naar: naam(e.b), gemeten: m.waarde_mm, verwacht, verschil: verwacht == null || m.waarde_mm == null ? null : rond(m.waarde_mm - verwacht, 1), status: m.status, model_status: lm.status };
+    });
+    return diag.concat(wandpunten);
+  };
+  // Een punt op een wand in het lijnmodel: afstand_mm vanaf een van de twee hoeken van die wand. null als wand of hoek niet klopt.
+  D.puntOpWand = function (d, lm, wandId, vanafHoek, afstand_mm) {
+    const wi = lijst(d.wanden).findIndex(w => w.id === wandId), w = lijst(d.wanden)[wi]; if (!w || !lm || (vanafHoek !== w.van && vanafHoek !== w.naar)) return null;
+    const n = lm.punten.length, a = lm.punten[wi], b = lm.punten[(wi + 1) % n], L = Math.hypot(b.x - a.x, b.y - a.y) || 1, u = vanafHoek === w.naar ? L - afstand_mm : afstand_mm;
+    return { x: a.x + (b.x - a.x) / L * u, y: a.y + (b.y - a.y) / L * u };
+  };
+  // Controlemaat tussen twee merktekens op de wanden (niet in de hoeken, zodat de laser er vrij bij kan). a en b: { wand_id, vanaf (hoek-id), afstand_mm }.
+  D.voegControleToe = function (d, a, b, waarde_mm, info, nu) {
+    info = info || {};
+    return D.voegMetingToe(d, { doel: { soort: 'controle', id: d.ruimte.id, extra: { a: { wand_id: a.wand_id, vanaf: a.vanaf, afstand_mm: Number(a.afstand_mm) }, b: { wand_id: b.wand_id, vanaf: b.vanaf, afstand_mm: Number(b.afstand_mm) }, hoogte_mm: info.hoogte_mm || null } },
+      veld: 'controlemaat', waarde_mm: waarde_mm, invoer: info.invoer || String(waarde_mm), eenheid_invoer: info.eenheid || null, bron: info.bron || 'hand', sessie: info.sessie || null,
+      betekenis: 'merkteken tot merkteken, op gelijke hoogte' }, nu);
   };
 
   // ── wat staat er nog open? ── vóór vertrek per wand, opening en vast onderdeel; ook wat de vorm dubbelzinnig maakt en waar beeld ontbreekt.
@@ -470,7 +490,8 @@
       });
       if (lm.schuin.length && !lijst(d.metingen).some(m => m.veld === 'diagonaal' && m.status === 'gemeten'))
         uit.push({ soort: 'vorm', ernst: 'let-op', tekst: 'Schuine wand(en) ' + lm.schuin.map(id => (lijst(d.wanden).find(w => w.id === id) || {}).label).join(', ') + ' zonder controlemaat: controleer de hoeken ervan met een driehoeksmeting (1000 mm langs elke wand en de schuine maat ertussen).' });
-      if (lm.sluitfout_mm != null && lm.sluitfout_mm > 20) uit.push({ soort: 'vorm', ernst: 'let-op', tekst: 'De kamer sluit met de wandmaten op ' + Math.round(lm.sluitfout_mm) + ' mm: een maat of een haaks gezette hoek klopt niet. Controleer een paar hoeken met een driehoeksmeting.' });
+      if (lm.sluitfout_mm != null && lm.sluitfout_mm > 20) uit.push({ soort: 'vorm', ernst: 'let-op', tekst: 'De kamer sluit met de wandmaten op ' + Math.round(lm.sluitfout_mm) + ' mm: een maat of een haaks gezette hoek klopt niet. Meet een controlemaat tussen twee wanden (tape tot tape) of controleer een hoek met een driehoeksmeting.' });
+      D.controleMaten(d, lm).forEach(c => { if (c.verschil != null && Math.abs(c.verschil) > 15) uit.push({ soort: 'vorm', ernst: 'let-op', tekst: 'Controlemaat ' + c.van + ' – ' + c.naar + ' wijkt ' + Math.round(c.verschil) + ' mm af van het model: een wandmaat of een haaks gezette hoek klopt niet.' }); });
       D.controleHoeken(d, lm).forEach(c => { if (c.verschil_graden != null && Math.abs(c.verschil_graden) > 0.5) uit.push({ soort: 'vorm', ernst: 'let-op', doel: c.hoek_id, tekst: 'Hoek ' + c.label + ' is volgens de driehoeksmeting ' + String(c.gemeten_graden).replace('.', ',') + '°, het model rekent met ' + String(c.model_graden).replace('.', ',') + '°: de kamer is daar niet haaks.' }); });
       lm.punten.forEach((p, i) => {
         const q = lm.punten[(i + 1) % lm.punten.length], h = p.binnenhoek_graden;

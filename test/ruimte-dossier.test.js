@@ -170,6 +170,21 @@ const jpg = n => Uint8Array.from([0xFF, 0xD8, 0xFF, 0xE0, n & 255, (n >> 8) & 25
     check('niet-haakse hoek staat bij de open vragen, zonder het woord diagonaal', D.openVragen(e, AR).some(v => v.doel === e.hoeken[1].id && /driehoeksmeting/.test(v.tekst)) && !D.openVragen(e, AR).some(v => /diagonaal/.test(v.tekst)));
   }
 
+  // ── controlemaat tussen twee merktekens op de wanden (optie 2, Bart 18-11) ──
+  {
+    const e = D.nieuw({}, NU), s = D.startSessie(e, {}, NU); s.xr.vloerY = 0;
+    D.zetHoeken(e, s.id, [{ x: 0, z: 0 }, { x: 3, z: 0 }, { x: 3, z: 2 }, { x: 0, z: 2 }], NU);
+    [3000, 2000, 3000, 2000].forEach((v, i) => D.voegMetingToe(e, { doel: { soort: 'wand', id: e.wanden[i].id }, veld: 'lengte', waarde_mm: v, bron: 'hand' }, NU));
+    const H = e.hoeken.map(h => h.id), W = e.wanden.map(w => w.id);
+    D.voegControleToe(e, { wand_id: W[0], vanaf: H[0], afstand_mm: 1000 }, { wand_id: W[2], vanaf: H[3], afstand_mm: 1000 }, 2004, { bron: 'disto' }, NU);
+    D.voegControleToe(e, { wand_id: W[0], vanaf: H[0], afstand_mm: 500 }, { wand_id: W[1], vanaf: H[1], afstand_mm: 500 }, 2549, { bron: 'disto' }, NU);
+    const cm = D.controleMaten(e, D.lijnmodel(e, AR)).filter(c => c.soort === 'wandpunten');
+    check('controlemaat tape-tot-tape tegenover elkaar: verwacht 2000, gemeten 2004', cm[0].verwacht === 2000 && cm[0].verschil === 4 && /W1 \(1000 van H1\)/.test(cm[0].van) && /W3 \(1000 van H4\)/.test(cm[0].naar), JSON.stringify(cm[0]));
+    check('controlemaat tape-tot-tape om de hoek: verwacht 2550', cm[1].verwacht === 2550 && cm[1].verschil === -1, JSON.stringify(cm[1]));
+    D.voegControleToe(e, { wand_id: W[0], vanaf: H[0], afstand_mm: 1000 }, { wand_id: W[2], vanaf: H[3], afstand_mm: 1000 }, 2050, { bron: 'hand' }, NU);
+    check('controlemaat die 50 mm afwijkt staat bij de open vragen', D.openVragen(e, AR).some(v => /Controlemaat W1/.test(v.tekst) && /50 mm/.test(v.tekst)));
+  }
+
   // ── pakket heen en terug ──
   const bestanden = {}; bestanden[foto.pad] = jpg(1);
   const ov1 = D.voegBeeldToe(d, { soort: 'overzicht', sessie: s1.id, pose: { pos: [0, 0, 0], dir: [0, 0, -1], pv: new Array(16).fill(0) }, bewaard: true }, NU);
