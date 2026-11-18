@@ -287,6 +287,7 @@ rechtgezet, de lengtes komen uit de maten). De drift raakt vooral de aansluiting
 | 18-11 22:00 | "Lijnen trekken gaat het best in één vloeiende beweging langs de vloer; de tekst zegt steeds kijk opzij en omhoog. Eerst een rondje plattegrond, daarna scannen. Kunnen we groothoekfoto's vanuit de app halen als het een echte app wordt?" | B29; P11. |
 | 18-11 22:10 | "Die diagonale meting is onbetrouwbaar: met de lasermeter kom je niet strak in de hoeken." | B30. |
 | 18-11 22:20 | "Optie 2 (controlemaat tussen twee punten op de wanden) voor nu; hoek meten kan ook, hoeken nog niet zo van belang. Is de P2P-adapter dezelfde als voor de DISTO X6?" | B31. |
+| 18-11 22:30 | Proef 21:52 met twee fases: camera binnen ±13 mm van de handmaten. | §5.1. |
 | 18-11 | Ontwikkeldocument waarin alles staat, zodat terug te zien is wat waarom veranderde; Astra moet er licht op kunnen laten schijnen. | Dit document. |
 
 ### 5.1 Meetresultaten echte proeven
@@ -337,6 +338,21 @@ een plaat). 68 overzichtsbeelden, tracking 1× kwijt, 7× iets automatisch gevon
 ±50 s 291 mm af van de tik**: de kaart dreef tijdens de rondgang van 80 s fors (avond, effen groene wanden). Elke hoek is dus in een iets andere versie van
 de kaart getikt; dat verklaart de scheve vorm, niet de tik zelf en niet de ankers (die stonden in deze versie stil). Plafond niet vastgelegd (plafondfoto
 wel). Tweede rondgang (aanvullen) bewaard als *niet uitgelijnd*. Geen maten ingevuld.
+**18-11-2026 21:52 · S24 · dezelfde kamer · versie met twee fases (B29: eerst plattegrond in één beweging, dan scannen)**
+
+| Wand | Rechtgezet | Ruw camera | Handmaat (20:27) | Verschil rechtgezet |
+|---|---|---|---|---|
+| W1 | 2893 | 2882 | 2900 | −7 |
+| W2 | 5787 | 5794 | 5774 | +13 |
+| W3 | 2893 | 2902 | 2902 | −9 |
+| W4 | 5787 | 5780 | 5781 | +6 |
+
+Hoeken gemeten 90,1 / 90,1 / 89,6 / 90,2° → gezet 90°. Telefoon op 1,44 m. Punten (m): -2.132;-4.454 0.639;-5.248 2.247;0.318 -0.547;1.104.
+*Waarnemingen:* camera binnen ±0,3 % van de handmaten (eerder +1–2 % om 20:27 en tot +20 % om 21:26), hoeken binnen 0,4° van haaks. De systematische
+schaalfout van 20:27 is hier niet zichtbaar; P10 (schaalcorrectie) blijft daarom terecht uitgesteld. Waarschijnlijke oorzaken van de verbetering: de
+plattegrond in één vloeiende beweging langs de vloer (B29), eerst rondkijken, en/of beter licht. Nog te bevestigen met het pakket (ankerposities) en
+een controlemaat tape tot tape.
+
 *Fout gevonden:* de ankerposities kwamen niet in het pakket (`xr_anker` ontbrak; Klaar gaf de verkeerde veldnaam door). Hersteld (B27).
 
 ---
@@ -495,7 +511,8 @@ Perspectief-correct plakken (homografie per vak i.p.v. affien), automatisch extr
 | 18-11 | `33f5f0c` | Sneller opslaan, wegschrijven bij sluiten | B28 |
 | 18-11 | `483a1fb` | Twee fases: plattegrond tikken, dan scannen | B29, P11 |
 | 18-11 | `13e9dae` | Driehoeksmeting voor haaksheid i.p.v. diagonaal | B30 |
-| 18-11 | (volgende) | Controlemaat tape tot tape tussen twee wanden | B31 |
+| 18-11 | `b8bdb4a` | Controlemaat tape tot tape tussen twee wanden | B31 |
+| 18-11 | (volgende) | Meetresultaat 21:52 | proef Bart |
 
 Meer detail per brok: `VOORTGANG-OPNAME.md`. Volledige diff: draft-PR #5.
 
