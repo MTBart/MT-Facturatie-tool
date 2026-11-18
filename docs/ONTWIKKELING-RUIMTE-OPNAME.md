@@ -178,6 +178,19 @@ het dossier (P2). Zie §6.
 **B16 · 18-11 · Na heropenen opnieuw kunnen plakken.** *Waarom:* bij de proef ging het tabblad per ongeluk dicht; de beelden stonden veilig,
 maar plakken kon alleen direct na de rondgang. Nu komen de beelden terug uit de opslag.
 
+**B17 · 18-11 · Getikte hoeken vastzetten met ARCore-ankers.** *Waarom:* proef 20:53: de vakjes op de wand schoven ten opzichte van de echte wand.
+Oorzaken: tikken van ver (3–5 m), ARCore die zijn kaart onderweg bijstelt terwijl de getikte punten vast bleven, aangenomen hoogte 2,60 m zolang het plafond
+niet gemeten is, en de schaalfout van 1–2 %. Met ankers (WebXR `anchors`, optioneel) schuiven de hoeken mee met de bijgestelde kaart; sprongen > 50 cm worden
+genegeerd; de oorspronkelijke tik blijft (`xr_tik`). *Nog te toetsen op het toestel.* Zonder ankers werkt alles zoals voorheen.
+
+**B18 · 18-11 · Groothoek niet in AR, wel per wand na de rondgang.** *Waarom:* Bart staat in kleine ruimtes te dicht op de wand. ARCore gebruikt altijd de
+hoofdcamera en Chrome kan in een AR-sessie niet wisselen. Buiten AR: foto met de gewone camera-app op 0,6×, de opnemer tikt de 4 wandhoeken aan, de app trekt
+de foto recht met een homografie (`AR.homografie`) tot een wandbeeld. Dat beeld gaat vóór het geplakte AR-panorama (`panorama[].bron = 'groothoek'`); de
+originele foto en de aangetikte hoeken worden bewaard. Lensvertekening: de Samsung-camera corrigeert die standaard; een sterk vertekende foto geeft kromme lijnen.
+
+**B19 · 18-11 · Knop Foto: een deel van de wand is ook goed.** De melding zegt niet meer "stap achteruit": het panorama voegt stukken samen; voor een
+volledig wandbeeld in een kleine ruimte is er de groothoekfoto (B18).
+
 ---
 
 ## 5. Input en feedback van Bart
@@ -191,6 +204,7 @@ maar plakken kon alleen direct na de rondgang. Nu komen de beelden terug uit de 
 | 18-11 | Vakjes op de muur zijn goed. Knop voor een losse foto vanaf een plek waar de hele wand in beeld is. Plafondpunten ook ongeveer meenemen. Bij een hoektik meteen een echte foto, zodat de getikte punten gecorrigeerd kunnen worden naar de echte hoek (via AI of in de app). | B8, B9, B10. AI-herkenning gepland (P4). |
 | 18-11 | Test: gordijnen inmeten in deze ruimte → goede foto's van de kozijnen en de maatvoering ervan. Via VW een presentatielaag-PDF: "Europese projectie" van de kamer met de wanden eromheen, volledig bemaat? | Voorstel P1 (gordijnenprofiel) en P2 (kameruitslag-PDF), P3 (VW-route). |
 | 18-11 20:27 | Echte proef, rechthoekige kamer ~2,9 × 5,8 m (zie §5.1). | Waarneming schaalfout camera → voorstel P10; diagonaal gevraagd. |
+| 18-11 20:53 | Screenshots: "de velden verschuiven ten opzichte van de wanden"; "kan ik mijn groothoekcamera gebruiken? Ik sta zo dicht op de wanden dat ik geen volledig beeld krijg". | B17, B18, B19. |
 | 18-11 | Ontwikkeldocument waarin alles staat, zodat terug te zien is wat waarom veranderde; Astra moet er licht op kunnen laten schijnen. | Dit document. |
 
 ### 5.1 Meetresultaten echte proeven
@@ -339,7 +353,8 @@ Perspectief-correct plakken (homografie per vak i.p.v. affien), automatisch extr
 | 18-11 | `97b5a6e` | Na heropenen opnieuw plakken | B16, tabblad per ongeluk dicht |
 | 18-11 | `5ba09b4` | Hoekfoto, plafondfoto, knop Foto, hoeken nakijken | B8–B10, feedback |
 | 18-11 | `ba0f17e` | Ontwikkeldocument | verzoek Bart |
-| 18-11 | (volgende) | Meetresultaat echte proef 20:27, voorstel P10 | proef Bart |
+| 18-11 | `ddeedbf` | Meetresultaat echte proef 20:27, voorstel P10 | proef Bart |
+| 18-11 | (volgende) | ARCore-ankers, groothoekfoto per wand rechtgetrokken, melding Foto | B17–B19 |
 
 Meer detail per brok: `VOORTGANG-OPNAME.md`. Volledige diff: draft-PR #5.
 

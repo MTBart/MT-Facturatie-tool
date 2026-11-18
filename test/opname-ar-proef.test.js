@@ -130,6 +130,16 @@ check('afwijking van haaks over de bijna-haakse hoeken', ha && ha.aantal === 3 &
   check('wandInBeeld: van ver weg past wand 1 helemaal, van dichtbij niet', AR.wandInBeeld(ver, W[0]) === 1 && AR.wandInBeeld(dicht, W[0]) < 0.8, AR.wandInBeeld(dicht, W[0]).toFixed(2));
 }
 
+// Groothoekfoto rechttrekken: homografie van de 4 getikte hoeken
+{
+  const van = [{ x: 0, y: 0 }, { x: 400, y: 0 }, { x: 400, y: 260 }, { x: 0, y: 260 }], naar = [{ x: 120, y: 80 }, { x: 900, y: 40 }, { x: 980, y: 700 }, { x: 60, y: 620 }];
+  const h = AR.homografie(van, naar);
+  check('homografie: de vier hoeken komen precies uit', h && van.every((p, i) => { const q = AR.pasHToe(h, p.x, p.y); return Math.abs(q.x - naar[i].x) < 1e-6 && Math.abs(q.y - naar[i].y) < 1e-6; }));
+  check('homografie: ontaarde punten geven null', AR.homografie(van, [{ x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }]) === null);
+  const W = AR.wanden3d([{ x: 0, z: 0 }, { x: 4, z: 0 }, { x: 4, z: 3 }, { x: 0, z: 3 }], true, 0, 2.6);
+  check('aLinks: vanuit de kamer gezien ligt de beginhoek steeds aan dezelfde kant', W.every(w => AR.aLinks(w) === AR.aLinks(W[0])));
+}
+
 // Rechtzetten en de schuine wand op de eigen maten zetten
 {
   // de echte proef van 17-11 (7 hoeken, schuine knik bij H2-H3), met de eigen maten

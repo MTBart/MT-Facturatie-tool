@@ -139,6 +139,20 @@ window.renderKamer = function (cam, w, h, fovy) {
   await p.click('#d-paneel .knop.hoofd');
   const hc = await p.evaluate(() => { const h = window.arProef.dossier().hoeken[1]; return { st: h.status, x: h.xr.x, z: h.xr.z, mm: h.correctie && h.correctie.verschuiving_mm, ruw: h.xr_ruw }; });
   check('hoek op de foto gecorrigeerd naar de echte hoek; tik bewaard', hc.st === 'gecorrigeerd' && Math.abs(hc.x - 4) < 0.02 && Math.abs(hc.z) < 0.02 && hc.ruw.x === 4.06 && Math.abs(hc.mm - 72) < 15, JSON.stringify(hc));
+  // groothoekfoto van W3 van 1,4 m afstand: vier hoeken aantikken, rechttrekken, raam op de juiste plek in het wandbeeld
+  const gh = await p.evaluate(async () => {
+    const R = window.renderKamer, f = await R({ x: 2, y: 1.3, z: 1.6, yaw: Math.PI, pitch: 0 }, 1000, 1000, 120 * Math.PI / 180), AR = window.arProef.AR;
+    const pr = (x, y, z) => AR.projecteer(f.pv, x, y, z), vloer = [pr(4, 0, 3), pr(0, 0, 3)].sort((a, b) => a.x - b.x), plaf = [pr(4, 2.6, 3), pr(0, 2.6, 3)].sort((a, b) => a.x - b.x);
+    await window.arProef.groothoekProef(2, f.blob, [vloer[0], vloer[1], plaf[1], plaf[0]]);
+    await window.arProef.schrijfNu();
+    const d = window.arProef.dossier(), w = d.wanden[2], p = d.panorama.find(x => x.wand_id === w.id), foto = await window.MTOpnameOpslag.leesFoto(window.arProef.rec().id + ':pano-' + w.id);
+    const bm = await createImageBitmap(foto.blob), c = document.createElement('canvas'); c.width = bm.width; c.height = bm.height; const x = c.getContext('2d'); x.drawImage(bm, 0, 0);
+    const links = window.arProef.wandRichting(2), px = u => Math.round((links ? u : 4 - u) / 4 * bm.width), py = v => Math.round((2.6 - v) / 2.6 * bm.height);
+    const kl = (u, v) => Array.from(x.getImageData(px(u), py(v), 1, 1).data.slice(0, 3));
+    return { bron: p && p.bron, w: bm.width, h: bm.height, raam: kl(1.45, 1.6), muur: kl(3.3, 1.2), radiator: kl(1.45, 0.55), links };
+  });
+  check('groothoekfoto: rechtgetrokken wandbeeld bewaard als bron groothoek', gh.bron === 'groothoek' && gh.w === 600 && gh.h === 390, JSON.stringify(gh));
+  check('groothoekfoto: raam, radiator en muur op de goede plek', gh.raam[2] > gh.raam[0] + 50 && gh.radiator.every(c => c > 200) && gh.muur[1] > gh.muur[2], JSON.stringify(gh));
   const wm = await p.evaluate(() => { const D = window.MTRuimteDossier, d = window.arProef.dossier(); return d.wanden.map(w => D.huidigeMeting(d, w.id, 'lengte')).map(x => x && x.bron); });
   check('wandmaten: hand, X4, hand, X4 herkend', JSON.stringify(wm) === JSON.stringify(['hand', 'disto', 'hand', 'disto']), JSON.stringify(wm));
   // panorama plakken (maakt de wandbeelden en bewaart ze)

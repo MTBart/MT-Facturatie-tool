@@ -146,7 +146,9 @@
     if (oud.length) d.archief.push({ soort: 'hoeken', tijd: isoNu(nu), hoeken: JSON.parse(JSON.stringify(oud)), wanden: JSON.parse(JSON.stringify(oudW)) });
     d.hoeken = punten.map((p, i) => ({
       id: (oud[i] && oud[i].id) || D.nieuwId('hk'), label: 'H' + (i + 1), sessie: sessieId,
-      xr: { x: Number(p.x), z: Number(p.z) }, via: p.bron === 'plafond' ? 'plafond' : 'vloer', status: 'geschat', bron: 'ar', tijd: p.tijd || isoNu(nu)
+      xr: { x: Number(p.x), z: Number(p.z) }, via: p.bron === 'plafond' ? 'plafond' : 'vloer', status: 'geschat', bron: 'ar', tijd: p.tijd || isoNu(nu),
+      // de oorspronkelijke tik, als de hoek daarna door een ARCore-anker is bijgesteld
+      xr_tik: p.tik && (p.tik.x !== Number(p.x) || p.tik.z !== Number(p.z)) ? { x: Number(p.tik.x), z: Number(p.tik.z) } : undefined
     }));
     const n = d.hoeken.length;
     d.wanden = d.hoeken.map((h, i) => {

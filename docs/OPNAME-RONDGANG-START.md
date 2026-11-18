@@ -26,9 +26,11 @@ alleen op de werkbranch.
    Een veld leeg laten = open vraag. Tik **Klaar**.
 8. Tik **Klaar** bovenin als de kamer rond is. Vul daarna de wandmaten, de plafondhoogte en een controlemaat (diagonaal) in.
    Onder **Nog open vóór vertrek** staat wat nog ontbreekt.
-9. **Hoeken nakijken**: open per hoek de foto en tik de echte hoek aan (rood = waar je tikte). De app rekent de plek om; de tik blijft bewaard en
+9. **Groothoekfoto per wand** (na de rondgang, bij *Wandfoto's met groothoek*): sta je te dicht op de wand, maak dan met je gewone camera-app
+   een foto op 0,6× en tik de vier hoeken van de wand aan (links onder, rechts onder, rechts boven, links boven). De app trekt hem recht.
+10. **Hoeken nakijken**: open per hoek de foto en tik de echte hoek aan (rood = waar je tikte). De app rekent de plek om; de tik blijft bewaard en
    kan terug. Daarna opnieuw **Wanden aan elkaar plakken**.
-10. **Wanden aan elkaar plakken** maakt de wandbeelden; **Pakket maken (zip)** of **Pakket delen** levert het bestand voor kantoor.
+11. **Wanden aan elkaar plakken** maakt de wandbeelden; **Pakket maken (zip)** of **Pakket delen** levert het bestand voor kantoor.
 
 Alles wordt tijdens de rondgang al op de telefoon bewaard (je ziet "Veilig bewaard: …"). Gaat er iets mis met opslaan, dan verschijnt
 een rode melding met **Opnieuw proberen**. Pagina dicht of telefoon uit: open de pagina opnieuw, kies de ruimte onder

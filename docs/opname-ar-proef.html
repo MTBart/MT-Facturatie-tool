@@ -209,6 +209,10 @@ dd{margin:0;font-variant-numeric:tabular-nums}
     <h2>Hoeken nakijken</h2>
     <p class="zacht">Bij elke getikte hoek is een foto gemaakt. Wijs op de foto de echte hoek aan; de getikte plek blijft bewaard.</p>
     <ul class="lijst" id="d-hoeken"></ul>
+    <h2>Wandfoto's met groothoek</h2>
+    <p class="zacht">Te dicht op de wand voor één beeld? Maak na de rondgang een foto met je gewone camera-app op 0,6× (groothoek) en tik op de foto de vier hoeken van de wand aan. De app trekt hem recht en gebruikt hem als wandbeeld in de kijker.</p>
+    <ul class="lijst" id="d-wandfotos"></ul>
+    <input type="file" id="d-groothoek" accept="image/*" hidden>
     <h2>Details en opmerkingen</h2>
     <ul class="lijst" id="d-details"></ul>
     <div class="rij">
@@ -634,6 +638,26 @@ var AR = (function () {
     }
     return binnen / tot;
   };
+  // Homografie (3x3, rij-volgorde) die 4 punten 'van' op 4 punten 'naar' afbeeldt. Voor het rechttrekken van een groothoekfoto van een wand:
+  // de opnemer tikt de 4 wandhoeken op de foto, de app rekent per pixel van het wandbeeld terug naar de foto. null als de punten ontaard zijn.
+  AR.homografie = function (van, naar) {
+    var A = [], i, j, k;
+    for (i = 0; i < 4; i++) {
+      var x = van[i].x, y = van[i].y, u = naar[i].x, v = naar[i].y;
+      A.push([x, y, 1, 0, 0, 0, -u * x, -u * y, u]); A.push([0, 0, 0, x, y, 1, -v * x, -v * y, v]);
+    }
+    for (i = 0; i < 8; i++) {
+      var p = i; for (j = i + 1; j < 8; j++) if (Math.abs(A[j][i]) > Math.abs(A[p][i])) p = j;
+      var t = A[i]; A[i] = A[p]; A[p] = t;
+      if (Math.abs(A[i][i]) < 1e-12) return null;
+      for (j = 0; j < 8; j++) if (j !== i) { var f = A[j][i] / A[i][i]; for (k = i; k < 9; k++) A[j][k] -= f * A[i][k]; }
+    }
+    var h = []; for (i = 0; i < 8; i++) h.push(A[i][8] / A[i][i]); h.push(1);
+    return h;
+  };
+  AR.pasHToe = function (h, x, y) { var w = h[6] * x + h[7] * y + h[8]; return { x: (h[0] * x + h[1] * y + h[2]) / w, y: (h[3] * x + h[4] * y + h[5]) / w }; };
+  // Staat hoek a van wand w links als je vanuit de kamer naar de wand kijkt? (kijkrichting -n, omhoog y: rechts = (nz, -nx))
+  AR.aLinks = function (w) { return w.nz * w.ux - w.nx * w.uz > 0; };
   // Voorbeeld: de proefkamer met de knik, aangetikt met wat onnauwkeurigheid (in meters, AR-ruimte gedraaid).
   AR.voorbeeld = function () {
     var echt = [[0, 0], [4.03, 0.02], [4.01, 2.97], [2.52, 3.02], [-0.01, 0.92]], dr = 23 * RAD;
@@ -972,6 +996,22 @@ if (typeof module !== 'undefined') module.exports = AR;
     trackingKwijt = false;
     var M = pose.transform.matrix, oog = { x: M[12], y: M[13], z: M[14] }, rich = { x: -M[8], y: -M[9], z: -M[10] };
     oogY = oog.y;
+    // ARCore-ankers: een getikte hoek schuift mee als ARCore zijn kaart bijstelt, zodat draadmodel en vakjes op de echte wand blijven.
+    // De tik zelf blijft in p.tik (en in het dossier als xr_tik). Grote sprongen (> 50 cm) worden genegeerd.
+    if (ankerRij.length && f.createAnchor && ref) {
+      var aOp = ankerRij.shift();
+      try { f.createAnchor(new XRRigidTransform({ x: aOp.p.x, y: aOp.y, z: aOp.p.z }), ref).then(function (a) { aOp.p.anker = a; }, function () {}); } catch (e) {}
+    }
+    if (f.trackedAnchors && punten.length) {
+      var verschoven = 0;
+      punten.forEach(function (q) {
+        if (!q.anker || !f.trackedAnchors.has(q.anker)) return;
+        var ap = f.getPose(q.anker.anchorSpace, ref); if (!ap) return;
+        var am = ap.transform.matrix, dA = Math.hypot(am[12] - q.x, am[14] - q.z);
+        if (dA > 0.002 && dA < 0.5) { q.x = am[12]; q.z = am[14]; verschoven = Math.max(verschoven, dA); }
+      });
+      if (verschoven > 0.01 && performance.now() - ankerTijd > 2000) { ankerTijd = performance.now(); detailWanden.sleutel = ''; pano.sleutel = ''; telWaarneming('anker_bijgesteld'); }
+    }
     // Detail: het punt op de wand onder het kruisje (zodra er twee hoeken zijn) en, als erom gevraagd is, één scherpe foto op volle resolutie.
     wandDoel = null;
     if (vloerY != null && punten.length >= 2) {
@@ -1146,6 +1186,7 @@ if (typeof module !== 'undefined') module.exports = AR;
     var viaPlafond = ps.length >= 3 ? ps[ps.length - 1].plafond : !!(richtpunt && richtpunt.plafond);
     if (punten.length >= 3 && AR.afstand(p, punten[0]) < 0.2) { afronden(); return; }
     punten.push(viaPlafond ? { x: p.x, z: p.z, bron: 'plafond' } : { x: p.x, z: p.z });
+    var nieuwP = punten[punten.length - 1]; nieuwP.tik = { x: p.x, z: p.z }; ankerRij.push({ p: nieuwP, y: vloerY });
     try { if (navigator.vibrate) navigator.vibrate(25); } catch (e) {}
     telWaarneming('getikt'); bewaarLive();
     var hi = punten.length - 1;
@@ -1187,7 +1228,7 @@ if (typeof module !== 'undefined') module.exports = AR;
   function startAr(aanvullen) {
     if (sessie) return;
     punten = []; vloerMonsters = []; vloerY = null; richtpunt = null; modus = 'vloer'; plafondY = null; plafondMonsters = []; plafondKandidaat = null; spoor = [];
-    aanvul = null; paneelOpen = false; vangRij = []; plafondFoto = null; flits = null; wandDoel = null; trackingKwijt = false; detailWanden = { sleutel: '', lijst: [] };
+    aanvul = null; paneelOpen = false; vangRij = []; ankerRij = []; plafondFoto = null; flits = null; wandDoel = null; trackingKwijt = false; detailWanden = { sleutel: '', lijst: [] };
     if (DS && OS) {
       if (aanvullen && rec) {
         var d0 = dossier();
@@ -1200,7 +1241,7 @@ if (typeof module !== 'undefined') module.exports = AR;
     el('ar-dun').hidden = true; el('ar-pano').textContent = '';
     el('ar-laag').hidden = false; status('AR start…', '');
     scanVlakken = new Map(); stil = null; hintPlekken = []; el('ar-hint').textContent = '';
-    navigator.xr.requestSession('immersive-ar', { requiredFeatures: ['hit-test'], optionalFeatures: ['dom-overlay', 'local-floor', 'camera-access', 'plane-detection'], domOverlay: { root: el('ar-laag') } }).then(function (s) {
+    navigator.xr.requestSession('immersive-ar', { requiredFeatures: ['hit-test'], optionalFeatures: ['dom-overlay', 'local-floor', 'camera-access', 'plane-detection', 'anchors'], domOverlay: { root: el('ar-laag') } }).then(function (s) {
       sessie = s;
       if (!gl) bouwGl();
       return Promise.resolve(gl.makeXRCompatible ? gl.makeXRCompatible() : null).then(function () {
@@ -1389,7 +1430,7 @@ if (typeof module !== 'undefined') module.exports = AR;
   }
 
   // ---------- live: gevonden wandvlakken, plattegrondje en richtingskaart ----------
-  var scanVlakken = new Map(), stil = null, hintPlekken = [], kaartTeller = 0, scanBewaard = 0, toonVlakken = false;
+  var scanVlakken = new Map(), stil = null, hintPlekken = [], kaartTeller = 0, scanBewaard = 0, toonVlakken = false, ankerRij = [], ankerTijd = 0;
   try { toonVlakken = localStorage.getItem('mt_ar_vlakken') === '1'; } catch (e) {}
   function zetVlakkenKnop() { var b = el('k-vlakken'); b.setAttribute('aria-pressed', toonVlakken ? 'true' : 'false'); b.textContent = toonVlakken ? 'Vlakken aan' : 'Vlakken'; }
   zetVlakkenKnop();
@@ -1477,6 +1518,7 @@ if (typeof module !== 'undefined') module.exports = AR;
     var d = dossier(); d.panorama = d.panorama || [];
     doeken.forEach(function (dk, i) {
       var wand = d.wanden[k.wanden[i].nr]; if (!wand) return;
+      if (d.panorama.some(function (p) { return p.wand_id === wand.id && p.bron === 'groothoek'; })) return;   // een rechtgetrokken groothoekfoto gaat voor
       var pad = 'panorama/' + wand.label + '.jpg';
       dk.toBlob(function (blob) {
         if (!blob) return;
@@ -1513,7 +1555,7 @@ if (typeof module !== 'undefined') module.exports = AR;
   }
   function bewaarLive() {
     if (!ses || aanvul) return;
-    ses.live_punten = punten.map(function (p) { return { x: p.x, z: p.z, bron: p.bron || 'vloer' }; });
+    ses.live_punten = punten.map(function (p) { return { x: p.x, z: p.z, bron: p.bron || 'vloer', tik: p.tik || null }; });
     ses.xr.vloerY = vloerY; ses.xr.plafondY = plafondY; planBewaar();
   }
   // Details die tijdens de eerste rondgang zijn vastgelegd kennen alleen het wandnummer: na Klaar krijgen ze het wand-id en de beginhoek als referentie.
@@ -1710,8 +1752,93 @@ if (typeof module !== 'undefined') module.exports = AR;
       telWaarneming('wandfoto');
       bewaarBeeld(b, r.blob);
       zegFlits(nr == null ? 'Foto bewaard. Tik eerst twee hoeken, dan weet de app welke wand dit is.'
-        : b.heel_in_beeld ? 'Wandfoto W' + (nr + 1) + ': hele wand in beeld ✓' : 'Wandfoto W' + (nr + 1) + ' bewaard, maar niet de hele wand (' + Math.round(best.a * 100) + '%). Stap achteruit en neem er nog een.');
+        : b.heel_in_beeld ? 'Wandfoto W' + (nr + 1) + ': hele wand in beeld ✓' : 'Wandfoto W' + (nr + 1) + ' bewaard, maar niet de hele wand (' + Math.round(best.a * 100) + '%). Neem de rest van de wand er gewoon bij: het panorama voegt de stukken samen. Te dichtbij? Maak na de rondgang een groothoekfoto.');
       return b;
+  }
+
+  // ---------- groothoekfoto per wand: buiten AR gemaakt, rechtgetrokken op de 4 aangetikte wandhoeken ----------
+  var groothoekWand = null;
+  function wandMaten(d, w) {
+    var lm = DS.lijnmodel(d, AR), seg = lm && lm.segmenten.find(function (x) { return x.id === w.id; });
+    var L = seg ? seg.lengte.waarde / 1000 : 3, H = lm && lm.hoogte.waarde ? lm.hoogte.waarde / 1000 : HOOGTE_STANDAARD;
+    return { L: L, H: H };
+  }
+  function wandRichting(d, w) {   // staat de beginhoek links als je vanuit de kamer naar de wand kijkt?
+    var basis = DS.basisSessie(d) || { xr: {} }, W3 = AR.wanden3d(d.hoeken.map(function (h) { return { x: h.xr.x, z: h.xr.z }; }), true, basis.xr.vloerY || 0, 2.6);
+    var i = d.wanden.indexOf(w), w3 = W3.find(function (x) { return x.nr === i; });
+    return w3 ? AR.aLinks(w3) : true;
+  }
+  function toonWandfotos() {
+    var ul = el('d-wandfotos'), d = dossier(); if (!ul || !d) return; ul.textContent = '';
+    d.wanden.forEach(function (w) {
+      var li = maak('li'), p = (d.panorama || []).find(function (x) { return x.wand_id === w.id; });
+      li.appendChild(maak('span', w.label, 'titel'));
+      li.appendChild(maak('span', p ? (p.bron === 'groothoek' ? 'Wandbeeld uit een groothoekfoto.' : 'Wandbeeld uit de rondgang.') : 'Nog geen wandbeeld.', 'zacht'));
+      var k = maak('button', 'Groothoekfoto ' + w.label, 'knop'); k.type = 'button';
+      k.addEventListener('click', function () { groothoekWand = w; el('d-groothoek').value = ''; el('d-groothoek').click(); });
+      li.appendChild(k); ul.appendChild(li);
+    });
+  }
+  if (DS && OS) el('d-groothoek').addEventListener('change', function (e) {
+    var f = e.target.files && e.target.files[0]; if (!f || !rec || !groothoekWand) return;
+    groothoekAantikken(groothoekWand, f);
+  });
+  // Vier hoeken aantikken: links onder, rechts onder, rechts boven, links boven (zoals je de wand vanuit de kamer ziet).
+  function groothoekAantikken(w, blob) {
+    var d = dossier(), c = el('d-paneel'), links = wandRichting(d, w), hl = function (id) { return (d.hoeken.find(function (h) { return h.id === id; }) || {}).label || ''; };
+    var lHoek = links ? hl(w.van) : hl(w.naar), rHoek = links ? hl(w.naar) : hl(w.van);
+    var namen = ['links onder (' + lHoek + ', vloer)', 'rechts onder (' + rHoek + ', vloer)', 'rechts boven (' + rHoek + ', plafond)', 'links boven (' + lHoek + ', plafond)'];
+    huidigPaneel = null; c.hidden = false; c.textContent = '';
+    var bx = maak('div', null, 'dpaneel'); c.appendChild(bx);
+    bx.appendChild(maak('h2', 'Groothoekfoto ' + w.label));
+    var uitleg = maak('p', 'Tik de hoek ' + namen[0] + ' aan.', 'bewaard'); bx.appendChild(uitleg);
+    var vak = maak('div'); vak.style.position = 'relative'; var im = maak('img'); im.alt = 'Groothoekfoto van ' + w.label; im.style.width = '100%'; im.style.display = 'block'; im.style.borderRadius = '8px';
+    vak.appendChild(im); bx.appendChild(vak);
+    var rij = maak('div', null, 'rij'), terugK = maak('button', 'Laatste hoek opnieuw', 'knop'), stop = maak('button', 'Annuleer', 'knop'); terugK.type = 'button'; stop.type = 'button';
+    rij.appendChild(terugK); rij.appendChild(stop); bx.appendChild(rij);
+    var punten4 = [], stippen = [], url = URL.createObjectURL(blob); im.src = url;
+    function stip(q) { var s = maak('div'); s.style.cssText = 'position:absolute;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;border:3px solid #2fbf71;pointer-events:none'; s.style.left = (q.x * 100) + '%'; s.style.top = (q.y * 100) + '%'; vak.appendChild(s); return s; }
+    im.addEventListener('click', function (e) {
+      if (punten4.length >= 4) return;
+      var r = im.getBoundingClientRect(), q = { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
+      punten4.push(q); stippen.push(stip(q));
+      if (punten4.length < 4) { uitleg.textContent = 'Tik de hoek ' + namen[punten4.length] + ' aan.'; return; }
+      uitleg.textContent = 'Bezig met rechttrekken…';
+      verwerkGroothoek(w, blob, punten4, links).then(function () { c.hidden = true; c.textContent = ''; URL.revokeObjectURL(url); toonDossier(); el('zeg').textContent = 'Groothoekfoto van ' + w.label + ' rechtgetrokken en bewaard.'; },
+        function (fout) { uitleg.textContent = 'Rechttrekken lukte niet: ' + (fout && fout.message || fout) + '. Tik de hoeken opnieuw.'; punten4 = []; stippen.forEach(function (x) { x.remove(); }); stippen = []; });
+    });
+    terugK.addEventListener('click', function () { if (!punten4.length) return; punten4.pop(); stippen.pop().remove(); uitleg.textContent = 'Tik de hoek ' + namen[punten4.length] + ' aan.'; });
+    stop.addEventListener('click', function () { c.hidden = true; c.textContent = ''; URL.revokeObjectURL(url); });
+    c.scrollIntoView({ block: 'start' });
+  }
+  // punten4: fracties op de foto (links onder, rechts onder, rechts boven, links boven). Bewaart de foto zelf en een rechtgetrokken wandbeeld (panorama/W*.jpg).
+  function verwerkGroothoek(w, blob, punten4, links) {
+    var d = dossier(), m = wandMaten(d, w), Wp = Math.max(60, Math.round(m.L * PPM)), Hp = Math.max(60, Math.round(m.H * PPM));
+    var doelHoeken = links ? [{ x: 0, y: Hp }, { x: Wp, y: Hp }, { x: Wp, y: 0 }, { x: 0, y: 0 }] : [{ x: Wp, y: Hp }, { x: 0, y: Hp }, { x: 0, y: 0 }, { x: Wp, y: 0 }];
+    var b = DS.voegBeeldToe(d, { soort: 'wand-groothoek', pad: 'beelden/wand/groothoek-' + w.label + '-' + Date.now().toString(36) + '.jpg', sessie: ses ? ses.id : null, wand_id: w.id, type: blob.type || 'image/jpeg', tijd: new Date().toISOString() });
+    b.hoeken_in_beeld = punten4.map(function (q) { return { x: q.x, y: q.y }; }); b.volgorde = 'links onder, rechts onder, rechts boven, links boven (vanuit de kamer)';
+    return bewaarBeeld(b, blob).then(function () { return (window.createImageBitmap ? createImageBitmap(blob) : new Promise(function (ok, fout) { var im = new Image(); im.onload = function () { ok(im); }; im.onerror = fout; im.src = URL.createObjectURL(blob); })); })
+      .then(function (bron) {
+        var sch = Math.min(1, 2000 / Math.max(bron.width, bron.height)), bw = Math.round(bron.width * sch), bh = Math.round(bron.height * sch), bc = document.createElement('canvas');
+        bc.width = bw; bc.height = bh; var bctx = bc.getContext('2d'); bctx.drawImage(bron, 0, 0, bw, bh);
+        var src = bctx.getImageData(0, 0, bw, bh).data, h = AR.homografie(doelHoeken, punten4.map(function (q) { return { x: q.x * bw, y: q.y * bh }; }));
+        if (!h) throw new Error('de vier hoeken liggen niet goed');
+        var uit = document.createElement('canvas'); uit.width = Wp; uit.height = Hp; var uctx = uit.getContext('2d'), id = uctx.createImageData(Wp, Hp), D = id.data;
+        for (var y = 0; y < Hp; y++) for (var x = 0; x < Wp; x++) {
+          var q = AR.pasHToe(h, x + 0.5, y + 0.5), sx = Math.floor(q.x), sy = Math.floor(q.y), k = (y * Wp + x) * 4;
+          if (sx < 0 || sy < 0 || sx >= bw || sy >= bh) { D[k] = 217; D[k + 1] = 214; D[k + 2] = 207; D[k + 3] = 255; continue; }
+          var j = (sy * bw + sx) * 4; D[k] = src[j]; D[k + 1] = src[j + 1]; D[k + 2] = src[j + 2]; D[k + 3] = 255;
+        }
+        uctx.putImageData(id, 0, 0);
+        return new Promise(function (ok) { uit.toBlob(ok, 'image/jpeg', 0.85); });
+      }).then(function (tex) {
+        if (!tex) throw new Error('wandbeeld maken mislukt');
+        var pad = 'panorama/' + w.label + '.jpg';
+        return OS.zetFoto({ id: rec.id + ':pano-' + w.id, opnameId: rec.id, blob: tex, type: 'image/jpeg', grootte: tex.size, soort: 'panorama', pad: pad, item: w.id }).then(function () {
+          d.panorama = (d.panorama || []).filter(function (p) { return p.wand_id !== w.id; }).concat([{ wand_id: w.id, pad: pad, ppm: PPM, bron: 'groothoek', beeld_id: b.id }]);
+          planBewaar(true); return b;
+        });
+      });
   }
 
   // ---------- hoeken nakijken op de foto ----------
@@ -1983,7 +2110,7 @@ if (typeof module !== 'undefined') module.exports = AR;
     var vragen = DS.openVragen(d, AR, { dekking: dekkingPerWand() });
     vragen.forEach(function (v) { var li = maak('li'); li.appendChild(pil(v.ernst === 'blokkeert' ? 'blokkeert' : v.ernst === 'open' ? 'open' : 'let op', v.ernst === 'blokkeert' || v.ernst === 'open' ? 'open' : '')); li.appendChild(maak('span', v.tekst)); ov.appendChild(li); });
     if (!vragen.length) ov.appendChild(maak('li', 'Niets open. Alles wat gevraagd is, is gemeten.', 'zacht'));
-    toonHoeken();
+    toonHoeken(); toonWandfotos();
     el('k-afsluiten').textContent = d.ruimte.afgesloten ? 'Ruimte heropenen' : 'Ruimte afsluiten';
     el('k-aanvullen').disabled = d.hoeken.length < 3 || !navigator.xr;
   }
@@ -2085,6 +2212,8 @@ if (typeof module !== 'undefined') module.exports = AR;
       if (o.stilstaan && stil) { stil.t -= 3000; kaartTeller = 1; richtingsKaart(o.oog, o.rich); }
       return { hint: el('ar-hint').textContent, voorstellen: ses && ses.scan_voorstellen, aanwijzingen: ses && ses.draai_aanwijzingen, waarnemingen: ses && ses.waarnemingen };
     },
+    groothoekProef: function (wandIndex, blob, punten4) { var d = dossier(), w = d.wanden[wandIndex]; return verwerkGroothoek(w, blob, punten4, wandRichting(d, w)); },
+    wandRichting: function (i) { var d = dossier(); return wandRichting(d, d.wanden[i]); },
     toonDetailInAr: function (det) { el('ar-laag').hidden = false; openPaneel(det, true); },
     // proefhaak: een nagebootste opname met beelden laden, zonder AR
     laadPano: function (k) { pano.klaar = k; toonPano(); return k; } };
