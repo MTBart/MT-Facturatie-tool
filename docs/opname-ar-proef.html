@@ -298,6 +298,7 @@ details.later[open]{display:flex;flex-direction:column;gap:10px}
     <div class="rij">
       <button class="knop hoofd" id="k-pakket">Pakket maken (zip)</button>
       <button class="knop" id="k-pakket-deel">Pakket delen</button>
+      <button class="knop" id="k-tekeningen">Tekeningen / PDF</button>
     </div>
     <div class="rij">
       <button class="knop" id="k-kijk-hier">Rondkijken op deze telefoon</button>
@@ -323,6 +324,10 @@ details.later[open]{display:flex;flex-direction:column;gap:10px}
   </section>
 </main>
 
+<div id="rapport" hidden>
+  <div class="rp-balk"><strong>Tekeningen</strong><span class="rp-uitleg">Afdrukken: kies "Opslaan als pdf", liggend A4.</span><button class="knop hoofd" id="rapport-print">Afdrukken / PDF</button><button class="knop" id="rapport-dicht">Sluiten</button></div>
+  <div id="rapport-inhoud"></div>
+</div>
 <div id="ar-laag" hidden>
   <div class="boven">
     <div class="kop"><div id="ar-status">AR start…</div><div class="klein"><button id="k-vlakken" aria-pressed="false" title="Toon de vlakken die de telefoon zelf herkent">Vlakken</button><button id="k-klaar" disabled>Klaar</button><button id="k-stop">Stop</button></div></div>
@@ -1967,7 +1972,20 @@ if (typeof module !== 'undefined') module.exports = AR;
   if (el('d-uitslag')) el('d-uitslag').addEventListener('click', function (e) { var g = e.target.closest && e.target.closest('[data-wand]'); if (g) openAanzicht(g.getAttribute('data-wand'), e.target.getAttribute('data-id') || null); });
   // hoogte van het zichtbare deel van het scherm (zonder toetsenbord): de tekening krimpt mee zodat de invoerbalk in beeld blijft
   if (window.visualViewport) { var zetVvh = function () { document.documentElement.style.setProperty('--vvh', window.visualViewport.height + 'px'); }; window.visualViewport.addEventListener('resize', zetVvh); zetVvh(); }
-  if (TK && !document.getElementById('mtt-stijl')) { var stl = document.createElement('style'); stl.id = 'mtt-stijl'; stl.textContent = TK.STIJL; document.head.appendChild(stl); }
+  if (TK && !document.getElementById('mtt-stijl')) { var stl = document.createElement('style'); stl.id = 'mtt-stijl'; stl.textContent = TK.STIJL + '\n' + TK.RAPPORT_STIJL; document.head.appendChild(stl); }
+  // Tekeningen / PDF rechtstreeks vanaf de telefoon (19-11): dezelfde pagina's als op kantoor (TK.rapport). Afdrukken → "Opslaan als pdf".
+  function toonTekeningen() {
+    var d = dossier(), r = el('rapport'), inh = el('rapport-inhoud'); if (!d || !TK) return; planBewaar(true); inh.textContent = '';
+    var lm = DS.lijnmodel(d, AR);
+    if (!lm) inh.appendChild(maak('p', 'Tik eerst de hoeken van de kamer aan (minstens drie): dan kan de tekening gemaakt worden.', 'melding'));
+    else inh.appendChild(TK.rapport(document, { dossier: d, lm: lm, openVragen: DS.openVragen(d, AR), controlematen: DS.controleMaten(d, lm), datum: new Date(d.bijgewerkt || d.gemaakt).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) }));
+    r.hidden = false; r.scrollTop = 0; document.body.classList.add('rapport-open');
+  }
+  if (el('k-tekeningen')) {
+    el('k-tekeningen').addEventListener('click', toonTekeningen);
+    el('rapport-dicht').addEventListener('click', function () { el('rapport').hidden = true; document.body.classList.remove('rapport-open'); });
+    el('rapport-print').addEventListener('click', function () { window.print(); });
+  }
   function toonAanzichten() {
     var ul = el('d-aanzichten'), d = dossier(); if (!ul || !d) return; ul.textContent = '';
     // de kamer opengeklapt: tik een wand aan om hem te bematen
@@ -2039,7 +2057,7 @@ if (typeof module !== 'undefined') module.exports = AR;
     // ── de invoerbalk ──
     function zetBalk() {
       var det = det_(); hoekRij.textContent = '';
-      if (!det || !azVeld) { balk.hidden = !det; lab.textContent = det ? 'Tik een maat in de tekening aan.' : ''; rij.hidden = true; info.textContent = ''; if (!det) return; return; }
+      if (!det || !azVeld) { balk.hidden = false; lab.textContent = det ? 'Tik een maat in de tekening aan.' : 'Tik een onderdeel in de tekening aan om het te bematen, of voeg er hieronder een toe.'; rij.hidden = true; info.textContent = ''; return; }
       balk.hidden = false; rij.hidden = false;
       var m = DS.huidigeMeting(d, det.id, azVeld), az = az_(), V = DS.VELDEN[azVeld];
       lab.textContent = det.label + ' · ' + azNaam(det, azVeld);

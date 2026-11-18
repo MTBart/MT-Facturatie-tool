@@ -333,6 +333,22 @@ een soort automatisch object in je werktekening invoegen; daarna in de wandteken
 - De voorbeeldkamer voor tests en de voorbeeld-PDF staat op Barts echte maten: R1 334 vanaf links en R2 40 vanaf rechts op W2 (H2–H3), R3 780 vanaf rechts
   op W3 (H3–H4), onderkanten 945 / 750 / 930.
 
+**B38 · 19-11 · Rustiger op de telefoon, scharnierblokjes, tekens op schaal, PDF vanaf de telefoon.** *Aanleiding:* Bart: "de mobiele versie gaat wat door
+elkaar lopen; misschien de maten per onderdeel pas actief maken als je dat object aanklikt", "de draairichting van R1 moet andersom, de scharnieren zitten
+aan de buitenkant", "ook (standaard) voor stopcontacten, waterleidingen etc." en "kan je direct vanuit de opnametool een pdf downloaden?".
+- **Telefoon:** zonder gekozen onderdeel staan alleen de wandlengte en de hoogte in de tekening. Tik je een onderdeel aan, dan worden zijn maten actief en
+  treden de andere onderdelen terug (lichter getekend). De doorlopende ketens staan alleen op de afdruk.
+- **Draairichting:** in de voorbeeldtekening stonden de scharnieren van R1 al aan de buitenkant (de punt van de driehoek wijst naar het scharnier), maar die
+  afspraak is blijkbaar niet vanzelfsprekend: Bart las hem andersom. Daarom staan er nu ook twee zwarte **scharnierblokjes** op de scharnierkant van elk
+  draaiend vak en van een deur. Dat is zonder legenda te lezen. De driehoek blijft (punt naar het scharnier, zoals in het grootste deel van Europa).
+  *Open:* gebruikt MT zelf de omgekeerde afspraak (punt naar de kruk)? Dan kan de driehoek met één instelling worden omgedraaid; de blokjes blijven kloppen.
+- **Stopcontacten en schakelaars:** op de afdekplaat (op schaal) staat nu wat je ziet: per contact een rondje met twee gaatjes, per schakelaar een wip,
+  een dimmer of thermostaat als rondje, data als rechthoekje. **Leidingen:** de doorsnede op schaal (buitendiameter) in de kleur van het medium, met de
+  code KW (koud water), WW (warm water), CV, GAS, AFV (afvoer) of E (elektra) en de diameter in de naam.
+  De officiële schemasymbolen (NEN 5152 voor elektra) horen op een plattegrond en zijn niet nagelezen; in een aanzicht tekenen we wat er hangt.
+- **PDF vanaf de telefoon:** knop **Tekeningen / PDF** in het dossier op de telefoon. Zelfde pagina's als op kantoor (`TK.rapport`, één bron). Afdrukken →
+  "Opslaan als pdf". Een download met één tik, zonder afdrukvenster, vraagt een pdf-bibliotheek in de app; dat is een bewuste vervolgstap (zie P2).
+
 **Waarneming (geen besluit):** met vier gemeten wandlengtes en haakse hoeken maakt de kaartdrift voor het lijnmodel weinig uit (de richtingen worden
 rechtgezet, de lengtes komen uit de maten). De drift raakt vooral de aansluiting tussen beelden en wanden in het panorama en de camera-plek van details.
 
@@ -364,6 +380,7 @@ rechtgezet, de lengtes komen uit de maten). De drift raakt vooral de aansluiting
 | 18-11 23:40 | "Kan ik op dat wandaanzicht een object invoegen (radiator, raam, stopcontact) en dat een maat geven en bematen, plus een opmerking? Ga door tot dit een werkend concept is." | B35, B36. |
 | 19-11 00:20 | Pakket "Test 10" + "dit werkt echt nog super omslachtig; op jouw screenshots staat het veel duidelijker". | B36 (analyse van het pakket in de beslissing). |
 | 19-11 01:00 | Echte plek van de kozijnen (R1 334 vanaf links en R2 40 vanaf rechts op wand H2–H3, onderkant R2 750; R3 op wand H3–H4, 780 vanaf rechts, onderkant 930; deur en R3 stonden op de verkeerde wand). "Zo helder moet de bemating eruitzien." Objecten automatisch invoegen in fase 2, daarna aanklikken en variant kiezen. Goede manier bedenken voor leidingwerk, plinten en sierlijsten. Industriestandaard voor symbolen en maatvoering? Uitslag wordt ingewikkelder bij meer vormen. | B37, §11, §12. Aanname: R3 op W3 en de deur op de wand waar R3 stond (W4); corrigeer als dat anders is. |
+| 19-11 02:00 | Standaardtekens ook voor stopcontacten en waterleidingen; draairichting R1 andersom (scharnieren buiten); de mobiele versie loopt door elkaar: maten pas actief bij aanklikken; PDF direct vanuit de opnametool? | B38. |
 | 18-11 | Ontwikkeldocument waarin alles staat, zodat terug te zien is wat waarom veranderde; Astra moet er licht op kunnen laten schijnen. | Dit document. |
 
 ### 5.1 Meetresultaten echte proeven
@@ -471,7 +488,7 @@ De meetvelden komen in het bestaande detailpaneel (X4/hand, open vragen).
 
 ### P2 · Bemaatde kameruitslag als PDF, rechtstreeks uit het dossier
 
-*Stand 19-11:* als concept gebouwd (B35, B37): knop Tekeningen op kantoor, kameruitslag, wandafwikkeling, wandpagina's, Afdrukken / PDF. Nog niet: schaal 1:20/1:50 met schaalstok, onderhoek, A3.
+*Stand 19-11:* als concept gebouwd (B35, B37, B38): knop Tekeningen op kantoor én op de telefoon, kameruitslag, wandafwikkeling, wandpagina's, Afdrukken / PDF. Nog niet: schaal 1:20/1:50 met schaalstok, onderhoek, A3, en een pdf-download met één tik (vraagt een pdf-bibliotheek zoals jsPDF met svg2pdf in `vendor/`; afweging: ± 400 kB extra tegenover één tik minder).
 **Wat:** een A3- of A4-PDF met de plattegrond in het midden en de wanden eromheen "opengeklapt" (elke wand als aanzicht vanuit de kamer,
 met de vloerlijn tegen de rand van de plattegrond). Bart noemt dit *Europese projectie*; het is een kameruitslag / opengeklapte kamer.
 
@@ -603,7 +620,8 @@ Perspectief-correct plakken (homografie per vak i.p.v. affien), automatisch extr
 | 18-11 | `4809f62` | Wandaanzicht met kozijn bematen | B32 |
 | 18-11 | `f5e9e8c` | Haaksheid ingeklapt onder Later | B33 |
 | 18-11 | `d6a0124` | Kozijn als opening met opbouw en vakken | B34 |
-| 19-11 | (deze commit) | Tekenmodule, tekening als invoer, snelkeuze en varianten, kameruitslag/wandafwikkeling/PDF op kantoor, tekenstandaarden, denkstuk §12 | B35–B37 |
+| 19-11 | `b4e2c6b` | Tekenmodule, tekening als invoer, snelkeuze en varianten, kameruitslag/wandafwikkeling/PDF op kantoor, tekenstandaarden, denkstuk §12 | B35–B37 |
+| 19-11 | (deze commit) | Maten alleen bij het gekozen onderdeel, scharnierblokjes, tekens op afdekplaat en leiding, Tekeningen / PDF op de telefoon | B38 |
 
 Meer detail per brok: `VOORTGANG-OPNAME.md`. Volledige diff: draft-PR #5.
 
@@ -624,7 +642,7 @@ Meer detail per brok: `VOORTGANG-OPNAME.md`. Volledige diff: draft-PR #5.
 - `node test/opname-ar-proef.test.js` — rekenkern (77)
 - `node test/ruimte-dossier.test.js` — dossier en pakket (105)
 - `node test/ruimte-tekening.test.js` — tekenmodule met de voorbeeldkamer `test/ruimte-voorbeeldkamer.js` (25)
-- `node test/ruimte-e2e.js <map>` — browser, nagebootste kamer (55); vereist `python3 -m http.server 8123` in de repo
+- `node test/ruimte-e2e.js <map>` — browser, nagebootste kamer (59); vereist `python3 -m http.server 8123` in de repo
 - Opslagcontrole uit het werkpakket (5 scenario's); `node tools/check-sinks.js`, `node tools/check-verwijzingen.js`
 - Vast proefpakket: `test/fixtures/ruimte-proefpakket.zip` (nagebootste kamer, geen echte beelden)
 

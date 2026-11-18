@@ -107,7 +107,8 @@
     radiator: [{ id: 'paneel', label: 'Paneelradiator', kort: 'paneel' }, { id: 'leden', label: 'Ledenradiator', kort: 'leden' }, { id: 'convector', label: 'Convector', kort: 'convector' }, { id: 'design', label: 'Designradiator', kort: 'design' }],
     deur: [{ id: 'binnen-links', label: 'Draait de kamer in, scharnier links', kort: '↙ L' }, { id: 'binnen-rechts', label: 'Draait de kamer in, scharnier rechts', kort: '↘ R' },
       { id: 'buiten-links', label: 'Draait de kamer uit, scharnier links', kort: '↖ L' }, { id: 'buiten-rechts', label: 'Draait de kamer uit, scharnier rechts', kort: '↗ R' }, { id: 'schuif', label: 'Schuifdeur', kort: 'schuif' }, { id: 'open', label: 'Open doorgang', kort: 'open' }],
-    leiding: [{ id: 'cv', label: 'CV', kort: 'cv' }, { id: 'water', label: 'Water', kort: 'water' }, { id: 'gas', label: 'Gas', kort: 'gas' }, { id: 'afvoer', label: 'Afvoer', kort: 'afvoer' }, { id: 'elektra', label: 'Elektra (buis of goot)', kort: 'elektra' }]
+    leiding: [{ id: 'cv', label: 'CV', kort: 'CV' }, { id: 'kw', label: 'Koud water', kort: 'KW' }, { id: 'ww', label: 'Warm water', kort: 'WW' }, { id: 'gas', label: 'Gas', kort: 'GAS' }, { id: 'afvoer', label: 'Afvoer', kort: 'AFV' },
+      { id: 'elektra', label: 'Elektra (buis of goot)', kort: 'E' }]
   };
   D.variantVan = det => (D.VARIANTEN[det.soort] || []).find(v => v.id === det.variant) || null;
   // Scharnierkant van een draaiend vak van een raam (vanuit de kamer gezien). Niet ingevuld: het linker vak scharniert links, het rechter rechts.
@@ -587,7 +588,7 @@
         let x = null, xs = 'open';
         if (afst) { x = xLinks(det, afst); xs = afst.status; } else if (camU != null) { x = vanLinks ? camU : L - camU; xs = 'geschat'; }
         const pl = vr && vr.plaat ? vr.plaat : (det.soort === 'stopcontact' || det.soort === 'schakelaar' ? [81, 81] : null);   // afdekplaat op schaal (zonder variant: enkel)
-        return Object.assign(basis, { vorm: 'punt', plaat: pl ? { w: pl[0], h: pl[1] } : null, velden: { x: rol(D.LANGS_VELDEN), y: rol(D.HOOGTE_VELDEN) }, punt: { x, y: hv ? hv.waarde : camV, status: { x: xs, y: hv ? hv.status : (camV != null ? 'geschat' : 'open') } } });
+        return Object.assign(basis, { vorm: 'punt', plaat: pl ? { w: pl[0], h: pl[1] } : null, diameter: det.soort === 'leiding' ? maat(det, ['buitendiameter']) : null, velden: { x: rol(D.LANGS_VELDEN), y: rol(D.HOOGTE_VELDEN) }, punt: { x, y: hv ? hv.waarde : camV, status: { x: xs, y: hv ? hv.status : (camV != null ? 'geschat' : 'open') } } });
       }
       const op = det.opening || null, zij = op && op.type === 'aftimmering-op-wand' ? lijst(op.zijden) : [], dk = op ? maat(det, ['aftimmer_dikte']) : null, dik = dk ? dk.waarde : (zij.length ? 12 : 0);
       const ob = op ? maat(det, ['opening_breedte']) : null, oh = op ? maat(det, ['opening_hoogte']) : null;

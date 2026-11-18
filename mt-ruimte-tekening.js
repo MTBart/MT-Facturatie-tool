@@ -41,6 +41,10 @@
     '.mtt .punt{fill:var(--oranje,#a86504);stroke:var(--inkt,#16211a);stroke-width:calc(var(--mtt-lijn,3) * .7)}',
     '.mtt .punt.gekozen{stroke:var(--kies,#1c5fc4);stroke-width:calc(var(--mtt-lijn,3) * 1.7)}',
     '.mtt .raak{fill:transparent;stroke:none}',
+    '.mtt .vaag{opacity:.38}',
+    '.mtt .scharnier{fill:var(--inkt,#16211a);stroke:none}',
+    '.mtt .teken{fill:none;stroke:var(--inkt,#16211a);stroke-width:calc(var(--mtt-lijn,3) * .5)} .mtt .teken.vol{fill:var(--inkt,#16211a)}',
+    '.mtt .pijp{fill:var(--vlak,#fff);stroke:var(--inkt,#16211a);stroke-width:calc(var(--mtt-lijn,3) * 1.1)} .mtt .pijp.kw{stroke:#1c5fc4} .mtt .pijp.ww{stroke:#c4322a} .mtt .pijp.cv{stroke:#c96a00} .mtt .pijp.gas{stroke:#b59a00} .mtt .pijp.afvoer{stroke:#6b6b6b} .mtt .pijp.gekozen{stroke-width:calc(var(--mtt-lijn,3) * 2.2)}',
     '.mtt .draai{fill:none;stroke:var(--zacht,#5d6b62);stroke-width:calc(var(--mtt-lijn,3) * .7)} .mtt .draai.weg{stroke-dasharray:10 7}',
     '.mtt .plaat{fill:var(--vlak,#fff);stroke:var(--inkt,#16211a);stroke-width:calc(var(--mtt-lijn,3) * .8)} .mtt .plaat.gekozen{stroke:var(--kies,#1c5fc4);stroke-width:calc(var(--mtt-lijn,3) * 1.7)}',
     '.mtt [data-id],.mtt [data-veld],.mtt [data-vak],.mtt [data-wand]{cursor:pointer}',
@@ -93,14 +97,42 @@
       : kant === 'onder' ? [[x, yBoven], [x + b / 2, yBoven + h], [x + b, yBoven]] : [[x, yBoven + h], [x + b / 2, yBoven], [x + b, yBoven + h]];
     return el('polyline', { points: P.map(q => getal(q[0]) + ',' + getal(q[1])).join(' '), 'class': 'draai' + (weg ? ' weg' : '') });
   }
+  // Twee zwarte blokjes op de scharnierkant: ook zonder de driehoek-afspraak te kennen zie je waar het raam of de deur hangt.
+  function scharnieren(x, yBoven, b, h, kant) {
+    const d = Math.max(2.5, Math.min(b, h) * 0.035), l = Math.max(6, Math.min(b, h) * 0.12), uit = [];
+    [0.18, 0.82].forEach(f => {
+      if (kant === 'links' || kant === 'rechts') uit.push(el('rect', { x: kant === 'links' ? x - d / 2 : x + b - d / 2, y: yBoven + h * f - l / 2, width: d, height: l, 'class': 'scharnier' }));
+      else uit.push(el('rect', { x: x + b * f - l / 2, y: kant === 'onder' ? yBoven + h - d / 2 : yBoven - d / 2, width: l, height: d, 'class': 'scharnier' }));
+    });
+    return uit;
+  }
   T.vakSymbolen = function (functie, scharnier, x, yBoven, b, h) {
     const uit = [], weg = /buiten/.test(functie);
+    if (/^draai/.test(functie)) scharnieren(x, yBoven, b, h, scharnier).forEach(k => uit.push(k));
+    else if (/^klep/.test(functie)) scharnieren(x, yBoven, b, h, 'boven').forEach(k => uit.push(k));
     if (/^draai-kiep/.test(functie)) { uit.push(driehoek(x, yBoven, b, h, scharnier, weg)); uit.push(driehoek(x, yBoven, b, h, 'onder', weg)); }
     else if (/^draai/.test(functie)) uit.push(driehoek(x, yBoven, b, h, scharnier, weg));
     else if (/^klep/.test(functie)) uit.push(driehoek(x, yBoven, b, h, 'boven', weg));
     else if (functie === 'schuif') { const ym = yBoven + h / 2, p = Math.min(b * 0.12, h * 0.12); uit.push(el('polyline', { points: [[x + b * 0.2, ym], [x + b * 0.8, ym], [x + b * 0.8 - p, ym - p], [x + b * 0.8, ym], [x + b * 0.8 - p, ym + p]].map(q => getal(q[0]) + ',' + getal(q[1])).join(' '), 'class': 'draai' })); }
     return uit;
   };
+
+  // Wat er op een afdekplaat zit, als herkenbaar plaatje op schaal: per contact een rondje met twee gaatjes, per schakelaar een wip.
+  // (De schemasymbolen van NEN 5152 horen op een plattegrond; in een aanzicht teken je wat je ziet. Zie §11 van het ontwikkeldocument.)
+  function plaatTekens(it, cx, cy, pw, ph) {
+    const uit = [], id = it.variant ? it.variant.id : 'enkel', staand = id === 'dubbel-staand';
+    const n = { enkel: 1, dubbel: 2, drievoudig: 3, viervoudig: 4, 'dubbel-staand': 2, combinatie: 2 }[id] || 1, m = (staand ? ph : pw) / n;
+    if (Math.min(pw, ph) < 9) return uit;   // te klein om iets in te tekenen
+    for (let i = 0; i < n; i++) {
+      const mx = staand ? cx : cx - pw / 2 + m * (i + 0.5), my = staand ? cy - ph / 2 + m * (i + 0.5) : cy, r = Math.min(m, staand ? pw : ph) * 0.3;
+      const contact = it.soort === 'stopcontact' ? !(id === 'data') : (id === 'combinatie' && i === 1);
+      if (it.soort === 'stopcontact' && id === 'data') uit.push(el('rect', { x: mx - r * 0.6, y: my - r * 0.45, width: r * 1.2, height: r * 0.9, 'class': 'teken' }));
+      else if (contact) { uit.push(el('circle', { cx: mx, cy: my, r, 'class': 'teken' })); [-1, 1].forEach(k => uit.push(el('circle', { cx: mx + k * r * 0.42, cy: my, r: Math.max(0.7, r * 0.13), 'class': 'teken vol' }))); }
+      else if (id === 'dimmer' || id === 'thermostaat') uit.push(el('circle', { cx: mx, cy: my, r: r * 0.8, 'class': 'teken' }));
+      else { uit.push(el('rect', { x: mx - r, y: my - r, width: r * 2, height: r * 2, rx: r * 0.15, 'class': 'teken' })); if (id === 'dubbel') uit.push(el('line', { x1: mx, y1: my - r, x2: mx, y2: my + r, 'class': 'teken' })); }
+    }
+    return uit;
+  }
 
   // Een rij maten (keten) langs een as, met de getallen om en om aan weerszijden van de lijn als ze anders over elkaar zouden vallen.
   // liggend: delen in px langs x op hoogte `vast`. staand: langs y op x = `vast`. Een deel met `veld` wordt een tikbare maat (vlakje erachter).
@@ -149,7 +181,9 @@
     // eerst de vlakken (achter), dan de trajecten (vensterbank, plint) en de punten erbovenop
     const volg = { vlak: 0, traject: 1, lijn: 2, punt: 3 };
     az.items.slice().sort((a, b) => (volg[a.vorm] || 0) - (volg[b.vorm] || 0)).forEach(it => {
-      const id = it.det.id, kies = !!gekozen && gekozen.det.id === id, lbl = it.label + (it.variant && it.vorm === 'punt' ? ' ' + it.variant.kort : '') + (it.opmerking ? ' *' : '');
+      const id = it.det.id, kies = !!gekozen && gekozen.det.id === id, vaag = gekozen && !kies ? ' vaag' : '';   // met een gekozen onderdeel treden de andere terug
+      const lbl = it.label + (it.variant && it.vorm === 'punt' ? ' ' + it.variant.kort : '') + (it.diameter && it.diameter.waarde ? ' ø' + Math.round(it.diameter.waarde) : '') + (it.opmerking ? ' *' : '');
+      const begin = out.length;
       if (it.rect) {
         const r = it.rect, vast = hard(it.status.x) && hard(it.status.w);
         out.push(el('rect', { x: X(r.x), y: Y(r.y + r.h), width: Math.max(2, r.w * s), height: Math.max(2, r.h * s), 'class': 'item ' + it.vorm + (kies ? ' gekozen' : '') + (vast ? '' : ' geschat'), 'data-id': id }));
@@ -167,7 +201,10 @@
             out.push(a);
           });
         }
-        if (it.soort === 'deur' && it.variant && /^(binnen|buiten)-/.test(it.variant.id)) out.push(driehoek(X(r.x), Y(r.y + r.h), r.w * s, r.h * s, /links$/.test(it.variant.id) ? 'links' : 'rechts', /^buiten/.test(it.variant.id)));
+        if (it.soort === 'deur' && it.variant && /^(binnen|buiten)-/.test(it.variant.id)) {
+          const dk = /links$/.test(it.variant.id) ? 'links' : 'rechts';
+          out.push(driehoek(X(r.x), Y(r.y + r.h), r.w * s, r.h * s, dk, /^buiten/.test(it.variant.id))); scharnieren(X(r.x), Y(r.y + r.h), r.w * s, r.h * s, dk).forEach(k => out.push(k));
+        }
         const lf = fs * 0.62;
         if (it.vorm === 'traject' || r.h * s < lf * 2.4) out.push(tekst(X(r.x + r.w / 2), Y(r.y + r.h) - fs * 0.25, lbl, 'naam klein', lf, { keer: o.keerH, id }));
         else out.push(tekst(X(r.x + r.w / 2), Y(r.y + r.h) + lf * 1.2, lbl, 'naam', lf, { keer: o.keerH, id }));
@@ -181,12 +218,18 @@
         if (it.plaat) {   // stopcontact of schakelaar: de afdekplaat op schaal, met het hart als maatpunt
           const pw = Math.max(it.plaat.w * s, fs * 0.5), ph = Math.max(it.plaat.h * s, fs * 0.5);
           out.push(el('rect', { x: X(it.punt.x) - pw / 2, y: Y(py) - ph / 2, width: pw, height: ph, rx: Math.min(pw, ph) * 0.12, 'class': 'plaat' + (kies ? ' gekozen' : '') }));
-          out.push(el('circle', { cx: X(it.punt.x), cy: Y(py), r: Math.max(1.5, fs * 0.09), 'class': 'punt' }));
+          const tk = plaatTekens(it, X(it.punt.x), Y(py), pw, ph);
+          if (tk.length) tk.forEach(k => out.push(k)); else out.push(el('circle', { cx: X(it.punt.x), cy: Y(py), r: Math.max(1.5, fs * 0.09), 'class': 'punt' }));
+        } else if (it.soort === 'leiding') {   // leiding: de doorsnede op schaal (buitendiameter), kleur naar het medium
+          const rr = Math.max(fs * 0.2, (it.diameter && it.diameter.waarde ? it.diameter.waarde : 22) * s / 2);
+          out.push(el('circle', { cx: X(it.punt.x), cy: Y(py), r: rr, 'class': 'pijp' + (it.variant ? ' ' + it.variant.id : '') + (kies ? ' gekozen' : '') }));
+          out.push(el('circle', { cx: X(it.punt.x), cy: Y(py), r: Math.max(1, rr * 0.18), 'class': 'teken vol' }));
         } else out.push(el('circle', { cx: X(it.punt.x), cy: Y(py), r: fs * (kies ? 0.42 : 0.3), 'class': 'punt' + (kies ? ' gekozen' : '') }));
         out.push(el('circle', { cx: X(it.punt.x), cy: Y(py), r: fs * 1.0, 'class': 'raak', 'data-id': id }));
         const rechts = X(it.punt.x) > X(L) - fs * 5;   // dicht bij de rechterhoek: naam links van de stip
         out.push(tekst(X(it.punt.x) + (rechts ? -1 : 1) * fs * 0.55, Y(py) - fs * 0.45, lbl, 'naam klein', fs * 0.55, { keer: o.keerH, anker: rechts ? 'end' : 'start', id }));
       }
+      if (vaag) for (let i = begin; i < out.length; i++) if (!/raak/.test(out[i].a['class'] || '')) out[i].a['class'] = (out[i].a['class'] || '') + vaag;
     });
 
     if (o.ketens === 'geen') return { knopen: out, onder: fs * 0.6, boven: fs * 0.6, links: fs * 0.6, rechts: fs * 0.6 };   // alleen de wand en zijn onderdelen (overzicht)
@@ -228,8 +271,9 @@
         }
       }
     }
-    // doorlopende ketens langs de hele wand: eerst de openingen (kozijnen, deuren), dan de overige onderdelen. Met een gekozen onderdeel alleen zijn eigen keten: rustig beeld.
-    if (alles || !gekozen) [D.wandKeten(az, D.isOpening), D.wandKeten(az, it => !D.isOpening(it) && it.soort !== 'plint' && it.soort !== 'sierlijst')].forEach(wk => {
+    // doorlopende ketens langs de hele wand (alleen op de afdruk): eerst de openingen (kozijnen, deuren), dan de overige onderdelen. Op de telefoon staan
+    // alleen de maten van het onderdeel dat je aantikt, plus de wandlengte en de hoogte: anders loopt het op een klein scherm door elkaar (feedback 19-11).
+    if (alles) [D.wandKeten(az, D.isOpening), D.wandKeten(az, it => !D.isOpening(it) && it.soort !== 'plint' && it.soort !== 'sierlijst')].forEach(wk => {
       if (wk.length > 1) keten(out, wk.map(px), rijY(), fs * (alles ? 1 : 0.8), false, { keer: o.keerH });
     });
     keten(out, [{ van: 0, tot: X(L), waarde: L, status: az.status.L }], rijY(), fs, false, { keer: o.keerH });
@@ -411,6 +455,96 @@
       });
     });
     return rijen;
+  };
+
+  // Opmaak van het rapport (tekeningen op papier: altijd licht). De pagina zet een <div id="rapport"> met de knoppenbalk klaar en hangt T.rapport erin.
+  T.RAPPORT_STIJL = [
+    "/* Tekeningen (kameruitslag, wandpagina's): altijd licht, ook in de donkere weergave, want het is papier */",
+    "#rapport{position:fixed;inset:0;z-index:50;overflow:auto;background:#e9ece8;color:#16211a;--inkt:#16211a;--zacht:#5d6b62;--rand:#cfd6d0;--vlak:#ffffff;--bg:#ffffff;--primair:#17643f;--kies:#1c5fc4;--oranje:#a86504;--geschat:#7f8a83;--rood:#c4322a}",
+    ".rp-balk{position:sticky;top:0;z-index:2;display:flex;gap:10px;align-items:center;padding:10px 16px;background:#ffffff;border-bottom:1px solid #cfd6d0}",
+    ".rp-balk strong{font-size:17px} .rp-uitleg{flex:1;color:#5d6b62;font-size:13px}",
+    ".rp-balk .knop{color:#16211a;background:#fff;border:1px solid #cfd6d0} .rp-balk .knop.hoofd{background:#17643f;color:#fff;border-color:#17643f}",
+    ".rp-pagina{background:#fff;max-width:1180px;margin:16px auto;padding:20px 24px;border-radius:6px;box-shadow:0 1px 6px rgba(0,0,0,.18);display:flex;flex-direction:column;gap:10px}",
+    ".rp-kop{display:flex;align-items:baseline;gap:14px;border-bottom:2px solid #16211a;padding-bottom:6px}",
+    ".rp-kop h2{margin:0;font-size:20px} .rp-kop span{color:#5d6b62;font-size:13px}",
+    ".rp-pagina h3{margin:8px 0 0;font-size:14px}",
+    ".rp-tek svg{max-height:150mm} .rp-wand svg{max-height:none;margin:0 auto}",
+    ".rp-legenda{color:#5d6b62;font-size:12px;margin:0}",
+    ".rp-pagina table{border-collapse:collapse;width:100%;font-size:12.5px}",
+    ".rp-pagina td,.rp-pagina th{border-bottom:1px solid #cfd6d0;padding:4px 6px;text-align:left;vertical-align:top}",
+    ".rp-pagina th{color:#5d6b62;font-weight:600}",
+    ".rp-doorsneden{display:flex;flex-wrap:wrap;gap:12px}",
+    ".rp-doorsneden figure{margin:0;width:300px} .rp-doorsneden figcaption{font-size:12px;color:#5d6b62}",
+    "@media (max-width:700px){.rp-uitleg{display:none} .rp-balk{padding:8px 10px} .rp-balk strong{flex:1} .rp-pagina{padding:12px 10px;margin:8px 4px} .rp-kop{flex-direction:column;gap:2px} .rp-pagina table{font-size:11px}}",
+    "@media print{",
+    "  @page{size:A4 landscape;margin:9mm}",
+    "  body.rapport-open > *:not(#rapport){display:none !important}",
+    "  html,body.rapport-open{background:#fff !important}",
+    "  #rapport{position:static;overflow:visible;background:#fff}",
+    "  .rp-balk{display:none}",
+    "  .rp-pagina{box-shadow:none;margin:0;padding:0;max-width:none;border-radius:0;break-after:page;page-break-after:always}",
+    "  .rp-pagina:last-child{break-after:auto;page-break-after:auto}",
+    "  .rp-pagina table,.rp-doorsneden figure{break-inside:avoid}",
+    "}"
+  ].join('\n');
+
+  // Het rapport als DOM (geen HTML als tekst): kameruitslag of plattegrond, wandafwikkeling, per wand een pagina met onderdelen- en kozijnenlijst, en een
+  // slotpagina met wandmaten en open punten. g: { dossier, lm (lijnmodel), openVragen, controlematen, datum (tekst) }. Zelfde uitvoer op telefoon en kantoor.
+  T.rapport = function (doc, g) {
+    const dos = g.dossier, lm = g.lm, azs = dos.wanden.map(w => D.wandAanzicht(dos, w.id, lm)), rijenAlle = T.onderdeelRijen(azs);
+    const maak = (tag, tekst, klasse) => { const e = doc.createElement(tag); if (tekst != null) e.textContent = tekst; if (klasse) e.className = klasse; return e; };
+    const tabel = (koppen, rijen) => { const t = maak('table'), kr = maak('tr'); koppen.forEach(k => kr.appendChild(maak('th', k))); t.appendChild(kr);
+      rijen.forEach(r => { const tr = maak('tr'); r.forEach(c => tr.appendChild(maak('td', c == null || c === '' ? '—' : String(c)))); t.appendChild(tr); }); return t; };
+    const uit = maak('div', null, 'rp-rapport'), naam = dos.ruimte.naam + (dos.project && (dos.project.code || dos.project.naam) ? ' · ' + (dos.project.code || dos.project.naam) : '');
+    const legenda = 'Maten in mm. Zwart = gemeten · blauw = berekend uit gemeten maten · grijs ~ = geschat (camera of aanname), niet om op te bestellen · ? = nog meten. Aanzichten gezien vanuit de kamer. ' +
+      'Raam of deur: de punt van de driehoek en de twee zwarte blokjes staan aan de scharnierkant; getrokken = draait de kamer in, gestreept = draait naar buiten. ' +
+      'Stopcontacten en schakelaars: afdekplaat op schaal met het aantal contacten, maat op het hart. Leiding: doorsnede op schaal met KW (koud water), WW (warm water), CV, GAS, AFV (afvoer) of E (elektra).';
+    const kop = (titel, sub) => { const h = maak('header', null, 'rp-kop'); h.appendChild(maak('h2', titel)); h.appendChild(maak('span', naam + (g.datum ? ' · opname ' + g.datum : '') + (sub ? ' · ' + sub : ''))); return h; };
+    const eenvoudig = T.eenvoudig(lm);
+    // Een kamer met alleen uitspringende hoeken: wanden opengeklapt rond de plattegrond. Met een inspringende hoek (L-vorm, nis) zouden opengeklapte wanden
+    // over elkaar vallen: dan alleen de plattegrond met de wandnamen, en de wanden staan in de afwikkeling op de volgende pagina.
+    const p1 = maak('section', null, 'rp-pagina'); p1.appendChild(kop(eenvoudig ? 'Kameruitslag' : 'Plattegrond', 'lijnmodel ' + lm.status + (lm.sluitfout_mm != null ? ', sluitfout ' + lm.sluitfout_mm + ' mm' : '')));
+    const u = T.uitslag(lm, azs, { titel: dos.ruimte.naam, ondertitel: lm.hoogte && lm.hoogte.waarde ? 'plafond ' + T.maatTekst(lm.hoogte.waarde, lm.hoogte.status) : '', breedte: 1500, maxHoogte: 940, ketens: eenvoudig ? 'alles' : 'plan' });
+    const uv = maak('div', null, 'rp-tek'); uv.appendChild(T.naarDom(doc, u.boom)); p1.appendChild(uv);
+    p1.appendChild(maak('p', legenda + (eenvoudig ? ' De wanden zijn om hun vloerlijn naar buiten geklapt; er is niets gespiegeld.' : ' Deze kamer heeft een inspringende hoek: de wanden staan naast elkaar in de wandafwikkeling.'), 'rp-legenda'));
+    uit.appendChild(p1);
+    // wandafwikkeling: alle wanden naast elkaar, met de klok mee (werkt voor elke kamervorm)
+    const pa = maak('section', null, 'rp-pagina'); pa.appendChild(kop('Wandafwikkeling', 'alle wanden naast elkaar, met de klok mee gezien vanuit de kamer'));
+    const af = T.afwikkeling(azs, { breedte: 1500, fs: 12 }), av = maak('div', null, 'rp-tek'); if (af.boom) av.appendChild(T.naarDom(doc, af.boom)); pa.appendChild(av);
+    pa.appendChild(maak('p', legenda, 'rp-legenda')); uit.appendChild(pa);
+    // per wand een pagina
+    azs.forEach(az => {
+      if (!az) return;
+      const p = maak('section', null, 'rp-pagina'); p.appendChild(kop(az.wand + ' · ' + az.links.label + ' – ' + az.rechts.label, 'lengte ' + T.maatTekst(az.L, az.status.L) + ' · hoogte ' + T.maatTekst(az.H, az.status.H)));
+      // 1500 tekeneenheden = de paginabreedte; een korte wand wordt smaller getekend (niet kleiner), zodat de maten overal even groot blijven
+      let t = T.aanzicht(az, { ketens: 'alles', breedte: 1500, fs: 22 }); if (t.hoogte > 620) t = T.aanzicht(az, { ketens: 'alles', breedte: Math.max(560, Math.round(1500 * 620 / t.hoogte)), fs: 22 });
+      const tv = maak('div', null, 'rp-tek rp-wand'), sv = T.naarDom(doc, t.boom); sv.setAttribute('style', 'width:' + (t.breedte / 15).toFixed(1) + '%'); tv.appendChild(sv); p.appendChild(tv);
+      const rijen = rijenAlle.filter(x => x.wand === az.wand);
+      if (rijen.length) {
+        p.appendChild(tabel(['Onderdeel', 'Uitvoering', 'Plek langs de wand', 'Breedte × hoogte', 'Hoogte', 'Opmerking'], rijen.map(x => [x.naam, x.variant, x.plek, x.maat, x.hoogte, x.opmerking])));
+        const koz = rijen.filter(x => x.opening);
+        if (koz.length) {
+          p.appendChild(maak('h3', 'Kozijnen op deze wand'));
+          p.appendChild(tabel(['Kozijn', 'Soort opening', 'Binnenwerks (b × h)', 'Op de wand (b × h)', 'Aftimmering', 'De wand in', 'Vakken, van links naar rechts'], koz.map(x => [x.naam, x.opening, x.binnenwerks, x.maat, x.aftimmering, x.diepte, x.vakken])));
+          const dr = maak('div', null, 'rp-doorsneden');
+          koz.forEach(x => { const it = az.items.find(i => i.det.id === x.id), ds = T.doorsnede(it, { breedte: 700, fs: 26 }); if (!ds.boom) return; const f = maak('figure'); f.appendChild(T.naarDom(doc, ds.boom)); f.appendChild(maak('figcaption', x.naam + ': doorsnede van boven gezien')); dr.appendChild(f); });
+          p.appendChild(dr);
+        }
+      } else p.appendChild(maak('p', 'Geen onderdelen op deze wand.', 'rp-legenda'));
+      p.appendChild(maak('p', legenda, 'rp-legenda'));
+      uit.appendChild(p);
+    });
+    // laatste pagina: wandmaten, controles en wat nog open staat
+    const pl = maak('section', null, 'rp-pagina'); pl.appendChild(kop('Maten en open punten'));
+    pl.appendChild(tabel(['Wand', 'Lengte', 'Status', 'Bron', 'Camera (ter controle)'], lm.segmenten.map(sg => [sg.label, sg.lengte.waarde, sg.lengte.status, D.BRONNEN[sg.lengte.bron] || sg.lengte.bron, sg.camera_mm])));
+    (g.controlematen || []).forEach(c => pl.appendChild(maak('p', 'Controlemaat ' + c.van + '–' + c.naar + ': gemeten ' + c.gemeten + ', verwacht ' + c.verwacht + ' (' + (c.verschil > 0 ? '+' : '') + c.verschil + ' mm)')));
+    const ov = g.openVragen || [];
+    pl.appendChild(maak('h3', ov.length ? 'Nog open (' + ov.length + ')' : 'Geen open vragen'));
+    if (ov.length) { const uo = maak('ul'); ov.forEach(v => uo.appendChild(maak('li', v.tekst))); pl.appendChild(uo); }
+    const opm = dos.opmerkingen || [];
+    if (opm.length) { pl.appendChild(maak('h3', 'Opmerkingen')); const ul = maak('ul'); opm.forEach(o => ul.appendChild(maak('li', o.tekst))); pl.appendChild(ul); }
+    uit.appendChild(pl);
+    return uit;
   };
 
   root.MTRuimteTekening = T;

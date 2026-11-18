@@ -31,7 +31,7 @@ alleen op de werkbranch.
 8. Tik **Klaar** bovenin als de kamer rond is. Vul daarna de wandmaten en de plafondhoogte in, meet een **controlemaat tape tot tape** tussen twee wanden (per tape de afstand tot een hoek, en de afstand tussen de tapes), en controleer desgewenst een paar hoeken met een **driehoeksmeting** (tape op 1000 mm langs elke wand, ±1 m hoog, en de schuine maat ertussen; haaks = 1414 mm). Een diagonaal alleen als die vrij en strak te meten is.
    Onder **Nog open vóór vertrek** staat wat nog ontbreekt.
 9. **Wanden bematen**: je ziet de kamer opengeklapt; tik een wand aan. Bovenaan staat de lijntekening van die wand, gezien vanuit de kamer.
-   - Tik een onderdeel in de tekening aan (of voeg er een toe met **+ Kozijn**, **+ Deur**, **+ Radiator**, **+ Stopcontact** of *Ander onderdeel*).
+   - Zonder keuze zie je alleen de wand met zijn onderdelen. Tik een onderdeel in de tekening aan: dan verschijnen zijn maten (of voeg er een toe met **+ Kozijn**, **+ Deur**, **+ Radiator**, **+ Stopcontact** of *Ander onderdeel*).
    - Tik een maat aan (oranje **?** = nog meten), typ het getal of meet met de X4 en druk **Enter**: de app bewaart en springt naar de volgende open maat.
      Een heel kozijn meet je zo achter elkaar door. **Vanaf ◂ H2 / H3 ▸** kiest vanaf welke hoek je de afstand meet.
    - Kozijn: kies met de drie plaatjes hoe het in de wand zit (kale nis, kader op de wand, kader in de nis), tik de dieptematen aan in de doorsnede,
@@ -44,6 +44,7 @@ alleen op de werkbranch.
 10. **Hoeken nakijken**: open per hoek de foto en tik de echte hoek aan (rood = waar je tikte). De app rekent de plek om; de tik blijft bewaard en
    kan terug. Daarna opnieuw **Wanden aan elkaar plakken**.
 11. **Wanden aan elkaar plakken** maakt de wandbeelden; **Pakket maken (zip)** of **Pakket delen** levert het bestand voor kantoor.
+    **Tekeningen / PDF** toont meteen op de telefoon de kameruitslag en de wandtekeningen; met *Afdrukken / PDF* → "Opslaan als pdf" heb je het bestand.
 
 Alles wordt tijdens de rondgang al op de telefoon bewaard (je ziet "Veilig bewaard: …"). Gaat er iets mis met opslaan, dan verschijnt
 een rode melding met **Opnieuw proberen**. Pagina dicht of telefoon uit: open de pagina opnieuw, kies de ruimte onder

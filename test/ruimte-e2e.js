@@ -267,6 +267,23 @@ window.renderKamer = function (cam, w, h, fovy) {
   check('variant: dubbel stopcontact, afdekplaat 152 × 81 op schaal, naam met 2× in de tekening; de wijziging staat in het archief', vari.variant === 'dubbel' && vari.plaat.w === 152 && /Stopcontact 2×/.test(vari.tekst) && vari.archief >= 2, JSON.stringify(vari));
   await p.screenshot({ path: path.join(UIT, 's24-13-stopcontact-variant.png') });
   await p.click('#az-sluit');
+  // tekeningen en PDF rechtstreeks vanaf de telefoon (zelfde rapport als op kantoor)
+  await p.click('#k-tekeningen'); await p.waitForSelector('#rapport .rp-pagina');
+  const trp = await p.evaluate(() => ({ paginas: document.querySelectorAll('#rapport .rp-pagina').length, wanden: document.querySelectorAll('#rapport svg.aanzicht').length, koppen: Array.from(document.querySelectorAll('#rapport .rp-kop h2')).map(h => h.textContent).join(' | '),
+    scharnier: document.querySelectorAll('#rapport svg.aanzicht rect.scharnier').length, contacten: document.querySelectorAll('#rapport svg.aanzicht circle.teken').length }));
+  check('telefoon: Tekeningen / PDF toont kameruitslag, wandafwikkeling en een pagina per wand, met scharnierblokjes en stopcontact-tekens', trp.paginas === trp.wanden + 3 && /Kameruitslag \| Wandafwikkeling \| W1/.test(trp.koppen) && trp.scharnier >= 4 && trp.contacten >= 2, JSON.stringify(trp));
+  await p.screenshot({ path: path.join(UIT, 's24-14-tekeningen-telefoon.png') });
+  await p.pdf({ path: path.join(UIT, 's24-14-tekeningen-telefoon.pdf'), format: 'A4', landscape: true, printBackground: true });
+  check('telefoon: afdrukken geeft een PDF', fs.statSync(path.join(UIT, 's24-14-tekeningen-telefoon.pdf')).size > 20000);
+  await p.click('#rapport-dicht');
+  // zonder gekozen onderdeel staan er geen onderdeelmaten in de wandtekening (rustig beeld); na aantikken wel
+  await p.evaluate(() => window.arProef.openAanzicht(window.arProef.dossier().wanden[2].id, null));
+  const rustig = await p.evaluate(() => ({ tik: document.querySelectorAll('#d-paneel .aztek [data-veld]').length, maten: Array.from(document.querySelectorAll('#d-paneel .aztek svg text')).filter(t => /^t-/.test(t.getAttribute('class') || '')).map(t => t.textContent), hint: document.querySelector('.azlabel').textContent }));
+  check('wandscherm zonder keuze: alleen wandlengte en hoogte, met de aanwijzing om een onderdeel aan te tikken', rustig.tik === 0 && rustig.maten.filter(t => /^~?\d+$/.test(t)).length === 2 && /Tik een onderdeel/.test(rustig.hint), JSON.stringify(rustig));
+  await p.click('#d-paneel .aztek rect.item[data-id="' + kozId + '"]', { position: { x: 12, y: 12 } });
+  check('wandscherm na aantikken: de maten van dat onderdeel zijn actief, de andere onderdelen treden terug', await p.evaluate(() => document.querySelectorAll('#d-paneel .aztek [data-veld]').length >= 6 && document.querySelectorAll('#d-paneel .aztek .vaag').length >= 2));
+  await p.screenshot({ path: path.join(UIT, 's24-15-wandscherm-gekozen.png') });
+  await p.click('#az-sluit');
   const wm = await p.evaluate(() => { const D = window.MTRuimteDossier, d = window.arProef.dossier(); return d.wanden.map(w => D.huidigeMeting(d, w.id, 'lengte')).map(x => x && x.bron); });
   check('wandmaten: hand, X4, hand, X4 herkend', JSON.stringify(wm) === JSON.stringify(['hand', 'disto', 'hand', 'disto']), JSON.stringify(wm));
   // panorama plakken (maakt de wandbeelden en bewaart ze)

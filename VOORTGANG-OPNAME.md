@@ -306,3 +306,6 @@ onscherp beeld vervangen, bolle wand met tussenpunten en zijdelingse afwijking, 
 - Tests: AR-kern 77, dossier 105, tekenmodule 25 (voorbeeldkamer op de echte maten van de proef), e2e 55. Opslagcontrole en `check-sinks` schoon.
 - **Niet op een echt toestel getest:** het nieuwe wandscherm met schermtoetsenbord en X4, de snelkeuze in de AR-laag, afdrukken vanaf een kantoor-pc.
 - Beslissingen B35–B37, tekenstandaarden §11 en het denkstuk over leidingwerk, plinten en sierlijsten §12 staan in `docs/ONTWIKKELING-RUIMTE-OPNAME.md`.
+- 19-11 later (B38): op de telefoon alleen de maten van het aangetikte onderdeel; scharnierblokjes bij ramen en deuren; stopcontact/schakelaar met
+  contacten of wip op de afdekplaat, leiding als doorsnede op schaal met KW/WW/CV/GAS/AFV/E; knop Tekeningen / PDF op de telefoon (rapport nu in de
+  tekenmodule, één bron voor telefoon en kantoor). Tests: tekenmodule 25, e2e 59.

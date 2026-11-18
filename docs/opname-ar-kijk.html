@@ -73,32 +73,6 @@ button:focus-visible{outline:3px solid var(--kies);outline-offset:2px}
 .pil.open,.pil.onbekend{background:#fbeed8;color:#7a4b06;border-color:transparent}
 .pil.afgeleid{background:#e4ecfa;color:#1c5fc4;border-color:transparent}
 #zoomlabel{color:#fff;font-size:13px;align-self:center;min-width:44px;text-align:center}
-/* Tekeningen (kameruitslag, wandpagina's): altijd licht, ook in de donkere weergave, want het is papier */
-#rapport{position:fixed;inset:0;z-index:50;overflow:auto;background:#e9ece8;color:#16211a;--inkt:#16211a;--zacht:#5d6b62;--rand:#cfd6d0;--vlak:#ffffff;--bg:#ffffff;--primair:#17643f;--kies:#1c5fc4;--oranje:#a86504;--geschat:#7f8a83;--rood:#c4322a}
-.rp-balk{position:sticky;top:0;z-index:2;display:flex;gap:10px;align-items:center;padding:10px 16px;background:#ffffff;border-bottom:1px solid #cfd6d0}
-.rp-balk strong{font-size:17px} .rp-uitleg{flex:1;color:#5d6b62;font-size:13px}
-.rp-balk .knop{color:#16211a;background:#fff;border:1px solid #cfd6d0} .rp-balk .knop.hoofd{background:#17643f;color:#fff;border-color:#17643f}
-.rp-pagina{background:#fff;max-width:1180px;margin:16px auto;padding:20px 24px;border-radius:6px;box-shadow:0 1px 6px rgba(0,0,0,.18);display:flex;flex-direction:column;gap:10px}
-.rp-kop{display:flex;align-items:baseline;gap:14px;border-bottom:2px solid #16211a;padding-bottom:6px}
-.rp-kop h2{margin:0;font-size:20px} .rp-kop span{color:#5d6b62;font-size:13px}
-.rp-pagina h3{margin:8px 0 0;font-size:14px}
-.rp-tek svg{max-height:150mm} .rp-wand svg{max-height:none;margin:0 auto}
-.rp-legenda{color:#5d6b62;font-size:12px;margin:0}
-.rp-pagina table{border-collapse:collapse;width:100%;font-size:12.5px}
-.rp-pagina td,.rp-pagina th{border-bottom:1px solid #cfd6d0;padding:4px 6px;text-align:left;vertical-align:top}
-.rp-pagina th{color:#5d6b62;font-weight:600}
-.rp-doorsneden{display:flex;flex-wrap:wrap;gap:12px}
-.rp-doorsneden figure{margin:0;width:300px} .rp-doorsneden figcaption{font-size:12px;color:#5d6b62}
-@media print{
-  @page{size:A4 landscape;margin:9mm}
-  body.rapport-open > *:not(#rapport){display:none !important}
-  html,body.rapport-open{background:#fff !important}
-  #rapport{position:static;overflow:visible;background:#fff}
-  .rp-balk{display:none}
-  .rp-pagina{box-shadow:none;margin:0;padding:0;max-width:none;border-radius:0;break-after:page;page-break-after:always}
-  .rp-pagina:last-child{break-after:auto;page-break-after:auto}
-  .rp-pagina table,.rp-doorsneden figure{break-inside:avoid}
-}
 </style>
 </head>
 <body>
@@ -649,72 +623,18 @@ button:focus-visible{outline:3px solid var(--kies);outline-offset:2px}
     p.appendChild(us);
   }
   el('k-dossier').addEventListener('click', function () { if (el('paneel').hidden || gekozen) { gekozen = null; toonDossier(); later(); } else sluitPaneel(); });
-  // ---------- tekeningen: kameruitslag, een pagina per wand en de lijst met onderdelen; Afdrukken / PDF (B35, 18-11) ----------
-  // Zelfde tekenmodule als op de telefoon (mt-ruimte-tekening.js). Het lijnmodel komt uit het pakket (afgeleid.lijnmodel): geen AR-kern nodig op kantoor.
-  if (TK && !document.getElementById('mtt-stijl')) { var stl = document.createElement('style'); stl.id = 'mtt-stijl'; stl.textContent = TK.STIJL; document.head.appendChild(stl); }
+  // ---------- tekeningen: kameruitslag, wandafwikkeling, een pagina per wand; Afdrukken / PDF (B35, 18-11) ----------
+  // De hele opmaak komt uit mt-ruimte-tekening.js (TK.rapport), zodat de telefoon precies dezelfde tekeningen en PDF geeft. Het lijnmodel komt uit het
+  // pakket (afgeleid.lijnmodel): geen AR-kern nodig op kantoor.
+  if (TK && !document.getElementById('mtt-stijl')) { var stl = document.createElement('style'); stl.id = 'mtt-stijl'; stl.textContent = TK.STIJL + '\n' + TK.RAPPORT_STIJL; document.head.appendChild(stl); }
   function rapportGegevens() {
     var lm = dos && dos.afgeleid && dos.afgeleid.lijnmodel; if (!lm || !DS || !TK || !DS.wandAanzicht) return null;
-    var azs = dos.wanden.map(function (w) { return DS.wandAanzicht(dos, w.id, lm); });
-    return { lm: lm, azs: azs, rijen: TK.onderdeelRijen(azs) };
-  }
-  function tabel(koppen, rijen) {
-    var t = maak('table'), kr = maak('tr'); koppen.forEach(function (k) { kr.appendChild(maak('th', k)); }); t.appendChild(kr);
-    rijen.forEach(function (r) { var tr = maak('tr'); r.forEach(function (c) { tr.appendChild(maak('td', c == null || c === '' ? '—' : String(c))); }); t.appendChild(tr); });
-    return t;
+    return { dossier: dos, lm: lm, openVragen: dos.afgeleid.open_vragen || [], controlematen: dos.afgeleid.controlematen || [], datum: tijd(dos.bijgewerkt || dos.gemaakt) };
   }
   function toonRapport() {
     var g = rapportGegevens(), r = el('rapport'), inh = el('rapport-inhoud'); inh.textContent = '';
-    if (!g) { inh.appendChild(maak('p', 'Voor de tekeningen is het lijnmodel nodig. Maak op de telefoon een pakket (Pakket maken of Delen) en open dat hier.', 'melding')); r.hidden = false; document.body.classList.add('rapport-open'); return; }
-    var naam = dos.ruimte.naam + (dos.project && (dos.project.code || dos.project.naam) ? ' · ' + (dos.project.code || dos.project.naam) : ''), datum = tijd(dos.bijgewerkt || dos.gemaakt);
-    var legenda = 'Maten in mm. Zwart = gemeten · blauw = berekend uit gemeten maten · grijs ~ = geschat (camera of aanname), niet om op te bestellen · ? = nog meten. Aanzichten gezien vanuit de kamer. ' +
-      'Driehoek in een raam of deur: de punt wijst naar de scharnierkant; getrokken = draait de kamer in, gestreept = draait naar buiten. Stopcontacten en schakelaars: afdekplaat op schaal, maat op het hart.';
-    var eenvoudig = TK.eenvoudig(g.lm);
-    var kop = function (titel, sub) { var h = maak('header', null, 'rp-kop'); h.appendChild(maak('h2', titel)); h.appendChild(maak('span', naam + ' · opname ' + datum + (sub ? ' · ' + sub : ''))); return h; };
-    // pagina 1: de kameruitslag
-    // Een kamer met alleen uitspringende hoeken: wanden opengeklapt rond de plattegrond. Met een inspringende hoek (L-vorm, nis) zouden opengeklapte wanden
-    // over elkaar vallen: dan alleen de plattegrond met de wandnamen, en de wanden staan in de afwikkeling op de volgende pagina.
-    var p1 = maak('section', null, 'rp-pagina'); p1.appendChild(kop(eenvoudig ? 'Kameruitslag' : 'Plattegrond', 'lijnmodel ' + g.lm.status + (g.lm.sluitfout_mm != null ? ', sluitfout ' + g.lm.sluitfout_mm + ' mm' : '')));
-    var u = TK.uitslag(g.lm, g.azs, { titel: dos.ruimte.naam, ondertitel: g.lm.hoogte && g.lm.hoogte.waarde ? 'plafond ' + TK.maatTekst(g.lm.hoogte.waarde, g.lm.hoogte.status) : '', breedte: 1500, maxHoogte: 940, ketens: eenvoudig ? 'alles' : 'plan' });
-    var uv = maak('div', null, 'rp-tek'); uv.appendChild(TK.naarDom(document, u.boom)); p1.appendChild(uv);
-    p1.appendChild(maak('p', legenda + (eenvoudig ? ' De wanden zijn om hun vloerlijn naar buiten geklapt; er is niets gespiegeld.' : ' Deze kamer heeft een inspringende hoek: de wanden staan naast elkaar in de wandafwikkeling.'), 'rp-legenda'));
-    inh.appendChild(p1);
-    // wandafwikkeling: alle wanden naast elkaar, met de klok mee (werkt voor elke kamervorm)
-    var pa = maak('section', null, 'rp-pagina'); pa.appendChild(kop('Wandafwikkeling', 'alle wanden naast elkaar, met de klok mee gezien vanuit de kamer'));
-    var af = TK.afwikkeling(g.azs, { breedte: 1500, fs: 12 }), av = maak('div', null, 'rp-tek'); if (af.boom) av.appendChild(TK.naarDom(document, af.boom)); pa.appendChild(av);
-    pa.appendChild(maak('p', legenda, 'rp-legenda'));
-    inh.appendChild(pa);
-    // per wand een pagina
-    g.azs.forEach(function (az) {
-      if (!az) return;
-      var p = maak('section', null, 'rp-pagina'); p.appendChild(kop(az.wand + ' · ' + az.links.label + ' – ' + az.rechts.label, 'lengte ' + TK.maatTekst(az.L, az.status.L) + ' · hoogte ' + TK.maatTekst(az.H, az.status.H)));
-      // 1500 tekeneenheden = de paginabreedte; een korte wand wordt smaller getekend (niet kleiner), zodat de maten overal even groot blijven
-      var t = TK.aanzicht(az, { ketens: 'alles', breedte: 1500, fs: 22 }); if (t.hoogte > 620) t = TK.aanzicht(az, { ketens: 'alles', breedte: Math.max(560, Math.round(1500 * 620 / t.hoogte)), fs: 22 });
-      var tv = maak('div', null, 'rp-tek rp-wand'), sv = TK.naarDom(document, t.boom); sv.style.width = (t.breedte / 15).toFixed(1) + '%'; tv.appendChild(sv); p.appendChild(tv);
-      var rijen = g.rijen.filter(function (x) { return x.wand === az.wand; });
-      if (rijen.length) {
-        p.appendChild(tabel(['Onderdeel', 'Uitvoering', 'Plek langs de wand', 'Breedte × hoogte', 'Hoogte', 'Opmerking'], rijen.map(function (x) { return [x.naam, x.variant, x.plek, x.maat, x.hoogte, x.opmerking]; })));
-        var koz = rijen.filter(function (x) { return x.opening; });
-        if (koz.length) {
-          p.appendChild(maak('h3', 'Kozijnen op deze wand'));
-          p.appendChild(tabel(['Kozijn', 'Soort opening', 'Binnenwerks (b × h)', 'Op de wand (b × h)', 'Aftimmering', 'De wand in', 'Vakken, van links naar rechts'], koz.map(function (x) { return [x.naam, x.opening, x.binnenwerks, x.maat, x.aftimmering, x.diepte, x.vakken]; })));
-          var dr = maak('div', null, 'rp-doorsneden');
-          koz.forEach(function (x) { var it = az.items.find(function (i) { return i.det.id === x.id; }), ds = TK.doorsnede(it, { breedte: 700, fs: 26 }); if (!ds.boom) return; var f = maak('figure'); f.appendChild(TK.naarDom(document, ds.boom)); f.appendChild(maak('figcaption', x.naam + ': doorsnede van boven gezien')); dr.appendChild(f); });
-          p.appendChild(dr);
-        }
-      } else p.appendChild(maak('p', 'Geen onderdelen op deze wand.', 'rp-legenda'));
-      p.appendChild(maak('p', legenda, 'rp-legenda'));
-      inh.appendChild(p);
-    });
-    // laatste pagina: wandmaten, controles en wat nog open staat
-    var pl = maak('section', null, 'rp-pagina'); pl.appendChild(kop('Maten en open punten'));
-    pl.appendChild(tabel(['Wand', 'Lengte', 'Status', 'Bron', 'Camera (ter controle)'], g.lm.segmenten.map(function (s) { return [s.label, s.lengte.waarde, s.lengte.status, DS.BRONNEN[s.lengte.bron] || s.lengte.bron, s.camera_mm]; })));
-    (dos.afgeleid.controlematen || []).forEach(function (c) { pl.appendChild(maak('p', 'Controlemaat ' + c.van + '–' + c.naar + ': gemeten ' + c.gemeten + ', verwacht ' + c.verwacht + ' (' + (c.verschil > 0 ? '+' : '') + c.verschil + ' mm)')); });
-    var ov = dos.afgeleid.open_vragen || [];
-    pl.appendChild(maak('h3', ov.length ? 'Nog open (' + ov.length + ')' : 'Geen open vragen'));
-    if (ov.length) { var uo = maak('ul'); ov.forEach(function (v) { uo.appendChild(maak('li', v.tekst)); }); pl.appendChild(uo); }
-    var opm = dos.opmerkingen || [];
-    if (opm.length) { pl.appendChild(maak('h3', 'Opmerkingen')); var ul = maak('ul'); opm.forEach(function (o) { ul.appendChild(maak('li', o.tekst)); }); pl.appendChild(ul); }
-    inh.appendChild(pl);
+    if (!g) inh.appendChild(maak('p', 'Voor de tekeningen is het lijnmodel nodig. Maak op de telefoon een pakket (Pakket maken of Delen) en open dat hier.', 'melding'));
+    else inh.appendChild(TK.rapport(document, g));
     r.hidden = false; r.scrollTop = 0; document.body.classList.add('rapport-open');
   }
   el('k-tekening').addEventListener('click', toonRapport);
