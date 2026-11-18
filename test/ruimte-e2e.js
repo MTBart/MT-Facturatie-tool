@@ -111,6 +111,7 @@ window.renderKamer = function (cam, w, h, fovy) {
     await p.click('#hand-' + i); await p.keyboard.type(v, { delay: snel ? 15 : 220 }); await p.keyboard.press('Enter'); await p.waitForTimeout(150);
   }
   await p.click('#d-plafond'); await p.keyboard.type('2600', { delay: 15 }); await p.keyboard.press('Enter');
+  await p.click('details.later summary');   // haaksheid en diagonaal staan ingeklapt onder 'Later'
   await p.selectOption('#d-diag-van', { index: 0 }); await p.selectOption('#d-diag-naar', { index: 2 }); await p.click('#d-diag'); await p.keyboard.type('5000', { delay: 220 }); await p.keyboard.press('Enter');
   await p.waitForTimeout(300);
   // controlemaat tape tot tape: W1 1000 mm van H1 naar W3 1000 mm van H4 (tegenover elkaar), verwacht 3000

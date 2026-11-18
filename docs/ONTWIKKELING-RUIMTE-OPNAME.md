@@ -272,6 +272,11 @@ het wandbeeld (panorama of groothoekfoto) licht eronder, maatketens onder de wan
 (oranje = nog niet bewaard), X4-invoer en referentiehoek zoals in het detailpaneel (B23). Foto per kozijn vanuit hetzelfde scherm. Een kozijn waarvan de
 plek uit de maten volgt, krijgt geen melding "alleen op foto". Vervolg: dezelfde tekening in de kijker en als PDF (P2).
 
+**B33 · 18-11 · Haaksheid van hoeken voorlopig niet; later meer aandacht.** Bart: "die haaksheid van de hoek etc komt later wel, voor nu is dat niet belangrijk".
+De driehoeksmeting (B30) en de controlemaat tussen hoeken staan ingeklapt onder *Later* op het telefoonscherm; ze werken nog en blijven in het datamodel.
+De controlemaat tape tot tape (B31) blijft gewoon zichtbaar. Opnieuw oppakken als de vorm van de kamer voor een project kritisch wordt (inbouwkast
+wand-tot-wand, keuken).
+
 **Waarneming (geen besluit):** met vier gemeten wandlengtes en haakse hoeken maakt de kaartdrift voor het lijnmodel weinig uit (de richtingen worden
 rechtgezet, de lengtes komen uit de maten). De drift raakt vooral de aansluiting tussen beelden en wanden in het panorama en de camera-plek van details.
 
@@ -298,6 +303,7 @@ rechtgezet, de lengtes komen uit de maten). De drift raakt vooral de aansluiting
 | 18-11 22:20 | "Optie 2 (controlemaat tussen twee punten op de wanden) voor nu; hoek meten kan ook, hoeken nog niet zo van belang. Is de P2P-adapter dezelfde als voor de DISTO X6?" | B31. |
 | 18-11 22:30 | Proef 21:52 met twee fases: camera binnen ±13 mm van de handmaten. | §5.1. |
 | 18-11 22:45 | "De ruimte staat ±; ik heb bij een ruimte de exacte maten achteraf ingevuld. Wil nu mijn kozijnen bematen: kan er een lijntekening van de wand komen waarin ik het kozijn kan bematen?" | B32. |
+| 18-11 23:00 | "Haaksheid van de hoek etc komt later wel; nu niet belangrijk, op een later punt wel." | B33. |
 | 18-11 | Ontwikkeldocument waarin alles staat, zodat terug te zien is wat waarom veranderde; Astra moet er licht op kunnen laten schijnen. | Dit document. |
 
 ### 5.1 Meetresultaten echte proeven
@@ -523,7 +529,8 @@ Perspectief-correct plakken (homografie per vak i.p.v. affien), automatisch extr
 | 18-11 | `13e9dae` | Driehoeksmeting voor haaksheid i.p.v. diagonaal | B30 |
 | 18-11 | `b8bdb4a` | Controlemaat tape tot tape tussen twee wanden | B31 |
 | 18-11 | `62d3d14` | Meetresultaat 21:52 | proef Bart |
-| 18-11 | (volgende) | Wandaanzicht met kozijn bematen | B32 |
+| 18-11 | `4809f62` | Wandaanzicht met kozijn bematen | B32 |
+| 18-11 | (volgende) | Haaksheid ingeklapt onder Later | B33 |
 
 Meer detail per brok: `VOORTGANG-OPNAME.md`. Volledige diff: draft-PR #5.
 

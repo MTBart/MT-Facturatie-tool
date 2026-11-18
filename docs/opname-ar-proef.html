@@ -144,6 +144,9 @@ dd{margin:0;font-variant-numeric:tabular-nums}
 .aanzicht .t-afgeleid{fill:var(--kies)} .aanzicht .t-invoer{fill:var(--oranje)} .aanzicht .t-onzeker{fill:var(--rood)}
 .aanzicht .hoeklabel{fill:var(--primair);font-weight:800}
 .legenda{font-size:13px;color:var(--zacht)}
+details.later{border:1px dashed var(--rand);border-radius:12px;padding:8px 12px}
+details.later summary{cursor:pointer;color:var(--zacht);font-weight:600;min-height:32px}
+details.later[open]{display:flex;flex-direction:column;gap:10px}
 #ar-hint{position:absolute;left:12px;right:12px;top:calc(50% - 80px);text-align:center;font-weight:700;font-size:18px;text-shadow:0 1px 4px rgba(0,0,0,.8)}
 </style>
 </head>
@@ -230,6 +233,8 @@ dd{margin:0;font-variant-numeric:tabular-nums}
     </div>
     <div class="rij"><button class="knop" id="k-cp">Controlemaat bewaren</button></div>
     <p class="zacht" id="d-cp-melding"></p>
+    <details class="later">
+    <summary>Later: haaksheid van hoeken en controlemaat tussen hoeken</summary>
     <h2>Is de hoek haaks? (driehoeksmeting, optioneel)</h2>
     <p class="zacht">Zet vanuit de hoek op beide wanden een streepje of stukje tape, bijv. op 1000 mm en ±1 m hoogte (boven plint en meubels). Meet de schuine maat tussen de twee tekens: haaks = 1414 mm.</p>
     <div class="velden">
@@ -247,6 +252,7 @@ dd{margin:0;font-variant-numeric:tabular-nums}
       <div class="veld"><label for="d-diag-naar">naar</label><select id="d-diag-naar"></select></div>
     </div>
     <div class="maatrij"><span>Gemeten afstand</span><input id="d-diag" inputmode="decimal" autocomplete="off" aria-label="Controlemaat in mm"></div>
+    </details>
     <div id="d-controle"></div>
     <h2>Hoeken nakijken</h2>
     <p class="zacht">Bij elke getikte hoek is een foto gemaakt. Wijs op de foto de echte hoek aan; de getikte plek blijft bewaard.</p>
