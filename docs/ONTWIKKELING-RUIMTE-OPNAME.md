@@ -263,6 +263,15 @@ met het camera-model; de app zegt dat erbij).
 *P2P (Bart vroeg):* DISTO X3/X4 → adapter **DST 360**; DISTO X6 → **DST 360-X** (o.a. in het X6 P2P-pakket). Niet uitwisselbaar; bij de leverancier
 navragen. Met P2P is een controlemaat tussen twee willekeurige punten vanaf één standplaats mogelijk.
 
+**B32 · 18-11 · Wandaanzicht: lijntekening per wand om kozijnen (en deur, radiator, stopcontact) te bematen.** *Waarom:* Bart wil na de rondgang de
+kozijnen bematen in een lijntekening van de wand. `D.wandAanzicht` geeft de wand zoals vanuit de kamer gezien (welke hoek links/rechts, met `AR.aLinks`),
+lengte en hoogte uit het lijnmodel met hun status, en de details als rechthoek of punt in mm vanaf de linkerhoek en de vloer; `D.maatketen` maakt
+de ketens (restmaat *afgeleid* als alle andere delen en het totaal hard zijn, anders *geschat*). Nieuw detailsoort **kozijn** met buitenmaat breedte/hoogte,
+onderkant boven vloer, afstand tot de hoek, en optioneel dagmaat en bovenkant-tot-plafond (optionele maten geven geen open vraag). Op de telefoon: SVG met
+het wandbeeld (panorama of groothoekfoto) licht eronder, maatketens onder de wand en naast het kozijn, kleuren per status, live voorbeeld tijdens het typen
+(oranje = nog niet bewaard), X4-invoer en referentiehoek zoals in het detailpaneel (B23). Foto per kozijn vanuit hetzelfde scherm. Een kozijn waarvan de
+plek uit de maten volgt, krijgt geen melding "alleen op foto". Vervolg: dezelfde tekening in de kijker en als PDF (P2).
+
 **Waarneming (geen besluit):** met vier gemeten wandlengtes en haakse hoeken maakt de kaartdrift voor het lijnmodel weinig uit (de richtingen worden
 rechtgezet, de lengtes komen uit de maten). De drift raakt vooral de aansluiting tussen beelden en wanden in het panorama en de camera-plek van details.
 
@@ -288,6 +297,7 @@ rechtgezet, de lengtes komen uit de maten). De drift raakt vooral de aansluiting
 | 18-11 22:10 | "Die diagonale meting is onbetrouwbaar: met de lasermeter kom je niet strak in de hoeken." | B30. |
 | 18-11 22:20 | "Optie 2 (controlemaat tussen twee punten op de wanden) voor nu; hoek meten kan ook, hoeken nog niet zo van belang. Is de P2P-adapter dezelfde als voor de DISTO X6?" | B31. |
 | 18-11 22:30 | Proef 21:52 met twee fases: camera binnen ±13 mm van de handmaten. | §5.1. |
+| 18-11 22:45 | "De ruimte staat ±; ik heb bij een ruimte de exacte maten achteraf ingevuld. Wil nu mijn kozijnen bematen: kan er een lijntekening van de wand komen waarin ik het kozijn kan bematen?" | B32. |
 | 18-11 | Ontwikkeldocument waarin alles staat, zodat terug te zien is wat waarom veranderde; Astra moet er licht op kunnen laten schijnen. | Dit document. |
 
 ### 5.1 Meetresultaten echte proeven
@@ -512,7 +522,8 @@ Perspectief-correct plakken (homografie per vak i.p.v. affien), automatisch extr
 | 18-11 | `483a1fb` | Twee fases: plattegrond tikken, dan scannen | B29, P11 |
 | 18-11 | `13e9dae` | Driehoeksmeting voor haaksheid i.p.v. diagonaal | B30 |
 | 18-11 | `b8bdb4a` | Controlemaat tape tot tape tussen twee wanden | B31 |
-| 18-11 | (volgende) | Meetresultaat 21:52 | proef Bart |
+| 18-11 | `62d3d14` | Meetresultaat 21:52 | proef Bart |
+| 18-11 | (volgende) | Wandaanzicht met kozijn bematen | B32 |
 
 Meer detail per brok: `VOORTGANG-OPNAME.md`. Volledige diff: draft-PR #5.
 

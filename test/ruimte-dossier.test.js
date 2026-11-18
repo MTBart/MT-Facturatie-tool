@@ -185,6 +185,32 @@ const jpg = n => Uint8Array.from([0xFF, 0xD8, 0xFF, 0xE0, n & 255, (n >> 8) & 25
     check('controlemaat die 50 mm afwijkt staat bij de open vragen', D.openVragen(e, AR).some(v => /Controlemaat W1/.test(v.tekst) && /50 mm/.test(v.tekst)));
   }
 
+  // ── wandaanzicht: kozijn bematen in een lijntekening ──
+  {
+    const e = D.nieuw({}, NU), s = D.startSessie(e, {}, NU); s.xr.vloerY = 0; s.xr.plafondY = 2.6;
+    D.zetHoeken(e, s.id, [{ x: 0, z: 0 }, { x: 4, z: 0 }, { x: 4, z: 3 }, { x: 0, z: 3 }], NU);
+    [4000, 3000, 4000, 3000].forEach((v, i) => D.voegMetingToe(e, { doel: { soort: 'wand', id: e.wanden[i].id }, veld: 'lengte', waarde_mm: v, bron: 'hand' }, NU));
+    D.voegMetingToe(e, { doel: { soort: 'ruimte', id: e.ruimte.id }, veld: 'plafondhoogte', waarde_mm: 2600, bron: 'disto' }, NU);
+    const w = e.wanden[2], leeg = D.wandAanzicht(e, w.id, AR);
+    check('wandaanzicht: lengte, hoogte en de hoeken links en rechts', leeg.L === 4000 && leeg.H === 2600 && leeg.status.L === 'gemeten' && leeg.links.label && leeg.rechts.label && leeg.links.id !== leeg.rechts.id && leeg.items.length === 0);
+    const k = D.voegDetailToe(e, { soort: 'kozijn', wand_id: w.id, referentie_hoek: leeg.links.id }, NU);
+    let a = D.wandAanzicht(e, w.id, AR).items[0];
+    check('nieuw kozijn zonder maten: geschat in het midden met standaardmaat', a.rect.w === 1000 && a.rect.x === 1500 && a.status.x === 'geschat' && a.status.w === 'geschat');
+    const zet = (f, v) => D.voegMetingToe(e, { doel: { soort: 'detail', id: k.id }, veld: f, waarde_mm: v, bron: 'disto', wand_id: w.id, referentie: f === 'afstand_tot_hoek' ? { soort: 'hoek', id: leeg.links.id } : null }, NU);
+    zet('afstand_tot_hoek', 700); zet('kozijn_breedte', 1500); zet('kozijn_hoogte', 1400); zet('kozijn_onderkant', 900);
+    a = D.wandAanzicht(e, w.id, AR).items[0];
+    check('kozijn bemeten vanaf links: x 700, 1500 × 1400 op 900', a.rect.x === 700 && a.rect.w === 1500 && a.rect.h === 1400 && a.rect.y === 900 && a.status.x === 'gemeten');
+    const kh = D.maatketen(4000, 'gemeten', [{ waarde: 700, status: 'gemeten' }, { waarde: 1500, status: 'gemeten' }]), kv = D.maatketen(2600, 'gemeten', [{ waarde: 900, status: 'gemeten' }, { waarde: 1400, status: 'gemeten' }]);
+    check('maatketen: restmaat rechts 1800 en bovenkant tot plafond 300, beide afgeleid', kh[2].waarde === 1800 && kh[2].status === 'afgeleid' && kv[2].waarde === 300 && kv[2].status === 'afgeleid');
+    check('maatketen met een geschat deel: rest is geschat', D.maatketen(4000, 'gemeten', [{ waarde: 700, status: 'geschat' }])[1].status === 'geschat');
+    const v2 = D.wandAanzicht(e, w.id, AR, { [k.id]: { kozijn_breedte: 1600 } }).items[0];
+    check('voorlopige invoer (live-voorbeeld) zonder op te slaan', v2.rect.w === 1600 && v2.status.w === 'invoer' && D.huidigeMeting(e, k.id, 'kozijn_breedte').waarde_mm === 1500);
+    check('kozijn: optionele dagmaat en bovenkant-plafond geven geen open vraag', !D.openVragen(e, AR).some(q => q.doel === k.id));
+    D.voegMetingToe(e, { doel: { soort: 'detail', id: k.id }, veld: 'afstand_tot_hoek', waarde_mm: 700, bron: 'hand', wand_id: w.id, referentie: { soort: 'hoek', id: leeg.rechts.id } }, NU);
+    a = D.wandAanzicht(e, w.id, AR).items[0];
+    check('700 vanaf de rechterhoek: kozijn eindigt 700 van rechts', a.rect.x === 4000 - 700 - 1500 && !a.vanLinks);
+  }
+
   // ── pakket heen en terug ──
   const bestanden = {}; bestanden[foto.pad] = jpg(1);
   const ov1 = D.voegBeeldToe(d, { soort: 'overzicht', sessie: s1.id, pose: { pos: [0, 0, 0], dir: [0, 0, -1], pv: new Array(16).fill(0) }, bewaard: true }, NU);

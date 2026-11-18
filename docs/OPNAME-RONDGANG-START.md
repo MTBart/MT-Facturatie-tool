@@ -31,7 +31,9 @@ alleen op de werkbranch.
    Een veld leeg laten = open vraag. Tik **Klaar**.
 8. Tik **Klaar** bovenin als de kamer rond is. Vul daarna de wandmaten en de plafondhoogte in, meet een **controlemaat tape tot tape** tussen twee wanden (per tape de afstand tot een hoek, en de afstand tussen de tapes), en controleer desgewenst een paar hoeken met een **driehoeksmeting** (tape op 1000 mm langs elke wand, ±1 m hoog, en de schuine maat ertussen; haaks = 1414 mm). Een diagonaal alleen als die vrij en strak te meten is.
    Onder **Nog open vóór vertrek** staat wat nog ontbreekt.
-9. **Groothoekfoto per wand** (na de rondgang, bij *Wandfoto's met groothoek*): sta je te dicht op de wand, maak dan met je gewone camera-app
+9. **Wanden bematen**: kies een wand, tik **+ Kozijn** (of deur, radiator, stopcontact) en vul de maten in. De lijntekening laat de maatketens zien
+   (zwart gemeten, blauw afgeleid, grijs ~ geschat); kies vanaf welke hoek je meet. Met *Foto van dit kozijn* hang je er een foto aan.
+9b. **Groothoekfoto per wand** (na de rondgang, bij *Wandfoto's met groothoek*): sta je te dicht op de wand, maak dan met je gewone camera-app
    een foto op 0,6× en tik de vier hoeken van de wand aan (links onder, rechts onder, rechts boven, links boven). De app trekt hem recht.
 10. **Hoeken nakijken**: open per hoek de foto en tik de echte hoek aan (rood = waar je tikte). De app rekent de plek om; de tik blijft bewaard en
    kan terug. Daarna opnieuw **Wanden aan elkaar plakken**.

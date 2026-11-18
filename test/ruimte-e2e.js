@@ -178,6 +178,21 @@ window.renderKamer = function (cam, w, h, fovy) {
   await p.reload(); await p.waitForSelector('#r-lijst li'); await p.click('#r-lijst li button');
   const naHeropenen = await plekNu(details[0]);
   check('review: na heropenen dezelfde plek en historie', naHeropenen.x === naMeting.x && naHeropenen.n === naMeting.n && naHeropenen.vanaf === naMeting.vanaf);
+  // wandaanzicht: kozijn in de lijntekening van W3 bematen met de X4
+  await p.evaluate(() => window.arProef.openAanzicht(window.arProef.dossier().wanden[2].id, null));
+  await p.click('#d-paneel button:has-text("+ Kozijn")');
+  for (const [f, val] of [['afstand_tot_hoek', '700'], ['kozijn_breedte', '1500'], ['kozijn_hoogte', '1400'], ['kozijn_onderkant', '900']]) {
+    await p.click('#az-' + f); await p.keyboard.type(val, { delay: 15 }); await p.keyboard.press('Enter');
+  }
+  await p.waitForTimeout(300);
+  const azT = await p.evaluate(() => Array.from(document.querySelectorAll('#d-paneel svg text')).map(t => t.getAttribute('class') + ':' + t.textContent));
+  await p.screenshot({ path: path.join(UIT, 's24-09-wandaanzicht-kozijn.png'), fullPage: false });
+  await p.evaluate(() => document.querySelector('#d-paneel svg').scrollIntoView({ block: 'start' }));
+  await p.screenshot({ path: path.join(UIT, 's24-09b-wandaanzicht-tekening.png') });
+  check('wandaanzicht: kozijn 700 + 1500 + rest 1800 (afgeleid), 900 + 1400 + 300 tot plafond (afgeleid)', ['t-gemeten:700', 't-gemeten:1500', 't-afgeleid:1800', 't-gemeten:900', 't-gemeten:1400', 't-afgeleid:300'].every(x => azT.indexOf(x) >= 0), azT.join(' '));
+  const azM = await p.evaluate(() => { const D = window.MTRuimteDossier, d = window.arProef.dossier(), k = d.details.find(x => x.soort === 'kozijn'); return D.metingenVan(d, k.id).map(m => m.veld + ':' + m.bron + ':' + m.waarde_mm); });
+  check('wandaanzicht: kozijnmaten als X4-metingen in het dossier', azM.length === 4 && azM.every(x => /:disto:/.test(x)), azM.join(' '));
+  await p.click('#d-paneel button:has-text("Sluiten")');
   const wm = await p.evaluate(() => { const D = window.MTRuimteDossier, d = window.arProef.dossier(); return d.wanden.map(w => D.huidigeMeting(d, w.id, 'lengte')).map(x => x && x.bron); });
   check('wandmaten: hand, X4, hand, X4 herkend', JSON.stringify(wm) === JSON.stringify(['hand', 'disto', 'hand', 'disto']), JSON.stringify(wm));
   // panorama plakken (maakt de wandbeelden en bewaart ze)

@@ -52,10 +52,18 @@
     eind_vanaf_hoek: { label: 'Eind vanaf de hoek', grootheid: 'afstand', vorm: 'traject', referentie: 'gekozen binnenhoek', betekenis: 'eind' },
     hoogte_bovenkant: { label: 'Hoogte bovenkant', grootheid: 'hoogte', vorm: 'punt-vlak', referentie: 'afgewerkte vloer', betekenis: 'bovenkant' },
     dikte: { label: 'Dikte', grootheid: 'dikte', vorm: 'afstand', referentie: 'voorkant tot achterkant', betekenis: 'dikte' },
-    peilverschil: { label: 'Peilverschil', grootheid: 'hoogte', vorm: 'punt-vlak', referentie: 'huidige afgewerkte vloer', betekenis: 'toekomstig peil' }
+    peilverschil: { label: 'Peilverschil', grootheid: 'hoogte', vorm: 'punt-vlak', referentie: 'huidige afgewerkte vloer', betekenis: 'toekomstig peil' },
+    kozijn_breedte: { label: 'Kozijn breedte (buitenmaat)', grootheid: 'breedte', vorm: 'afstand', referentie: 'buitenkant kozijn tot buitenkant', betekenis: 'kozijnmaat' },
+    kozijn_hoogte: { label: 'Kozijn hoogte (buitenmaat)', grootheid: 'hoogte', vorm: 'afstand', referentie: 'onderkant kozijn tot bovenkant', betekenis: 'kozijnmaat' },
+    kozijn_onderkant: { label: 'Onderkant kozijn boven vloer', grootheid: 'hoogte', vorm: 'punt-vlak', referentie: 'afgewerkte vloer', betekenis: 'onderkant kozijn' },
+    dag_breedte: { label: 'Dagmaat breedte', grootheid: 'breedte', vorm: 'afstand', referentie: 'binnenkant tot binnenkant', betekenis: 'dagmaat' },
+    dag_hoogte: { label: 'Dagmaat hoogte', grootheid: 'hoogte', vorm: 'afstand', referentie: 'binnenkant tot binnenkant', betekenis: 'dagmaat' },
+    boven_tot_plafond: { label: 'Bovenkant kozijn tot plafond', grootheid: 'hoogte', vorm: 'afstand', referentie: 'bovenkant kozijn tot plafond', betekenis: 'vrije hoogte' }
   };
   D.SOORTEN = {
     raam: { groep: 'bouwdeel', label: 'Raam', velden: ['afstand_tot_hoek', 'breedte', 'hoogte', 'borstwering'] },
+    kozijn: { groep: 'bouwdeel', label: 'Kozijn', velden: ['afstand_tot_hoek', 'kozijn_breedte', 'kozijn_hoogte', 'kozijn_onderkant', 'dag_breedte', 'dag_hoogte', 'boven_tot_plafond'],
+      optioneel: ['dag_breedte', 'dag_hoogte', 'boven_tot_plafond'] },
     deur: { groep: 'bouwdeel', label: 'Deur', velden: ['afstand_tot_hoek', 'breedte', 'hoogte'] },
     nis: { groep: 'bouwdeel', label: 'Nis', velden: ['afstand_tot_hoek', 'breedte_onder', 'breedte_midden', 'breedte_boven', 'diepte', 'hoogte'] },
     kolom: { groep: 'bouwdeel', label: 'Kolom', velden: ['afstand_tot_hoek', 'breedte', 'diepte'] },
@@ -448,6 +456,57 @@
         driehoek: m.driehoek, graden_per_mm: m.graden_per_mm, meting_id: m.id, model_status: lm.status };
     }).filter(Boolean);
   };
+  // ── wandaanzicht ── De wand zoals je hem vanuit de kamer ziet (links/rechts), met de details erop als rechthoek of punt, in mm vanaf de linkerhoek en de vloer.
+  // Per maat de status: gemeten, geschat (camera/aangenomen), afgeleid (uit andere maten) of open. voorlopig: { detailId: { veld: mm } } (invoer die nog niet
+  // bewaard is: status 'invoer'), voor een live-voorbeeld tijdens het typen. Leest geen beelden; het lijnmodel levert de wandlengte en de hoogte.
+  D.STANDAARD_MAAT = { kozijn: { b: 1000, h: 1200, o: 900 }, raam: { b: 1000, h: 1200, o: 900 }, deur: { b: 900, h: 2100, o: 0 }, radiator: { b: 1000, h: 600, o: 150 }, nis: { b: 800, h: 1000, o: 0 }, kolom: { b: 300, h: null, o: 0 } };
+  D.wandAanzicht = function (d, wandId, AR, voorlopig) {
+    const lm = D.lijnmodel(d, AR); if (!lm) return null;
+    const wi = lijst(d.wanden).findIndex(w => w.id === wandId), w = lijst(d.wanden)[wi]; if (!w) return null;
+    const seg = lm.segmenten[wi], L = seg.lengte.waarde, H = lm.hoogte.waarde || 2600, basis = D.basisSessie(d) || { xr: {} };
+    // links of rechts: vanuit de kamer kijkend; hoek 'van' ligt links als (nz*ux - nx*uz) > 0 voor de naar binnen wijzende normaal
+    const W3 = AR.wanden3d(lijst(d.hoeken).map(h => ({ x: h.xr.x, z: h.xr.z })), true, basis.xr.vloerY || 0, 2.6), w3 = W3.find(x => x.nr === wi);
+    const vanLinks = w3 ? AR.aLinks(w3) : true, linksId = vanLinks ? w.van : w.naar, rechtsId = vanLinks ? w.naar : w.van, hl = id => (lijst(d.hoeken).find(h => h.id === id) || {}).label;
+    const vl = voorlopig || {};
+    const maat = (det, velden) => {
+      for (const f of velden) {
+        if (vl[det.id] && vl[det.id][f] != null) return { waarde: vl[det.id][f], status: 'invoer', veld: f };
+        const m = D.huidigeMeting(d, det.id, f); if (m && m.waarde_mm != null && m.status !== 'open') return { waarde: m.waarde_mm, status: m.status, bron: m.bron, veld: f, meting: m };
+      }
+      return null;
+    };
+    const items = D.actieveDetails(d).filter(det => det.wand_id === w.id).map(det => {
+      const st = D.STANDAARD_MAAT[det.soort], vlak = !!st;
+      const afst = maat(det, D.LANGS_VELDEN), refId = afst && afst.meting && afst.meting.referentie && afst.meting.referentie.id ? afst.meting.referentie.id : (det.referentie_hoek || linksId);
+      const camU = det.anker && det.anker.u_m != null ? det.anker.u_m * 1000 : null, camV = det.anker && det.anker.v_m != null ? det.anker.v_m * 1000 : null;
+      if (!vlak) {   // punt: stopcontact, schakelaar, leiding, …
+        const hv = maat(det, D.HOOGTE_VELDEN);
+        let x = null, xs = 'onbekend';
+        if (afst) { x = refId === linksId ? afst.waarde : L - afst.waarde; xs = afst.status; } else if (camU != null) { x = vanLinks ? camU : L - camU; xs = 'geschat'; }
+        return { det, soort: det.soort, label: det.label, punt: { x, y: hv ? hv.waarde : camV, status: { x: xs, y: hv ? hv.status : (camV != null ? 'geschat' : 'onbekend') } }, afstand: afst, vanaf: refId };
+      }
+      const b = maat(det, ['kozijn_breedte', 'breedte']), h = maat(det, ['kozijn_hoogte', 'hoogte']), o = maat(det, ['kozijn_onderkant', 'borstwering', 'onderkant']);
+      const bw = b ? b.waarde : st.b, hh = h ? h.waarde : (st.h == null ? H : st.h), oo = o ? o.waarde : (det.soort === 'deur' || det.soort === 'nis' || det.soort === 'kolom' ? 0 : (camV != null ? Math.max(0, camV - hh / 2) : st.o));
+      let x, xs;
+      if (afst) { x = refId === linksId ? afst.waarde : L - afst.waarde - bw; xs = afst.status; }
+      else if (camU != null) { x = (vanLinks ? camU : L - camU) - bw / 2; xs = 'geschat'; }
+      else { x = (L - bw) / 2; xs = 'geschat'; }
+      const btp = maat(det, ['boven_tot_plafond']);
+      return { det, soort: det.soort, label: det.label, rect: { x, y: oo, w: bw, h: hh }, afstand: afst, vanaf: refId, vanLinks: refId === linksId,
+        status: { x: xs, w: b ? b.status : 'geschat', h: h ? h.status : 'geschat', y: o ? o.status : (det.soort === 'deur' ? 'gemeten' : 'geschat'), boven: btp ? btp.status : null },
+        boven_tot_plafond: btp ? btp.waarde : null, dag: { b: maat(det, ['dag_breedte']), h: maat(det, ['dag_hoogte']) } };
+    });
+    return { wand_id: w.id, wand: w.label, L, H, status: { L: seg.lengte.status, H: lm.hoogte.waarde ? lm.hoogte.status : 'aangenomen' }, links: { id: linksId, label: hl(linksId) }, rechts: { id: rechtsId, label: hl(rechtsId) }, items };
+  };
+  // Maatketen langs een as: delen [a, b] met status; een restdeel is 'afgeleid' als alle andere delen en het totaal gemeten (of ingevoerd) zijn, anders 'geschat'.
+  D.maatketen = function (totaal, totaalStatus, delen) {
+    const hard = st => st === 'gemeten' || st === 'invoer';
+    const uit = [], som = delen.reduce((s, x) => s + x.waarde, 0), rest = totaal - som, allesHard = hard(totaalStatus) && delen.every(x => hard(x.status));
+    let pos = 0;
+    delen.forEach(x => { uit.push({ van: pos, tot: pos + x.waarde, waarde: x.waarde, status: x.status }); pos += x.waarde; });
+    uit.push({ van: pos, tot: totaal, waarde: rond(rest, 1), status: allesHard ? 'afgeleid' : 'geschat', rest: true });
+    return uit;
+  };
   // Controlematen (bijv. diagonaal H4-H6) naast de waarde die het model verwacht.
   D.controleMaten = function (d, lm) {
     if (!lm) return [];
@@ -504,10 +563,12 @@
     D.actieveDetails(d).forEach(det => {
       const s = D.SOORTEN[det.soort] || D.SOORTEN.overig;
       s.velden.forEach(f => {
+        if (lijst(s.optioneel).indexOf(f) >= 0) return;   // optionele maat: geen open vraag
         const m = D.huidigeMeting(d, det.id, f), geschatMag = det.groep === 'meubilair';
         if (!m || m.status === 'open' || (m.status === 'geschat' && !geschatMag)) uit.push({ soort: 'maat', ernst: 'open', doel: det.id, veld: f, tekst: det.label + ': ' + D.VELDEN[f].label.toLowerCase() + ' nog niet gemeten.' });
       });
-      if (det.anker_status === 'alleen-foto') uit.push({ soort: 'plek', ernst: 'let-op', doel: det.id, tekst: det.label + ' is alleen op een foto aangewezen; de plek in de ruimte is nog niet bepaald.' });
+      const plekUitMaten = det.wand_id && (() => { const ml = D.maatLangsWand(d, det); return ml && !ml.onzeker; })();
+      if (det.anker_status === 'alleen-foto' && !plekUitMaten) uit.push({ soort: 'plek', ernst: 'let-op', doel: det.id, tekst: det.label + ' is alleen op een foto aangewezen; de plek in de ruimte is nog niet bepaald.' });
       if (det.groep === 'materiaal' && !(det.materiaal && det.materiaal.code)) uit.push({ soort: 'materiaal', ernst: 'let-op', doel: det.id, tekst: det.label + ': materiaalcode onbekend (visuele benadering).' });
     });
     lijst(opties.dekking).forEach(x => { if (x.pct < 70) uit.push({ soort: 'beeld', ernst: 'let-op', doel: x.wand_id, tekst: x.label + ': maar ' + x.pct + '% in beeld. Draai daar nog even rond.' }); });

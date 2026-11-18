@@ -131,6 +131,19 @@ dd{margin:0;font-variant-numeric:tabular-nums}
 #ar-bewaard{font-size:13px;opacity:.95}
 #ar-doel{font-size:14px;color:#9ff0c0}
 #ar-kaart{position:absolute;left:10px;bottom:calc(140px + env(safe-area-inset-bottom, 0px));width:136px;height:136px;border-radius:12px;background:rgba(10,20,14,.6);border:1px solid rgba(255,255,255,.4)}
+.aanzicht{display:block;width:100%;height:auto;background:var(--vloer);border-radius:10px;border:1px solid var(--rand)}
+.aanzicht .wandlijn{fill:none;stroke:var(--inkt);stroke-width:3}
+.aanzicht .vloerlijn{stroke:var(--inkt);stroke-width:7}
+.aanzicht .item{fill:rgba(28,95,196,.08);stroke:var(--zacht);stroke-width:3}
+.aanzicht .item.gekozen{stroke:var(--kies);stroke-width:6;fill:rgba(28,95,196,.14)}
+.aanzicht .item.geschat{stroke-dasharray:14 8}
+.aanzicht .punt{fill:var(--oranje)}
+.aanzicht .maat{stroke:var(--zacht);stroke-width:3}
+.aanzicht text{font:700 36px var(--letter)}
+.aanzicht .t-gemeten{fill:var(--inkt)} .aanzicht .t-geschat,.aanzicht .t-aangenomen{fill:var(--geschat);font-style:italic}
+.aanzicht .t-afgeleid{fill:var(--kies)} .aanzicht .t-invoer{fill:var(--oranje)} .aanzicht .t-onzeker{fill:var(--rood)}
+.aanzicht .hoeklabel{fill:var(--primair);font-weight:800}
+.legenda{font-size:13px;color:var(--zacht)}
 #ar-hint{position:absolute;left:12px;right:12px;top:calc(50% - 80px);text-align:center;font-weight:700;font-size:18px;text-shadow:0 1px 4px rgba(0,0,0,.8)}
 </style>
 </head>
@@ -198,6 +211,10 @@ dd{margin:0;font-variant-numeric:tabular-nums}
     <div class="rij" id="d-fout-knoppen" hidden><button class="knop" id="k-opnieuw-bewaren">Opnieuw proberen te bewaren</button></div>
     <h2 id="d-kop">Ruimte</h2>
     <p class="bewaard" id="d-bewaard" aria-live="polite"></p>
+    <h2>Wanden bematen</h2>
+    <p class="zacht">Een lijntekening per wand, zoals je hem vanuit de kamer ziet. Zet er een kozijn (of deur, radiator) in en vul de maten in: de tekening bemaat zichzelf.</p>
+    <ul class="lijst" id="d-aanzichten"></ul>
+    <input type="file" id="d-az-foto" accept="image/*" hidden>
     <h2>Extra maten</h2>
     <div class="maatrij" id="d-plafond-rij"><span>Plafondhoogte</span><input id="d-plafond" inputmode="decimal" autocomplete="off" aria-label="Plafondhoogte in mm"><span class="info" id="d-plafond-info"></span></div>
     <h2>Controlemaat tussen twee wanden (tape tot tape)</h2>
@@ -1909,6 +1926,140 @@ if (typeof module !== 'undefined') module.exports = AR;
       });
   }
 
+  // ---------- wandaanzicht: lijntekening per wand, kozijn bematen (18-11) ----------
+  var azVoorlopig = {}, azGekozen = null, azWand = null, azFotoDetail = null, azTex = {};
+  function toonAanzichten() {
+    var ul = el('d-aanzichten'), d = dossier(); if (!ul || !d) return; ul.textContent = '';
+    d.wanden.forEach(function (w) {
+      var li = maak('li'), n = DS.actieveDetails(d).filter(function (x) { return x.wand_id === w.id; }).length, k = maak('button', w.label + ' bematen', 'knop');
+      li.appendChild(maak('span', w.label + (n ? ' · ' + n + ' onderdeel' + (n > 1 ? 'en' : '') : ''), 'titel'));
+      k.type = 'button'; k.addEventListener('click', function () { openAanzicht(w.id, null); }); li.appendChild(k); ul.appendChild(li);
+    });
+  }
+  function svgEl(tag, a, tekst) { var e = document.createElementNS(NS, tag); Object.keys(a || {}).forEach(function (k) { e.setAttribute(k, a[k]); }); if (tekst != null) e.textContent = tekst; return e; }
+  function maatTekst(waarde, st) { var t = String(Math.round(waarde)); return st === 'geschat' || st === 'aangenomen' ? '~' + t : t; }
+  // Maatlijn met schuine tikjes (bouwkundig) en de maat erboven of ernaast.
+  function maatlijn(g, x1, y1, x2, y2, waarde, st, verticaal) {
+    g.appendChild(svgEl('line', { x1: x1, y1: y1, x2: x2, y2: y2, 'class': 'maat' }));
+    [[x1, y1], [x2, y2]].forEach(function (p) { g.appendChild(svgEl('line', { x1: p[0] - 7, y1: p[1] + 7, x2: p[0] + 7, y2: p[1] - 7, 'class': 'maat' })); });
+    if (Math.abs(x2 - x1) + Math.abs(y2 - y1) < 30 && waarde < 1) return;
+    var mx = (x1 + x2) / 2, my = (y1 + y2) / 2, t = svgEl('text', verticaal ? { x: mx + 10, y: my + 9, 'class': 't-' + st } : { x: mx, y: my - 9, 'text-anchor': 'middle', 'class': 't-' + st }, maatTekst(waarde, st));
+    g.appendChild(t);
+  }
+  function tekenAanzicht(vak) {
+    var d = dossier(), az = DS.wandAanzicht(d, azWand, AR, azVoorlopig); vak.textContent = ''; if (!az) return az;
+    var VB = 1000, ml = 80, mr = 170, mt = 60, mb = 190, s = (VB - ml - mr) / az.L, Hp = az.H * s, svg = svgEl('svg', { viewBox: '0 0 ' + VB + ' ' + Math.round(Hp + mt + mb), 'class': 'aanzicht', role: 'img', 'aria-label': 'Wandaanzicht ' + az.wand });
+    var X = function (mm) { return ml + mm * s; }, Y = function (mm) { return mt + Hp - mm * s; };
+    // het wandbeeld (panorama of groothoekfoto) licht als ondergrond; links in de tekening is links vanuit de kamer
+    if (azTex[azWand]) {
+      var w0 = d.wanden.find(function (w) { return w.id === azWand; }), vanLinks = az.links.id === w0.van;
+      var im = svgEl('image', { href: azTex[azWand], x: vanLinks ? X(0) : -X(az.L), y: Y(az.H), width: az.L * s, height: Hp, preserveAspectRatio: 'none', opacity: '0.35' });
+      if (!vanLinks) im.setAttribute('transform', 'scale(-1,1)');
+      svg.appendChild(im);
+    }
+    svg.appendChild(svgEl('rect', { x: X(0), y: Y(az.H), width: az.L * s, height: Hp, 'class': 'wandlijn' }));
+    svg.appendChild(svgEl('line', { x1: X(0), y1: Y(0), x2: X(az.L), y2: Y(0), 'class': 'vloerlijn' }));
+    svg.appendChild(svgEl('text', { x: X(0), y: Y(0) + 44, 'text-anchor': 'middle', 'class': 'hoeklabel' }, az.links.label));
+    svg.appendChild(svgEl('text', { x: X(az.L), y: Y(0) + 44, 'text-anchor': 'middle', 'class': 'hoeklabel' }, az.rechts.label));
+    var g = svgEl('g', {}); svg.appendChild(g);
+    maatlijn(g, X(0), Y(0) + 160, X(az.L), Y(0) + 160, az.L, az.status.L);                          // wandlengte
+    maatlijn(g, X(0) - 40, Y(0), X(0) - 40, Y(az.H), az.H, az.status.H, true);                     // plafondhoogte
+    var sel = null;
+    az.items.forEach(function (it) {
+      var gekozen = azGekozen === it.det.id;
+      if (it.rect) {
+        var hard = it.status.x !== 'geschat' && it.status.w !== 'geschat';
+        svg.appendChild(svgEl('rect', { x: X(it.rect.x), y: Y(it.rect.y + it.rect.h), width: it.rect.w * s, height: it.rect.h * s, 'class': 'item' + (gekozen ? ' gekozen' : '') + (hard ? '' : ' geschat') }));
+        svg.appendChild(svgEl('text', { x: X(it.rect.x + it.rect.w / 2), y: Y(it.rect.y + it.rect.h / 2) + 9, 'text-anchor': 'middle', 'class': 't-geschat' }, it.label));
+        if (gekozen || (!azGekozen && !sel)) sel = it;
+      } else if (it.punt && it.punt.x != null) {
+        svg.appendChild(svgEl('circle', { cx: X(it.punt.x), cy: Y(it.punt.y || 300), r: gekozen ? 14 : 10, 'class': 'punt' }));
+        if (gekozen) sel = it;
+      }
+    });
+    if (sel && sel.rect) {
+      var r = sel.rect, st = sel.status, yk = Y(0) + 90, hard = function (x) { return x === 'gemeten' || x === 'invoer'; };
+      // horizontale keten onder de wand: links – kozijn – rechts (de kant waarvandaan gemeten is telt, de andere kant is de restmaat)
+      var delen = sel.vanLinks ? DS.maatketen(az.L, az.status.L, [{ waarde: r.x, status: st.x }, { waarde: r.w, status: st.w }])
+        : DS.maatketen(az.L, az.status.L, [{ waarde: az.L - r.x - r.w, status: st.x }, { waarde: r.w, status: st.w }]).map(function (k) { return { van: az.L - k.tot, tot: az.L - k.van, waarde: k.waarde, status: k.status }; });
+      delen.forEach(function (k) { maatlijn(g, X(k.van), yk, X(k.tot), yk, k.waarde, k.status); });
+      // verticale keten rechts van het kozijn: vloer – onderkant – kozijn – plafond
+      var xv = Math.min(X(r.x + r.w) + 45, VB - 70), kv = DS.maatketen(az.H, az.status.H, [{ waarde: r.y, status: st.y }, { waarde: r.h, status: st.h }]);
+      if (sel.boven_tot_plafond != null) kv[2] = { van: kv[2].van, tot: kv[2].tot, waarde: sel.boven_tot_plafond, status: st.boven };
+      kv.forEach(function (k) { maatlijn(g, xv, Y(k.van), xv, Y(k.tot), k.waarde, k.status, true); });
+    } else if (sel && sel.punt) {
+      maatlijn(g, X(0), Y(sel.punt.y || 0), X(sel.punt.x), Y(sel.punt.y || 0), sel.punt.x, sel.punt.status.x);
+      if (sel.punt.y != null) maatlijn(g, X(sel.punt.x) + 25, Y(0), X(sel.punt.x) + 25, Y(sel.punt.y), sel.punt.y, sel.punt.status.y, true);
+    }
+    vak.appendChild(svg);
+    return az;
+  }
+  function openAanzicht(wandId, detailId) {
+    var d = dossier(), c = el('d-paneel'); azWand = wandId; azGekozen = detailId; azVoorlopig = {};
+    huidigPaneel = null; c.hidden = false; c.textContent = '';
+    var bx = maak('div', null, 'dpaneel'); c.appendChild(bx);
+    var kop = maak('h2'), vak = maak('div'); bx.appendChild(kop); bx.appendChild(vak);
+    bx.appendChild(maak('p', 'Zwart = gemeten · blauw = afgeleid (uit de andere maten) · grijs ~ = geschat · oranje = nog niet bewaard.', 'legenda'));
+    var chips = maak('div', null, 'rij'), velden = maak('div'); bx.appendChild(chips); bx.appendChild(velden);
+    var sluit = maak('button', 'Sluiten', 'knop'); sluit.type = 'button'; sluit.addEventListener('click', function () { c.hidden = true; c.textContent = ''; toonDossier(); }); bx.appendChild(sluit);
+    if (!azTex[wandId] && OS) OS.leesFoto(rec.id + ':pano-' + wandId).then(function (f) { if (f && f.blob) { azTex[wandId] = URL.createObjectURL(f.blob); teken(); } }, function () {});
+    function teken() {
+      var az = tekenAanzicht(vak); if (!az) return;
+      kop.textContent = az.wand + ' bematen · vanuit de kamer: ' + az.links.label + ' links, ' + az.rechts.label + ' rechts';
+      chips.textContent = '';
+      az.items.forEach(function (it) { var b = maak('button', it.label, 'knop' + (azGekozen === it.det.id ? ' hoofd' : '')); b.type = 'button'; b.addEventListener('click', function () { azGekozen = it.det.id; azVoorlopig = {}; teken(); velden_(); }); chips.appendChild(b); });
+      [['kozijn', '+ Kozijn'], ['deur', '+ Deur'], ['radiator', '+ Radiator'], ['stopcontact', '+ Stopcontact']].forEach(function (x) {
+        var b = maak('button', x[1], 'knop'); b.type = 'button';
+        b.addEventListener('click', function () { var det = DS.voegDetailToe(d, { soort: x[0], wand_id: wandId, referentie_hoek: az.links.id, sessie: ses && ses.id }); planBewaar(true); azGekozen = det.id; azVoorlopig = {}; teken(); velden_(); });
+        chips.appendChild(b);
+      });
+      return az;
+    }
+    function velden_() {
+      velden.textContent = ''; var det = d.details.find(function (x) { return x.id === azGekozen; }); if (!det) return;
+      var az = DS.wandAanzicht(d, wandId, AR, azVoorlopig), soort = DS.SOORTEN[det.soort] || DS.SOORTEN.overig, opt = soort.optioneel || [];
+      velden.appendChild(maak('h2', det.label));
+      if (DS.LANGS_VELDEN.some(function (f) { return soort.velden.indexOf(f) >= 0; })) {
+        var rv = maak('div', null, 'veld'), rl = maak('label', 'Volgende afstand meten vanaf'), rs = maak('select'); rs.id = 'az-ref'; rl.htmlFor = rs.id;
+        [[az.links.id, az.links.label + ' (links)'], [az.rechts.id, az.rechts.label + ' (rechts)']].forEach(function (o) { var op = maak('option', o[1]); op.value = o[0]; rs.appendChild(op); });
+        rs.value = det.referentie_hoek || az.links.id; rs.addEventListener('change', function () { det.referentie_hoek = rs.value; planBewaar(); });
+        rv.appendChild(rl); rv.appendChild(rs); velden.appendChild(rv);
+      }
+      var invoer = [];
+      soort.velden.forEach(function (f, idx) {
+        var V = DS.VELDEN[f], m = DS.huidigeMeting(d, det.id, f), rij = maak('div', null, 'maatrij'), lab = maak('label', V.label + (opt.indexOf(f) >= 0 ? ' (optioneel)' : '')), inp = maak('input'), info = maak('span', infoTekst(m), 'info');
+        inp.id = 'az-' + f; lab.htmlFor = inp.id; inp.inputMode = 'decimal'; inp.autocomplete = 'off';
+        if (m && m.status !== 'open' && m.bron !== 'ar' && m.waarde_mm != null) inp.value = String(m.waarde_mm);
+        rij.appendChild(lab); rij.appendChild(inp); rij.appendChild(info); velden.appendChild(rij); volgToetsen(inp);
+        inp.addEventListener('focus', function () { Array.prototype.forEach.call(velden.querySelectorAll('.maatrij'), function (x) { x.classList.remove('actief'); }); rij.classList.add('actief'); });
+        inp.addEventListener('input', function () { var l = DS.leesMaat(inp.value); azVoorlopig[det.id] = azVoorlopig[det.id] || {}; if (l) azVoorlopig[det.id][f] = l.mm; else delete azVoorlopig[det.id][f]; tekenAanzicht(vak); });
+        function opslaan() {
+          var l = DS.leesMaat(inp.value); if (!l || !inp._gewijzigd) return;
+          var huidig = DS.huidigeMeting(d, det.id, f), refId = det.referentie_hoek || az.links.id, bron = bronVan(inp);
+          var ref = V.referentie === 'gekozen binnenhoek' ? { soort: 'hoek', id: refId, label: (d.hoeken.find(function (h) { return h.id === refId; }) || {}).label } : null;
+          inp._gewijzigd = false;
+          if (huidig && huidig.waarde_mm === l.mm && huidig.bron === bron && (huidig.referentie && huidig.referentie.id || null) === (ref ? ref.id : null)) return;
+          var nieuw = DS.voegMetingToe(d, { doel: { soort: 'detail', id: det.id }, veld: f, waarde_mm: l.mm, invoer: inp.value, eenheid_invoer: l.eenheid, bron: bron, status: 'gemeten', referentie: ref, wand_id: wandId, sessie: ses && ses.id });
+          if (azVoorlopig[det.id]) delete azVoorlopig[det.id][f];
+          info.textContent = (bron === 'disto' ? 'X4: ' : '') + l.mm + ' mm bewaard · ' + infoTekst(nieuw); planBewaar(); tekenAanzicht(vak);
+        }
+        inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); opslaan(); var nx = invoer[idx + 1]; if (nx) nx.focus(); else inp.blur(); } });
+        inp.addEventListener('change', opslaan);
+        invoer.push(inp);
+      });
+      var fr = maak('div', null, 'rij'), fk = maak('button', det.foto_ids.length ? 'Nog een foto van dit ' + det.label.toLowerCase() : 'Foto van dit ' + det.label.toLowerCase(), 'knop');
+      fk.type = 'button'; fk.addEventListener('click', function () { azFotoDetail = det; el('d-az-foto').value = ''; el('d-az-foto').click(); });
+      fr.appendChild(fk); if (det.foto_ids.length) fr.appendChild(maak('span', det.foto_ids.length + ' foto(\'s) ✓', 'bewaard')); velden.appendChild(fr);
+      if (invoer[0]) setTimeout(function () { try { invoer[0].scrollIntoView({ block: 'center' }); } catch (e) {} }, 0);
+    }
+    teken(); velden_();
+    c.scrollIntoView({ block: 'start' });
+  }
+  if (DS && OS) el('d-az-foto').addEventListener('change', function (e) {
+    var f = e.target.files && e.target.files[0]; if (!f || !azFotoDetail) return;
+    koppelDetailFoto(azFotoDetail, f, null, null, null, new Date(f.lastModified || Date.now()).toISOString()).then(function () { if (azWand) openAanzicht(azWand, azFotoDetail.id); });
+  });
+
   // ---------- hoeken nakijken op de foto ----------
   function poseVan(d, b) { var s = d.sessies.find(function (x) { return x.id === b.sessie; }); return s && s.uitlijning && s.uitlijning.status === 'basis' ? b.pose : b.pose_basis; }
   function toonHoeken() {
@@ -2218,7 +2369,7 @@ if (typeof module !== 'undefined') module.exports = AR;
     var vragen = DS.openVragen(d, AR, { dekking: dekkingPerWand() });
     vragen.forEach(function (v) { var li = maak('li'); li.appendChild(pil(v.ernst === 'blokkeert' ? 'blokkeert' : v.ernst === 'open' ? 'open' : 'let op', v.ernst === 'blokkeert' || v.ernst === 'open' ? 'open' : '')); li.appendChild(maak('span', v.tekst)); ov.appendChild(li); });
     if (!vragen.length) ov.appendChild(maak('li', 'Niets open. Alles wat gevraagd is, is gemeten.', 'zacht'));
-    toonHoeken(); toonWandfotos();
+    toonHoeken(); toonWandfotos(); toonAanzichten();
     el('k-afsluiten').textContent = d.ruimte.afgesloten ? 'Ruimte heropenen' : 'Ruimte afsluiten';
     el('k-aanvullen').disabled = d.hoeken.length < 3 || !navigator.xr;
   }
@@ -2345,6 +2496,7 @@ if (typeof module !== 'undefined') module.exports = AR;
     },
     groothoekProef: function (wandIndex, blob, punten4) { var d = dossier(), w = d.wanden[wandIndex]; return verwerkGroothoek(w, blob, punten4, wandRichting(d, w)); },
     wandRichting: function (i) { var d = dossier(); return wandRichting(d, d.wanden[i]); },
+    openAanzicht: function (wandId, detId) { openAanzicht(wandId, detId); },
     toonDetailInAr: function (det) { el('ar-laag').hidden = false; openPaneel(det, true); },
     // proefhaak: een nagebootste opname met beelden laden, zonder AR
     laadPano: function (k) { pano.klaar = k; toonPano(); return k; } };
