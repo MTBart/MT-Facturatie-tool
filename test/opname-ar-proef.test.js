@@ -83,6 +83,34 @@ check('haaks zetten laat de schuine wand van 40 graden staan', Math.abs(hz[3] - 
 const ha = AR.haaksAfwijking([90.5, 88, 270.4, 140, 131], 8);
 check('afwijking van haaks over de bijna-haakse hoeken', ha && ha.aantal === 3 && Math.abs(ha.grootst - 2) < 1e-9 && Math.abs(ha.gemiddeld - (0.5 + 2 + 0.4) / 3) < 1e-9);
 
+// Detail op de wand: de kijkrichting snijdt de dichtstbijzijnde wand (kamer 4 x 3, telefoon in het midden op 1,5 m)
+{
+  const W = AR.wanden3d([{ x: 0, z: 0 }, { x: 4, z: 0 }, { x: 4, z: 3 }, { x: 0, z: 3 }], true, 0, 2.6);
+  const oog = { x: 2, y: 1.5, z: 1.5 }, r = { x: 0, y: -0.6, z: -0.8 }, s = AR.snijWand(oog, r, W);
+  check('snijWand: recht naar wand 1, iets omlaag', s && s.nr === 0 && Math.abs(s.u - 2) < 1e-9 && Math.abs(s.v - (1.5 - 0.6 / 0.8 * 1.5)) < 1e-9, s && JSON.stringify({ nr: s.nr, u: s.u.toFixed(3), v: s.v.toFixed(3) }));
+  const s2 = AR.snijWand(oog, { x: 1, y: 0, z: 0 }, W);
+  check('snijWand: naar rechts komt op wand 2, 1,5 m vanaf H2', s2 && s2.nr === 1 && Math.abs(s2.u - 1.5) < 1e-9 && Math.abs(s2.v - 1.5) < 1e-9);
+  check('snijWand: recht omhoog raakt geen wand', AR.snijWand(oog, { x: 0, y: 1, z: 0 }, W) === null);
+  const s3 = AR.snijWand(oog, { x: 0, y: 0.9, z: -0.1 }, W);
+  check('snijWand: boven het plafond van de wand telt niet', s3 === null);
+}
+
+// Richtingskaart en draai-aanwijzing
+{
+  const kijk = (yaw, pitch) => ({ pos: [1, 1.4, 1], dir: [Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)] });
+  const rond = []; for (let k = 0; k < 8; k++) rond.push(kijk(k * Math.PI / 4, 0));
+  let r = AR.richtingen(rond.concat([kijk(0, 0.7), kijk(0, -0.7)]), { x: 1, z: 1 }, 0.6);
+  check('richtingen: rondom, omhoog en omlaag gedekt: geen aanwijzing', r.sectoren.every(n => n === 1) && r.omhoog === 1 && r.omlaag === 1 && AR.draaiHint(r, 0) === null);
+  r = AR.richtingen(rond.filter((_, k) => k !== 6 && k !== 7).concat([kijk(0, -0.7)]), { x: 1, z: 1 }, 0.6);
+  const h = AR.draaiHint(r, 0);
+  check('aanwijzing: links ontbreekt en omhoog ontbreekt', h && h.tekst === 'Draai hier even naar links en omhoog', h && h.tekst);
+  check('aanwijzing: rechts als de leemte rechts ligt', AR.draaiHint(AR.richtingen(rond.filter((_, k) => k !== 2).concat([kijk(0, 0.7), kijk(0, -0.7)]), { x: 1, z: 1 }, 0.6), 0).tekst === 'Draai hier even naar rechts');
+  check('beelden van een ander standpunt tellen niet mee', AR.richtingen(rond, { x: 3, z: 3 }, 0.6).n === 0);
+  check('te weinig beelden: nog geen aanwijzing', AR.draaiHint(AR.richtingen(rond.slice(0, 2), { x: 1, z: 1 }, 0.6), 0) === null);
+  const sg = AR.vlakSegment([{ x: 0, y: 0, z: 2 }, { x: 3, y: 0, z: 2 }, { x: 3, y: 2.4, z: 2 }, { x: 0, y: 2.4, z: 2 }], { x: 1, z: 0 });
+  check('vlakSegment: wandvlak van bovenaf 3 m lang', sg && Math.abs(sg.lengte - 3) < 1e-9 && sg.y1 === 2.4 && Math.abs(sg.a.x) < 1e-9 && Math.abs(sg.b.x - 3) < 1e-9);
+}
+
 // Rechtzetten en de schuine wand op de eigen maten zetten
 {
   // de echte proef van 17-11 (7 hoeken, schuine knik bij H2-H3), met de eigen maten
@@ -94,6 +122,19 @@ check('afwijking van haaks over de bijna-haakse hoeken', ha && ha.aantal === 3 &
   const f = AR.pasSchuin(kc.wanden.map(w => w.richting), rz.schuin, L), hk = AR.hoekenUitRichtingen(f.richtingen, 1);
   check('proef 17-11: met eigen maten blijft 42 mm over (de maten passen niet helemaal)', Math.abs(f.gat - 42.3) < 1, f.gat.toFixed(1) + ' mm, H2 ' + hk[1].toFixed(1) + ' H3 ' + hk[2].toFixed(1));
   check('proef 17-11: binnenhoeken samen 900 graden', Math.abs(hk.reduce((a, b) => a + b, 0) - 900) < 1e-6);
+  for (const stap of [1, -1]) {
+    for (let start = 0; start < P.length; start++) {
+      const hoek = P.map((_, i) => (start + stap * i + P.length) % P.length);
+      const wand = hoek.map((h, i) => stap === 1 ? h : hoek[(i + 1) % P.length]);
+      const raster = AR.rechtzetten(hoek.map(h => P[h]), 10);
+      const fit = AR.pasSchuin(AR.kamer(raster.punten).wanden.map(w => w.richting), raster.schuin, wand.map(w => L[w]));
+      check('start H' + (start + 1) + ', richting ' + stap + ': dezelfde knik en sluitfout',
+        raster.schuin.length === 1 && wand[raster.schuin[0]] === 1 && Math.abs(fit.gat - f.gat) < 0.001);
+    }
+  }
+  const recht = AR.rechtzetten([{x: 0, z: 0}, {x: 3, z: 0}, {x: 3, z: 2}, {x: 0, z: 2}], 10);
+  check('exact haakse wanden blijven als haaks geclassificeerd', recht.schuin.length === 0);
+
 }
 {
   // kamer met de knik, haakse hoeken tot 6 graden scheef getikt: rechtzetten + echte maten geeft de echte kamer terug

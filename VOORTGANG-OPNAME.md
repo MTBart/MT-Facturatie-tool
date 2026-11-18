@@ -249,3 +249,36 @@ Aanleiding: Bart testte de opname op de Windows-tablet met de DISTO X4 en wil ee
 
 Nog niet (volgende stappen, in deze volgorde besproken met Bart): de opname op kantoor terugkijken (vraagt opslag buiten het toestel), een export waarmee de ruimte in Vectorworks
 is na te bouwen, en de DISTO-koppeling in app-modus (helling per meting) zodra de proef laat zien wat de X4 stuurt.
+
+## Ruimte-opname: rondgang, details en kantoorkijker (18-11-2026)
+
+Werkpakket "Bouw de ruimtelijke opname" (START-HIER / OPNAME-AR-START-HIER.md). Eerste proef volgens Bart: één kamer rondlopen met live contourlijnen en tijdens
+dezelfde rondgang de beelden verzamelen om op kantoor interactief rond te kijken. Startinstructie: `docs/OPNAME-RONDGANG-START.md`.
+
+**Gedaan**
+- Reparatie uit het pakket (`opname-ar.patch`) toegepast: robuust haaks-raster (onafhankelijk van de starthoek), foutafhandeling panorama en opslag.
+- `mt-ruimte-dossier.js` (nieuw, pure functies): dossier met stabiele ID's (project, ruimte, sessie, hoek, wand, beeld, detail, meting, opmerking), metingen met
+  bron (DISTO X4 / hand / camera), status (gemeten / geschat / afgeleid / open), oorspronkelijke invoer en historie (`vervangt`), details per groep (bouwdeel, installatie,
+  afwerking, meubilair, materiaal, notitie), XR-naar-ruimte (mm, oorsprong in een binnenhoek, X langs de eerste wand, Y de kamer in, Z omhoog, rechtsdraaiend),
+  lijnmodel (punten, segmenten, hoogte, sluitfout, met status per waarde), controlematen (bijv. H4-H6 naast de verwachte waarde), open vragen, uitlijnen van een
+  aanvulsessie op twee bekende hoeken, pakket (zip via `mt-opname-export.js`, relatieve paden, sha256) en het lezen van oude panoramabestanden.
+- `docs/opname-ar-proef.html` (S24): Nieuwe ruimte → Start rondgang; live contouren van de door ARCore gevonden vlakken (blauw) naast de getikte wanden (groen),
+  plattegrondje met positie en richtingsring, draai-aanwijzing alleen bij een echte leemte (en vastgelegd waar), Detail-knop (punt op de wand onder het kruisje,
+  scherpe foto op volle camera-resolutie, maten met X4-herkenning, referentiehoek kiezen), wandmaten/plafond/diagonaal naar het dossier, stapsgewijs bewaren in
+  `mt-opname-opslag.js` (records `soort: 'ruimte'`, revisiecontrole) met zichtbare fout en Opnieuw proberen, heropenen na onderbreking (ook hoeken van een rondgang
+  zonder Klaar), aanvulronde met uitlijnen of Apart, afsluiten/heropenen, gaten in het panorama gearceerd, pakket maken/delen met MB per soort.
+- `docs/opname-ar-kijk.html` (kantoor): zip openen (oude JSON blijft werken), opname op het toestel zelf (`#ruimte=`), zoomen met scroll/knijpen/+−, kijkpunten in
+  beeld en op de plattegrond, detailmarkeringen per groep met paneel (originele foto, maten met bron/status/tijd/invoer/historie, plek in mm, opmerkingen, open vragen),
+  rode maatlijnen op de wand, dossierpaneel (lijnmodel, controlematen, groepen, open vragen, rondgangen met tellers), opentijd en MB per soort.
+- `mt-opname.js`: de beta-lijst toont geen ruimte-records.
+
+**Getest**: `node test/ruimte-dossier.test.js` (57, o.a. de zevenhoek bij alle 14 starts met ~42,3 mm, korte wand 155 mm apart, H4-H6, proef 5 fictieve kamer,
+zip heen en terug, beschadigd/ontbrekend beeld, uitlijnen), `node test/opname-ar-proef.test.js` (71, nieuw: snijWand, richtingen, draaiHint, vlakSegment),
+de opslagcontrole uit het pakket (5 scenario's), alle bestaande opname-tests, `check-sinks`, `check-verwijzingen`. Browser (headless Chromium, nagebootste kamer
+4 x 3 m met raam, radiator, cv-leiding, stopcontact en een kastje als obstakel): `test/ruimte-e2e.js`, 24 controles groen. Vast proefpakket:
+`test/fixtures/ruimte-proefpakket.zip` (0,6 MB, alleen gerenderde beelden).
+
+**Niet op hardware getest (alleen gesimuleerd)**: de hele AR-kant op de S24 met de nieuwe functies (plane-detection, Detail-foto via de AR-camera, X4 via Bluetooth
+in het detailpaneel, toetsenbord in de AR-overlay), opslag op een echt volle telefoon, geweigerde cameratoestemming, de kijker op een echte kantoor-pc met een groot pakket.
+**Niet gebouwd**: iPhone/RoomPlan en Nomad-import (zie startinstructie), een kijkpunt automatisch bijmaken bij een andere zichtlijn (nu: kijkpunten uit de standpunten),
+onscherp beeld vervangen, bolle wand met tussenpunten en zijdelingse afwijking, meethoogte per vrije-breedtemaat, integratie in het Meer-menu van mobiel.html.

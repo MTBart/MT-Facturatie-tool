@@ -100,6 +100,37 @@ dd{margin:0;font-variant-numeric:tabular-nums}
 .wandbeelden img{height:140px;border-radius:8px;border:1px solid var(--rand);background:var(--bg)}
 .wandbeelden figcaption{font-size:13px;color:var(--zacht)}
 #ar-laag.ver #ar-kruis::before,#ar-laag.ver #ar-kruis::after{background:#ffb347}
+/* Ruimte-opname (18-11): velden, detailpaneel (in AR en op de pagina), lijsten */
+.velden{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:480px){.velden{grid-template-columns:1fr}}
+.veld{display:flex;flex-direction:column;gap:4px}
+.veld label,.veld .lab{font-size:14px;color:var(--zacht)}
+.veld input,.veld select,.veld textarea,.invoer{font:16px var(--letter);padding:10px;border-radius:10px;border:1.5px solid var(--rand);background:var(--bg);color:var(--inkt);min-height:44px}
+.lijst{display:flex;flex-direction:column;gap:8px;margin:0;padding:0;list-style:none}
+.lijst li{border:1px solid var(--rand);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.lijst .titel{font-weight:650}
+.pil{display:inline-block;border-radius:10px;padding:1px 8px;font-size:12px;font-weight:650;border:1px solid var(--rand);color:var(--zacht)}
+.pil.gemeten{background:var(--primair-zacht);color:var(--primair);border-color:transparent}
+.pil.geschat{border-style:dashed}
+.pil.open{background:var(--oranje-zacht);color:var(--oranje);border-color:transparent}
+.dpaneel{display:flex;flex-direction:column;gap:10px}
+.dpaneel .chips{display:flex;flex-wrap:wrap;gap:6px}
+.dpaneel .chips button{min-height:40px;padding:0 12px;border-radius:20px;border:1px solid var(--rand);background:var(--vlak)}
+.dpaneel .chips button.aan{background:var(--primair);border-color:var(--primair);color:var(--op-primair)}
+.maatrij{display:grid;grid-template-columns:1fr 112px;gap:4px 8px;align-items:center;border-radius:10px;padding:4px}
+.maatrij .info{grid-column:1 / -1;font-size:12px;color:var(--zacht)}
+.maatrij input{width:112px;text-align:right;font:600 17px var(--cijfer);padding:8px;border-radius:8px;border:1.5px solid var(--rand);background:var(--bg);color:var(--inkt)}
+.maatrij.actief{background:var(--oranje-zacht)}
+.maatrij.actief .info::before{content:"X4 of toetsenbord → dit veld · "}
+.bewaard{font-size:13px;color:var(--primair);font-weight:600}
+.bewaard.fout{color:var(--rood)}
+#ar-detail{position:absolute;left:8px;right:8px;top:calc(96px + env(safe-area-inset-top, 0px));bottom:calc(132px + env(safe-area-inset-bottom, 0px));overflow:auto;background:rgba(250,252,250,.97);color:#16211a;border-radius:14px;padding:12px;pointer-events:auto}
+#ar-detail .dpaneel .chips button{color:#16211a}
+#ar-laag .onder button.klein2{width:76px}
+#ar-bewaard{font-size:13px;opacity:.95}
+#ar-doel{font-size:14px;color:#9ff0c0}
+#ar-kaart{position:absolute;left:10px;bottom:calc(140px + env(safe-area-inset-bottom, 0px));width:136px;height:136px;border-radius:12px;background:rgba(10,20,14,.6);border:1px solid rgba(255,255,255,.4)}
+#ar-hint{position:absolute;left:12px;right:12px;top:calc(50% - 80px);text-align:center;font-weight:700;font-size:18px;text-shadow:0 1px 4px rgba(0,0,0,.8)}
 </style>
 </head>
 <body>
@@ -121,15 +152,27 @@ dd{margin:0;font-variant-numeric:tabular-nums}
     </ol>
     <p class="zacht">Hoe dichter bij de hoek, hoe preciezer. Staat het kruisje oranje, dan ben je meer dan 2,5 m van de hoek: loop dichterbij. Een hoek via het plafond is minder precies dan op de vloer. De lengtes uit de camera zijn een schatting; de vorm en de hoeken zijn waar het om gaat.</p>
     <div class="melding" id="ar-kan" hidden></div>
-    <div class="rij">
-      <button class="knop hoofd" id="k-start" disabled>AR starten</button>
+    <div class="velden" id="r-velden">
+      <div class="veld"><label for="r-project">Project (code of naam)</label><input id="r-project" autocomplete="off" placeholder="bijv. 2026-041"></div>
+      <div class="veld"><label for="r-ruimte">Ruimte</label><input id="r-ruimte" autocomplete="off" placeholder="bijv. woonkamer"></div>
     </div>
+    <div class="rij">
+      <button class="knop hoofd" id="k-start" disabled>Nieuwe ruimte: start rondgang</button>
+    </div>
+    <p class="zacht" id="r-uitleg">Tijdens de rondgang leg je ook vast: met <b>Detail</b> richt je het kruisje op een leiding, stopcontact of raam, de telefoon maakt een scherpe foto en je zet de maten erbij (DISTO X4 of met de hand). Alles wordt meteen op deze telefoon bewaard.</p>
     <div class="rij">
       <button class="knop" id="k-voorbeeld">Voorbeeld van de uitkomst</button>
     </div>
   </section>
 
+  <section class="kaart" id="s-opnames" hidden>
+    <h2>Opnames op deze telefoon</h2>
+    <ul class="lijst" id="r-lijst"></ul>
+  </section>
+
+
   <section class="kaart" id="s-uitkomst" hidden>
+    <p class="melding" id="opslag-fout" role="alert" hidden></p>
     <div class="zeg" id="zeg" aria-live="polite"></div>
     <h2 id="plan-kop">Plattegrond uit de camera</h2>
     <svg id="plan" role="img" aria-label="Plattegrond uit de aangetikte hoeken"></svg>
@@ -148,6 +191,39 @@ dd{margin:0;font-variant-numeric:tabular-nums}
       <button class="knop" id="k-opnieuw">Opnieuw</button>
     </div>
     <textarea id="kopie" hidden readonly aria-label="Uitkomst als tekst"></textarea>
+  </section>
+  <section class="kaart" id="s-dossier" hidden>
+    <p class="melding" id="d-fout" role="alert" hidden></p>
+    <div class="rij" id="d-fout-knoppen" hidden><button class="knop" id="k-opnieuw-bewaren">Opnieuw proberen te bewaren</button></div>
+    <h2 id="d-kop">Ruimte</h2>
+    <p class="bewaard" id="d-bewaard" aria-live="polite"></p>
+    <h2>Extra maten</h2>
+    <div class="maatrij" id="d-plafond-rij"><span>Plafondhoogte</span><input id="d-plafond" inputmode="decimal" autocomplete="off" aria-label="Plafondhoogte in mm"><span class="info" id="d-plafond-info"></span></div>
+    <div class="velden">
+      <div class="veld"><label for="d-diag-van">Controlemaat van</label><select id="d-diag-van"></select></div>
+      <div class="veld"><label for="d-diag-naar">naar</label><select id="d-diag-naar"></select></div>
+    </div>
+    <div class="maatrij"><span>Gemeten afstand</span><input id="d-diag" inputmode="decimal" autocomplete="off" aria-label="Controlemaat in mm"></div>
+    <div id="d-controle"></div>
+    <h2>Details en opmerkingen</h2>
+    <ul class="lijst" id="d-details"></ul>
+    <div class="rij">
+      <label class="knop" id="k-detail-foto">Detail met foto toevoegen<input type="file" id="d-foto" accept="image/*" capture="environment" hidden></label>
+      <button class="knop" id="k-opmerking">Opmerking</button>
+    </div>
+    <div id="d-paneel" hidden></div>
+    <h2>Nog open vóór vertrek</h2>
+    <ul class="lijst" id="d-open"></ul>
+    <div class="rij">
+      <button class="knop hoofd" id="k-pakket">Pakket maken (zip)</button>
+      <button class="knop" id="k-pakket-deel">Pakket delen</button>
+    </div>
+    <div class="rij">
+      <button class="knop" id="k-kijk-hier">Rondkijken op deze telefoon</button>
+      <button class="knop" id="k-aanvullen">Aanvullen: nieuwe rondgang</button>
+    </div>
+    <div class="rij"><button class="knop" id="k-afsluiten">Ruimte afsluiten</button></div>
+    <p class="zacht" id="d-pakket-info"></p>
   </section>
   <section class="kaart" id="s-pano" hidden>
     <h2>Rondkijken</h2>
@@ -171,16 +247,25 @@ dd{margin:0;font-variant-numeric:tabular-nums}
     <div class="kop"><div id="ar-status">AR start…</div><div class="klein"><button id="k-klaar" disabled>Klaar</button><button id="k-stop">Stop</button></div></div>
     <div id="ar-sub"></div>
     <div id="ar-pano"></div>
+    <div id="ar-doel"></div>
+    <div id="ar-bewaard"></div>
   </div>
   <img id="ar-dun" alt="" hidden>
+  <canvas id="ar-kaart" width="272" height="272" aria-label="Plattegrondje: jouw plek, getikte wanden (groen), door de camera gevonden wanden (blauw) en waar beeld is (rondje om je heen)"></canvas>
+  <div id="ar-hint" aria-live="polite"></div>
   <div id="ar-kruis"></div>
   <div id="ar-maatvak"><div id="ar-maat"></div></div>
+  <div id="ar-detail" hidden></div>
   <div class="onder">
-    <button id="k-weg" disabled>Terug</button>
+    <button id="k-weg" class="klein2" disabled>Terug</button>
+    <button id="k-detail" class="klein2" aria-label="Detail vastleggen op het kruisje">Detail</button>
     <button id="k-hoek" class="duim" aria-label="Hoek vastleggen">Hoek</button>
-    <button id="k-modus">Plafond</button>
+    <button id="k-modus" class="klein2">Plafond</button>
   </div>
 </div>
+<script src="../mt-opname-export.js?v=2026-11-18a"></script>
+<script src="../mt-opname-opslag.js?v=2026-11-18a"></script>
+<script src="../mt-ruimte-dossier.js?v=2026-11-18a"></script>
 
 <script>
 /*KERN-BEGIN*/
@@ -236,26 +321,40 @@ var AR = (function () {
   // Richtingen haaks zetten: een wand die binnen 'tol' graden van het haakse raster ligt, wordt precies op dat raster gezet.
   // Het raster volgt het gemiddelde van alle bijna-haakse wanden (gewogen naar lengte, rekenend in viervoudige hoeken),
   // niet alleen wand 1: anders trekt één scheef getikte wand alle andere mee.
-  AR.haaks = function (richtingen, tol, lengtes) {
-    var r0 = richtingen[0], ss = 0, sc = 0;
-    richtingen.forEach(function (r, i) {
-      var d = (r - r0) / RAD, k = Math.round(d / 90);
-      if (Math.abs(d - k * 90) > 2 * tol) return;
-      var w = lengtes ? lengtes[i] : 1, t = 4 * (r - r0);
-      ss += w * Math.sin(t); sc += w * Math.cos(t);
+  function rasterVoor(richtingen, tol, lengtes) {
+    var kwart = Math.PI / 2, grens = tol * RAD;
+    function verschil(r, as) { var d = r - as; return d - kwart * Math.round(d / kwart); }
+    var kandidaten = richtingen.map(function (r, i) {
+      return { as: ((r % kwart) + kwart) % kwart, gewicht: lengtes ? lengtes[i] : 1 };
+    }).sort(function (a, b) { return a.as - b.as || a.gewicht - b.gewicht; });
+    var beste = 0, maxSteun = -1;
+    kandidaten.forEach(function (k) {
+      var steun = kandidaten.reduce(function (som, ander) {
+        // Nabije lange wanden steunen deze as sterker dan korte of afwijkende wanden.
+        var afwijking = Math.abs(verschil(ander.as, k.as));
+        var nabij = grens > 0 ? Math.max(0, 1 - afwijking / grens) : Number(afwijking === 0);
+        return som + ander.gewicht * nabij;
+      }, 0);
+      if (steun > maxSteun) { beste = k.as; maxSteun = steun; }
     });
-    if (ss || sc) r0 += Math.atan2(ss, sc) / 4;
-    return richtingen.map(function (r) {
-      var d = (r - r0) / RAD, k = Math.round(d / 90);
-      return Math.abs(d - k * 90) <= tol ? r0 + k * 90 * RAD : r;
+    var sin = 0, cos = 0;
+    kandidaten.forEach(function (k) {
+      if (Math.abs(verschil(k.as, beste)) > 2 * grens) return;
+      sin += k.gewicht * Math.sin(4 * k.as); cos += k.gewicht * Math.cos(4 * k.as);
     });
-  };
+    var as = (sin || cos) ? Math.atan2(sin, cos) / 4 : beste;
+    var haaks = richtingen.map(function (r) { return Math.abs(verschil(r, as)) <= grens; });
+    return { haaks: haaks, richtingen: richtingen.map(function (r, i) {
+      return haaks[i] ? as + kwart * Math.round((r - as) / kwart) : r;
+    }) };
+  }
+  AR.haaks = function (richtingen, tol, lengtes) { return rasterVoor(richtingen, tol, lengtes).richtingen; };
   // Rechtzetten: wanden die binnen 'tol' graden van het haakse raster liggen worden precies haaks gezet. Elke wand blijft door
   // het midden van zijn aangetikte stuk lopen; de hoeken worden de snijpunten van de wanden. Schuine wanden houden hun richting.
   AR.rechtzetten = function (punten, tol) {
     var n = punten.length, r = [], L = [], i;
     for (i = 0; i < n; i++) { var a = punten[i], b = punten[(i + 1) % n]; r.push(Math.atan2(b.z - a.z, b.x - a.x)); L.push(Math.hypot(b.x - a.x, b.z - a.z)); }
-    var g = AR.haaks(r, tol, L), haaks = g.map(function (x, k) { return x !== r[k]; });
+    var raster = rasterVoor(r, tol, L), g = raster.richtingen, haaks = raster.haaks;
     var lijnen = g.map(function (t, k) { var a = punten[k], b = punten[(k + 1) % n]; return { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2, dx: Math.cos(t), dz: Math.sin(t) }; });
     var uit = [];
     for (i = 0; i < n; i++) {
@@ -423,6 +522,60 @@ var AR = (function () {
     v = Math.round(v);
     return v < 10 || v > 100000 ? null : v;
   };
+  // Snijpunt van de kijkrichting met de wanden (uit AR.wanden3d): de dichtstbijzijnde wand die het kruisje raakt, met u langs de wand vanaf hoek a
+  // en v boven de vloer (meters). Zo komt een detail (leiding, stopcontact) op de juiste wand en hoogte. Geen wand geraakt: null.
+  AR.snijWand = function (oog, r, wanden) {
+    var best = null;
+    for (var k = 0; k < wanden.length; k++) {
+      var w = wanden[k], den = r.x * w.nx + r.z * w.nz;
+      if (Math.abs(den) < 1e-6) continue;
+      var t = ((w.a.x - oog.x) * w.nx + (w.a.z - oog.z) * w.nz) / den;
+      if (!(t > 0.05) || t > 15) continue;
+      var px = oog.x + r.x * t, py = oog.y + r.y * t, pz = oog.z + r.z * t, u = (px - w.a.x) * w.ux + (pz - w.a.z) * w.uz, v = py - w.y0;
+      if (u < -0.02 || u > w.L + 0.02 || v < -0.02 || v > w.H + 0.05) continue;
+      if (!best || t < best.afstand) best = { k: k, nr: w.nr, u: Math.max(0, Math.min(w.L, u)), v: Math.max(0, v), x: px, y: py, z: pz, afstand: t };
+    }
+    return best;
+  };
+  // Richtingskaart: welke kijkrichtingen hebben echt beeld rond een standpunt (binnen 'straal' meter)? 8 sectoren rondom (0 = de richting -z waarin
+  // de sessie begon, met de klok mee) plus omhoog en omlaag (meer dan ~26 graden). Groen zegt alleen dát er beeld is, niet dat het scherp of bruikbaar is.
+  AR.richtingen = function (beelden, pos, straal) {
+    var r = { sectoren: [0, 0, 0, 0, 0, 0, 0, 0], omhoog: 0, omlaag: 0, n: 0 };
+    beelden.forEach(function (b) {
+      if (!b || !b.pos || Math.hypot(b.pos[0] - pos.x, b.pos[2] - pos.z) > straal) return;
+      var d = b.dir, p = Math.asin(Math.max(-1, Math.min(1, d[1])));
+      r.n++;
+      if (p > 0.45) { r.omhoog++; return; }
+      if (p < -0.45) { r.omlaag++; return; }
+      var s = Math.round(Math.atan2(d[0], -d[2]) / (Math.PI / 4)); r.sectoren[((s % 8) + 8) % 8]++;
+    });
+    return r;
+  };
+  // Korte aanwijzing, alleen bij een echte leemte: de dichtstbijzijnde ontbrekende richting vanuit de huidige kijkrichting (yaw zoals atan2(x, -z): positief = rechts).
+  AR.draaiHint = function (r, yaw) {
+    if (!r || r.n < 3) return null;
+    var mis = [], i; for (i = 0; i < 8; i++) if (!r.sectoren[i]) mis.push(i);
+    var op = !r.omhoog, neer = !r.omlaag;
+    if (!mis.length && !op && !neer) return null;
+    var tekst = 'Draai hier even';
+    if (mis.length) {
+      var best = null;
+      mis.forEach(function (s) { var rel = s * Math.PI / 4 - yaw; rel = Math.atan2(Math.sin(rel), Math.cos(rel)); if (best === null || Math.abs(rel) < Math.abs(best)) best = rel; });
+      tekst += Math.abs(best) > 2.4 ? ' achter je' : (best > 0 ? ' naar rechts' : ' naar links');
+      if (op) tekst += ' en omhoog'; else if (neer) tekst += ' en omlaag';
+    } else tekst += op ? ' omhoog' : ' omlaag';
+    return { tekst: tekst, ontbreekt: mis, omhoog: op, omlaag: neer };
+  };
+  // Een door ARCore gevonden vlak (polygoon in wereldcoördinaten) als lijnstuk van bovenaf: begin en eind langs de horizontale as van het vlak.
+  // as = de horizontale richting van het vlak (x, z). Geeft { a:{x,z}, b:{x,z}, y0, y1, lengte }.
+  AR.vlakSegment = function (pts, as) {
+    if (!pts.length) return null;
+    var L = Math.hypot(as.x, as.z) || 1, ux = as.x / L, uz = as.z / L, cx = 0, cz = 0, y0 = Infinity, y1 = -Infinity, lo = Infinity, hi = -Infinity;
+    pts.forEach(function (p) { cx += p.x; cz += p.z; y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y); });
+    cx /= pts.length; cz /= pts.length;
+    pts.forEach(function (p) { var t = (p.x - cx) * ux + (p.z - cz) * uz; lo = Math.min(lo, t); hi = Math.max(hi, t); });
+    return { a: { x: cx + ux * lo, z: cz + uz * lo }, b: { x: cx + ux * hi, z: cz + uz * hi }, y0: y0, y1: y1, lengte: hi - lo };
+  };
   // Voorbeeld: de proefkamer met de knik, aangetikt met wat onnauwkeurigheid (in meters, AR-ruimte gedraaid).
   AR.voorbeeld = function () {
     var echt = [[0, 0], [4.03, 0.02], [4.01, 2.97], [2.52, 3.02], [-0.01, 0.92]], dr = 23 * RAD;
@@ -446,7 +599,17 @@ if (typeof module !== 'undefined') module.exports = AR;
 
   // ---------- uitkomst (bewaard per telefoon) ----------
   var uitkomst = null;   // { punten:[{x,z}], hoogte, tijd, voorbeeld, hand:{} }
-  function bewaar() { try { if (uitkomst) localStorage.setItem(SLEUTEL, JSON.stringify(uitkomst)); } catch (e) {} }
+  function bewaar() {
+    if (!uitkomst) return;
+    var melding = el('opslag-fout');
+    try {
+      localStorage.setItem(SLEUTEL, JSON.stringify(uitkomst));
+      melding.hidden = true;
+    } catch (e) {
+      melding.textContent = 'Meting opslaan op dit toestel is mislukt. Houd dit scherm open en kies Uitkomst kopiëren.';
+      melding.hidden = false;
+    }
+  }
   function laad() {
     try {
       var j = JSON.parse(localStorage.getItem(SLEUTEL) || 'null');
@@ -540,7 +703,8 @@ if (typeof module !== 'undefined') module.exports = AR;
         var d = Math.round(w.lengte) - h; td4.textContent = (d > 0 ? '+' : d < 0 ? '−' : '') + Math.abs(d); td4.className = Math.abs(d) <= 50 ? 'goed' : 'let';
       }
       inv.addEventListener('input', function () { var v = AR.leesMaat(inv.value); if (v) uitkomst.hand[i] = v; else delete uitkomst.hand[i]; verschil(); sluitTekst(); bewaar(); });
-      inv.addEventListener('change', function () { toonUitkomst(); });
+      volgToetsen(inv);
+      inv.addEventListener('change', function () { slaWandmaatOp(i, inv); toonUitkomst(); });
       inv.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); var v = el('hand-' + ((i + 1) % n)); if (v) v.focus(); } });
       var td3 = maak('td'); td3.appendChild(inv);
       tr.appendChild(maak('td', 'Wand ' + (i + 1))); tr.appendChild(maak('td', String(Math.round(w.lengte)))); tr.appendChild(td3); tr.appendChild(td4);
@@ -581,8 +745,12 @@ if (typeof module !== 'undefined') module.exports = AR;
     function toonVak() { vak.hidden = false; vak.value = t; vak.focus(); vak.select(); el('zeg').textContent = 'Kopiëren lukte niet vanzelf. De tekst staat hieronder geselecteerd.'; }
     try { navigator.clipboard.writeText(t).then(function () { el('zeg').textContent = 'De uitkomst staat op het klembord.'; }, toonVak); } catch (e) { toonVak(); }
   });
-  el('k-opnieuw').addEventListener('click', function () { uitkomst = null; try { localStorage.removeItem(SLEUTEL); } catch (e) {} el('s-uitkomst').hidden = true; el('s-start').hidden = false; window.scrollTo(0, 0); });
+  el('k-opnieuw').addEventListener('click', function () {
+    uitkomst = null; try { localStorage.removeItem(SLEUTEL); } catch (e) {} el('s-uitkomst').hidden = true; el('s-start').hidden = false;
+    rec = null; ses = null; toonDossier(); toonOpnames(); window.scrollTo(0, 0);
+  });
   el('k-voorbeeld').addEventListener('click', function () {
+    rec = null; ses = null; toonDossier();
     uitkomst = { punten: AR.voorbeeld(), hoogte: 1.42, tijd: 'voorbeeld', voorbeeld: true, hand: { 0: 4000, 1: 3000, 2: 1500, 3: 3264, 4: 902 } };
     bewaar(); toonUitkomst(); el('zeg').textContent = 'Voorbeeld met verzonnen tikken; de eigen maten zijn de echte maten van de proefkamer.';
     el('s-uitkomst').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -613,7 +781,14 @@ if (typeof module !== 'undefined') module.exports = AR;
   var MAX_BEELDEN = 500, HOOGTE_STANDAARD = 2.6;
 
   function status(a, b, maat) { el('ar-status').textContent = a || ''; el('ar-sub').textContent = b || ''; el('ar-maat').textContent = maat || ''; }
-  function knoppen() { el('k-weg').disabled = !punten.length; el('k-klaar').disabled = punten.length < 3; el('k-modus').textContent = modus === 'vloer' ? 'Plafond' : 'Vloer'; }
+  function knoppen() {
+    el('k-weg').disabled = aanvul ? true : !punten.length;
+    el('k-klaar').disabled = aanvul ? false : punten.length < 3;
+    el('k-modus').textContent = aanvul ? 'Apart' : (modus === 'vloer' ? 'Plafond' : 'Vloer');
+    el('k-modus').disabled = !!(aanvul && aanvul.stap >= 2);
+    el('k-hoek').textContent = aanvul && aanvul.stap >= 2 ? 'Detail' : 'Hoek';
+    el('k-detail').disabled = !rec;
+  }
 
   function bouwGl() {
     var c = document.createElement('canvas');
@@ -645,6 +820,12 @@ if (typeof module !== 'undefined') module.exports = AR;
     var dx = oog.x - p.x, dz = oog.z - p.z, L = Math.hypot(dx, dz) || 1, nx = -dz / L * breed / 2, nz = dx / L * breed / 2, y0 = p.y, y1 = p.y + hoog;
     out.push(p.x + nx, y0, p.z + nz, p.x - nx, y0, p.z - nz, p.x + nx, y1, p.z + nz, p.x + nx, y1, p.z + nz, p.x - nx, y0, p.z - nz, p.x - nx, y1, p.z - nz);
   }
+  function lijn3d(out, a, b, breed, oog) {   // dun lint van a naar b, gedraaid naar de kijker (contourlijn van een gevonden vlak)
+    var dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z, vx = oog.x - a.x, vy = oog.y - a.y, vz = oog.z - a.z;
+    var sx = dy * vz - dz * vy, sy = dz * vx - dx * vz, sz = dx * vy - dy * vx, L = Math.hypot(sx, sy, sz); if (L < 1e-9) return;
+    sx *= breed / 2 / L; sy *= breed / 2 / L; sz *= breed / 2 / L;
+    out.push(a.x - sx, a.y - sy, a.z - sz, a.x + sx, a.y + sy, a.z + sz, b.x + sx, b.y + sy, b.z + sz, a.x - sx, a.y - sy, a.z - sz, b.x + sx, b.y + sy, b.z + sz, b.x - sx, b.y - sy, b.z - sz);
+  }
   function bouwVanger() {
     function sh(type, bron) { var x = gl.createShader(type); gl.shaderSource(x, bron); gl.compileShader(x); return x; }
     capProg = gl.createProgram();
@@ -655,10 +836,12 @@ if (typeof module !== 'undefined') module.exports = AR;
     capDoek = document.createElement('canvas');
   }
   // Eén camerabeeld klein (360 breed) uitlezen en als JPEG bewaren, met de stand van de camera erbij.
-  function vangBeeld(v, pv, oog, dir) {
+  // opt: { breed, kwaliteit, detail: true (niet in het panorama), klaar: function (rec) } — een detailfoto is het volle camerabeeld.
+  function vangBeeld(v, pv, oog, dir, opt) {
+    opt = opt || {};
     var cam = v.camera, tex = binding.getCameraImage(cam);
-    if (!tex) return;
-    var w2 = 360, h2 = Math.max(1, Math.round(360 * cam.height / cam.width));
+    if (!tex) return null;
+    var w2 = opt.breed ? Math.min(opt.breed, cam.width) : 360, h2 = Math.max(1, Math.round(w2 * cam.height / cam.width));
     if (!capProg) bouwVanger();
     if (!capFbo || capW !== w2 || capH !== h2) {
       if (capFbo) { gl.deleteFramebuffer(capFbo); gl.deleteTexture(capTex); }
@@ -680,13 +863,20 @@ if (typeof module !== 'undefined') module.exports = AR;
     var cx = capDoek.getContext('2d'), id = cx.createImageData(w2, h2), rij = w2 * 4;
     for (var r = 0; r < h2; r++) id.data.set(px.subarray((h2 - 1 - r) * rij, (h2 - r) * rij), r * rij);
     cx.putImageData(id, 0, 0);
-    var rec = { pos: [oog.x, oog.y, oog.z], dir: [dir.x, dir.y, dir.z], pv: Array.prototype.slice.call(pv), w: w2, h: h2, blob: null };
-    pano.beelden.push(rec);
-    capDoek.toBlob(function (b) {
-      rec.blob = b;
-      try { if (pano.dunUrl) URL.revokeObjectURL(pano.dunUrl); pano.dunUrl = URL.createObjectURL(b); el('ar-dun').src = pano.dunUrl; el('ar-dun').hidden = false; } catch (e) {}
-    }, 'image/jpeg', 0.65);
-    if (pano.wanden.length) AR.dekBij(pano.cellen, pano.wanden, rec, pano.beelden.length - 1);
+    var rec = { pos: [oog.x, oog.y, oog.z], dir: [dir.x, dir.y, dir.z], pv: Array.prototype.slice.call(pv), w: w2, h: h2, blob: null, tijd: new Date().toISOString() };
+    if (!opt.detail) pano.beelden.push(rec);
+    rec.gereed = new Promise(function (klaar) {
+      capDoek.toBlob(function (b) {
+        rec.blob = b;
+        klaar();
+        if (!b) { telWaarneming('beeld_mislukt'); if (opt.klaar) opt.klaar(null); return; }
+        if (opt.klaar) { opt.klaar(rec); return; }
+        bewaarOverzicht(rec);
+        try { if (pano.dunUrl) URL.revokeObjectURL(pano.dunUrl); pano.dunUrl = URL.createObjectURL(b); el('ar-dun').src = pano.dunUrl; el('ar-dun').hidden = false; } catch (e) {}
+      }, 'image/jpeg', opt.kwaliteit || 0.65);
+    });
+    if (!opt.detail && pano.wanden.length) AR.dekBij(pano.cellen, pano.wanden, rec, pano.beelden.length - 1);
+    return rec;
   }
   function hoek3(a, b) { var d = a.x * b.x + a.y * b.y + a.z * b.z; return Math.acos(Math.max(-1, Math.min(1, d))) / RAD; }
   var RAD = Math.PI / 180;
@@ -695,7 +885,7 @@ if (typeof module !== 'undefined') module.exports = AR;
     var H = plafondY != null ? plafondY - vloerY : HOOGTE_STANDAARD, sleutel = punten.length + '|' + H.toFixed(3);
     if (sleutel === pano.sleutel) return;
     pano.sleutel = sleutel;
-    pano.wanden = punten.length >= 2 ? AR.wanden3d(punten, false, vloerY, H, oog) : [];
+    pano.wanden = punten.length >= 2 ? AR.wanden3d(punten, !!(aanvul && aanvul.stap >= 2), vloerY, H, oog) : [];
     pano.cellen = pano.wanden.map(function (w) { return AR.cellen(w, 0.3); });
     pano.beelden.forEach(function (f, i) { AR.dekBij(pano.cellen, pano.wanden, f, i); });
   }
@@ -717,9 +907,29 @@ if (typeof module !== 'undefined') module.exports = AR;
     var pose = f.getViewerPose(ref);
     gl.bindFramebuffer(gl.FRAMEBUFFER, laag.framebuffer);
     gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    if (!pose) { status('Even zoeken…', 'Beweeg de telefoon rustig. Te donker of een kale witte vloer maakt het moeilijk.'); return; }
+    if (!pose) {
+      if (!trackingKwijt) { trackingKwijt = true; telWaarneming('tracking_kwijt'); }
+      status('Even zoeken…', 'Beweeg de telefoon rustig. Te donker of een kale witte vloer maakt het moeilijk.'); return;
+    }
+    trackingKwijt = false;
     var M = pose.transform.matrix, oog = { x: M[12], y: M[13], z: M[14] }, rich = { x: -M[8], y: -M[9], z: -M[10] };
     oogY = oog.y;
+    // Detail: het punt op de wand onder het kruisje (zodra er twee hoeken zijn) en, als erom gevraagd is, één scherpe foto op volle resolutie.
+    wandDoel = null;
+    if (vloerY != null && punten.length >= 2) {
+      var Hw = plafondY != null ? plafondY - vloerY : HOOGTE_STANDAARD, dk = punten.length + '|' + Hw.toFixed(3) + '|' + (aanvul ? 1 : 0);
+      if (dk !== detailWanden.sleutel) { detailWanden.sleutel = dk; detailWanden.lijst = AR.wanden3d(punten, !!aanvul, vloerY, Hw, oog); }
+      wandDoel = AR.snijWand(oog, rich, detailWanden.lijst);
+    }
+    if (detailVang && binding) {
+      var dv = null; pose.views.forEach(function (v) { if (!dv && v.camera) dv = v; });
+      if (dv) {
+        var opdracht = detailVang; detailVang = null;
+        try { vangBeeld(dv, mul(dv.projectionMatrix, dv.transform.inverse.matrix), oog, rich, { breed: 4096, kwaliteit: 0.88, detail: true, klaar: opdracht }); }
+        catch (e) { opdracht(null, e); }
+        gl.bindFramebuffer(gl.FRAMEBUFFER, laag.framebuffer);
+      }
+    }
     // panorama: een beeld vastleggen als de telefoon genoeg verplaatst of gedraaid is en niet te snel beweegt
     if (pano.aan && vloerY != null) {
       var nu0 = performance.now(), dirN = rich, snel = pano.vorigeDir ? hoek3(dirN, pano.vorigeDir) > 2.5 : true;
@@ -751,8 +961,8 @@ if (typeof module !== 'undefined') module.exports = AR;
           if (plafondY == null && H[5] < -0.9 && H[13] - oog.y > 0.3) plafondMonsters.push(H[13]);
         }
       }
-      if (!punten.length && vloerMonsters.length >= 8) vloerY = AR.mediaan(vloerMonsters);
-      if (plafondY == null && plafondMonsters.length >= 8 && vloerY != null) { var pm = AR.mediaan(plafondMonsters); if (pm - vloerY > 1.8 && pm - vloerY < 6) plafondY = pm; }
+      if (!punten.length && vloerMonsters.length >= 8) { if (vloerY == null) telWaarneming('automatisch', 'vloer'); vloerY = AR.mediaan(vloerMonsters); }
+      if (plafondY == null && plafondMonsters.length >= 8 && vloerY != null) { var pm = AR.mediaan(plafondMonsters); if (pm - vloerY > 1.8 && pm - vloerY < 6) { plafondY = pm; telWaarneming('automatisch', 'plafond'); } }
     }
     plafondKandidaat = null;
     if (vloerY == null) richtpunt = null;
@@ -765,7 +975,14 @@ if (typeof module !== 'undefined') module.exports = AR;
       if (punten.length) { var hb = AR.hoogteBoven(oog, rich, punten[punten.length - 1]); if (hb && hb.y - vloerY > 1.8 && hb.y - vloerY < 6 && hb.naast < 0.5) plafondKandidaat = hb.y; }
     }
     var nu = performance.now();
-    spoor.push({ t: nu, p: richtpunt ? { x: richtpunt.x, z: richtpunt.z, plafond: !!richtpunt.plafond } : null, h: plafondKandidaat });
+    spoor.push({ t: nu, p: richtpunt ? { x: richtpunt.x, z: richtpunt.z, plafond: !!richtpunt.plafond } : null, h: plafondKandidaat,
+      w: wandDoel ? { nr: wandDoel.nr, u: wandDoel.u, v: wandDoel.v } : null, o: { x: oog.x, y: oog.y, z: oog.z } });
+    var doelTekst = '';
+    if (wandDoel) {
+      var wl = aanvul ? 'W' + (wandDoel.nr + 1) : 'wand ' + (wandDoel.nr + 1);
+      doelTekst = 'Detail-kruisje: ' + wl + ' · ' + meter(wandDoel.u) + ' m van H' + (wandDoel.nr + 1) + ' · ' + meter(wandDoel.v) + ' m hoog';
+    } else if (punten.length >= 2) doelTekst = 'Detail-kruisje raakt geen wand: de foto wordt dan op de vloerplek bewaard.';
+    el('ar-doel').textContent = doelTekst;
     while (spoor.length && spoor[0].t < nu - 1500) spoor.shift();
     var ver = !!(richtpunt && richtpunt.afstand > VER);
     el('ar-laag').classList.toggle('ver', ver);
@@ -773,6 +990,8 @@ if (typeof module !== 'undefined') module.exports = AR;
     // statusregel
     var pl = plafondY != null ? ' · plafond ' + meter(plafondY - vloerY) + ' m' : '';
     if (vloerY == null) status('Vloer zoeken…', 'Richt op een vrij stuk vloer en beweeg de telefoon rustig heen en weer.');
+    else if (aanvul && aanvul.stap < 2) status('Uitlijnen: tik hoek ' + aanvul.labels[aanvul.stap] + ' aan', 'Dezelfde hoek als bij de eerste rondgang. Daarna weet de telefoon waar de oude opname ligt.' + (aanvul.melding ? ' ' + aanvul.melding : ''));
+    else if (aanvul) status(aanvul.apart ? 'Aanvullen (apart, niet uitgelijnd)' : 'Aanvullen: uitgelijnd', 'Loop rond voor extra beelden; richt op een onderdeel en druk Detail.' + pl);
     else if (modus === 'plafond' && plafondY == null && !punten.length) status('Eerst één vloerhoek', 'Tik op Vloer en tik een hoek aan die je op de vloer ziet. Daarna meet je recht erboven het plafond.');
     else if (modus === 'plafond' && plafondY == null) status('Plafond meten', plafondKandidaat != null ? 'Richt recht boven hoek H' + punten.length + ' op de plafondhoek en tik.' : 'Richt omhoog, recht boven hoek H' + punten.length + '.', plafondKandidaat != null ? meter(plafondKandidaat - vloerY) + ' m' : '');
     else if (!richtpunt) status(modus === 'vloer' ? 'Richt lager' : 'Richt hoger', modus === 'vloer' ? 'Het kruisje moet op de vloer staan.' + pl : 'Het kruisje moet op het plafond staan.' + pl);
@@ -787,6 +1006,9 @@ if (typeof module !== 'undefined') module.exports = AR;
     // tekenen: de vloerlijn, en zodra het plafond bekend is ook de plafondlijn en staande lijnen op elke hoek (het draadmodel)
     var y = (vloerY == null ? 0 : vloerY) + 0.003, yp = plafondY == null ? null : plafondY - 0.003, vast = [], los = [], richt = [], palen = [], plaf = [];
     for (var i = 0; i + 1 < punten.length; i++) { strook(vast, punten[i], punten[i + 1], 0.018, y); if (yp != null) strook(plaf, punten[i], punten[i + 1], 0.018, yp); }
+    if (aanvul && punten.length >= 3) { strook(vast, punten[punten.length - 1], punten[0], 0.018, y); if (yp != null) strook(plaf, punten[punten.length - 1], punten[0], 0.018, yp); }
+    if (aanvul) aanvul.getikt.forEach(function (p) { ring(richt, p, 0.05, 0.07, y); });
+    if (wandDoel) { ring(richt, { x: wandDoel.x, z: wandDoel.z }, 0.02, 0.035, wandDoel.y); }
     if (punten.length && richtpunt) { strook(los, punten[punten.length - 1], dichtBijStart ? punten[0] : richtpunt, 0.012, y); if (yp != null) strook(los, punten[punten.length - 1], dichtBijStart ? punten[0] : richtpunt, 0.012, yp); }
     punten.forEach(function (p) {
       paal(p.bron === 'plafond' ? plaf : palen, { x: p.x, y: y, z: p.z }, oog, yp != null ? yp - y : 0.35, 0.012);
@@ -806,10 +1028,28 @@ if (typeof module !== 'undefined') module.exports = AR;
         [0, 1, 2, 0, 2, 3].forEach(function (j) { o.push(hk[j].x + tx, hk[j].y, hk[j].z + tz); });
       });
     });
+    // Live contouren: de vlakken die ARCore zelf vindt. Wanden (staand) als blauwe lijnen, vloer en tafelbladen dun wit. Dit is het ruwe scanvoorstel;
+    // de getikte hoeken (groen) zijn de bevestigde lijnstukken. Beide worden apart bewaard.
+    var vlakLijnen = [], vlakVloer = [];
+    if (f.detectedPlanes && ref) {
+      try {
+        f.detectedPlanes.forEach(function (pl) {
+          var pp = f.getPose(pl.planeSpace, ref); if (!pp || !pl.polygon || pl.polygon.length < 3) return;
+          var m = pp.transform.matrix, pts = Array.prototype.map.call(pl.polygon, function (q) {
+            return { x: m[0] * q.x + m[4] * q.y + m[8] * q.z + m[12], y: m[1] * q.x + m[5] * q.y + m[9] * q.z + m[13], z: m[2] * q.x + m[6] * q.y + m[10] * q.z + m[14] };
+          });
+          var staand = pl.orientation === 'vertical' || Math.abs(m[5]) < 0.3, uit = staand ? vlakLijnen : vlakVloer;
+          for (var q = 0; q < pts.length; q++) lijn3d(uit, pts[q], pts[(q + 1) % pts.length], staand ? 0.014 : 0.006, oog);
+          if (staand) noteerVlak(pl, pts, { x: m[0], z: m[2] });
+        });
+      } catch (e) { /* een toestel zonder vlakken: dan alleen de getikte lijnen */ }
+    }
+    richtingsKaart(oog, rich);
     pose.views.forEach(function (v) {
       var vp = laag.getViewport(v); gl.viewport(vp.x, vp.y, vp.width, vp.height);
       teken(mul(v.projectionMatrix, v.transform.inverse.matrix), [
         { v: gedekt, c: [0.3, 0.85, 0.5, 0.22] }, { v: open, c: [1, 0.6, 0.2, 0.16] },
+        { v: vlakVloer, c: [1, 1, 1, 0.3] }, { v: vlakLijnen, c: [0.35, 0.72, 1, 0.95] },
         { v: vast, c: [0.36, 0.86, 0.55, 0.95] }, { v: los, c: [0.47, 0.68, 1, 0.9] }, { v: palen, c: [1, 1, 1, 0.95] }, { v: plaf, c: [1, 0.72, 0.25, 0.95] },
         { v: richt, c: dichtBijStart ? [0.36, 0.86, 0.55, 1] : ver ? [1, 0.7, 0.28, 1] : [1, 1, 1, 1] }]);
     });
@@ -818,9 +1058,10 @@ if (typeof module !== 'undefined') module.exports = AR;
   // Wat er in de 0,4 s voor het drukken in beeld was (de laatste 40 ms niet: dan beweegt de telefoon al onder de duim).
   function vlakVoor(T) { return spoor.filter(function (e) { return e.t >= T - 400 && e.t <= T - 40; }); }
   function tik(T) {
-    if (!sessie) return;
+    if (!sessie || paneelOpen) return;
     if (vloerY == null) { status('Eerst de vloer', 'Beweeg de telefoon rustig over een vrij stuk vloer.'); return; }
     var rij = vlakVoor(T || performance.now());
+    if (aanvul) { tikAanvul(T, rij); return; }
     if (modus === 'plafond' && plafondY == null) {
       var hs = rij.map(function (e) { return e.h; }).filter(function (h) { return h != null; });
       var h = hs.length >= 3 ? AR.mediaan(hs) : plafondKandidaat;
@@ -833,15 +1074,23 @@ if (typeof module !== 'undefined') module.exports = AR;
     if (punten.length >= 3 && AR.afstand(p, punten[0]) < 0.2) { afronden(); return; }
     punten.push(viaPlafond ? { x: p.x, z: p.z, bron: 'plafond' } : { x: p.x, z: p.z });
     try { if (navigator.vibrate) navigator.vibrate(25); } catch (e) {}
+    telWaarneming('getikt'); bewaarLive();
     knoppen();
   }
   function afronden() {
+    if (aanvul) { if (sessie) sessie.end(); return; }
     if (punten.length >= 3) {
       uitkomst = { punten: punten.slice(), hoogte: oogY != null && vloerY != null ? oogY - vloerY : 0, plafond: plafondY != null && vloerY != null ? plafondY - vloerY : 0,
         tijd: new Date().toLocaleString('nl-NL'), voorbeeld: false, hand: {} };
       bewaar();
       pano.klaar = pano.beelden.length ? { beelden: pano.beelden.slice(), punten: punten.slice(), vloerY: vloerY, hoogte: plafondY != null ? plafondY - vloerY : HOOGTE_STANDAARD,
         plafondBekend: plafondY != null, tijd: uitkomst.tijd } : null;
+      if (rec && ses) {
+        var d = dossier();
+        DS.zetHoeken(d, ses.id, punten);
+        ses.xr.vloerY = vloerY; ses.xr.plafondY = plafondY; ses.xr.oog_boven_vloer = uitkomst.hoogte; ses.live_punten = null;
+        koppelWanden(d); planBewaar(true);
+      }
     }
     if (sessie) sessie.end();
   }
@@ -849,17 +1098,33 @@ if (typeof module !== 'undefined') module.exports = AR;
     sessie = null; hits = null;
     try { if (wake) wake.release(); } catch (e) {}
     el('ar-laag').hidden = true; document.body.style.background = '';
+    paneelOpen = false; el('ar-detail').hidden = true; huidigPaneel = null;
+    if (rec && ses) { DS.sluitSessie(dossier(), ses.id, { vloerY: vloerY, plafondY: plafondY }); planBewaar(true); }
+    if (aanvul) { aanvul = null; el('s-start').hidden = true; el('s-opnames').hidden = true; toonDossier(); el('zeg').textContent = 'Aanvulronde klaar.'; return; }
+    if (rec && !dossier().hoeken.length && punten.length >= 3) zegKan('Gestopt zonder Klaar: de ' + punten.length + ' hoeken staan bewaard. Open de ruimte hieronder om ze te herstellen.');
     if (uitkomst && !uitkomst.voorbeeld && uitkomst.punten.length >= 3) { el('s-start').hidden = true; toonUitkomst(); toonPano(); el('zeg').textContent = 'Klaar: ' + uitkomst.punten.length + ' hoeken aangetikt. Vul nu je eigen maten in.'; }
     else if (punten.length) { zegKan('Gestopt met ' + punten.length + (punten.length === 1 ? ' hoek' : ' hoeken') + '; voor een kamer zijn er minstens 3 nodig.'); }
+    if (rec) toonDossier(); else toonOpnames();
   }
 
-  start.addEventListener('click', function () {
+  start.addEventListener('click', function () { startAr(false); });
+  function startAr(aanvullen) {
     if (sessie) return;
-    punten = []; vloerMonsters = []; vloerY = null; richtpunt = null; modus = 'vloer'; plafondY = null; plafondMonsters = []; plafondKandidaat = null; spoor = []; knoppen();
+    punten = []; vloerMonsters = []; vloerY = null; richtpunt = null; modus = 'vloer'; plafondY = null; plafondMonsters = []; plafondKandidaat = null; spoor = [];
+    aanvul = null; paneelOpen = false; detailVang = null; wandDoel = null; trackingKwijt = false; detailWanden = { sleutel: '', lijst: [] };
+    if (DS && OS) {
+      if (aanvullen && rec) {
+        var d0 = dossier();
+        aanvul = { stap: 0, getikt: [], idx: [0, 1], labels: [d0.hoeken[0].label, d0.hoeken[1].label], melding: '', transform: null, apart: false };
+        ses = DS.startSessie(d0, toestelInfo()); planBewaar(true);
+      } else maakRuimte();
+    }
+    knoppen();
     pano = { aan: false, beelden: [], laatste: null, vorigeDir: null, t: 0, wanden: [], cellen: [], sleutel: '', dekking: 0, klaar: null, dunUrl: null };
     el('ar-dun').hidden = true; el('ar-pano').textContent = '';
     el('ar-laag').hidden = false; status('AR start…', '');
-    navigator.xr.requestSession('immersive-ar', { requiredFeatures: ['hit-test'], optionalFeatures: ['dom-overlay', 'local-floor', 'camera-access'], domOverlay: { root: el('ar-laag') } }).then(function (s) {
+    scanVlakken = new Map(); stil = null; hintPlekken = []; el('ar-hint').textContent = '';
+    navigator.xr.requestSession('immersive-ar', { requiredFeatures: ['hit-test'], optionalFeatures: ['dom-overlay', 'local-floor', 'camera-access', 'plane-detection'], domOverlay: { root: el('ar-laag') } }).then(function (s) {
       sessie = s;
       if (!gl) bouwGl();
       return Promise.resolve(gl.makeXRCompatible ? gl.makeXRCompatible() : null).then(function () {
@@ -881,15 +1146,25 @@ if (typeof module !== 'undefined') module.exports = AR;
       el('ar-laag').hidden = true;
       if (sessie) { try { sessie.end(); } catch (x) {} }
       zegKan('AR starten lukte niet: ' + (e && e.message ? e.message : 'onbekende fout') + '. Gebruik Chrome en geef toestemming voor de camera.');
+      if (rec && ses) { ses.eind = new Date().toISOString(); ses.fout = 'AR starten lukte niet: ' + String(e && e.message || e).slice(0, 120); planBewaar(true); if (aanvul) { aanvul = null; toonDossier(); } }
     });
-  });
-  // knoppen in de AR-laag tellen niet als tik op een hoek
-  el('ar-laag').addEventListener('beforexrselect', function (e) { if (e.target && e.target.closest && e.target.closest('button')) e.preventDefault(); });
-  el('k-weg').addEventListener('click', function () { punten.pop(); knoppen(); });
+  }
+  // knoppen en invoervelden in de AR-laag tellen niet als tik op een hoek
+  el('ar-laag').addEventListener('beforexrselect', function (e) { if (e.target && e.target.closest && e.target.closest('button, input, select, textarea, label, #ar-detail')) e.preventDefault(); });
+  el('k-weg').addEventListener('click', function () { punten.pop(); bewaarLive(); knoppen(); });
+  el('k-detail').addEventListener('pointerdown', function (e) { e.preventDefault(); doeDetail(performance.now()); });
+  el('k-detail').addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); doeDetail(performance.now()); } });
   // De duimknop reageert al bij het neerzetten van de duim (niet pas bij loslaten), met het punt van vlak daarvoor.
   el('k-hoek').addEventListener('pointerdown', function (e) { e.preventDefault(); tik(performance.now()); });
   el('k-hoek').addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tik(performance.now()); } });
-  el('k-modus').addEventListener('click', function () { modus = modus === 'vloer' ? 'plafond' : 'vloer'; knoppen(); });
+  el('k-modus').addEventListener('click', function () {
+    if (aanvul) {
+      // Uitlijnen lukt niet of de hoeken zijn niet te zien: de rondgang komt apart in het dossier, met een eigen AR-ruimte, en wordt niet samengevoegd.
+      if (aanvul.stap < 2) { aanvul.apart = true; aanvul.stap = 2; punten = []; ses.uitlijning = { status: 'niet-uitgelijnd', reden: 'opnemer koos apart bewaren' }; planBewaar(); }
+      knoppen(); return;
+    }
+    modus = modus === 'vloer' ? 'plafond' : 'vloer'; knoppen();
+  });
   el('k-klaar').addEventListener('click', afronden);
   el('k-stop').addEventListener('click', function () { if (sessie) sessie.end(); });
 
@@ -906,19 +1181,24 @@ if (typeof module !== 'undefined') module.exports = AR;
     el('pano-tekst').textContent = k.beelden.length + ' beelden vastgelegd tijdens de opname. ' + Math.round(AR.dekking(C) * 100) + '% van de wanden is in beeld geweest' +
       (k.plafondBekend ? '' : ' (wandhoogte geschat op ' + meter(k.hoogte) + ' m, het plafond is niet gemeten)') + '.';
     el('pano-wanden').textContent = ''; el('pano-verder').hidden = true; el('pano-melding').hidden = true; el('k-plak').disabled = false;
+    // met een dossier gaat bewaren en delen via het pakket (zip met alle beelden en maten)
+    el('k-bewaar').hidden = !!rec; el('k-deel').hidden = !!rec;
   }
   function laadBeeld(f) {
     if (f.bitmap) return Promise.resolve(f.bitmap);
     if (f.blob && window.createImageBitmap) return createImageBitmap(f.blob).then(function (b) { f.bitmap = b; return b; });
     var src = f.url || (f.blob ? URL.createObjectURL(f.blob) : null);
     if (!src) return Promise.resolve(null);
-    return new Promise(function (ok) { var im = new Image(); im.onload = function () { f.bitmap = im; ok(im); }; im.onerror = function () { ok(null); }; im.src = src; });
+    return new Promise(function (ok, fout) { var im = new Image(); im.onload = function () { f.bitmap = im; ok(im); }; im.onerror = function () { fout(new Error('Een bronfoto kan niet worden geopend.')); }; im.src = src; });
   }
   // Teken elk vakje van een wand uit het beeld dat het het best liet zien (twee driehoeken per vakje, affien vervormd).
   function plakWand(w, cellen, beelden) {
     var cw = Math.max(1, Math.round(w.L * PPM)), ch = Math.max(1, Math.round(w.H * PPM)), dk = document.createElement('canvas');
     dk.width = cw; dk.height = ch;
+    // ondergrond = gat: grijs met oranje arcering, zodat een stuk zonder beeld in de kijker als gat herkenbaar blijft
     var cx = dk.getContext('2d'); cx.fillStyle = '#d9d6cf'; cx.fillRect(0, 0, cw, ch);
+    cx.strokeStyle = 'rgba(200,110,20,.55)'; cx.lineWidth = 3;
+    if (cx.beginPath) for (var hx = -ch; hx < cw; hx += 24) { cx.beginPath(); cx.moveTo(hx, ch); cx.lineTo(hx + ch, 0); cx.stroke(); }
     var nodig = {}; cellen.forEach(function (c) { if (c.beste >= 0) nodig[c.beste] = true; });
     return Promise.all(Object.keys(nodig).map(function (i) { return laadBeeld(beelden[i]); })).then(function () {
       cellen.forEach(function (c) {
@@ -949,25 +1229,34 @@ if (typeof module !== 'undefined') module.exports = AR;
     k.wanden.forEach(function (w, i) { keten = keten.then(function () { return plakWand(w, k.cellen[i], k.beelden).then(function (dk) { uit.push(dk); }); }); });
     return keten.then(function () { return uit; });
   }
-  function naarDataUrl(blob) { return new Promise(function (ok) { var r = new FileReader(); r.onload = function () { ok(r.result); }; r.onerror = function () { ok(null); }; r.readAsDataURL(blob); }); }
+  function naarDataUrl(blob) { return new Promise(function (ok, fout) { var r = new FileReader(); r.onload = function () { ok(r.result); }; r.onerror = function () { fout(new Error('Een bronfoto kan niet worden gelezen.')); }; r.readAsDataURL(blob); }); }
   el('k-plak').addEventListener('click', function () {
     var k = pano.klaar; if (!k) return;
     el('k-plak').disabled = true; el('pano-melding').hidden = false; el('pano-melding').className = 'melding'; el('pano-melding').textContent = 'Bezig met plakken…';
-    plakAlles(k).then(function (doeken) {
+    Promise.all(k.beelden.map(function (f) { return f.gereed; })).then(function () {
+      if (k.beelden.some(function (f) { return !f.blob && !f.url; })) throw new Error('Een camerabeeld ontbreekt. De opname is onvolledig.');
+      return plakAlles(k);
+    }).then(function (doeken) {
       var strook = el('pano-wanden'); strook.textContent = '';
       var wanden = doeken.map(function (dk, i) {
         var url = dk.toDataURL('image/jpeg', 0.78), fig = maak('figure'), im = maak('img'); im.src = url; im.alt = 'Wand ' + (k.wanden[i].nr + 1);
         fig.appendChild(im); fig.appendChild(maak('figcaption', 'Wand ' + (k.wanden[i].nr + 1) + ' · ' + meter(k.wanden[i].L) + ' m')); strook.appendChild(fig);
         return { nr: k.wanden[i].nr, L: k.wanden[i].L, beeld: url };
       });
-      return Promise.all(k.beelden.map(function (f) { return f.blob ? naarDataUrl(f.blob) : Promise.resolve(null); })).then(function (urls) {
+      bewaarPanorama(doeken, k);
+      return Promise.all(k.beelden.map(function (f) { return f.blob ? naarDataUrl(f.blob) : f.url; })).then(function (urls) {
         panoBestand = { soort: 'mt-ar-panorama', versie: 1, tijd: k.tijd, vloerY: k.vloerY, hoogte: k.hoogte, plafondBekend: k.plafondBekend,
           punten: k.punten.map(function (p) { return { x: p.x, z: p.z }; }), wanden: wanden,
-          beelden: k.beelden.map(function (f, i) { return urls[i] ? { pos: f.pos, dir: f.dir, pv: f.pv, beeld: urls[i] } : null; }).filter(Boolean) };
+          beelden: k.beelden.map(function (f, i) { return { pos: f.pos, dir: f.dir, pv: f.pv, beeld: urls[i] }; }) };
         return bewaarIdb(panoBestand);
       });
-    }).then(function () {
-      el('pano-melding').className = 'melding goed'; el('pano-melding').textContent = 'Klaar. Grijze stukken zijn niet in beeld geweest.';
+    }).then(function (bewaard) {
+      el('k-kijk').disabled = !bewaard;
+      el('k-plak').disabled = bewaard;
+      el('pano-melding').className = bewaard ? 'melding goed' : 'melding';
+      el('pano-melding').textContent = bewaard
+        ? 'Panorama op dit toestel bewaard. Grijze stukken hebben geen beeld.'
+        : 'Panorama opslaan op dit toestel is mislukt. Kies Bewaren als bestand voordat je deze pagina sluit, of probeer opnieuw.';
       el('pano-verder').hidden = false;
     }, function (e) {
       el('pano-melding').textContent = 'Plakken lukte niet: ' + String(e && e.message || e).slice(0, 120); el('k-plak').disabled = false;
@@ -978,7 +1267,7 @@ if (typeof module !== 'undefined') module.exports = AR;
       try {
         var rq = indexedDB.open('mt-ar', 1);
         rq.onupgradeneeded = function () { rq.result.createObjectStore('opnames'); };
-        rq.onsuccess = function () { try { var tx = rq.result.transaction('opnames', 'readwrite'); tx.objectStore('opnames').put(obj, 'laatste'); tx.oncomplete = function () { ok(true); }; tx.onerror = function () { ok(false); }; } catch (e) { ok(false); } };
+        rq.onsuccess = function () { try { var tx = rq.result.transaction('opnames', 'readwrite'); tx.objectStore('opnames').put(obj, 'laatste'); tx.oncomplete = function () { ok(true); }; tx.onerror = tx.onabort = function () { ok(false); }; } catch (e) { ok(false); } };
         rq.onerror = function () { ok(false); };
       } catch (e) { ok(false); }
     });
@@ -1000,11 +1289,597 @@ if (typeof module !== 'undefined') module.exports = AR;
     } catch (e) { el('pano-melding').textContent = 'Delen lukte niet.'; }
   });
 
+  // =====================================================================================================================
+  // Ruimte-opname (18-11-2026): één dossier per ruimte (mt-ruimte-dossier.js), stapsgewijs bewaard in de bestaande opname-opslag (mt-opname-opslag.js, met
+  // revisiecontrole), details met foto en maten tijdens de rondgang, aanvullen in een nieuwe sessie na uitlijnen op twee bekende hoeken, en een zip-pakket.
+  // Zonder die twee modules (losse proef) werkt de pagina zoals voorheen.
+  // =====================================================================================================================
+  var DS = window.MTRuimteDossier || null, OS = window.MTOpnameOpslag || null;
+  var rec = null, ses = null, aanvul = null, paneelOpen = false, detailVang = null, wandDoel = null, trackingKwijt = false, huidigPaneel = null, laatsteSoort = 'leiding';
+  var detailWanden = { sleutel: '', lijst: [] }, keten = Promise.resolve(), bewaarTimer = null, wachtrij = [], laatstePakket = null;
+  var VOLGORDE = ['leiding', 'stopcontact', 'schakelaar', 'radiator', 'raam', 'deur', 'nis', 'knik', 'kolom', 'balk', 'plint', 'vensterbank', 'sierlijst', 'meubel', 'afwerking', 'opmerking', 'overig'];
+  function dossier() { return rec ? rec.opname : null; }
+  function nuMs() { return window.performance && performance.now ? performance.now() : Date.now(); }
+  function mb(n) { return (n / 1048576).toFixed(1).replace('.', ',') + ' MB'; }
+  function tijdTekst(iso) { try { return new Date(iso).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } }
+  function toestelInfo() { var ua = navigator.userAgent || ''; return { toestel: /SM-S92\d/.test(ua) ? 'Samsung Galaxy S24' : (/iPhone/.test(ua) ? 'iPhone' : ''), browser: ua.slice(0, 160) }; }
+  function telWaarneming(soort, wat) {
+    if (!ses || !ses.waarnemingen) return;
+    ses.waarnemingen[soort] = (ses.waarnemingen[soort] || 0) + 1;
+    if (wat) { ses.waarnemingen.wat = ses.waarnemingen.wat || []; ses.waarnemingen.wat.push({ soort: soort, wat: wat, tijd: new Date().toISOString() }); }
+    planBewaar();
+  }
+
+  // ---------- live: gevonden wandvlakken, plattegrondje en richtingskaart ----------
+  var scanVlakken = new Map(), stil = null, hintPlekken = [], kaartTeller = 0, scanBewaard = 0;
+  function noteerVlak(pl, pts, as) {
+    var v = scanVlakken.get(pl);
+    if (!v) { v = { id: 'vl' + (scanVlakken.size + 1), eerst: new Date().toISOString() }; scanVlakken.set(pl, v); telWaarneming('automatisch', 'wandvlak'); }
+    if (v.seg && pl.lastChangedTime === v.t) return;
+    v.t = pl.lastChangedTime; v.seg = AR.vlakSegment(pts, as);
+    var nu = nuMs();
+    if (ses && nu - scanBewaard > 3000) {
+      scanBewaard = nu; ses.scan_voorstellen = [];
+      scanVlakken.forEach(function (x) { if (x.seg && x.seg.lengte > 0.2) ses.scan_voorstellen.push({ id: x.id, soort: 'wandvlak', bron: 'arcore-plane-detection', status: 'ruw scanvoorstel', a: x.seg.a, b: x.seg.b, y0: x.seg.y0, y1: x.seg.y1, lengte_m: x.seg.lengte, eerst: x.eerst }); });
+      planBewaar();
+    }
+  }
+  // Geeft alleen een aanwijzing als de opnemer even stilstaat (2,5 s binnen 30 cm) en er rond dat standpunt echt een richting zonder beeld is.
+  function richtingsKaart(oog, rich) {
+    var nu = nuMs(), yaw = Math.atan2(rich.x, -rich.z);
+    if (!stil || Math.hypot(oog.x - stil.x, oog.z - stil.z) > 0.3) stil = { x: oog.x, z: oog.z, t: nu };
+    var r = pano.aan ? AR.richtingen(pano.beelden, oog, 0.6) : null, hint = r && nu - stil.t > 2500 ? AR.draaiHint(r, yaw) : null;
+    el('ar-hint').textContent = hint ? hint.tekst : '';
+    if (hint && ses && !hintPlekken.some(function (q) { return Math.hypot(q.x - oog.x, q.z - oog.z) < 0.6; })) {
+      hintPlekken.push({ x: oog.x, z: oog.z });
+      (ses.draai_aanwijzingen = ses.draai_aanwijzingen || []).push({ x: oog.x, z: oog.z, tekst: hint.tekst, tijd: new Date().toISOString() }); planBewaar();
+    }
+    if (kaartTeller++ % 6) return;
+    var cv = el('ar-kaart'), c = cv && cv.getContext ? cv.getContext('2d') : null; if (!c || !c.clearRect) return;
+    var W = cv.width, alle = punten.map(function (p) { return [p.x, p.z]; });
+    scanVlakken.forEach(function (v) { if (v.seg) alle.push([v.seg.a.x, v.seg.a.z], [v.seg.b.x, v.seg.b.z]); });
+    alle.push([oog.x, oog.z]);
+    var x0 = Math.min.apply(null, alle.map(function (a) { return a[0]; })), x1 = Math.max.apply(null, alle.map(function (a) { return a[0]; }));
+    var z0 = Math.min.apply(null, alle.map(function (a) { return a[1]; })), z1 = Math.max.apply(null, alle.map(function (a) { return a[1]; }));
+    var s = (W - 48) / Math.max(3, x1 - x0, z1 - z0), mx = (x0 + x1) / 2, mz = (z0 + z1) / 2, S = function (x, z) { return [W / 2 + (x - mx) * s, W / 2 + (z - mz) * s]; };
+    c.clearRect(0, 0, W, W); c.lineCap = 'round';
+    function lijn(a, b, kleur, dik) { var p = S(a.x, a.z), q = S(b.x, b.z); c.strokeStyle = kleur; c.lineWidth = dik; c.beginPath(); c.moveTo(p[0], p[1]); c.lineTo(q[0], q[1]); c.stroke(); }
+    scanVlakken.forEach(function (v) { if (v.seg && v.seg.lengte > 0.2) lijn(v.seg.a, v.seg.b, 'rgba(90,180,255,.9)', 6); });
+    for (var i = 0; i + 1 < punten.length; i++) lijn(punten[i], punten[i + 1], '#5cdc8c', 7);
+    if (aanvul && punten.length >= 3) lijn(punten[punten.length - 1], punten[0], '#5cdc8c', 7);
+    // standpunten met beeld
+    var stippen = [];
+    pano.beelden.forEach(function (b) { if (!stippen.some(function (q) { return Math.hypot(q[0] - b.pos[0], q[1] - b.pos[2]) < 0.6; })) stippen.push([b.pos[0], b.pos[2]]); });
+    c.fillStyle = 'rgba(255,255,255,.75)'; stippen.forEach(function (q) { var p = S(q[0], q[1]); c.beginPath(); c.arc(p[0], p[1], 5, 0, Math.PI * 2); c.fill(); });
+    // richtingen rond jou: groen = beeld vastgelegd, grijs = nog niet; boven en onder als driehoekjes
+    var o = S(oog.x, oog.z);
+    if (r) for (var k = 0; k < 8; k++) {
+      var hk = k * Math.PI / 4 - Math.PI / 2; c.strokeStyle = r.sectoren[k] ? '#5cdc8c' : 'rgba(255,255,255,.35)'; c.lineWidth = 9;
+      c.beginPath(); c.arc(o[0], o[1], 26, hk - 0.33, hk + 0.33); c.stroke();
+    }
+    if (r) { c.fillStyle = r.omhoog ? '#5cdc8c' : 'rgba(255,255,255,.35)'; c.font = '700 26px sans-serif'; c.fillText('▲', W - 34, 30); c.fillStyle = r.omlaag ? '#5cdc8c' : 'rgba(255,255,255,.35)'; c.fillText('▼', W - 34, W - 10); }
+    c.strokeStyle = '#ff5a4e'; c.lineWidth = 5; c.beginPath(); c.moveTo(o[0], o[1]); c.lineTo(o[0] + Math.sin(yaw) * 22, o[1] - Math.cos(yaw) * 22); c.stroke();
+    c.fillStyle = '#ff5a4e'; c.beginPath(); c.arc(o[0], o[1], 8, 0, Math.PI * 2); c.fill();
+  }
+
+  // ---------- bewaren: dossier na elke wijziging (even gebundeld), elk beeld meteen; fouten zichtbaar, opnieuw proberen zonder dubbele delen ----------
+  function planBewaar(direct) {
+    if (!rec || !OS) return;
+    if (bewaarTimer) clearTimeout(bewaarTimer);
+    bewaarTimer = setTimeout(schrijfNu, direct ? 0 : 1200);
+  }
+  function schrijfNu() {
+    bewaarTimer = null;
+    if (!rec || !OS) return keten;
+    var r = rec;
+    keten = keten.then(function () {
+      return OS.schrijf(r, r.rev ? {} : { nieuw: true }).then(function (k) { r.rev = k.rev; r._bewaardOp = new Date(); if (!wachtrij.length) wisFout(); toonBewaard(); }, meldFout);
+    });
+    return keten;
+  }
+  function bewaarBeeld(b, blob) {
+    var foto = { id: rec.id + ':' + b.id, opnameId: rec.id, blob: blob, type: blob.type || 'image/jpeg', grootte: blob.size, breedte: b.breedte, hoogte: b.hoogte, tijd: b.tijd, soort: b.soort, pad: b.pad, item: b.detail_id || null };
+    return OS.zetFoto(foto).then(function () { b.bewaard = true; b.bytes = blob.size; planBewaar(); toonBewaard(); },
+      function (e) { if (!wachtrij.some(function (x) { return x.b === b; })) wachtrij.push({ b: b, blob: blob }); meldFout(e); });
+  }
+  function bewaarOverzicht(r) {
+    if (!rec || !DS || !ses) return;
+    var pose = { pos: r.pos, dir: r.dir, pv: r.pv }, b = DS.voegBeeldToe(dossier(), { soort: 'overzicht', sessie: ses.id, pose: pose, breedte: r.w, hoogte: r.h, tijd: r.tijd });
+    if (aanvul && aanvul.transform) b.pose_basis = DS.poseNaarBasis(aanvul.transform, pose);
+    else if (aanvul) b.niet_uitgelijnd = true;
+    r.beeldId = b.id; telWaarneming('beeld_vastgelegd');
+    bewaarBeeld(b, r.blob);
+  }
+  function bewaarPanorama(doeken, k) {
+    if (!rec || !OS) return;
+    var d = dossier(); d.panorama = d.panorama || [];
+    doeken.forEach(function (dk, i) {
+      var wand = d.wanden[k.wanden[i].nr]; if (!wand) return;
+      var pad = 'panorama/' + wand.label + '.jpg';
+      dk.toBlob(function (blob) {
+        if (!blob) return;
+        OS.zetFoto({ id: rec.id + ':pano-' + wand.id, opnameId: rec.id, blob: blob, type: 'image/jpeg', grootte: blob.size, soort: 'panorama', pad: pad, item: wand.id }).then(function () {
+          d.panorama = d.panorama.filter(function (p) { return p.wand_id !== wand.id; }).concat([{ wand_id: wand.id, pad: pad, ppm: PPM, sessie: ses ? ses.id : null }]); planBewaar();
+        }, meldFout);
+      }, 'image/jpeg', 0.8);
+    });
+  }
+  function meldFout(e) {
+    var t = (e && e.code === 'conflict') ? e.message : 'Opslaan mislukt: ' + String(e && e.message || e).slice(0, 140) + '. Wat je deed staat nog in dit scherm; kies Opnieuw proberen (bij een volle telefoon eerst ruimte maken).';
+    el('d-fout').textContent = t; el('d-fout').hidden = false; el('d-fout-knoppen').hidden = false;
+    el('ar-bewaard').textContent = '⚠ ' + t;
+  }
+  function wisFout() { el('d-fout').hidden = true; el('d-fout-knoppen').hidden = true; }
+  function toonBewaard() {
+    var d = dossier(); if (!d) return;
+    var b = d.beelden.filter(function (x) { return x.bewaard; }).length, open = d.beelden.length - b;
+    var t = 'Veilig bewaard op deze telefoon: ' + b + ' beelden, ' + DS.actieveDetails(d).length + ' details, ' + d.metingen.length + ' maten' + (open ? ' · ' + open + ' beelden nog bezig' : '') + (wachtrij.length ? ' · ' + wachtrij.length + ' wachten op opnieuw proberen' : '');
+    el('d-bewaard').textContent = t; if (!wachtrij.length) el('ar-bewaard').textContent = t;
+  }
+  el('k-opnieuw-bewaren').addEventListener('click', function () {
+    var q = wachtrij; wachtrij = []; wisFout();
+    Promise.all(q.map(function (x) { return bewaarBeeld(x.b, x.blob); })).then(function () { planBewaar(true); });
+  });
+
+  // ---------- een ruimte beginnen, openen en herstellen ----------
+  function maakRuimte() {
+    var proj = String(el('r-project').value || '').trim(), naam = String(el('r-ruimte').value || '').trim() || 'Ruimte';
+    var d = DS.nieuw({ project: { code: proj }, ruimte: { naam: naam } });
+    ses = DS.startSessie(d, toestelInfo());
+    rec = { id: 'ruimte:' + d.ruimte.id, soort: 'ruimte', opname: d, layout: {}, instellingen: {}, rev: 0 };
+    wachtrij = []; planBewaar(true);
+  }
+  function bewaarLive() {
+    if (!ses || aanvul) return;
+    ses.live_punten = punten.map(function (p) { return { x: p.x, z: p.z, bron: p.bron || 'vloer' }; });
+    ses.xr.vloerY = vloerY; ses.xr.plafondY = plafondY; planBewaar();
+  }
+  // Details die tijdens de eerste rondgang zijn vastgelegd kennen alleen het wandnummer: na Klaar krijgen ze het wand-id en de beginhoek als referentie.
+  function koppelWanden(d) {
+    DS.actieveDetails(d).forEach(function (det) {
+      if (det.anker && det.anker.wand_nr != null && !det.wand_id && d.wanden[det.anker.wand_nr]) {
+        var w = d.wanden[det.anker.wand_nr]; det.wand_id = w.id; det.anker.wand_id = w.id; if (!det.referentie_hoek) det.referentie_hoek = w.van;
+        d.metingen.forEach(function (m) { if (m.doel.id === det.id && m.referentie && m.referentie.soort === 'hoek' && !m.referentie.id) m.referentie.id = w.van; });
+      }
+    });
+  }
+  function uitkomstUitDossier(d) {
+    if (d.hoeken.length < 3) return null;
+    var s = DS.basisSessie(d) || { xr: {} }, hand = {};
+    d.wanden.forEach(function (w, i) { var m = DS.huidigeMeting(d, w.id, 'lengte'); if (m && m.status === 'gemeten' && m.waarde_mm != null) hand[i] = m.waarde_mm; });
+    return { punten: d.hoeken.map(function (h) { return h.via === 'plafond' ? { x: h.xr.x, z: h.xr.z, bron: 'plafond' } : { x: h.xr.x, z: h.xr.z }; }),
+      hoogte: s.xr.oog_boven_vloer || 0, plafond: s.xr.plafondY != null && s.xr.vloerY != null ? s.xr.plafondY - s.xr.vloerY : 0, tijd: d.gemaakt, voorbeeld: false, hand: hand };
+  }
+  function openRec(r) {
+    rec = r; ses = null; aanvul = null; wachtrij = []; huidigPaneel = null;
+    var d = dossier(), melding = '';
+    if (!d.hoeken.length) {
+      var s = d.sessies.slice().reverse().find(function (x) { return x.live_punten && x.live_punten.length >= 3; });
+      if (s) { DS.zetHoeken(d, s.id, s.live_punten); s.live_punten = null; koppelWanden(d); planBewaar(true); melding = 'De hoeken van de onderbroken rondgang zijn hersteld.'; }
+    }
+    uitkomst = uitkomstUitDossier(d);
+    el('s-start').hidden = true; el('s-opnames').hidden = true;
+    if (uitkomst) toonUitkomst(); else el('s-uitkomst').hidden = true;
+    toonDossier(); el('zeg').textContent = melding || 'Opname geopend.';
+    el('s-dossier').scrollIntoView({ block: 'start' });
+  }
+  function toonOpnames() {
+    if (!OS || !DS) return;
+    OS.lijst().then(function (l) {
+      var r = l.filter(function (x) { return x && x.soort === 'ruimte' && x.opname; }), ul = el('r-lijst'); ul.textContent = '';
+      el('s-opnames').hidden = !r.length || el('s-start').hidden;
+      r.forEach(function (x) {
+        var d = x.opname, li = maak('li'), knop = maak('button', 'Openen', 'knop');
+        li.appendChild(maak('span', (d.ruimte.naam || 'Ruimte') + (d.project.code ? ' · ' + d.project.code : ''), 'titel'));
+        li.appendChild(maak('span', d.hoeken.length + ' hoeken · ' + DS.actieveDetails(d).length + ' details · ' + d.beelden.length + ' beelden · ' + d.sessies.length + ' sessie(s) · ' +
+          new Date(x.bijgewerkt || d.bijgewerkt).toLocaleString('nl-NL') + (d.ruimte.afgesloten ? ' · afgesloten' : ''), 'zacht'));
+        knop.type = 'button'; knop.addEventListener('click', function () { openRec(x); });
+        li.appendChild(knop); ul.appendChild(li);
+      });
+    }, function (e) { el('s-opnames').hidden = false; el('r-lijst').textContent = ''; el('r-lijst').appendChild(maak('li', 'De opnames op deze telefoon zijn niet te lezen: ' + (e && e.message || e))); });
+  }
+
+  // ---------- aanvullen: twee bekende hoeken aanwijzen, dan valt de oude opname op zijn plek ----------
+  function naarSessie(t, p) { var dx = p.x - t.tx, dz = p.z - t.tz; return { x: t.c * dx + t.s * dz, z: -t.s * dx + t.c * dz }; }
+  function tikAanvul(T, rij) {
+    if (aanvul.stap >= 2) { doeDetail(T); return; }
+    var ps = rij.map(function (e) { return e.p; }).filter(Boolean), p = ps.length >= 3 ? AR.stabiel(ps) : (richtpunt ? { x: richtpunt.x, z: richtpunt.z } : null);
+    if (!p) return;
+    aanvul.getikt.push(p); aanvul.stap++; aanvul.melding = ''; telWaarneming('getikt');
+    try { if (navigator.vibrate) navigator.vibrate(25); } catch (e) {}
+    if (aanvul.stap === 2) {
+      var d = dossier(), A = d.hoeken[aanvul.idx[0]].xr, B = d.hoeken[aanvul.idx[1]].xr, basis = DS.basisSessie(d) || { xr: {} };
+      var u = DS.lijnUit(A, B, aanvul.getikt[0], aanvul.getikt[1], basis.xr.vloerY, vloerY, 0.08);
+      if (!u.goed) {
+        aanvul.melding = 'Dat past niet (' + Math.round(u.rest_m * 100) + ' cm verschil met de eerste rondgang). Begin opnieuw bij ' + aanvul.labels[0] + ', of kies Apart.';
+        aanvul.stap = 0; aanvul.getikt = []; knoppen(); return;
+      }
+      aanvul.transform = u.transform;
+      ses.uitlijning = { status: 'uitgelijnd', transform: u.transform, rest_m: u.rest_m, hoeken: [d.hoeken[aanvul.idx[0]].id, d.hoeken[aanvul.idx[1]].id], tijd: new Date().toISOString() };
+      punten = d.hoeken.map(function (h) { return naarSessie(u.transform, h.xr); });
+      detailWanden.sleutel = ''; pano.sleutel = '';
+      d.beelden.forEach(function (b) { if (b.sessie === ses.id && b.pose && !b.pose_basis) { b.pose_basis = DS.poseNaarBasis(u.transform, b.pose); delete b.niet_uitgelijnd; } });
+      planBewaar(true);
+    }
+    knoppen();
+  }
+
+  // ---------- detail vastleggen tijdens de rondgang ----------
+  // Het punt komt uit de 0,4 s vóór het drukken (zelfde regel als bij de hoeken): de wand die het kruisje het vaakst raakte, met de mediaan van u en v.
+  function doeDetail(T) {
+    if (!sessie || paneelOpen) return;
+    if (!rec || !DS) { status('Detail kan hier niet', 'De opslag van de opname ontbreekt op deze pagina.'); return; }
+    var rij = vlakVoor(T || nuMs()), ws = rij.map(function (e) { return e.w; }).filter(Boolean), anker = null;
+    if (ws.length || wandDoel) {
+      var tel = {}; ws.forEach(function (w) { tel[w.nr] = (tel[w.nr] || 0) + 1; });
+      var nr = ws.length ? Number(Object.keys(tel).sort(function (a, b) { return tel[b] - tel[a]; })[0]) : wandDoel.nr;
+      var zelf = ws.filter(function (w) { return w.nr === nr; }), u = zelf.length ? AR.mediaan(zelf.map(function (w) { return w.u; })) : wandDoel.u, v = zelf.length ? AR.mediaan(zelf.map(function (w) { return w.v; })) : wandDoel.v;
+      anker = { wand_nr: nr, u: u, v: v };
+    } else if (richtpunt) anker = { vloer: { x: richtpunt.x, y: vloerY, z: richtpunt.z } };
+    var det = maakDetail(anker);
+    detailFoto(det);
+    openPaneel(det, true);
+  }
+  // anker: { wand_nr, u, v } (op een wand van de huidige sessie) of { vloer: {x,y,z} } of null (alleen foto).
+  function maakDetail(a, soort) {
+    var d = dossier(), anker = null;
+    if (a && a.wand_nr != null) {
+      var wd = detailWanden.lijst.find(function (w) { return w.nr === a.wand_nr; }) || null, p = wd ? AR.wandPunt(wd, a.u, a.v) : null;
+      anker = { xr_sessie: p, wand_nr: a.wand_nr, wand_id: d.wanden[a.wand_nr] ? d.wanden[a.wand_nr].id : null, u_m: a.u, v_m: a.v };
+    } else if (a && a.vloer) anker = { xr_sessie: a.vloer, wand_id: null, u_m: null, v_m: 0 };
+    if (anker && anker.xr_sessie) anker.xr = !aanvul ? anker.xr_sessie : (aanvul.transform ? DS.pasToe(aanvul.transform, anker.xr_sessie) : null);
+    var det = DS.voegDetailToe(d, { soort: soort || laatsteSoort, anker: anker, wand_id: anker && anker.wand_id, sessie: ses ? ses.id : null,
+      referentie_hoek: anker && anker.wand_id ? d.wanden[anker.wand_nr].van : null });
+    if (anker && anker.xr_sessie && !anker.xr) det.anker_status = 'sessie-niet-uitgelijnd';
+    voegArSchattingen(det); telWaarneming('details');
+    planBewaar(true);
+    return det;
+  }
+  // De camera geeft een plek op de wand: als voorstel (bron camera, status geschat) bij de afstand en de hoogte. Een gemeten maat komt erbij en gaat voor.
+  function voegArSchattingen(det) {
+    var d = dossier(), a = det.anker; if (!a || a.u_m == null) return;
+    var velden = (DS.SOORTEN[det.soort] || DS.SOORTEN.overig).velden;
+    var fu = ['afstand_hart_tot_hoek', 'afstand_tot_hoek', 'begin_vanaf_hoek'].find(function (f) { return velden.indexOf(f) >= 0; });
+    var fv = ['hoogte_hart', 'onderkant', 'borstwering', 'hoogte_bovenkant'].find(function (f) { return velden.indexOf(f) >= 0; });
+    var ref = { soort: 'hoek', label: 'H' + (a.wand_nr + 1), id: det.wand_id ? (d.wanden.find(function (w) { return w.id === det.wand_id; }) || {}).van : null };
+    if (fu && !DS.huidigeMeting(d, det.id, fu)) DS.voegMetingToe(d, { doel: { soort: 'detail', id: det.id }, veld: fu, waarde_mm: Math.round(a.u_m * 1000), bron: 'ar', status: 'geschat', referentie: ref, sessie: ses ? ses.id : null });
+    if (fv && !DS.huidigeMeting(d, det.id, fv)) DS.voegMetingToe(d, { doel: { soort: 'detail', id: det.id }, veld: fv, waarde_mm: Math.round(a.v_m * 1000), bron: 'ar', status: 'geschat', referentie: { soort: 'vlak', naam: 'afgewerkte vloer (camera)' }, sessie: ses ? ses.id : null });
+  }
+  function detailFoto(det) {
+    if (!binding) { det.foto_status = 'geen-camera-toegang'; return; }
+    det.foto_status = 'bezig';
+    detailVang = function (r) {
+      if (!r || !r.blob) { det.foto_status = 'mislukt'; planBewaar(); verversPaneel(); return; }
+      koppelDetailFoto(det, r.blob, { pos: r.pos, dir: r.dir, pv: r.pv }, r.w, r.h, r.tijd);
+    };
+  }
+  function koppelDetailFoto(det, blob, pose, w, h, tijd) {
+    var d = dossier(), b = DS.voegBeeldToe(d, { soort: 'detail', sessie: ses ? ses.id : null, pose: pose, breedte: w, hoogte: h, tijd: tijd, detail_id: det.id, wand_id: det.wand_id, type: blob.type || 'image/jpeg' });
+    if (pose && aanvul && aanvul.transform) b.pose_basis = DS.poseNaarBasis(aanvul.transform, pose);
+    det.foto_ids.push(b.id);
+    if (pose) det.foto_punt = { beeld_id: b.id, x: 0.5, y: 0.5, uitleg: 'het kruisje zat midden in de foto' };
+    det.foto_status = 'opslaan'; verversPaneel();
+    return bewaarBeeld(b, blob).then(function () { det.foto_status = b.bewaard ? 'bewaard' : 'mislukt'; planBewaar(true); verversPaneel(); if (!paneelOpen) toonDossier(); });
+  }
+
+  // ---------- maten invoeren: DISTO X4 als toetsenbord (snelle reeks + Enter) of met de hand ----------
+  function volgToetsen(inp) {
+    inp._tikken = [];
+    inp.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { inp._enter = nuMs(); return; }
+      if (e.key && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (!inp.value || (inp.selectionStart === 0 && inp.selectionEnd === String(inp.value).length)) inp._tikken = [];
+        inp._tikken.push(nuMs());
+      } else if (e.key !== 'Shift') inp._tikken = [];
+    });
+    inp.addEventListener('focus', function () { inp._tikken = []; inp._enter = null; try { inp.select(); } catch (e) {} });
+  }
+  function bronVan(inp) {
+    var ok = DS && DS.isDistoReeks(inp._tikken || [], inp._enter || 0, String(inp.value).trim().length);
+    inp._tikken = []; inp._enter = null;
+    return ok ? 'disto' : 'hand';
+  }
+  function slaWandmaatOp(i, inv) {
+    if (!rec) return;
+    var d = dossier(), w = d.wanden[i]; if (!w) return;
+    var l = DS.leesMaat(inv.value), huidig = DS.huidigeMeting(d, w.id, 'lengte');
+    if (!l) { if (!String(inv.value).trim() && huidig && huidig.status === 'gemeten') DS.voegMetingToe(d, { doel: { soort: 'wand', id: w.id }, veld: 'lengte', waarde_mm: null, invoer: '', sessie: ses && ses.id, opmerking: 'maat leeggemaakt' }); planBewaar(); return; }
+    if (huidig && huidig.status === 'gemeten' && huidig.waarde_mm === l.mm) return;
+    DS.voegMetingToe(d, { doel: { soort: 'wand', id: w.id }, veld: 'lengte', waarde_mm: l.mm, invoer: inv.value, eenheid_invoer: l.eenheid, bron: bronVan(inv), sessie: ses && ses.id,
+      referentie: { soort: 'hoeken', van: w.van, naar: w.naar } });
+    planBewaar(); toonDossier();
+  }
+  function infoTekst(m) {
+    if (!m || m.status === 'open') return 'open: nog meten';
+    if (m.status === 'geschat') return (m.bron === 'ar' ? 'camera' : 'schatting') + ' ~' + Math.round(m.waarde_mm) + ' mm: nog meten';
+    return DS.BRONNEN[m.bron] + ' · ' + tijdTekst(m.tijd) + (m.vervangt ? ' · vervangt een eerdere waarde' : '');
+  }
+
+  // ---------- het detailpaneel (in AR over het camerabeeld, en op de pagina) ----------
+  function openPaneel(det, inAR) {
+    var c = inAR ? el('ar-detail') : el('d-paneel');
+    huidigPaneel = { det: det, c: c, inAR: inAR }; paneelOpen = !!inAR; c.hidden = false;
+    verversPaneel();
+    if (!inAR) c.scrollIntoView({ block: 'start' });
+  }
+  function sluitPaneel() {
+    var P = huidigPaneel; if (!P) return;
+    P.c.hidden = true; P.c.textContent = ''; huidigPaneel = null; paneelOpen = false; planBewaar(true); toonDossier();
+  }
+  function wandVan(det) { var d = dossier(); return det.wand_id ? d.wanden.find(function (w) { return w.id === det.wand_id; }) : null; }
+  function plekTekst(det) {
+    var a = det.anker, w = wandVan(det);
+    if (det.anker_status === 'sessie-niet-uitgelijnd') return 'Plek uit een aanvulronde die niet is uitgelijnd: alleen geldig binnen die rondgang.';
+    if (!a) return 'Alleen op de foto aangewezen: de plek in de ruimte is nog niet bepaald.';
+    if (a.u_m != null) return 'Camera: ' + meter(a.u_m) + ' m langs ' + (w ? w.label : 'wand ' + (a.wand_nr + 1)) + ' vanaf H' + (a.wand_nr + 1) + ', ' + meter(a.v_m) + ' m boven de vloer (schatting).';
+    return 'Op de vloer aangewezen (schatting).';
+  }
+  function verversPaneel() {
+    var P = huidigPaneel; if (!P || !rec) return;
+    var det = P.det, c = P.c, d = dossier(), w = maak('div', null, 'dpaneel'), wand = wandVan(det);
+    c.textContent = ''; c.appendChild(w);
+    w.appendChild(maak('h2', (det.label || 'Detail') + (wand ? ' op ' + wand.label : (det.anker && det.anker.wand_nr != null ? ' op wand ' + (det.anker.wand_nr + 1) : ''))));
+    w.appendChild(maak('p', plekTekst(det), 'zacht'));
+    var fs = { bezig: 'Foto wordt gemaakt…', opslaan: 'Foto wordt bewaard…', bewaard: 'Foto veilig bewaard ✓', mislukt: 'Foto mislukt: voeg straks een foto toe met "Detail met foto toevoegen".',
+      'geen-camera-toegang': 'Geen camerabeeld in AR op dit toestel: voeg straks een foto toe.' }[det.foto_status];
+    if (fs) w.appendChild(maak('p', fs, 'bewaard' + (det.foto_status === 'mislukt' ? ' fout' : '')));
+    // soort
+    var chips = maak('div', null, 'chips');
+    VOLGORDE.forEach(function (s) {
+      var b = maak('button', DS.SOORTEN[s].label); b.type = 'button'; if (s === det.soort) b.className = 'aan';
+      b.addEventListener('click', function () {
+        if (s === det.soort) return;
+        DS.wijzigDetail(d, det.id, { soort: s, groep: DS.SOORTEN[s].groep, label: DS.SOORTEN[s].label }); laatsteSoort = s; voegArSchattingen(det); planBewaar(); verversPaneel();
+      });
+      chips.appendChild(b);
+    });
+    w.appendChild(chips);
+    // naam
+    var nv = maak('div', null, 'veld'), nl = maak('label', 'Naam (mag leeg)'), ni = maak('input'); ni.id = 'dp-naam'; nl.htmlFor = ni.id; ni.value = det.label || ''; ni.autocomplete = 'off';
+    ni.addEventListener('change', function () { det.label = ni.value.trim() || DS.SOORTEN[det.soort].label; planBewaar(); });
+    nv.appendChild(nl); nv.appendChild(ni); w.appendChild(nv);
+    // wand en referentiehoek
+    if (!P.inAR || !det.anker) {
+      var wv = maak('div', null, 'veld'), wl = maak('label', 'Op welke wand?'), ws = maak('select'); ws.id = 'dp-wand'; wl.htmlFor = ws.id;
+      [['', 'geen wand / vrij in de ruimte']].concat(d.wanden.map(function (x) { return [x.id, x.label]; })).forEach(function (o) { var op = maak('option', o[1]); op.value = o[0]; ws.appendChild(op); });
+      ws.value = det.wand_id || '';
+      ws.addEventListener('change', function () { det.wand_id = ws.value || null; var ww = wandVan(det); det.referentie_hoek = ww ? ww.van : null; planBewaar(); verversPaneel(); });
+      wv.appendChild(wl); wv.appendChild(ws); w.appendChild(wv);
+    }
+    if (wand) {
+      var rv = maak('div', null, 'veld'), rl = maak('label', 'Afstand gemeten vanaf welke binnenhoek?'), rs = maak('select'); rs.id = 'dp-ref'; rl.htmlFor = rs.id;
+      [wand.van, wand.naar].forEach(function (hid) { var h = d.hoeken.find(function (x) { return x.id === hid; }); var op = maak('option', h ? h.label : hid); op.value = hid; rs.appendChild(op); });
+      rs.value = det.referentie_hoek || wand.van;
+      rs.addEventListener('change', function () { det.referentie_hoek = rs.value; planBewaar(); verversPaneel(); });
+      rv.appendChild(rl); rv.appendChild(rs); w.appendChild(rv);
+    }
+    // maten
+    var velden = (DS.SOORTEN[det.soort] || DS.SOORTEN.overig).velden, invoer = [], meubel = det.groep === 'meubilair', schat = null;
+    // wandlengte (gemeten of camera) om een camera-afstand vanaf de andere hoek te tonen
+    var lmP = wand ? DS.lijnmodel(d, AR) : null, seg = lmP ? lmP.segmenten.find(function (s) { return s.id === wand.id; }) : null, Lmm = seg ? seg.lengte.waarde : null;
+    function hint(m, f) {
+      var V = DS.VELDEN[f];
+      if (m && m.status === 'geschat' && m.bron === 'ar' && V.referentie === 'gekozen binnenhoek' && wand && Lmm && m.referentie && m.referentie.id && det.referentie_hoek && m.referentie.id !== det.referentie_hoek) {
+        var h = d.hoeken.find(function (x) { return x.id === det.referentie_hoek; });
+        return 'camera ~' + Math.round(Lmm - m.waarde_mm) + ' mm vanaf ' + (h ? h.label : 'de gekozen hoek') + ': nog meten';
+      }
+      if (m && m.status === 'geschat' && m.bron === 'ar' && V.referentie === 'gekozen binnenhoek' && m.referentie && m.referentie.label) return 'camera ~' + Math.round(m.waarde_mm) + ' mm vanaf ' + m.referentie.label + ': nog meten';
+      return infoTekst(m);
+    }
+    if (velden.length) w.appendChild(maak('p', 'Maten in mm (of 0,312 m). Leeg laten = open vraag. De DISTO X4 vult het oranje veld; Enter gaat naar het volgende.', 'zacht'));
+    if (meubel) {
+      var sl = maak('label'); schat = maak('input'); schat.type = 'checkbox'; schat.checked = true; sl.appendChild(schat); sl.appendChild(document.createTextNode(' Maten zijn schattingen (los meubel)')); w.appendChild(sl);
+    }
+    velden.forEach(function (f, idx) {
+      var V = DS.VELDEN[f], m = DS.huidigeMeting(d, det.id, f), rij = maak('div', null, 'maatrij'), lab = maak('label', V.label), inp = maak('input'), info = maak('span', hint(m, f), 'info');
+      inp.id = 'dp-' + f; lab.htmlFor = inp.id; inp.inputMode = 'decimal'; inp.autocomplete = 'off';
+      if (m && (m.status === 'gemeten' || (m.status === 'geschat' && m.bron !== 'ar')) && m.waarde_mm != null) inp.value = String(m.waarde_mm);
+      if (V.referentie) info.title = 'Referentie: ' + V.referentie;
+      rij.appendChild(lab); rij.appendChild(inp); rij.appendChild(info); w.appendChild(rij);
+      volgToetsen(inp);
+      inp.addEventListener('focus', function () { Array.prototype.forEach.call(w.querySelectorAll('.maatrij'), function (x) { x.classList.remove('actief'); }); rij.classList.add('actief'); });
+      function opslaan() {
+        var l = DS.leesMaat(inp.value);
+        if (!l) { if (String(inp.value).trim()) info.textContent = 'Geen maat herkend: typ bijv. 312 of 0,312 m'; return; }
+        var huidig = DS.huidigeMeting(d, det.id, f);
+        if (huidig && huidig.status !== 'open' && huidig.bron !== 'ar' && huidig.waarde_mm === l.mm) return;
+        var bron = bronVan(inp), geschat = !!(schat && schat.checked), ref = V.referentie === 'gekozen binnenhoek' && det.referentie_hoek ? { soort: 'hoek', id: det.referentie_hoek, label: (d.hoeken.find(function (h) { return h.id === det.referentie_hoek; }) || {}).label } : null;
+        var nieuw = DS.voegMetingToe(d, { doel: { soort: 'detail', id: det.id }, veld: f, waarde_mm: l.mm, invoer: inp.value, eenheid_invoer: l.eenheid, bron: bron, status: geschat ? 'geschat' : 'gemeten', referentie: ref, sessie: ses && ses.id });
+        info.textContent = (bron === 'disto' ? 'X4: ' : '') + l.mm + ' mm bewaard bij ' + V.label.toLowerCase() + ' · ' + infoTekst(nieuw);
+        planBewaar();
+      }
+      inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); opslaan(); var nx = invoer[idx + 1]; if (nx) nx.focus(); else inp.blur(); } });
+      inp.addEventListener('change', opslaan);
+      invoer.push(inp);
+    });
+    // materiaal (kleur en textuur)
+    if (det.groep === 'materiaal') {
+      det.materiaal = det.materiaal || { vlak: '', type: '', kleur: '', glans: '', nerfrichting: '', schaal: '', code: null, status: 'visuele benadering' };
+      [['vlak', 'Welk vlak of onderdeel'], ['type', 'Materiaal'], ['kleur', 'Kleur'], ['glans', 'Glans'], ['nerfrichting', 'Nerf- of patroonrichting'], ['schaal', 'Schaal op de foto (liniaal, plankbreedte)'], ['code', 'Kleur-, decor- of productcode (leeg = onbekend)']].forEach(function (x) {
+        var v = maak('div', null, 'veld'), l = maak('label', x[1]), i = maak('input'); i.id = 'dp-mat-' + x[0]; l.htmlFor = i.id; i.value = det.materiaal[x[0]] || ''; i.autocomplete = 'off';
+        i.addEventListener('change', function () { det.materiaal[x[0]] = i.value.trim() || (x[0] === 'code' ? null : ''); det.materiaal.status = det.materiaal.code ? 'bevestigde code' : 'visuele benadering'; planBewaar(); });
+        v.appendChild(l); v.appendChild(i); w.appendChild(v);
+      });
+    }
+    // opmerking
+    var ov = maak('div', null, 'veld'), ol = maak('label', det.soort === 'opmerking' ? 'Opmerking (bijv. nieuwe vloer komt 12 mm hoger)' : 'Opmerking of open vraag'), ot = maak('textarea'); ot.id = 'dp-opm'; ol.htmlFor = ot.id; ot.rows = 2; ot.value = det.opmerking || '';
+    ot.addEventListener('change', function () {
+      var t = ot.value.trim(); if (t === (det.opmerking || '')) return;
+      det.opmerking = t;
+      if (t) DS.voegOpmerkingToe(d, { tekst: t, locatie: { soort: 'detail', id: det.id, wand_id: det.wand_id, xr: det.anker ? det.anker.xr || null : null }, bron: 'opnemer', sessie: ses && ses.id });
+      planBewaar();
+    });
+    ov.appendChild(ol); ov.appendChild(ot); w.appendChild(ov);
+    var rijK = maak('div', null, 'rij'), klaar = maak('button', 'Klaar', 'knop hoofd'), weg = maak('button', 'Verwijderen', 'knop');
+    klaar.type = 'button'; weg.type = 'button'; klaar.id = 'dp-klaar';
+    klaar.addEventListener('click', function () { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); sluitPaneel(); });
+    weg.addEventListener('click', function () { DS.verwijderDetail(d, det.id, 'door de opnemer verwijderd'); sluitPaneel(); });
+    rijK.appendChild(klaar); rijK.appendChild(weg); w.appendChild(rijK);
+  }
+
+  // ---------- het dossier op de pagina ----------
+  function dekkingPerWand() {
+    var k = pano.klaar, d = dossier(); if (!k || !k.cellen || !d) return [];
+    return k.cellen.map(function (cs, i) {
+      var g = cs.filter(function (c) { return c.beste >= 0; }).length, w = d.wanden[k.wanden[i].nr];
+      return { wand_id: w ? w.id : null, label: w ? w.label : 'Wand ' + (i + 1), pct: Math.round(g / Math.max(1, cs.length) * 100) };
+    });
+  }
+  function pil(tekst, klasse) { return maak('span', tekst, 'pil ' + (klasse || '')); }
+  function toonDossier() {
+    var vak = el('s-dossier');
+    if (!rec || !DS) { vak.hidden = true; return; }
+    vak.hidden = false;
+    var d = dossier();
+    el('d-kop').textContent = (d.ruimte.naam || 'Ruimte') + (d.project.code ? ' · ' + d.project.code : '') + (d.ruimte.afgesloten ? ' (afgesloten)' : '');
+    toonBewaard();
+    var lm = DS.lijnmodel(d, AR);
+    // plafond
+    var pm = DS.huidigeMeting(d, d.ruimte.id, 'plafondhoogte'), pi = el('d-plafond');
+    if (document.activeElement !== pi) pi.value = pm && pm.status === 'gemeten' ? String(pm.waarde_mm) : '';
+    el('d-plafond-info').textContent = pm ? infoTekst(pm) : (lm && lm.hoogte.waarde ? 'camera ~' + lm.hoogte.waarde + ' mm: nog meten' : 'open');
+    // controlemaat
+    ['d-diag-van', 'd-diag-naar'].forEach(function (id, j) {
+      var s = el(id), oud = s.value; s.textContent = '';
+      d.hoeken.forEach(function (h) { var o = maak('option', h.label); o.value = h.id; s.appendChild(o); });
+      s.value = oud || (d.hoeken[j * 2] ? d.hoeken[j * 2].id : '');
+    });
+    var cv = el('d-controle'); cv.textContent = '';
+    DS.controleMaten(d, lm).forEach(function (c) {
+      cv.appendChild(maak('p', c.van + '–' + c.naar + ': gemeten ' + c.gemeten + ' mm, het model verwacht ' + c.verwacht + ' mm (' + (c.verschil > 0 ? '+' : '') + c.verschil + ' mm' + (c.model_status === 'geschat' ? ', model nog uit de camera' : '') + ').', Math.abs(c.verschil) > 20 ? 'melding' : 'melding goed'));
+    });
+    // details
+    var ul = el('d-details'); ul.textContent = '';
+    DS.actieveDetails(d).forEach(function (det) {
+      var li = maak('li'), wand = wandVan(det), kop = maak('span', det.label + (wand ? ' · ' + wand.label : '') + ' · ' + (DS.GROEPEN[det.groep] || ''), 'titel');
+      li.appendChild(kop);
+      var pillen = maak('div', null, 'rij');
+      (DS.SOORTEN[det.soort] || DS.SOORTEN.overig).velden.forEach(function (f) {
+        var m = DS.huidigeMeting(d, det.id, f), st = !m ? 'open' : m.status;
+        pillen.appendChild(pil(DS.VELDEN[f].label + ': ' + (m && m.waarde_mm != null && st !== 'open' ? (st === 'geschat' ? '~' : '') + m.waarde_mm : 'open'), st));
+      });
+      pillen.appendChild(pil(det.foto_ids.length ? 'foto ✓' : 'geen foto', det.foto_ids.length ? 'gemeten' : 'open'));
+      li.appendChild(pillen);
+      if (det.opmerking) li.appendChild(maak('span', det.opmerking, 'zacht'));
+      var kn = maak('div', null, 'rij'), bew = maak('button', 'Bewerken', 'knop'); bew.type = 'button';
+      bew.addEventListener('click', function () { openPaneel(det, false); });
+      kn.appendChild(bew);
+      if (det.foto_ids.length) {
+        var fk = maak('button', 'Foto bekijken', 'knop'); fk.type = 'button';
+        fk.addEventListener('click', function () { OS.leesFoto(rec.id + ':' + det.foto_ids[det.foto_ids.length - 1]).then(function (f) { if (f && f.blob) window.open(URL.createObjectURL(f.blob), '_blank'); }); });
+        kn.appendChild(fk);
+      }
+      li.appendChild(kn); ul.appendChild(li);
+    });
+    if (!DS.actieveDetails(d).length) ul.appendChild(maak('li', 'Nog geen details. Tijdens de rondgang: richt op een onderdeel en druk Detail.', 'zacht'));
+    // open vragen
+    var ov = el('d-open'); ov.textContent = '';
+    var vragen = DS.openVragen(d, AR, { dekking: dekkingPerWand() });
+    vragen.forEach(function (v) { var li = maak('li'); li.appendChild(pil(v.ernst === 'blokkeert' ? 'blokkeert' : v.ernst === 'open' ? 'open' : 'let op', v.ernst === 'blokkeert' || v.ernst === 'open' ? 'open' : '')); li.appendChild(maak('span', v.tekst)); ov.appendChild(li); });
+    if (!vragen.length) ov.appendChild(maak('li', 'Niets open. Alles wat gevraagd is, is gemeten.', 'zacht'));
+    el('k-afsluiten').textContent = d.ruimte.afgesloten ? 'Ruimte heropenen' : 'Ruimte afsluiten';
+    el('k-aanvullen').disabled = d.hoeken.length < 3 || !navigator.xr;
+  }
+  if (DS && OS) {
+    volgToetsen(el('d-plafond'));
+    el('d-plafond').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); el('d-plafond').blur(); } });
+    el('d-plafond').addEventListener('change', function () {
+      var d = dossier(), l = DS.leesMaat(el('d-plafond').value); if (!d || !l) return;
+      DS.voegMetingToe(d, { doel: { soort: 'ruimte', id: d.ruimte.id }, veld: 'plafondhoogte', waarde_mm: l.mm, invoer: el('d-plafond').value, eenheid_invoer: l.eenheid, bron: bronVan(el('d-plafond')), sessie: ses && ses.id });
+      planBewaar(); toonDossier();
+    });
+    volgToetsen(el('d-diag'));
+    el('d-diag').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); el('d-diag').blur(); } });
+    el('d-diag').addEventListener('change', function () {
+      var d = dossier(), l = DS.leesMaat(el('d-diag').value), van = el('d-diag-van').value, naar = el('d-diag-naar').value; if (!d || !l || !van || !naar || van === naar) return;
+      DS.voegMetingToe(d, { doel: { soort: 'diagonaal', id: d.ruimte.id, extra: { van: van, naar: naar } }, veld: 'diagonaal', waarde_mm: l.mm, invoer: el('d-diag').value, eenheid_invoer: l.eenheid, bron: bronVan(el('d-diag')), sessie: ses && ses.id });
+      el('d-diag').value = ''; planBewaar(); toonDossier();
+    });
+    el('d-foto').addEventListener('change', function (e) {
+      var f = e.target.files && e.target.files[0]; if (!f || !rec) return;
+      var det = maakDetail(null); det.foto_status = 'opslaan';
+      koppelDetailFoto(det, f, null, null, null, new Date(f.lastModified || Date.now()).toISOString());
+      e.target.value = '';
+      openPaneel(det, false);
+    });
+    el('k-opmerking').addEventListener('click', function () { if (!rec) return; openPaneel(maakDetail(null, 'opmerking'), false); });
+    el('k-afsluiten').addEventListener('click', function () {
+      var d = dossier(); if (!d) return;
+      d.ruimte.afgesloten = !d.ruimte.afgesloten; (d.ruimte.historie = d.ruimte.historie || []).push({ tijd: new Date().toISOString(), afgesloten: d.ruimte.afgesloten });
+      planBewaar(true); toonDossier();
+    });
+    el('k-aanvullen').addEventListener('click', function () { if (rec && dossier().hoeken.length >= 3) startAr(true); });
+    el('k-kijk-hier').addEventListener('click', function () { schrijfNu().then(function () { location.href = 'opname-ar-kijk.html#ruimte=' + encodeURIComponent(rec.id); }); });
+    el('k-pakket').addEventListener('click', function () { pakketMaken().then(function (p) { if (p) download(p); }); });
+    el('k-pakket-deel').addEventListener('click', function () {
+      pakketMaken().then(function (p) {
+        if (!p) return;
+        try {
+          var file = new File([p.blob], p.naam, { type: 'application/zip' });
+          if (navigator.canShare && navigator.canShare({ files: [file] })) navigator.share({ files: [file], title: 'Opname ' + dossier().ruimte.naam }).catch(function () {});
+          else { download(p); el('d-pakket-info').textContent += ' Delen kan hier niet; het pakket is als bestand bewaard.'; }
+        } catch (e) { download(p); }
+      });
+    });
+  }
+  function download(p) {
+    var a = document.createElement('a'), u = URL.createObjectURL(p.blob); a.href = u; a.download = p.naam; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(u); }, 30000);
+  }
+  function veiligeNaam(t) { return String(t || '').replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40); }
+  function pakketMaken() {
+    if (!rec) return Promise.resolve(null);
+    var d = dossier(), t0 = nuMs(), grootte = { overzicht: 0, detail: 0, panorama: 0 };
+    el('d-pakket-info').textContent = 'Pakket wordt gemaakt…';
+    return schrijfNu().then(function () { return OS.fotosVan(rec.id); }).then(function (fotos) {
+      return Promise.all(fotos.map(function (f) { return f.blob.arrayBuffer().then(function (ab) { return { pad: f.pad, soort: f.soort, data: new Uint8Array(ab) }; }); }));
+    }).then(function (rijen) {
+      var best = {}; rijen.forEach(function (r) { if (!r.pad) return; best[r.pad] = r.data; grootte[r.soort] = (grootte[r.soort] || 0) + r.data.length; });
+      return DS.maakPakket(d, best, { AR: AR, dekking: dekkingPerWand(), app: 'opname-ar-proef' });
+    }).then(function (pk) {
+      var blob = new Blob([pk.bytes], { type: 'application/zip' }), naam = ['ruimte', veiligeNaam(d.project.code), veiligeNaam(d.ruimte.naam), new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')].filter(Boolean).join('-') + '.zip';
+      laatstePakket = { blob: blob, naam: naam };
+      d.pakket_metingen = (d.pakket_metingen || []).concat([{ tijd: new Date().toISOString(), bytes: blob.size, overzicht: grootte.overzicht, detail: grootte.detail, panorama: grootte.panorama, beelden: d.beelden.length, ms: Math.round(nuMs() - t0) }]);
+      planBewaar();
+      el('d-pakket-info').textContent = 'Pakket ' + mb(blob.size) + ' (overzicht ' + mb(grootte.overzicht) + ', details ' + mb(grootte.detail) + ', panorama ' + mb(grootte.panorama) + '), ' +
+        d.beelden.length + ' beelden, gemaakt in ' + ((nuMs() - t0) / 1000).toFixed(1).replace('.', ',') + ' s.' + (pk.ontbreekt.length ? ' Let op: ' + pk.ontbreekt.length + ' beelden ontbraken in de opslag.' : '');
+      return laatstePakket;
+    }, function (e) { el('d-pakket-info').textContent = 'Pakket maken mislukt: ' + String(e && e.message || e).slice(0, 140); return null; });
+  }
+
   window.arProef = { AR: AR, uitkomst: function () { return uitkomst; },
+    // proefhaken voor de browsertest (zonder AR): een rondgang nabootsen met de echte bewaar-, detail- en pakketcode
+    dossier: function () { return dossier(); }, rec: function () { return rec; }, openRec: openRec, toonOpnames: toonOpnames, pakketMaken: pakketMaken, schrijfNu: schrijfNu,
+    proefRondgang: function (o) {
+      maakRuimte(); punten = o.punten.slice(); vloerY = o.vloerY; plafondY = o.plafondY; detailWanden = { sleutel: '', lijst: AR.wanden3d(punten, false, vloerY, plafondY - vloerY, null) };
+      bewaarLive();
+      (o.beelden || []).forEach(function (b) { var r = { pos: b.pos, dir: b.dir, pv: b.pv, w: b.w, h: b.h, blob: b.blob, tijd: new Date().toISOString() }; r.gereed = Promise.resolve(); pano.beelden.push(r); bewaarOverzicht(r); });
+      var details = (o.details || []).map(function (x) { var det = maakDetail(x.anker, x.soort); if (x.foto) koppelDetailFoto(det, x.foto, x.pose || null, x.w, x.h, new Date().toISOString()); return det; });
+      uitkomst = { punten: punten.slice(), hoogte: 1.4, plafond: plafondY - vloerY, tijd: new Date().toLocaleString('nl-NL'), voorbeeld: false, hand: {} };
+      bewaar();
+      pano.klaar = pano.beelden.length ? { beelden: pano.beelden.slice(), punten: punten.slice(), vloerY: vloerY, hoogte: plafondY - vloerY, plafondBekend: true, tijd: uitkomst.tijd } : null;
+      var d = dossier(); DS.zetHoeken(d, ses.id, punten); ses.xr.vloerY = vloerY; ses.xr.plafondY = plafondY; ses.live_punten = null; koppelWanden(d); DS.sluitSessie(d, ses.id, {});
+      el('s-start').hidden = true; toonUitkomst(); toonPano(); toonDossier(); planBewaar(true);
+      return details;
+    },
+    openPaneel: function (det) { openPaneel(det, false); },
+    // proefhaak: gevonden vlakken en een standpunt nabootsen, dan plattegrondje en aanwijzing tekenen (zonder AR)
+    liveProef: function (o) {
+      if (o.nieuw) { scanVlakken = new Map(); hintPlekken = []; stil = null; }
+      (o.vlakken || []).forEach(function (v) { noteerVlak(v.pl, v.pts, v.as); });
+      if (o.punten) punten = o.punten.slice();
+      if (o.beelden) { pano.aan = true; pano.beelden = o.beelden; }
+      kaartTeller = 0; richtingsKaart(o.oog, o.rich);
+      if (o.stilstaan && stil) { stil.t -= 3000; kaartTeller = 1; richtingsKaart(o.oog, o.rich); }
+      return { hint: el('ar-hint').textContent, voorstellen: ses && ses.scan_voorstellen, aanwijzingen: ses && ses.draai_aanwijzingen, waarnemingen: ses && ses.waarnemingen };
+    },
+    toonDetailInAr: function (det) { el('ar-laag').hidden = false; openPaneel(det, true); },
     // proefhaak: een nagebootste opname met beelden laden, zonder AR
     laadPano: function (k) { pano.klaar = k; toonPano(); return k; } };
   uitkomst = laad();
   if (uitkomst) { toonUitkomst(); el('zeg').textContent = 'De laatste meting van deze telefoon staat hieronder.'; }
+  if (DS && OS) { toonOpnames(); try { OS.beveilig(); } catch (e) {} }
+  else { el('r-velden').hidden = true; el('r-uitleg').hidden = true; }
 })();
 </script>
 </body>

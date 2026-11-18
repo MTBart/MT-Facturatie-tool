@@ -1,0 +1,189 @@
+// Test van mt-ruimte-dossier.js: het dossier van de ruimtelijke opname (hoeken, wanden, details, maten, beelden, pakket).
+// Draaien: node test/ruimte-dossier.test.js — alleen verzonnen kamers en de proefkamer van 17-11 (geen klant- of persoonsgegevens).
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const D = require('../mt-ruimte-dossier.js');
+const X = require('../mt-opname-export.js');
+const html = fs.readFileSync(path.join(__dirname, '..', 'docs', 'opname-ar-proef.html'), 'utf8');
+const mod = { exports: {} };
+new Function('module', html.split('/*KERN-BEGIN*/')[1].split('/*KERN-EINDE*/')[0])(mod);
+const AR = mod.exports;
+
+let goed = 0, fout = 0;
+function check(naam, ok, extra) { if (ok) goed++; else fout++; console.log((ok ? 'ok  - ' : 'FOUT - ') + naam + (extra ? '  ' + extra : '')); }
+let teller = 0; D.zetIdMaker(p => p + '_' + (++teller));
+const NU = Date.UTC(2026, 10, 18, 10, 0, 0);
+const jpg = n => Uint8Array.from([0xFF, 0xD8, 0xFF, 0xE0, n & 255, (n >> 8) & 255, 0xFF, 0xD9]);
+
+(async function () {
+  // ── invoer ──
+  check('leesMaat: 2,345 is meters', D.leesMaat('2,345').mm === 2345);
+  check('leesMaat: 2345 is mm', D.leesMaat('2345').mm === 2345 && D.leesMaat('2345').eenheid === 'mm');
+  check('leesMaat: 2.345 m', D.leesMaat('2.345 m').mm === 2345);
+  check('leesMaat: 12 mm (klein mag)', D.leesMaat('12').mm === 12);
+  check('leesMaat: 15cm', D.leesMaat('15cm').mm === 150);
+  check('leesMaat: onzin geeft null', D.leesMaat('abc') === null && D.leesMaat('') === null);
+  check('X4-reeks herkend', D.isDistoReeks([0, 40, 80, 120], 160, 4));
+  check('mens op schermtoetsenbord geen X4', !D.isDistoReeks([0, 300, 700, 1000], 1300, 4));
+
+  // ── nieuw dossier, hoeken met stabiele ID's ──
+  const d = D.nieuw({ project: { code: 'TEST-001', naam: 'Proefkamer' }, ruimte: { naam: 'Woonkamer' } }, NU);
+  check('schema en versie', d.schema === 'mt-ruimte-dossier' && d.versie === '0.1.0' && d.ruimte.eenheid === 'mm');
+  const s1 = D.startSessie(d, { toestel: 'test' }, NU);
+  check('eerste sessie is de basis', s1.uitlijning.status === 'basis');
+  const P = '0.141;-1.344 0.163;-0.736 0.778;-0.391 0.912;-0.413 1.129;2.933 -1.533;3.330 -1.725;-1.217'.split(' ').map(t => { const [a, b] = t.split(';').map(Number); return { x: a, z: b }; });
+  const L = [600, 655, 155, 3427, 2454, 4371, 1792];
+  D.zetHoeken(d, s1.id, P, NU); s1.xr.vloerY = -1.4; s1.xr.plafondY = 1.2;
+  const ids = d.hoeken.map(h => h.id), wids = d.wanden.map(w => w.id);
+  check('7 hoeken en 7 wanden met eigen id', ids.length === 7 && new Set(ids).size === 7 && wids.length === 7 && d.wanden[6].naar === ids[0]);
+  D.zetHoeken(d, s1.id, P.map(p => ({ x: p.x + 0.01, z: p.z })), NU);
+  check('opnieuw zetten houdt de ids; de ruwe stand staat in het archief', d.hoeken.every((h, i) => h.id === ids[i]) && d.archief.length === 1 && d.archief[0].hoeken[0].xr.x === P[0].x);
+  D.zetHoeken(d, s1.id, P, NU);
+
+  // ── lijnmodel zonder maten: geschat ──
+  let lm = D.lijnmodel(d, AR);
+  check('lijnmodel zonder maten is geschat', lm.status === 'geschat' && lm.segmenten.every(s => s.lengte.status === 'geschat'));
+  check('oorsprong in een hoek op 0,0,0', lm.punten.some(p => p.x === 0 && p.y === 0 && p.z === 0));
+  const oppR = lm.punten.reduce((s, p, i) => { const q = lm.punten[(i + 1) % lm.punten.length]; return s + p.x * q.y - q.x * p.y; }, 0);
+  const o = lm.punten.find(p => p.label === lm.x_as.van), xn = lm.punten.find(p => p.label === lm.x_as.naar);
+  check('de kamer ligt aan de +Y-kant van de X-as (rechtsdraaiend, ook bij een holle vorm)', o.x === 0 && o.y === 0 && Math.abs(xn.y) < 0.5 && xn.x > 0 && (lm.x_as.van === 'H1' ? oppR > 0 : oppR < 0), lm.x_as.van + '→' + lm.x_as.naar);
+  check('korte wand van 155 mm apart gehouden', lm.segmenten[2].kort === true && lm.segmenten.filter(s => s.kort).length <= 2);
+  check('schuine wand W2 benoemd', lm.schuin.length === 1 && lm.schuin[0] === wids[1]);
+  check('plafond uit de camera geschat', lm.hoogte.status === 'geschat' && lm.hoogte.waarde === 2600);
+
+  // ── wandmaten: X4 en hand; een correctie vervangt, de vorige blijft ──
+  d.wanden.forEach((w, i) => D.voegMetingToe(d, { doel: { soort: 'wand', id: w.id }, veld: 'lengte', waarde_mm: L[i] + (i === 3 ? 100 : 0), invoer: String(L[i]), bron: i % 2 ? 'disto' : 'hand' }, NU));
+  const fout3 = D.huidigeMeting(d, wids[3], 'lengte');
+  const corr = D.voegMetingToe(d, { doel: { soort: 'wand', id: wids[3] }, veld: 'lengte', waarde_mm: L[3], invoer: '3,427', eenheid_invoer: 'm', bron: 'disto' }, NU);
+  check('correctie verwijst naar de vorige meting', corr.vervangt === fout3.id && D.huidigeMeting(d, wids[3], 'lengte').id === corr.id && D.historie(d, wids[3], 'lengte').length === 2);
+  check('oorspronkelijke invoer bewaard', corr.invoer === '3,427' && corr.eenheid_invoer === 'm');
+  lm = D.lijnmodel(d, AR);
+  check('met alle maten: afgeleid, sluitfout ~42,3 mm zichtbaar', lm.status === 'afgeleid' && Math.abs(lm.sluitfout_mm - 42.3) < 1, String(lm.sluitfout_mm));
+  check('gemeten lengte met bron en meting-id in het segment', lm.segmenten[3].lengte.status === 'gemeten' && lm.segmenten[3].lengte.meting_id === corr.id && lm.segmenten[3].lengte.bron === 'disto');
+
+  // ── zevenhoek bij alle starthoeken en beide richtingen, via het dossier ──
+  let allesGelijk = true;
+  for (const stap of [1, -1]) for (let start = 0; start < 7; start++) {
+    const volg = P.map((_, i) => (start + stap * i + 7) % 7), wandVan = volg.map((h, i) => stap === 1 ? h : volg[(i + 1) % 7]);
+    const e = D.nieuw({}, NU), s = D.startSessie(e, {}, NU); s.xr.vloerY = 0;
+    D.zetHoeken(e, s.id, volg.map(h => P[h]), NU);
+    e.wanden.forEach((w, i) => D.voegMetingToe(e, { doel: { soort: 'wand', id: w.id }, veld: 'lengte', waarde_mm: L[wandVan[i]], bron: 'hand' }, NU));
+    const m = D.lijnmodel(e, AR), schuinIdx = e.wanden.findIndex(w => w.id === m.schuin[0]);
+    if (!(m.schuin.length === 1 && wandVan[schuinIdx] === 1 && Math.abs(m.sluitfout_mm - 42.3) < 1)) allesGelijk = false;
+  }
+  check('alle 14 starts: dezelfde wand schuin en ~42,3 mm sluitfout', allesGelijk);
+
+  // ── controlemaat H4–H6 naast de verwachte waarde ──
+  D.voegMetingToe(d, { doel: { soort: 'diagonaal', id: d.ruimte.id, extra: { van: ids[3], naar: ids[5] } }, veld: 'diagonaal', waarde_mm: 5000, invoer: '5000', bron: 'disto' }, NU);
+  const cm = D.controleMaten(d, lm);
+  check('controlemaat H4-H6 met verwachte waarde en verschil', cm.length === 1 && cm[0].van === 'H4' && cm[0].naar === 'H6' && cm[0].verwacht > 0 && cm[0].verschil === Math.round((5000 - cm[0].verwacht) * 10) / 10, JSON.stringify(cm[0]));
+
+  // ── detail: cv-leiding onder een raam, één X4-maat, één handmaat, één open maat ──
+  const foto = D.voegBeeldToe(d, { soort: 'detail', sessie: s1.id, pose: { pos: [0, 0, 0], dir: [0, 0, -1], pv: new Array(16).fill(0) }, breedte: 1280, hoogte: 960, bewaard: true }, NU);
+  const leiding = D.voegDetailToe(d, { soort: 'leiding', label: 'CV-leiding onder raam', wand_id: wids[4], anker: { xr: { x: 0.5, y: -1.1, z: 3.0 }, wand_id: wids[4], u_m: 0.8, v_m: 0.3 }, foto_ids: [foto.id], referentie_hoek: ids[4], sessie: s1.id }, NU);
+  foto.detail_id = leiding.id;
+  D.voegMetingToe(d, { doel: { soort: 'detail', id: leiding.id }, veld: 'hoogte_hart', waarde_mm: 312, invoer: '312', bron: 'disto', sessie: s1.id }, NU);
+  D.voegMetingToe(d, { doel: { soort: 'detail', id: leiding.id }, veld: 'afstand_hart_tot_hoek', waarde_mm: 845, invoer: '84,5 cm', bron: 'hand' }, NU);
+  D.voegMetingToe(d, { doel: { soort: 'detail', id: leiding.id }, veld: 'uitsteek_max', waarde_mm: null, bron: null }, NU);
+  const mv = D.metingenVan(d, leiding.id);
+  check('detail heeft drie metingen: X4, hand en open', mv.length === 3 && mv.some(m => m.bron === 'disto' && m.status === 'gemeten') && mv.some(m => m.bron === 'hand') && mv.some(m => m.status === 'open'));
+  const plek = D.detailPlek(d, leiding, lm);
+  check('plek van de leiding volgt de gemeten maten', plek && plek.z === 312 && plek.status.langs_wand === 'gemeten' && plek.status.hoogte === 'gemeten');
+  const ov = D.openVragen(d, AR);
+  check('open vragen noemen de open uitsteekmaat en de diameter van de leiding', ov.some(v => v.doel === leiding.id && v.veld === 'uitsteek_max') && ov.some(v => v.doel === leiding.id && v.veld === 'buitendiameter'));
+  check('open vragen noemen de korte wand', ov.some(v => v.doel === wids[2] && /kort/.test(v.tekst)));
+  D.voegOpmerkingToe(d, { tekst: 'Nieuwe vloer komt 12 mm hoger', locatie: { soort: 'ruimte', id: d.ruimte.id }, bron: 'opnemer', sessie: s1.id }, NU);
+  check('opmerking met datum, bron en locatie; de bestaande toestand blijft', d.opmerkingen[0].tijd && d.opmerkingen[0].bron === 'opnemer' && d.opmerkingen[0].toestand === 'toekomstig' && d.opmerkingen[0].locatie.id === d.ruimte.id);
+
+  // ── correctie aan de wand houdt detail en maten aan elkaar ──
+  D.zetHoeken(d, s1.id, P.map(p => ({ x: p.x, z: p.z + 0.02 })), NU);
+  check('na correctie van de omtrek: zelfde wand-id en het detail wijst er nog naar', d.wanden[4].id === wids[4] && leiding.wand_id === wids[4] && D.metingenVan(d, leiding.id).length === 3);
+
+  // ── pakket heen en terug ──
+  const bestanden = {}; bestanden[foto.pad] = jpg(1);
+  const ov1 = D.voegBeeldToe(d, { soort: 'overzicht', sessie: s1.id, pose: { pos: [0, 0, 0], dir: [0, 0, -1], pv: new Array(16).fill(0) }, bewaard: true }, NU);
+  bestanden[ov1.pad] = jpg(2); bestanden['panorama/W1.jpg'] = jpg(3);
+  const pk = await D.maakPakket(d, bestanden, { AR, nu: NU });
+  const terug = await D.leesPakket(pk.bytes);
+  check('pakket opent weer zonder meldingen', !terug.fout && terug.meldingen.length === 0, terug.fout || terug.meldingen.join('; '));
+  const t = terug.dossier;
+  check('ID\'s en waarden gelijk na de zip', t.ruimte.id === d.ruimte.id && t.details[0].id === leiding.id && t.metingen.length === d.metingen.length && D.huidigeMeting(t, leiding.id, 'hoogte_hart').waarde_mm === 312);
+  check('relatieve paden en sha256 in het dossier', t.beelden.every(b => !/^\//.test(b.pad) && b.sha256 && b.sha256.length === 64) && terug.bestanden[foto.pad].length === 8);
+  check('lijnmodel staat leesbaar in het pakket', t.afgeleid.lijnmodel && t.afgeleid.lijnmodel.punten.length === 7 && !t.afgeleid.lijnmodel._t && t.afgeleid.detail_plekken[0].plek.z === 312);
+  check('open vragen in het pakket', t.afgeleid.open_vragen.some(v => v.veld === 'uitsteek_max'));
+  check('panorama mee in het pakket', t.afgeleid.panorama[0] === 'panorama/W1.jpg' && terug.bestanden['panorama/W1.jpg']);
+  // beschadigd beeld en ontbrekend beeld
+  const items = await X.leesZip(pk.bytes), kapot = items.map(x => x.naam === foto.pad ? { naam: x.naam, data: jpg(99) } : x);
+  const r2 = await D.leesPakket(X.zipBytes(kapot));
+  check('beschadigd beeld wordt gemeld', r2.meldingen.some(m => /beschadigd/.test(m)));
+  const r3 = await D.leesPakket(X.zipBytes(items.filter(x => x.naam !== ov1.pad)));
+  check('ontbrekend beeld wordt gemeld', r3.meldingen.some(m => /ontbreekt/.test(m)));
+  const r4 = await D.leesPakket(X.zipBytes([{ naam: 'opname.json', data: new TextEncoder().encode('{}') }]));
+  check('ander zip-bestand wordt geweigerd', !!r4.fout);
+  const half = await D.maakPakket(d, {}, { nu: NU });
+  check('beeld zonder bestand staat als ontbrekend in het pakket', half.ontbreekt.length === 2 && half.dossier.afgeleid.ontbrekende_beelden.length === 2);
+
+  // ── oud panoramabestand van de AR-proef blijft openen ──
+  const png = 'data:image/jpeg;base64,' + Buffer.from(jpg(5)).toString('base64');
+  const oud = { soort: 'mt-ar-panorama', versie: 1, tijd: 'test', vloerY: 0, hoogte: 2.5, plafondBekend: true, punten: [{ x: 0, z: 0 }, { x: 3, z: 0 }, { x: 3, z: 2 }, { x: 0, z: 2 }],
+    wanden: [{ nr: 0, L: 3, beeld: png }], beelden: [{ pos: [1, 1.5, 1], dir: [0, 0, -1], pv: new Array(16).fill(0), beeld: png }] };
+  const mig = D.uitPanorama(oud, NU);
+  check('oud panorama wordt een dossier met hoeken, beeld en wandtextuur', mig.dossier.hoeken.length === 4 && mig.dossier.beelden.length === 1 && mig.bestanden['panorama/W1.jpg'].length === 8 && mig.bestanden[mig.dossier.beelden[0].pad].length === 8);
+
+  // ── een tweede sessie uitlijnen op twee bekende hoeken ──
+  const A = { x: 1, z: 2 }, B = { x: 4, z: 2 }, hoek = 0.7, c = Math.cos(hoek), sn = Math.sin(hoek);
+  const naarNieuw = p => ({ x: c * p.x - sn * p.z + 0.3, z: sn * p.x + c * p.z - 1.1 });
+  const ul = D.lijnUit(A, B, naarNieuw(A), naarNieuw(B), 0, 0.05);
+  const q = D.pasToe(ul.transform, Object.assign(naarNieuw({ x: 2.5, z: 3.3 }), { y: 1.0 }));
+  check('uitlijnen: een punt uit de nieuwe sessie valt op zijn plek in de basis', ul.goed && Math.abs(q.x - 2.5) < 1e-9 && Math.abs(q.z - 3.3) < 1e-9 && Math.abs(q.y + 0.05 - 1.0) < 1e-9 + 0.1);
+  const slecht = D.lijnUit(A, B, naarNieuw(A), naarNieuw({ x: 4.2, z: 2 }), 0, 0);
+  check('uitlijnen met een verkeerde hoek wordt geweigerd', !slecht.goed && slecht.rest_m > 0.15);
+  // de camerastand gaat mee: hetzelfde punt projecteert gelijk
+  const pvNieuw = [1.2, 0.1, 0, 0.05, 0, 1.5, 0.02, 0.1, 0.3, 0.2, -1, -1, 0.5, -0.4, -0.2, 2];
+  const pNieuw = { x: 0.7, y: 0.4, z: -2.1 }, pBasis = D.pasToe(ul.transform, pNieuw), pvB = D.pvNaarBasis(ul.transform, pvNieuw);
+  const a1 = AR.projecteer(pvNieuw, pNieuw.x, pNieuw.y, pNieuw.z), a2 = AR.projecteer(pvB, pBasis.x, pBasis.y, pBasis.z);
+  check('camerastand mee omgerekend: projectie blijft gelijk', a1 && a2 && Math.abs(a1.x - a2.x) < 1e-9 && Math.abs(a1.y - a2.y) < 1e-9);
+  const s2 = D.startSessie(d, {}, NU);
+  check('tweede sessie blijft apart tot ze is uitgelijnd', s2.uitlijning.status === 'niet-uitgelijnd');
+
+  // ── proef 5: fictieve kamer met raam, cv-leiding met bocht, onderbroken plint, losse stoel en houtafwerking ──
+  const k = D.nieuw({ project: { code: 'TEST-002', naam: 'Fictief' }, ruimte: { naam: 'Studeerkamer' } }, NU), ks = D.startSessie(k, {}, NU); ks.xr.vloerY = 0;
+  D.zetHoeken(k, ks.id, [{ x: 0, z: 0 }, { x: 4, z: 0 }, { x: 4, z: 3 }, { x: 0, z: 3 }], NU);
+  [4000, 3000, 4000, 3000].forEach((v, i) => D.voegMetingToe(k, { doel: { soort: 'wand', id: k.wanden[i].id }, veld: 'lengte', waarde_mm: v, bron: 'disto' }, NU));
+  const raam = D.voegDetailToe(k, { soort: 'raam', wand_id: k.wanden[2].id, referentie_hoek: k.hoeken[2].id, anker: { xr: { x: 2, y: 1.4, z: 3 }, wand_id: k.wanden[2].id, u_m: 1.4, v_m: 0.9 } }, NU);
+  [['afstand_tot_hoek', 700], ['breedte', 1500], ['hoogte', 1400], ['borstwering', 900]].forEach(([f, v]) => D.voegMetingToe(k, { doel: { soort: 'detail', id: raam.id }, veld: f, waarde_mm: v, bron: 'disto' }, NU));
+  const cv = D.voegDetailToe(k, { soort: 'leiding', label: 'CV-leiding met bocht', wand_id: k.wanden[2].id, anker: { xr: { x: 2.5, y: 0.25, z: 2.95 }, wand_id: k.wanden[2].id, u_m: 1.5, v_m: 0.25 },
+    traject: { punten_mm: [{ x: 1200, y: 2950, z: 250 }, { x: 2800, y: 2950, z: 250 }, { x: 2800, y: 2950, z: 0 }], zichtbaar_tot: 'vloer bij het eindpunt', status: 'geschat' } }, NU);
+  D.voegMetingToe(k, { doel: { soort: 'detail', id: cv.id }, veld: 'hoogte_hart', waarde_mm: 250, bron: 'hand' }, NU);
+  D.voegMetingToe(k, { doel: { soort: 'detail', id: cv.id }, veld: 'buitendiameter', waarde_mm: 22, bron: 'hand' }, NU);
+  const plint1 = D.voegDetailToe(k, { soort: 'plint', wand_id: k.wanden[0].id, profiel_id: 'prof_plint_A', traject: { begin_mm: 0, eind_mm: 900 } }, NU);
+  const plint2 = D.voegDetailToe(k, { soort: 'plint', wand_id: k.wanden[0].id, profiel_id: 'prof_plint_A', traject: { begin_mm: 1800, eind_mm: 4000 } }, NU);
+  const stoel = D.voegDetailToe(k, { soort: 'meubel', label: 'Stoel', anker: { xr: { x: 1.5, y: 0, z: 1.5 } }, meubel: { categorie: 'stoel', draairichting_graden: 30 } }, NU);
+  ['breedte', 'diepte', 'hoogte'].forEach((f, i) => D.voegMetingToe(k, { doel: { soort: 'detail', id: stoel.id }, veld: f, waarde_mm: [450, 500, 850][i], bron: 'ar', status: 'geschat' }, NU));
+  const schaal = D.voegBeeldToe(k, { soort: 'detail', sessie: ks.id, bewaard: true }, NU);
+  const hout = D.voegDetailToe(k, { soort: 'afwerking', label: 'Eiken vloer', foto_ids: [schaal.id],
+    materiaal: { vlak: 'vloer', type: 'hout', kleur: 'licht eiken', glans: 'mat', nerfrichting: 'evenwijdig aan W1', schaal: { methode: 'plankbreedte', waarde_mm: 180, foto_id: schaal.id }, code: null, status: 'visuele benadering' } }, NU);
+  const kb = {}; kb[schaal.pad] = jpg(7);
+  const kp = await D.maakPakket(k, kb, { AR, nu: NU }), kt = (await D.leesPakket(kp.bytes)).dossier;
+  const g = D.perGroep(kt), lmK = kt.afgeleid.lijnmodel, raamPlek = kt.afgeleid.detail_plekken.find(x => x.detail_id === raam.id).plek;
+  check('proef 5: groepen afzonderlijk op te vragen', g.bouwdeel.length === 1 && g.installatie.length === 1 && g.afwerking.length === 2 && g.meubilair.length === 1 && g.materiaal.length === 1);
+  check('proef 5: raam zonder foto uit te lezen (wand, hoek, maten, bron)', raamPlek.status.langs_wand === 'gemeten' && raamPlek.z === 900 && D.metingenVan(kt, raam.id).every(m => m.bron === 'disto' && m.status === 'gemeten'));
+  check('proef 5: raam staat 700 mm uit de gekozen hoek', (() => { const w = lmK.punten[2], p = raamPlek; return Math.abs(Math.hypot(p.x - w.x, p.y - w.y) - 700) < 1; })());
+  check('proef 5: leiding met bocht als 3D-traject met hart en diameter', kt.details.find(x => x.id === cv.id).traject.punten_mm.length === 3 && D.huidigeMeting(kt, cv.id, 'buitendiameter').waarde_mm === 22);
+  check('proef 5: onderbroken plint = twee stukken met hetzelfde profiel-ID', g.afwerking.every(x => x.profiel_id === 'prof_plint_A') && g.afwerking[0].traject.eind_mm < g.afwerking[1].traject.begin_mm);
+  check('proef 5: stoel is geschat', D.metingenVan(kt, stoel.id).every(m => m.status === 'geschat') && kt.details.find(x => x.id === stoel.id).meubel.draairichting_graden === 30);
+  check('proef 5: houtvlak met nerf, schaalfoto en onbekende code', (() => { const m = kt.details.find(x => x.id === hout.id).materiaal; return m.nerfrichting && m.schaal.foto_id === schaal.id && m.code === null && m.status === 'visuele benadering'; })());
+  check('proef 5: onbekende materiaalcode staat bij de open vragen', kt.afgeleid.open_vragen.some(v => v.doel === hout.id && v.soort === 'materiaal'));
+  check('proef 5: kamer 4 x 3 sluit precies', lmK.sluitfout_mm === 0 && lmK.status === 'afgeleid');
+
+  // ── het vaste proefpakket (gemaakt met test/ruimte-e2e.js uit de echte invoerroute; nagebootste kamer, geen echte beelden) blijft openen ──
+  const vast = await D.leesPakket(new Uint8Array(fs.readFileSync(path.join(__dirname, 'fixtures', 'ruimte-proefpakket.zip'))));
+  check('proefpakket opent zonder meldingen', !vast.fout && vast.meldingen.length === 0, vast.fout || vast.meldingen.join('; '));
+  const vd = vast.dossier, vl = vd && vd.details.find(x => x.soort === 'leiding' && x.foto_ids.length);
+  check('proefpakket: leiding met X4-hoogte, handmaat en open uitsteek', vl && D.huidigeMeting(vd, vl.id, 'hoogte_hart').bron === 'disto' && D.huidigeMeting(vd, vl.id, 'afstand_hart_tot_hoek').bron === 'hand' && !D.huidigeMeting(vd, vl.id, 'uitsteek_max'));
+  check('proefpakket: detailfoto aanwezig en lijnmodel gemeten', vl && vast.bestanden[vd.beelden.find(b => b.id === vl.foto_ids[0]).pad] && vd.afgeleid.lijnmodel.status === 'afgeleid');
+
+  console.log('\n' + goed + ' tests geslaagd' + (fout ? ', ' + fout + ' MISLUKT' : ''));
+  if (fout) process.exitCode = 1;
+})().catch(e => { console.error(e); process.exitCode = 1; });
