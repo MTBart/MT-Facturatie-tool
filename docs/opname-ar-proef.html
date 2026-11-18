@@ -1467,6 +1467,30 @@ if (typeof module !== 'undefined') module.exports = AR;
     if (uitkomst) toonUitkomst(); else el('s-uitkomst').hidden = true;
     toonDossier(); el('zeg').textContent = melding || 'Opname geopend.';
     el('s-dossier').scrollIntoView({ block: 'start' });
+    return herbouwPano();
+  }
+  // Na heropenen (pagina dicht, tabblad per ongeluk gesloten) de beelden uit de opslag terughalen, zodat Wanden aan elkaar plakken weer kan.
+  function herbouwPano() {
+    var d = dossier(); if (!d || !OS || d.hoeken.length < 3) return Promise.resolve();
+    var basis = DS.basisSessie(d) || { xr: {} }, vloer = basis.xr.vloerY; if (vloer == null) return Promise.resolve();
+    var r = rec;
+    return OS.fotosVan(r.id).then(function (fotos) {
+      if (rec !== r) return;
+      var opPad = {}; fotos.forEach(function (f) { if (f.pad) opPad[f.pad] = f; });
+      var bl = [];
+      d.beelden.forEach(function (b) {
+        if (b.soort !== 'overzicht') return;
+        var s = d.sessies.find(function (x) { return x.id === b.sessie; }), pose = s && s.uitlijning && s.uitlijning.status === 'basis' ? b.pose : b.pose_basis, f = opPad[b.pad];
+        if (!pose || !f || !f.blob) return;
+        bl.push({ pos: pose.pos, dir: pose.dir, pv: pose.pv, w: b.breedte, h: b.hoogte, blob: f.blob, gereed: Promise.resolve(), beeldId: b.id, tijd: b.tijd });
+      });
+      if (!bl.length) return;
+      pano.beelden = bl;
+      pano.klaar = { beelden: bl, punten: d.hoeken.map(function (h) { return { x: h.xr.x, z: h.xr.z }; }), vloerY: vloer,
+        hoogte: basis.xr.plafondY != null ? basis.xr.plafondY - vloer : HOOGTE_STANDAARD, plafondBekend: basis.xr.plafondY != null, tijd: d.gemaakt };
+      toonPano();
+      el('pano-tekst').textContent += (d.panorama && d.panorama.length ? ' De wanden zijn al eerder geplakt; opnieuw plakken vervangt ze.' : ' De wanden zijn nog niet geplakt.');
+    }, meldFout);
   }
   function toonOpnames() {
     if (!OS || !DS) return;

@@ -155,6 +155,11 @@ window.renderKamer = function (cam, w, h, fovy) {
   await p.click('#r-lijst li button');
   const terug = await p.evaluate(() => { const d = window.arProef.dossier(); return { hoeken: d.hoeken.length, det: d.details.length, mt: d.metingen.length, open: !document.querySelector('#s-dossier').hidden }; });
   check('na herladen: ruimte opent met hoeken, details en maten', terug.hoeken === 4 && terug.det >= 2 && terug.mt > 8 && terug.open, JSON.stringify(terug));
+  // tabblad per ongeluk gesloten: na heropenen kan het plakken van de wanden opnieuw (beelden komen uit de opslag)
+  await p.waitForSelector('#s-pano:not([hidden])', { timeout: 15000 });
+  await p.click('#k-plak');
+  await p.waitForFunction(() => /bewaard/.test(document.querySelector('#pano-melding').textContent), null, { timeout: 30000 });
+  check('na heropenen: wanden opnieuw te plakken uit de bewaarde beelden', true);
   check('geen fouten in de console (S24-pagina)', fouten.length === 0, fouten.join(' | '));
 
   // ── kantoor-pc: de kijker ──
