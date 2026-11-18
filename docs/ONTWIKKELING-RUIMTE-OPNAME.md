@@ -190,7 +190,25 @@ maar plakken kon alleen direct na de rondgang. Nu komen de beelden terug uit de 
 | 18-11 | Per ongeluk op het kruisje gedrukt na *Delen*. | B16; gegevens waren veilig. |
 | 18-11 | Vakjes op de muur zijn goed. Knop voor een losse foto vanaf een plek waar de hele wand in beeld is. Plafondpunten ook ongeveer meenemen. Bij een hoektik meteen een echte foto, zodat de getikte punten gecorrigeerd kunnen worden naar de echte hoek (via AI of in de app). | B8, B9, B10. AI-herkenning gepland (P4). |
 | 18-11 | Test: gordijnen inmeten in deze ruimte → goede foto's van de kozijnen en de maatvoering ervan. Via VW een presentatielaag-PDF: "Europese projectie" van de kamer met de wanden eromheen, volledig bemaat? | Voorstel P1 (gordijnenprofiel) en P2 (kameruitslag-PDF), P3 (VW-route). |
+| 18-11 20:27 | Echte proef, rechthoekige kamer ~2,9 × 5,8 m (zie §5.1). | Waarneming schaalfout camera → voorstel P10; diagonaal gevraagd. |
 | 18-11 | Ontwikkeldocument waarin alles staat, zodat terug te zien is wat waarom veranderde; Astra moet er licht op kunnen laten schijnen. | Dit document. |
+
+### 5.1 Meetresultaten echte proeven
+
+**18-11-2026 20:27 · S24 · rechthoekige kamer · 4 hoeken getikt · telefoon op 1,58 m**
+
+| Wand | Camera (rechtgezet) | Zelf gemeten | Verschil | Hoek gemeten → gezet |
+|---|---|---|---|---|
+| W1 | 2934 | 2900 | +34 (+1,2 %) | H1 89,8° → 90° |
+| W2 | 5886 | 5774 | +112 (+1,9 %) | H2 90,6° → 90° |
+| W3 | 2934 | 2902 | +32 (+1,1 %) | H3 89,4° → 90° |
+| W4 | 5886 | 5781 | +105 (+1,8 %) | H4 90,2° → 90° |
+
+Sluiting met eigen maten 7 mm (zonder rechtzetten 33 mm). Punten (m, AR): -0.092;-1.748 2.558;-0.528 0.148;4.843 -2.533;3.607.
+
+*Waarnemingen:* hoeken tikken ruim binnen 1° van haaks; rechtzetten verbetert de sluiting van 33 naar 7 mm. De camera schat **systematisch 1–2 % te lang**
+(schaal, geen ruis). De resterende 7 mm zit in de eigen maten (lange wanden 5774/5781, korte 2900/2902): kamer licht scheef of een maat net anders genomen.
+Verwachte diagonaal bij een haakse kamer ≈ 6465 mm; beide diagonalen meten beslist het.
 
 ---
 
@@ -264,6 +282,13 @@ langs een tweede review.
 1) Een echte Nomad-export bekijken (inhoud, ID's, assen, eenheden, foto's) en een import naar het dossier bouwen; 2) eventueel een native
 iOS-onderdeel met RoomPlan (vraagt Mac + Xcode, Apple-ontwikkelaarsaccount, iPhone Pro met LiDAR).
 
+### P10 · Schaalcorrectie van camera-schattingen per gemeten wand
+**Waarom:** de proef van 18-11 laat een vaste schaalfout van de camera zien (1–2 % te lang). Een detailplek die alleen met de camera is bepaald
+(bijv. een stopcontact op 0,82 m van de hoek) erft die fout.
+**Voorstel:** zodra een wand gemeten is, schaal de camera-afstanden langs die wand met `gemeten / camera` (bijv. 2900/2934). Het resultaat blijft
+status *geschat* (bron `ar`, met `schaal_gecorrigeerd: true` en de bronmaat), en een echte meting gaat altijd voor. Ook als hint in het detailpaneel tonen.
+**Te toetsen:** in meer kamers kijken of de factor per wand of per sessie stabiel is.
+
 ### P9 · Kwaliteit panorama en prestaties
 Perspectief-correct plakken (homografie per vak i.p.v. affien), automatisch extra kijkpunt bij een andere zichtlijn (radiator vóór raam),
 `readPixels` asynchroon (PBO/OffscreenCanvas) als de AR gaat haperen, meten van geheugen bij lange rondgangen.
@@ -313,7 +338,8 @@ Perspectief-correct plakken (homografie per vak i.p.v. affien), automatisch extr
 | 18-11 | `9fb5f92` | Draadmodel centraal, vlakken via knop | B6, feedback proef |
 | 18-11 | `97b5a6e` | Na heropenen opnieuw plakken | B16, tabblad per ongeluk dicht |
 | 18-11 | `5ba09b4` | Hoekfoto, plafondfoto, knop Foto, hoeken nakijken | B8–B10, feedback |
-| 18-11 | (dit document) | Ontwikkeldocument | verzoek Bart |
+| 18-11 | `ba0f17e` | Ontwikkeldocument | verzoek Bart |
+| 18-11 | (volgende) | Meetresultaat echte proef 20:27, voorstel P10 | proef Bart |
 
 Meer detail per brok: `VOORTGANG-OPNAME.md`. Volledige diff: draft-PR #5.
 
