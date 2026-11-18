@@ -11,8 +11,8 @@ alleen op de werkbranch.
 1. Open de telefoonpagina in Chrome. Vul **Project** en **Ruimte** in en tik **Nieuwe ruimte: start rondgang**. Geef de camera toestemming.
 2. Beweeg rustig over een vrij stuk vloer tot de vloer gevonden is.
 3. Loop de kamer rond en tik elke hoek aan met de ronde duimknop **Hoek**. Wat je in beeld ziet:
-   - **blauwe lijnen**: wanden die de telefoon zelf herkent (ruw scanvoorstel);
-   - **groene lijnen**: de wanden die jij hebt bevestigd door de hoeken te tikken;
+   - **het draadmodel** (groene vloerlijn, witte staanders, oranje plafondlijn zodra het plafond bekend is): de wanden die jij hebt bevestigd door de hoeken te tikken;
+   - **Vlakken** (knop bovenin, standaard uit): toont ook de vlakken die de telefoon zelf herkent als blauwe lijnen. Ze worden altijd als ruw scanvoorstel bewaard;
    - **plattegrondje linksonder**: rode stip = jij, de ring eromheen = richtingen waar al beeld van is (groen) of nog niet (grijs), ▲ ▼ = omhoog en omlaag.
 4. De beelden voor het rondkijken worden vanzelf verzameld. Sta je even stil en ontbreekt er rond die plek echt een richting, dan
    verschijnt bijvoorbeeld *"Draai hier even naar links en omhoog"*. Geen aparte panoramaronde nodig.

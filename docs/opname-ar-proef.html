@@ -244,7 +244,7 @@ dd{margin:0;font-variant-numeric:tabular-nums}
 
 <div id="ar-laag" hidden>
   <div class="boven">
-    <div class="kop"><div id="ar-status">AR start…</div><div class="klein"><button id="k-klaar" disabled>Klaar</button><button id="k-stop">Stop</button></div></div>
+    <div class="kop"><div id="ar-status">AR start…</div><div class="klein"><button id="k-vlakken" aria-pressed="false" title="Toon de vlakken die de telefoon zelf herkent">Vlakken</button><button id="k-klaar" disabled>Klaar</button><button id="k-stop">Stop</button></div></div>
     <div id="ar-sub"></div>
     <div id="ar-pano"></div>
     <div id="ar-doel"></div>
@@ -1008,7 +1008,6 @@ if (typeof module !== 'undefined') module.exports = AR;
     for (var i = 0; i + 1 < punten.length; i++) { strook(vast, punten[i], punten[i + 1], 0.018, y); if (yp != null) strook(plaf, punten[i], punten[i + 1], 0.018, yp); }
     if (aanvul && punten.length >= 3) { strook(vast, punten[punten.length - 1], punten[0], 0.018, y); if (yp != null) strook(plaf, punten[punten.length - 1], punten[0], 0.018, yp); }
     if (aanvul) aanvul.getikt.forEach(function (p) { ring(richt, p, 0.05, 0.07, y); });
-    if (wandDoel) { ring(richt, { x: wandDoel.x, z: wandDoel.z }, 0.02, 0.035, wandDoel.y); }
     if (punten.length && richtpunt) { strook(los, punten[punten.length - 1], dichtBijStart ? punten[0] : richtpunt, 0.012, y); if (yp != null) strook(los, punten[punten.length - 1], dichtBijStart ? punten[0] : richtpunt, 0.012, yp); }
     punten.forEach(function (p) {
       paal(p.bron === 'plafond' ? plaf : palen, { x: p.x, y: y, z: p.z }, oog, yp != null ? yp - y : 0.35, 0.012);
@@ -1038,9 +1037,11 @@ if (typeof module !== 'undefined') module.exports = AR;
           var m = pp.transform.matrix, pts = Array.prototype.map.call(pl.polygon, function (q) {
             return { x: m[0] * q.x + m[4] * q.y + m[8] * q.z + m[12], y: m[1] * q.x + m[5] * q.y + m[9] * q.z + m[13], z: m[2] * q.x + m[6] * q.y + m[10] * q.z + m[14] };
           });
-          var staand = pl.orientation === 'vertical' || Math.abs(m[5]) < 0.3, uit = staand ? vlakLijnen : vlakVloer;
-          for (var q = 0; q < pts.length; q++) lijn3d(uit, pts[q], pts[(q + 1) % pts.length], staand ? 0.014 : 0.006, oog);
-          if (staand) noteerVlak(pl, pts, { x: m[0], z: m[2] });
+          var staand = pl.orientation === 'vertical' || Math.abs(m[5]) < 0.3;
+          if (!staand) return;
+          // standaard niet in beeld (te onrustig naast het draadmodel); wel altijd bewaard als ruw scanvoorstel
+          if (toonVlakken) for (var q = 0; q < pts.length; q++) lijn3d(vlakLijnen, pts[q], pts[(q + 1) % pts.length], 0.01, oog);
+          noteerVlak(pl, pts, { x: m[0], z: m[2] });
         });
       } catch (e) { /* een toestel zonder vlakken: dan alleen de getikte lijnen */ }
     }
@@ -1311,7 +1312,11 @@ if (typeof module !== 'undefined') module.exports = AR;
   }
 
   // ---------- live: gevonden wandvlakken, plattegrondje en richtingskaart ----------
-  var scanVlakken = new Map(), stil = null, hintPlekken = [], kaartTeller = 0, scanBewaard = 0;
+  var scanVlakken = new Map(), stil = null, hintPlekken = [], kaartTeller = 0, scanBewaard = 0, toonVlakken = false;
+  try { toonVlakken = localStorage.getItem('mt_ar_vlakken') === '1'; } catch (e) {}
+  function zetVlakkenKnop() { var b = el('k-vlakken'); b.setAttribute('aria-pressed', toonVlakken ? 'true' : 'false'); b.textContent = toonVlakken ? 'Vlakken aan' : 'Vlakken'; }
+  zetVlakkenKnop();
+  el('k-vlakken').addEventListener('click', function () { toonVlakken = !toonVlakken; try { localStorage.setItem('mt_ar_vlakken', toonVlakken ? '1' : '0'); } catch (e) {} zetVlakkenKnop(); });
   function noteerVlak(pl, pts, as) {
     var v = scanVlakken.get(pl);
     if (!v) { v = { id: 'vl' + (scanVlakken.size + 1), eerst: new Date().toISOString() }; scanVlakken.set(pl, v); telWaarneming('automatisch', 'wandvlak'); }
