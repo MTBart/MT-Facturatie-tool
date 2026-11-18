@@ -1496,7 +1496,7 @@ if (typeof module !== 'undefined') module.exports = AR;
   function planBewaar(direct) {
     if (!rec || !OS) return;
     if (bewaarTimer) clearTimeout(bewaarTimer);
-    bewaarTimer = setTimeout(schrijfNu, direct ? 0 : 1200);
+    bewaarTimer = setTimeout(schrijfNu, direct ? 0 : 400);
   }
   function schrijfNu() {
     bewaarTimer = null;
@@ -1547,6 +1547,10 @@ if (typeof module !== 'undefined') module.exports = AR;
     var t = 'Veilig bewaard op deze telefoon: ' + b + ' beelden, ' + DS.actieveDetails(d).length + ' details, ' + d.metingen.length + ' maten' + (open ? ' · ' + open + ' beelden nog bezig' : '') + (wachtrij.length ? ' · ' + wachtrij.length + ' wachten op opnieuw proberen' : '');
     el('d-bewaard').textContent = t; if (!wachtrij.length) el('ar-bewaard').textContent = t;
   }
+  // Pagina naar de achtergrond of dicht (tabblad gesloten, andere app): wat nog wacht meteen wegschrijven, zodat de laatste invoer niet verloren gaat.
+  function bewaarNuAlsNodig() { if (bewaarTimer && rec) { clearTimeout(bewaarTimer); schrijfNu(); } }
+  if (document.addEventListener) document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') bewaarNuAlsNodig(); });
+  if (window.addEventListener) window.addEventListener('pagehide', bewaarNuAlsNodig);
   el('k-opnieuw-bewaren').addEventListener('click', function () {
     var q = wachtrij; wachtrij = []; wisFout();
     Promise.all(q.map(function (x) { return bewaarBeeld(x.b, x.blob); })).then(function () { planBewaar(true); });

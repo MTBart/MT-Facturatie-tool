@@ -237,6 +237,11 @@ het dichtst bij de werkelijkheid ligt. Een automatische plafondfoto (omhoog bove
 (camera-schatting), zodat draadmodel en vakjes niet op 2,60 m blijven staan. Tips in de startinstructie: eerst 10–15 s rustig rondkijken voor het eerste
 tikken, goed licht, rustig lopen, sluiten met Klaar.
 
+**B28 · 18-11 · Sneller opslaan en wegschrijven bij sluiten.** De browsertest liet zien dat een meting die vlak vóór het sluiten van de pagina werd
+ingevoerd verloren kon gaan (opslaan wachtte 1,2 s). Nu 0,4 s, en bij `visibilitychange` (naar de achtergrond) en `pagehide` wordt wat nog wacht
+meteen weggeschreven. Een tabblad dat binnen een fractie van een seconde na de invoer wordt gesloten blijft een (kleine) restkans; daarom toont de pagina
+"Veilig bewaard".
+
 **Waarneming (geen besluit):** met vier gemeten wandlengtes en haakse hoeken maakt de kaartdrift voor het lijnmodel weinig uit (de richtingen worden
 rechtgezet, de lengtes komen uit de maten). De drift raakt vooral de aansluiting tussen beelden en wanden in het panorama en de camera-plek van details.
 
@@ -450,7 +455,8 @@ Perspectief-correct plakken (homografie per vak i.p.v. affien), automatisch extr
 | 18-11 | `19b578c` | Ankers alleen meeschrijven, hoek weghalen, spie-waarschuwing | B20, B21 |
 | 18-11 | `66b01d8` | Tekenen volgt het anker, meting blijft de tik | B22 |
 | 18-11 | `8556c20` | Review GPT verwerkt: referentie per meting, maatlijnen op de meting, modellengte | B23–B25 |
-| 18-11 | (volgende) | Ankerposities bewaren en vergelijken, plafond uit plafondfoto | B27 |
+| 18-11 | `4ea9756` | Ankerposities bewaren en vergelijken, plafond uit plafondfoto | B27 |
+| 18-11 | (volgende) | Sneller opslaan, wegschrijven bij sluiten | B28 |
 
 Meer detail per brok: `VOORTGANG-OPNAME.md`. Volledige diff: draft-PR #5.
 

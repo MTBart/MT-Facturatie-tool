@@ -164,6 +164,7 @@ window.renderKamer = function (cam, w, h, fovy) {
   await p.click('#dp-afstand_hart_tot_hoek'); await p.keyboard.type('1550', { delay: 220 }); await p.keyboard.press('Enter'); await p.click('#dp-klaar');
   const naMeting = await plekNu(details[0]);
   check('review: dezelfde 1550 bewust vanaf de andere hoek meten geeft een nieuwe meting en een andere plek', naMeting.n === voor.n + 1 && naMeting.vanaf !== voor.vanaf && (naMeting.x !== voor.x || naMeting.y !== voor.y), JSON.stringify(naMeting));
+  await p.waitForTimeout(700);   // zoals een gebruiker die 'Veilig bewaard' ziet en dan pas sluit
   await p.reload(); await p.waitForSelector('#r-lijst li'); await p.click('#r-lijst li button');
   const naHeropenen = await plekNu(details[0]);
   check('review: na heropenen dezelfde plek en historie', naHeropenen.x === naMeting.x && naHeropenen.n === naMeting.n && naHeropenen.vanaf === naMeting.vanaf);
