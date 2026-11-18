@@ -9,7 +9,9 @@ alleen op de werkbranch.
 ## Samsung S24 (Chrome)
 
 1. Open de telefoonpagina in Chrome. Vul **Project** en **Ruimte** in en tik **Nieuwe ruimte: start rondgang**. Geef de camera toestemming.
-2. Beweeg rustig over een vrij stuk vloer tot de vloer gevonden is.
+2. Beweeg rustig over een vrij stuk vloer tot de vloer gevonden is. **Kijk daarna eerst 10–15 seconden rustig de kamer rond** voordat je de eerste
+   hoek tikt: dan bouwt de telefoon een betere kaart en drijft hij minder weg. Doe het licht aan; effen muren in schemer zijn lastig.
+   Sluit de kamer af met **Klaar** (niet nog een keer op H1 tikken).
 3. Loop de kamer rond en tik elke hoek aan met de ronde duimknop **Hoek**. Wat je in beeld ziet:
    - **het draadmodel** (groene vloerlijn, witte staanders, oranje plafondlijn zodra het plafond bekend is): de wanden die jij hebt bevestigd door de hoeken te tikken;
    - **Vlakken** (knop bovenin, standaard uit): toont ook de vlakken die de telefoon zelf herkent als blauwe lijnen. Ze worden altijd als ruw scanvoorstel bewaard;

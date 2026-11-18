@@ -1088,6 +1088,8 @@ if (typeof module !== 'undefined') module.exports = AR;
         if (hb2 && hb2.naast < 0.25 && rich.y > 0.3 && hb2.y - vloerY > 1.8 && hb2.y - vloerY < 6) {
           var pidx = plafondFoto.idx; plafondFoto = null;
           hoekFoto(pidx, 'plafondhoek', hb2.y, { hoogte_schatting_m: hb2.y - vloerY });
+          // zo kent de app ook de plafondhoogte (camera-schatting): draadmodel en vakjes krijgen de echte hoogte i.p.v. 2,60 m
+          if (plafondY == null) { plafondY = hb2.y; telWaarneming('automatisch', 'plafond uit plafondfoto'); detailWanden.sleutel = ''; pano.sleutel = ''; if (ses) { ses.xr.plafondY = plafondY; planBewaar(); } }
           zegFlits('Plafondfoto boven H' + (pidx + 1) + ' bewaard');
           try { if (navigator.vibrate) navigator.vibrate([15, 30, 15]); } catch (e) {}
         }
@@ -1209,7 +1211,7 @@ if (typeof module !== 'undefined') module.exports = AR;
         plafondBekend: plafondY != null, tijd: uitkomst.tijd } : null;
       if (rec && ses) {
         var d = dossier();
-        DS.zetHoeken(d, ses.id, punten);
+        DS.zetHoeken(d, ses.id, punten.map(function (q) { return { x: q.x, z: q.z, bron: q.bron, anker: q.ankerPos || null }; }));
         ses.xr.vloerY = vloerY; ses.xr.plafondY = plafondY; ses.xr.oog_boven_vloer = uitkomst.hoogte; ses.live_punten = null;
         koppelWanden(d); planBewaar(true);
       }

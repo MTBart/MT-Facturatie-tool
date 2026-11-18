@@ -352,12 +352,15 @@
       const r = D.naarRuimte(t, { x: model[i].x, y: vloerY, z: model[i].z });
       return { id: h.id, label: h.label, x: r.x, y: r.y, z: 0, status, bron: status === 'afgeleid' ? 'wandmaten met camerarichtingen' : 'camera, bijna-haakse hoeken haaks gezet', via: h.via, binnenhoek_graden: rond(hoeken[i], 1) };
     });
+    // Ter vergelijking: de wandlengtes zoals de ARCore-ankers de hoeken aan het eind van de rondgang zagen (alle hoeken in dezelfde, laatste versie
+    // van de kaart). Alleen als elke hoek een ankerpositie heeft.
+    const ankerLengte = H.every(h => h.xr_anker) ? H.map((h, i) => { const q = H[(i + 1) % n].xr_anker; return rond(Math.hypot(q.x - h.xr_anker.x, q.z - h.xr_anker.z) * 1000, 0); }) : null;
     const segmenten = lijst(d.wanden).map((w, i) => {
       const m = lengteMeting[i], open = D.huidigeMeting(d, w.id, 'lengte'), camera = rond(kc.wanden[i].lengte, 0);
       return {
         id: w.id, label: w.label, soort: 'wand-binnenzijde', van: w.van, naar: w.naar,
         lengte: m ? { waarde: m.waarde_mm, status: 'gemeten', bron: m.bron, meting_id: m.id } : { waarde: camera, status: 'geschat', bron: 'ar', meting_id: null, open: !!(open && open.status === 'open') },
-        camera_mm: camera, ruw_camera_mm: rond(ruw.wanden[i].lengte, 0),
+        camera_mm: camera, ruw_camera_mm: rond(ruw.wanden[i].lengte, 0), anker_camera_mm: ankerLengte ? ankerLengte[i] : null,
         richting: { status: rz.haaks[i] ? 'haaks-aangenomen' : 'camera', bron: 'ar' },
         kort: (m ? m.waarde_mm : camera) < D.KORTE_WAND_MM, dikte: w.dikte
       };

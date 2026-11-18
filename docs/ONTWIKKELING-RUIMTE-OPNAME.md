@@ -231,6 +231,15 @@ dan ziet de tekenaar het verschil expliciet (ook in het dossierpaneel van de kij
 - *Overdracht:* onderbreken en teruglezen op de kantoor-pc testen voordat de telefoon de enige kopie opgeeft. Echte woningbeelden blijven binnen het
   project met de bestaande toegangsrechten; openbare testlinks alleen met fictieve beelden.
 
+**B27 · 18-11 · Ankerposities echt bewaren en vergelijken; plafond uit de plafondfoto.** Bij Klaar gaat per hoek de laatste ankerpositie mee (`xr_anker`),
+en het lijnmodel geeft per wand ook de lengte volgens de ankers (`anker_camera_mm`) naast tik en rechtgezet. Volgende proef met handmaten beslist welke
+het dichtst bij de werkelijkheid ligt. Een automatische plafondfoto (omhoog boven een hoek) zet nu ook de plafondhoogte als die nog onbekend was
+(camera-schatting), zodat draadmodel en vakjes niet op 2,60 m blijven staan. Tips in de startinstructie: eerst 10–15 s rustig rondkijken voor het eerste
+tikken, goed licht, rustig lopen, sluiten met Klaar.
+
+**Waarneming (geen besluit):** met vier gemeten wandlengtes en haakse hoeken maakt de kaartdrift voor het lijnmodel weinig uit (de richtingen worden
+rechtgezet, de lengtes komen uit de maten). De drift raakt vooral de aansluiting tussen beelden en wanden in het panorama en de camera-plek van details.
+
 ---
 
 ## 5. Input en feedback van Bart
@@ -248,6 +257,7 @@ dan ziet de tekenaar het verschil expliciet (ook in het dossierpaneel van de kij
 | 18-11 21:14 | Tweede proef met ankers: 5 hoeken, vorm scheef (zie §5.1). | B20, B21; pakket gevraagd voor diagnose. |
 | 18-11 21:30 | "Weer verschuiven de wanden." | B22. |
 | 18-11 21:45 | Review van GPT (`OPNAME-AR-REVIEW-2026-11-18.md`, op stand `ddeedbf`). | B23–B26; acceptatieproef §6 P0. |
+| 18-11 21:50 | Pakket van de proef van 21:26 gedeeld (`ruimte-Test-8-Joe-…zip`), niet in de repo bewaard. | Analyse §5.1, B27. |
 | 18-11 | Ontwikkeldocument waarin alles staat, zodat terug te zien is wat waarom veranderde; Astra moet er licht op kunnen laten schijnen. | Dit document. |
 
 ### 5.1 Meetresultaten echte proeven
@@ -283,6 +293,22 @@ Punten (m): -1.214;-2.928 1.380;-3.107 1.844;2.254 -1.758;1.379 -1.329;-3.847. G
 (korte wanden 2,6 en 3,7 m, lange 5,4 en 5,2 m) tegen 2,93/5,89 om 20:27. Mogelijke oorzaken: tracking-drift tijdens deze rondgang, of de nieuwe
 verplaatsende ankers. Gevolg: B20 en B21. Voor de diagnose is het pakket (zip) van deze rondgang nodig: daarin staan per hoek de tik, de ankerpositie,
 de camerastanden van alle beelden (looppad) en hoe vaak de tracking kwijt was.
+
+**18-11-2026 21:26 · S24 · dezelfde kamer (±2900 × 5778) · versie met tik leidend en ankers meeschrijvend (B20) · pakket ontvangen (3,7 MB, 117 beelden)**
+
+| Wand | Ruw camera | Rechtgezet | Echt (handmaten 20:27) |
+|---|---|---|---|
+| W1 | 3087 | 3282 | ±2900 |
+| W2 | 6008 | 5958 | ±5778 |
+| W3 | 3480 | 3282 | ±2900 |
+| W4 | 5915 | 5958 | ±5778 |
+
+*Uit het pakket:* 4 hoeken netjes getikt (op de hoekfoto's ligt het getikte punt bij H1, H3, H4 en de plafondhoek van H1 precies op de hoek; H2 zat achter
+een plaat). 68 overzichtsbeelden, tracking 1× kwijt, 7× iets automatisch gevonden (vloer, wandvlakken). **De ARCore-ankers weken binnen 10 s 74 mm en na
+±50 s 291 mm af van de tik**: de kaart dreef tijdens de rondgang van 80 s fors (avond, effen groene wanden). Elke hoek is dus in een iets andere versie van
+de kaart getikt; dat verklaart de scheve vorm, niet de tik zelf en niet de ankers (die stonden in deze versie stil). Plafond niet vastgelegd (plafondfoto
+wel). Tweede rondgang (aanvullen) bewaard als *niet uitgelijnd*. Geen maten ingevuld.
+*Fout gevonden:* de ankerposities kwamen niet in het pakket (`xr_anker` ontbrak; Klaar gaf de verkeerde veldnaam door). Hersteld (B27).
 
 ---
 
@@ -423,7 +449,8 @@ Perspectief-correct plakken (homografie per vak i.p.v. affien), automatisch extr
 | 18-11 | `efae8d2` | ARCore-ankers, groothoekfoto per wand rechtgetrokken, melding Foto | B17–B19 |
 | 18-11 | `19b578c` | Ankers alleen meeschrijven, hoek weghalen, spie-waarschuwing | B20, B21 |
 | 18-11 | `66b01d8` | Tekenen volgt het anker, meting blijft de tik | B22 |
-| 18-11 | (volgende) | Review GPT verwerkt: referentie per meting, maatlijnen op de meting, modellengte | B23–B25 |
+| 18-11 | `8556c20` | Review GPT verwerkt: referentie per meting, maatlijnen op de meting, modellengte | B23–B25 |
+| 18-11 | (volgende) | Ankerposities bewaren en vergelijken, plafond uit plafondfoto | B27 |
 
 Meer detail per brok: `VOORTGANG-OPNAME.md`. Volledige diff: draft-PR #5.
 
