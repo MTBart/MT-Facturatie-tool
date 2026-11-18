@@ -291,3 +291,18 @@ onscherp beeld vervangen, bolle wand met tussenpunten en zijdelingse afwijking, 
   op vloer of plafond uit, `D.corrigeerHoek` bewaart de tik (`xr_ruw`, archief) en kan terug. Kijker: hoekmarkeringen met foto, rood = getikt, groen = gecorrigeerd.
   Later: dezelfde foto's en standen kunnen een automatische hoekherkenning (AI) voeden; het datamodel heeft daarvoor `correctie.bron = 'ai'`.
 - Tests: AR-kern 74, dossier 60, e2e 28 (o.a. hoek 72 mm naast de echte hoek getikt, na één tik op de foto binnen 2 mm).
+
+**Vervolg 19-11 (werkend concept wandtekening, feedback op pakket "Test 10")**
+- `mt-ruimte-tekening.js` (nieuw): wandaanzicht, doorsnede van een opening, kameruitslag en wandafwikkeling als boom van objecten; de pagina maakt er
+  SVG-elementen van (geen HTML als tekst). Zelfde tekening op de telefoon, op kantoor en in de PDF.
+- Telefoon: de tekening is de invoer. Maat aantikken, getal + Enter, door naar de volgende open maat (X4 achter elkaar). Soort opening met drie plaatjes,
+  dieptematen in de doorsnede, vakken met draairichting en scharnierkant, uitvoering per onderdeel (enkel/dubbel/drievoudig …), opmerking, naam, foto,
+  weghalen naar het archief. Elk soort onderdeel toe te voegen (ook vensterbank, plint, sierlijst, knik, balk). Kamer opengeklapt als wandkiezer.
+- Fase 2: Detail = foto + "Wat is dit?"; één tik en het onderdeel staat (geschat) in de werktekening van de wand.
+- Kantoor: knop Tekeningen met kameruitslag (of plattegrond bij een inspringende hoek), wandafwikkeling, pagina per wand met onderdelen- en kozijnenlijst,
+  Afdrukken / PDF.
+- Dossier: `D.wandAanzicht` zonder AR-kern (lijnmodel uit het pakket), `D.wandKeten` (doorlopende maatketen, openingen en overige onderdelen apart),
+  `D.VARIANTEN`, `D.WANDSOORTEN`, status `open` voor een maat die nog niet gemeten is, de buitenmaat van een kozijn wordt niet meer gevraagd.
+- Tests: AR-kern 77, dossier 105, tekenmodule 25 (voorbeeldkamer op de echte maten van de proef), e2e 55. Opslagcontrole en `check-sinks` schoon.
+- **Niet op een echt toestel getest:** het nieuwe wandscherm met schermtoetsenbord en X4, de snelkeuze in de AR-laag, afdrukken vanaf een kantoor-pc.
+- Beslissingen B35–B37, tekenstandaarden §11 en het denkstuk over leidingwerk, plinten en sierlijsten §12 staan in `docs/ONTWIKKELING-RUIMTE-OPNAME.md`.

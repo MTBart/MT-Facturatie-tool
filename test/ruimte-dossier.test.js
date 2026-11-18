@@ -195,7 +195,7 @@ const jpg = n => Uint8Array.from([0xFF, 0xD8, 0xFF, 0xE0, n & 255, (n >> 8) & 25
     check('wandaanzicht: lengte, hoogte en de hoeken links en rechts', leeg.L === 4000 && leeg.H === 2600 && leeg.status.L === 'gemeten' && leeg.links.label && leeg.rechts.label && leeg.links.id !== leeg.rechts.id && leeg.items.length === 0);
     const k = D.voegDetailToe(e, { soort: 'kozijn', wand_id: w.id, referentie_hoek: leeg.links.id }, NU);
     let a = D.wandAanzicht(e, w.id, AR).items[0];
-    check('nieuw kozijn zonder maten: geschat in het midden met standaardmaat', a.rect.w === 1000 && a.rect.x === 1500 && a.status.x === 'geschat' && a.status.w === 'geschat');
+    check('nieuw kozijn zonder maten: in het midden met standaardmaat, maten open (te tikken)', a.rect.w === 1000 && a.rect.x === 1500 && a.status.x === 'open' && a.status.w === 'open' && a.velden.x === 'afstand_tot_hoek' && a.velden.w === 'kozijn_breedte');
     const zet = (f, v) => D.voegMetingToe(e, { doel: { soort: 'detail', id: k.id }, veld: f, waarde_mm: v, bron: 'disto', wand_id: w.id, referentie: f === 'afstand_tot_hoek' ? { soort: 'hoek', id: leeg.links.id } : null }, NU);
     zet('afstand_tot_hoek', 700); zet('kozijn_breedte', 1500); zet('kozijn_hoogte', 1400); zet('kozijn_onderkant', 900);
     a = D.wandAanzicht(e, w.id, AR).items[0];
@@ -238,6 +238,49 @@ const jpg = n => Uint8Array.from([0xFF, 0xD8, 0xFF, 0xE0, n & 255, (n >> 8) & 25
     zet(r3, 'opening_breedte', 1218); zet(r3, 'opening_hoogte', 1200); zet(r3, 'nis_diepte_tot_aftimmering', 120); zet(r3, 'diepte_tot_kozijn', 80);
     const a3 = D.wandAanzicht(e, w.id, AR).items.find(x => x.det.id === r3.id);
     check('R3: nismaat 1218 × 1200 op de wand, aftimmering in de nis (120 + 80 tot kozijn)', a3.rect.w === 1218 && a3.opening.nis_diepte.waarde === 120 && a3.opening.kozijn_diepte.waarde === 80 && a3.raam.vakken[0].functie === 'draai-kiep naar binnen');
+  }
+
+  // ── wandaanzicht: elk onderdeel (vensterbank, plint, stopcontact, balk, knik), maatketen langs de wand en zonder AR-kern (kantoor) ──
+  {
+    const e = D.nieuw({}, NU), s = D.startSessie(e, {}, NU); s.xr.vloerY = 0;
+    D.zetHoeken(e, s.id, [{ x: 0, z: 0 }, { x: 5, z: 0 }, { x: 5, z: 3 }, { x: 0, z: 3 }], NU);
+    [5000, 3000, 5000, 3000].forEach((v, i) => D.voegMetingToe(e, { doel: { soort: 'wand', id: e.wanden[i].id }, veld: 'lengte', waarde_mm: v, bron: 'hand' }, NU));
+    D.voegMetingToe(e, { doel: { soort: 'ruimte', id: e.ruimte.id }, veld: 'plafondhoogte', waarde_mm: 2600, bron: 'disto' }, NU);
+    const w = e.wanden[0], az0 = D.wandAanzicht(e, w.id, AR), links = az0.links.id, rechts = az0.rechts.id;
+    const zet = (det, f, v, ref) => D.voegMetingToe(e, { doel: { soort: 'detail', id: det.id }, veld: f, waarde_mm: v, bron: 'hand', wand_id: w.id, referentie: D.VELDEN[f].referentie === 'gekozen binnenhoek' ? { soort: 'hoek', id: ref || links } : null }, NU);
+    const k = D.voegDetailToe(e, { soort: 'kozijn', label: 'R1', wand_id: w.id }, NU);
+    zet(k, 'afstand_tot_hoek', 1000); zet(k, 'kozijn_breedte', 1500); zet(k, 'kozijn_hoogte', 1200); zet(k, 'kozijn_onderkant', 900);
+    const vb = D.voegDetailToe(e, { soort: 'vensterbank', wand_id: w.id }, NU);
+    zet(vb, 'begin_vanaf_hoek', 950); zet(vb, 'eind_vanaf_hoek', 2550); zet(vb, 'hoogte_bovenkant', 920); zet(vb, 'dikte', 20);
+    const pl = D.voegDetailToe(e, { soort: 'plint', wand_id: w.id }, NU);
+    zet(pl, 'begin_vanaf_hoek', 0, rechts); zet(pl, 'eind_vanaf_hoek', 1500, rechts);
+    const sc = D.voegDetailToe(e, { soort: 'stopcontact', wand_id: w.id, opmerking: 'dubbel, randaarde' }, NU);
+    zet(sc, 'afstand_hart_tot_hoek', 400, rechts); zet(sc, 'hoogte_hart', 300);
+    const bk = D.voegDetailToe(e, { soort: 'balk', wand_id: w.id }, NU); zet(bk, 'afstand_tot_hoek', 200); zet(bk, 'breedte', 150); zet(bk, 'onderkant', 2400);
+    const kn = D.voegDetailToe(e, { soort: 'knik', wand_id: w.id }, NU); zet(kn, 'afstand_tot_hoek', 3000);
+    const az = D.wandAanzicht(e, w.id, AR), it = id => az.items.find(x => x.det.id === id);
+    const v = it(vb.id), p = it(pl.id), c = it(sc.id), b = it(bk.id), n = it(kn.id);
+    check('vensterbank: van 950 tot 2550, bovenkant 920, 20 dik (onderkant 900 afgeleid)', v.vorm === 'traject' && v.rect.x === 950 && v.rect.w === 1600 && v.rect.y === 900 && v.rect.h === 20 && v.status.w === 'afgeleid' && v.status.y === 'afgeleid' && v.extraV[0].waarde === 920, JSON.stringify(v.rect));
+    check('plint vanaf de rechterhoek: x 3500 tot 5000, standaard 70 hoog (hoogte nog open)', p.rect.x === 3500 && p.rect.w === 1500 && p.rect.h === 70 && p.status.h === 'open' && !p.vanLinks);
+    check('stopcontact 400 van rechts op 300, met opmerking', c.vorm === 'punt' && c.punt.x === 4600 && c.punt.y === 300 && c.opmerking === 'dubbel, randaarde');
+    check('balk: van de onderkant 2400 tot het plafond (200 hoog, afgeleid)', b.rect.y === 2400 && b.rect.h === 200 && b.status.h === 'afgeleid');
+    check('knik: verticale lijn op 3000', n.vorm === 'lijn' && n.lijn.x === 3000 && n.lijn.status === 'gemeten');
+    const keten = D.wandKeten(az), som = keten.reduce((t, x) => t + x.waarde, 0);
+    check('maatketen langs de wand telt op tot 5000', Math.abs(som - 5000) < 0.01 && keten[0].van === 0 && keten[keten.length - 1].tot === 5000, keten.map(x => x.waarde).join(' + '));
+    check('maatketen: 200 tot de balk, de 1500 van R1 en 400 rechts van het stopcontact zijn gemeten', keten.some(x => x.van === 0 && x.tot === 200 && x.status === 'gemeten') && keten.some(x => x.van === 1000 && x.tot === 2500 && x.status === 'gemeten') && keten.some(x => x.van === 4600 && x.tot === 5000 && x.status === 'gemeten'));
+    check('maatketen: tussenstukken tussen harde punten zijn afgeleid', keten.some(x => x.van === 2550 && x.tot === 3000 && x.status === 'afgeleid'));
+    // kantoor: zelfde aanzicht uit het lijnmodel in het pakket, zonder AR-kern
+    const lmJ = JSON.parse(JSON.stringify(D.lijnmodel(e, AR))), azK = D.wandAanzicht(e, w.id, lmJ);
+    check('wandaanzicht zonder AR-kern (uit het lijnmodel) geeft hetzelfde', azK.links.id === az.links.id && azK.items.length === az.items.length && JSON.stringify(azK.items.map(x => x.rect || x.punt || x.lijn)) === JSON.stringify(az.items.map(x => x.rect || x.punt || x.lijn)));
+    // links/rechts uit het lijnmodel == links/rechts uit de AR-kern, voor beide looprichtingen en alle wanden
+    const gelijk = [[{ x: 0, z: 0 }, { x: 5, z: 0 }, { x: 5, z: 3 }, { x: 0, z: 3 }], [{ x: 0, z: 0 }, { x: 0, z: 3 }, { x: 5, z: 3 }, { x: 5, z: 0 }], [{ x: 0, z: 0 }, { x: 4, z: 0 }, { x: 4, z: 2 }, { x: 2, z: 2 }, { x: 2, z: 4 }, { x: 0, z: 4 }]].every(pt => {
+      const e2 = D.nieuw({}, NU), s2 = D.startSessie(e2, {}, NU); s2.xr.vloerY = 0; D.zetHoeken(e2, s2.id, pt, NU);
+      const lm2 = D.lijnmodel(e2, AR), W3 = AR.wanden3d(e2.hoeken.map(h => ({ x: h.xr.x, z: h.xr.z })), true, 0, 2.6);
+      return e2.wanden.every((w2, i) => AR.aLinks(W3.find(x => x.nr === i)) === D.vanLinks(lm2));
+    });
+    check('links/rechts uit het lijnmodel klopt met de AR-kern (beide looprichtingen, L-vormige kamer)', gelijk);
+    check('wandsoorten: geen meubel of losse opmerking op de wand', D.WANDSOORTEN.indexOf('meubel') < 0 && D.WANDSOORTEN.every(x => D.SOORTEN[x]));
+    check('sierlijst: hoogte bovenkant is optioneel', (() => { const sl = D.voegDetailToe(e, { soort: 'sierlijst', wand_id: w.id }, NU); zet(sl, 'begin_vanaf_hoek', 0); zet(sl, 'eind_vanaf_hoek', 5000); zet(sl, 'hoogte', 80); zet(sl, 'uitsteek_max', 40); const r = !D.openVragen(e, AR).some(q => q.doel === sl.id); const a = D.wandAanzicht(e, w.id, AR).items.find(x => x.det.id === sl.id); return r && a.rect.y === 2520 && a.rect.h === 80; })());
   }
 
   // ── pakket heen en terug ──

@@ -179,39 +179,94 @@ window.renderKamer = function (cam, w, h, fovy) {
   await p.reload(); await p.waitForSelector('#r-lijst li'); await p.click('#r-lijst li button');
   const naHeropenen = await plekNu(details[0]);
   check('review: na heropenen dezelfde plek en historie', naHeropenen.x === naMeting.x && naHeropenen.n === naMeting.n && naHeropenen.vanaf === naMeting.vanaf);
-  // wandaanzicht: kozijn in de lijntekening van W3 bematen met de X4
+  // wandaanzicht (B36): de tekening is de invoer. Kozijn toevoegen en met de X4 achter elkaar door meten: alleen getal + Enter, zonder een veld aan te tikken.
+  const X4 = async val => { await p.keyboard.type(val, { delay: 15 }); await p.keyboard.press('Enter'); };
+  const azTekst = () => p.evaluate(() => Array.from(document.querySelectorAll('#d-paneel .aztek svg text')).map(t => (t.getAttribute('class') || '') + ':' + t.textContent));
+  const azIt = (wi) => p.evaluate(i => { const D = window.MTRuimteDossier, d = window.arProef.dossier(), az = D.wandAanzicht(d, d.wanden[i].id, window.arProef.AR); return az.items.map(x => ({ id: x.det.id, soort: x.soort, label: x.label, vorm: x.vorm, rect: x.rect || null, punt: x.punt || null, opmerking: x.opmerking, status: x.det.status })); }, wi);
   await p.evaluate(() => window.arProef.openAanzicht(window.arProef.dossier().wanden[2].id, null));
-  await p.click('#d-paneel button:has-text("+ Kozijn")');
-  for (const [f, val] of [['afstand_tot_hoek', '700'], ['kozijn_breedte', '1500'], ['kozijn_hoogte', '1400'], ['kozijn_onderkant', '900']]) {
-    await p.click('#az-' + f); await p.keyboard.type(val, { delay: 15 }); await p.keyboard.press('Enter');
-  }
+  await p.click('#az-plus-kozijn');
+  check('nieuw kozijn: invoerbalk staat klaar op de eerste maat en de tekening toont vraagtekens', await p.evaluate(() => document.activeElement && document.activeElement.id === 'az-invoer' && /Vanaf de hoek/.test(document.querySelector('.azlabel').textContent) && Array.from(document.querySelectorAll('.aztek svg text')).filter(t => t.textContent === '?').length >= 3));
+  await p.screenshot({ path: path.join(UIT, 's24-09a-wandaanzicht-nieuw-kozijn.png') });
+  for (const val of ['700', '1500', '1400', '900', '115']) await X4(val);
   await p.waitForTimeout(300);
-  const azT = await p.evaluate(() => Array.from(document.querySelectorAll('#d-paneel svg text')).map(t => t.getAttribute('class') + ':' + t.textContent));
+  const azT = await azTekst();
   await p.screenshot({ path: path.join(UIT, 's24-09-wandaanzicht-kozijn.png'), fullPage: false });
-  await p.evaluate(() => document.querySelector('#d-paneel svg').scrollIntoView({ block: 'start' }));
-  await p.screenshot({ path: path.join(UIT, 's24-09b-wandaanzicht-tekening.png') });
   check('wandaanzicht: kozijn 700 + 1500 + rest 1800 (afgeleid), 900 + 1400 + 300 tot plafond (afgeleid)', ['t-gemeten:700', 't-gemeten:1500', 't-afgeleid:1800', 't-gemeten:900', 't-gemeten:1400', 't-afgeleid:300'].every(x => azT.indexOf(x) >= 0), azT.join(' '));
   const azM = await p.evaluate(() => { const D = window.MTRuimteDossier, d = window.arProef.dossier(), k = d.details.find(x => x.soort === 'kozijn'); return D.metingenVan(d, k.id).map(m => m.veld + ':' + m.bron + ':' + m.waarde_mm); });
-  check('wandaanzicht: kozijnmaten als X4-metingen in het dossier', azM.length === 4 && azM.every(x => /:disto:/.test(x)), azM.join(' '));
-  await p.click('#d-paneel button:has-text("Sluiten")');
-  // R1 uit Barts voorbeeld op W1: aftimmering op de wand, 2440 × 1084 binnenwerks, 12 mm panelen, 5 mm voor de muur, 310 mm tot het kozijn, 3 vakken
-  await p.evaluate(() => window.arProef.openAanzicht(window.arProef.dossier().wanden[0].id, null));
-  await p.click('#d-paneel button:has-text("+ Kozijn")');
-  await p.selectOption('#az-opening', 'aftimmering-op-wand');
-  for (const [f, val] of [['afstand_tot_hoek', '1200'], ['opening_breedte', '2440'], ['opening_hoogte', '1084'], ['kozijn_onderkant', '1000'], ['aftimmer_dikte', '12'], ['aftimmer_uitsteek', '5'], ['diepte_tot_kozijn', '310']]) {
-    await p.click('#az-' + f); await p.keyboard.type(val, { delay: 15 }); await p.keyboard.press('Enter');
-  }
-  await p.selectOption('#az-vakken', '3');
-  await p.selectOption('#az-vak-0', 'draai naar buiten'); await p.selectOption('#az-vak-2', 'draai naar buiten');
+  check('wandaanzicht: vijf maten achter elkaar als X4-metingen in het dossier, in de goede velden', azM.join(' ') === 'afstand_tot_hoek:disto:700 opening_breedte:disto:1500 opening_hoogte:disto:1400 kozijn_onderkant:disto:900 diepte_tot_kozijn:disto:115', azM.join(' '));
+  // een maat in de tekening aantikken en verbeteren
+  await p.click('#d-paneel .aztek text[data-veld="opening_hoogte"]');
+  check('maat aantikken in de tekening zet de invoerbalk op die maat, met de oude waarde', await p.evaluate(() => /Nismaat hoogte/.test(document.querySelector('.azlabel').textContent) && document.querySelector('#az-invoer').value === '1400'));
+  await p.keyboard.type('1380', { delay: 220 });   /* met de hand: te langzaam voor de X4 */ await p.keyboard.press('Enter'); await p.waitForTimeout(200);
+  const hist = await p.evaluate(() => { const D = window.MTRuimteDossier, d = window.arProef.dossier(), k = d.details.find(x => x.soort === 'kozijn'); return D.historie(d, k.id, 'opening_hoogte').map(m => m.waarde_mm + ':' + m.bron); });
+  check('verbeterde maat: nieuwe meting (hand) erbij, de oude blijft in de historie', hist.length === 2 && hist.indexOf('1380:hand') >= 0 && hist.indexOf('1400:disto') >= 0, hist.join(' '));
+  // stopcontact met opmerking, vanaf de rechterhoek
+  await p.click('#az-plus-stopcontact'); await p.click('#az-hoek-rechts');
+  await X4('400'); await X4('300');
+  await p.fill('#az-opmerking', 'dubbel, randaarde'); await p.keyboard.press('Tab');
+  // vensterbank via de lijst met alle onderdelen
+  await p.selectOption('#az-meer', 'vensterbank');
+  for (const val of ['650', '2250', '880']) await X4(val);
+  // radiator toevoegen en weer weghalen (twee keer tikken; blijft in het archief)
+  await p.click('#az-plus-radiator'); await p.click('#az-weg'); await p.click('#az-weg');
   await p.waitForTimeout(300);
-  const r1 = await p.evaluate(() => ({ t: Array.from(document.querySelectorAll('#d-paneel svg text')).map(t => (t.getAttribute('class') || '') + ':' + t.textContent), zin: Array.from(document.querySelectorAll('#d-paneel p.zacht')).map(x => x.textContent).join(' | ') }));
-  check('R1 in het wandaanzicht: buitenmaat 2464 (afgeleid), binnenwerks 2440 × 1084, drie vakken', ['t-afgeleid:2464', 't-gemeten:2440', 't-gemeten:1084', 't-gemeten:1200', 't-gemeten:1000'].every(x => r1.t.indexOf(x) >= 0) && r1.t.filter(x => /↗ buiten/.test(x)).length === 2 && r1.t.indexOf('t-afgeleid:336') >= 0 && r1.t.indexOf('t-afgeleid:492') >= 0 && r1.t.some(x => /:vast$/.test(x)), r1.t.join(' '));
-  check('R1 dieptelijn: 12 mm, 5 mm voor de muur, 310 tot kozijn = 305 mm in de muur', /Aftimmering 12 mm, 5 mm voor de muur, 310 mm van de voorkant tot het kozijn \(305 mm in de muur\)/.test(r1.zin), r1.zin);
-  await p.evaluate(() => document.querySelector('#d-paneel svg').scrollIntoView({ block: 'start' }));
+  const its = await azIt(2), sc = its.find(x => x.soort === 'stopcontact'), vb = its.find(x => x.soort === 'vensterbank');
+  check('stopcontact 400 van rechts op 300 hoog, met opmerking', !!sc && sc.punt.x === 3600 && sc.punt.y === 300 && sc.opmerking === 'dubbel, randaarde', JSON.stringify(sc));
+  check('vensterbank van 650 tot 2250 met bovenkant 880', !!vb && vb.rect.x === 650 && vb.rect.w === 1600 && vb.rect.y + vb.rect.h === 880, JSON.stringify(vb));
+  check('weggehaalde radiator staat niet meer op de wand maar wel in het dossier', !its.some(x => x.soort === 'radiator') && await p.evaluate(() => window.arProef.dossier().details.some(x => x.soort === 'radiator' && x.status === 'verwijderd' && x.verwijderd.reden)));
+  // een onderdeel in de tekening aantikken
+  const kozId = its.find(x => x.soort === 'kozijn').id;
+  await p.click('#d-paneel .aztek rect.item[data-id="' + kozId + '"]', { position: { x: 12, y: 12 } });
+  check('onderdeel aantikken in de tekening kiest het', await p.evaluate(() => /^Kozijn/.test(document.querySelector('.azlabel').textContent) && !!document.querySelector('#az-open-nis.aan')));
+  await p.evaluate(() => document.querySelector('#d-paneel .azvast').scrollIntoView({ block: 'start' }));
+  await p.screenshot({ path: path.join(UIT, 's24-09b-wandaanzicht-tekening.png') });
+  await p.click('#az-sluit');
+  // R1 uit de proef op W1: kader op de wand, 2440 × 1084 binnenwerks, 12 mm panelen, 5 mm voor de muur, 310 mm tot het kozijn, 3 vakken
+  await p.evaluate(() => window.arProef.openAanzicht(window.arProef.dossier().wanden[0].id, null));
+  await p.click('#az-plus-kozijn'); await p.click('#az-open-aftimmering-op-wand');
+  for (const val of ['1200', '2440', '1084', '1000', '12', '5', '310']) await X4(val);
+  await p.click('#az-vak-plus'); await p.click('#az-vak-plus');
+  await p.click('#d-paneel .aztek text[data-vak="0"]'); await p.click('#az-functie-2');
+  await p.click('#d-paneel .aztek text[data-vak="2"]'); await p.click('#az-functie-2');
+  await p.click('#az-scharnier-rechts');
+  await p.fill('#az-naam', 'R1'); await p.keyboard.press('Tab');
+  await p.waitForTimeout(300);
+  const r1 = await p.evaluate(() => ({ t: Array.from(document.querySelectorAll('#d-paneel .azvast svg text')).map(t => (t.getAttribute('class') || '') + ':' + t.textContent), ds: Array.from(document.querySelectorAll('#d-paneel .azdoorsnede svg text')).map(t => (t.getAttribute('class') || '') + ':' + t.textContent) }));
+  check('R1 in het wandaanzicht: keten 1200 – 12 – 2440 – 12 – 336, binnenwerks 1084 hoog, drie vakken', ['t-gemeten:12', 't-gemeten:2440', 't-gemeten:1084', 't-gemeten:1200', 't-gemeten:1000', 'naam:R1'].every(x => r1.t.indexOf(x) >= 0) && r1.t.filter(x => /↗ buiten/.test(x)).length === 2 && r1.t.indexOf('t-afgeleid:336') >= 0 && r1.t.indexOf('t-afgeleid:492') >= 0 && r1.t.some(x => /:vast$/.test(x)), r1.t.join(' '));
+  check('R1 doorsnede: 5 mm voor de muur en 310 tot het kozijn, als tikbare maten', r1.ds.indexOf('t-gemeten:5') >= 0 && r1.ds.indexOf('t-gemeten:310') >= 0 && await p.evaluate(() => document.querySelectorAll('#d-paneel .azdoorsnede [data-veld]').length >= 4), r1.ds.join(' '));
+  check('R1: draairichting als driehoek, gestreept (naar buiten), punt naar de scharnierkant', await p.evaluate(() => { const pl = Array.from(document.querySelectorAll('#d-paneel .azvast svg polyline.draai.weg')); return pl.length === 2 && pl[0].getAttribute('points') !== pl[1].getAttribute('points'); }));
+  check('R1: alle verplichte maten ingevuld (geen oranje knoppen meer)', await p.evaluate(() => document.querySelectorAll('.azvelden button.open').length === 0 && document.querySelectorAll('.azvelden button').length === 8));
+  await p.evaluate(() => document.querySelector('#d-paneel .azvast').scrollIntoView({ block: 'start' }));
   await p.screenshot({ path: path.join(UIT, 's24-10-kozijn-R1.png') });
-  await p.evaluate(() => document.querySelector('#az-vakken').scrollIntoView({ block: 'start' }));
+  await p.evaluate(() => document.querySelector('.aztypes').scrollIntoView({ block: 'center' }));
   await p.screenshot({ path: path.join(UIT, 's24-10b-kozijn-R1-opbouw.png') });
-  await p.click('#d-paneel button:has-text("Sluiten")');
+  await p.click('#az-sluit');
+  // de kamer opengeklapt in het dossier: een wand aantikken opent die wand; in het wandscherm door naar de volgende wand
+  await p.evaluate(() => document.querySelector('#d-uitslag').scrollIntoView({ block: 'center' }));
+  await p.screenshot({ path: path.join(UIT, 's24-11-kamer-opengeklapt.png') });
+  const w2 = await p.evaluate(() => window.arProef.dossier().wanden[1].id);
+  await p.click('#d-uitslag rect.wandraak[data-wand="' + w2 + '"]');
+  const kopW2 = await p.evaluate(() => document.querySelector('#d-paneel .azkop h2').textContent);
+  await p.click('#az-wand-volgende');
+  const kopW3 = await p.evaluate(() => document.querySelector('#d-paneel .azkop h2').textContent);
+  check('opengeklapte kamer: wand aantikken opent W2, daarna door naar W3', /^W2 /.test(kopW2) && /^W3 /.test(kopW3) && await p.evaluate(() => document.querySelectorAll('#d-uitslag [data-wand]').length >= 8), kopW2 + ' | ' + kopW3);
+  await p.click('#az-sluit');
+  // fase 2, snelkeuze (B37): één tik op de soort en het onderdeel staat op zijn geschatte plek in de werktekening; daarna variant kiezen in het wandscherm
+  const snelId = await p.evaluate(() => { const D = window.MTRuimteDossier, d = window.arProef.dossier(), w = d.wanden[1];
+    const det = D.voegDetailToe(d, { soort: 'overig', wand_id: w.id, referentie_hoek: w.van, anker: { wand_nr: 1, wand_id: w.id, u_m: 1.0, v_m: 0.3, xr: { x: 0, y: 0, z: 0 } } }); window.arProef.snelProef(det); return det.id; });
+  await p.screenshot({ path: path.join(UIT, 's24-12-snelkeuze.png') });
+  await p.click('#snel-stopcontact');
+  await p.evaluate(() => { document.querySelector('#ar-laag').hidden = true; });
+  const snel = await p.evaluate(id => { const D = window.MTRuimteDossier, d = window.arProef.dossier(), det = d.details.find(x => x.id === id), az = D.wandAanzicht(d, det.wand_id, window.arProef.AR), it = az.items.find(x => x.det.id === id);
+    return { soort: det.soort, dicht: document.querySelector('#ar-detail').hidden, x: it && it.punt.x, y: it && it.punt.y, sx: it && it.punt.status.x, plaat: it && it.plaat, L: az.L }; }, snelId);
+  check('snelkeuze: stopcontact staat met één tik op de wand, op de plek van de camera (geschat)', snel.soort === 'stopcontact' && snel.dicht && (snel.x === 1000 || snel.x === snel.L - 1000) && snel.y === 300 && snel.sx === 'geschat' && snel.plaat.w === 81, JSON.stringify(snel));
+  await p.evaluate(id => window.arProef.openAanzicht(window.arProef.dossier().wanden[1].id, id), snelId);
+  await p.click('#az-variant-dubbel'); await p.waitForTimeout(150);
+  const vari = await p.evaluate(id => { const D = window.MTRuimteDossier, d = window.arProef.dossier(), det = d.details.find(x => x.id === id), it = D.wandAanzicht(d, det.wand_id, window.arProef.AR).items.find(x => x.det.id === id);
+    return { variant: det.variant, plaat: it.plaat, tekst: Array.from(document.querySelectorAll('#d-paneel .aztek svg text')).map(t => t.textContent).join(' | '), archief: d.archief.filter(a => a.soort === 'detail' && a.detail.id === id).length }; }, snelId);
+  check('variant: dubbel stopcontact, afdekplaat 152 × 81 op schaal, naam met 2× in de tekening; de wijziging staat in het archief', vari.variant === 'dubbel' && vari.plaat.w === 152 && /Stopcontact 2×/.test(vari.tekst) && vari.archief >= 2, JSON.stringify(vari));
+  await p.screenshot({ path: path.join(UIT, 's24-13-stopcontact-variant.png') });
+  await p.click('#az-sluit');
   const wm = await p.evaluate(() => { const D = window.MTRuimteDossier, d = window.arProef.dossier(); return d.wanden.map(w => D.huidigeMeting(d, w.id, 'lengte')).map(x => x && x.bron); });
   check('wandmaten: hand, X4, hand, X4 herkend', JSON.stringify(wm) === JSON.stringify(['hand', 'disto', 'hand', 'disto']), JSON.stringify(wm));
   // panorama plakken (maakt de wandbeelden en bewaart ze)
@@ -310,6 +365,19 @@ window.renderKamer = function (cam, w, h, fovy) {
   const dt = await k.textContent('#paneel');
   check('dossierpaneel: lijnmodel met gemeten wanden en controlemaat', /Lijnmodel/.test(dt) && /Gemeten/.test(dt) && /Controlemaat H1–H3/.test(dt), dt.slice(0, 160));
   await k.screenshot({ path: path.join(UIT, 'pc-06-dossier.png') });
+  // tekeningen op kantoor: kameruitslag, wandafwikkeling, een pagina per wand, afdrukbaar (zelfde tekenmodule als de telefoon, lijnmodel uit het pakket)
+  await k.click('#k-tekening'); await k.waitForSelector('#rapport .rp-pagina');
+  const rp = await k.evaluate(() => ({ paginas: document.querySelectorAll('#rapport .rp-pagina').length, koppen: Array.from(document.querySelectorAll('#rapport .rp-kop h2')).map(h => h.textContent),
+    uitslagWanden: document.querySelectorAll('#rapport svg.uitslag g[data-wand]').length, afw: document.querySelectorAll('#rapport svg.afwikkeling g[data-wand]').length,
+    teksten: Array.from(document.querySelectorAll('#rapport svg.aanzicht text')).map(t => t.textContent), tikbaar: document.querySelectorAll('#rapport svg.aanzicht [data-veld]').length, tabellen: document.querySelectorAll('#rapport table').length }));
+  const nW = await k.evaluate(() => document.querySelectorAll('#rapport svg.aanzicht').length);
+  check('kantoor: tekeningen met kameruitslag, wandafwikkeling en een pagina per wand', rp.paginas === nW + 3 && /uitslag|Plattegrond/i.test(rp.koppen[0]) && rp.koppen[1] === 'Wandafwikkeling' && rp.afw === nW && rp.tabellen >= 2 && rp.tikbaar === 0, JSON.stringify({ p: rp.paginas, k: rp.koppen, u: rp.uitslagWanden, a: rp.afw, n: nW }));
+  check('kantoor: de maten uit het pakket staan in de wandtekeningen', rp.teksten.some(t => /^\d{3,4}$/.test(t)) && rp.teksten.length > 10, rp.teksten.slice(0, 30).join(' '));
+  await k.screenshot({ path: path.join(UIT, 'pc-07-tekeningen.png') });
+  await k.pdf({ path: path.join(UIT, 'pc-07-tekeningen.pdf'), format: 'A4', landscape: true, printBackground: true });
+  check('kantoor: afdrukken geeft een PDF', fs.statSync(path.join(UIT, 'pc-07-tekeningen.pdf')).size > 20000);
+  await k.click('#rapport-dicht');
+  check('kantoor: tekeningen sluiten, rondkijken is terug', await k.evaluate(() => document.querySelector('#rapport').hidden && !document.body.classList.contains('rapport-open')));
   check('geen fouten in de console (kijker)', kf.length === 0, kf.join(' | '));
   // telefoon: dezelfde kijker vanaf de telefoon zelf (#ruimte=)
   const recId = await p.evaluate(() => window.arProef.rec().id);

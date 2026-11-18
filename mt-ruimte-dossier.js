@@ -78,9 +78,10 @@
     const t = det.opening && det.opening.type;
     if (!t) return { verplicht: ['afstand_tot_hoek', 'kozijn_breedte', 'kozijn_hoogte', 'kozijn_onderkant'], optioneel: ['dag_breedte', 'dag_hoogte', 'boven_tot_plafond'] };   // oud kozijn (B32)
     const basis = ['afstand_tot_hoek', 'opening_breedte', 'opening_hoogte', 'kozijn_onderkant'];
-    if (t === 'aftimmering-op-wand') return { verplicht: basis.concat(['aftimmer_dikte', 'aftimmer_uitsteek', 'diepte_tot_kozijn']), optioneel: ['boven_tot_plafond', 'kozijn_breedte', 'kozijn_hoogte'] };
-    if (t === 'nis-met-aftimmering') return { verplicht: basis.concat(['nis_diepte_tot_aftimmering', 'diepte_tot_kozijn']), optioneel: ['aftimmer_dikte', 'boven_tot_plafond', 'kozijn_breedte', 'kozijn_hoogte'] };
-    return { verplicht: basis.concat(['diepte_tot_kozijn']), optioneel: ['boven_tot_plafond', 'kozijn_breedte', 'kozijn_hoogte'] };
+    // B36 (proef 18-11): de buitenmaat van het kozijn zelf wordt niet meer gevraagd; die volgt uit binnenwerks + paneeldikte. Minder velden, minder dubbel werk.
+    if (t === 'aftimmering-op-wand') return { verplicht: basis.concat(['aftimmer_dikte', 'aftimmer_uitsteek', 'diepte_tot_kozijn']), optioneel: ['boven_tot_plafond'] };
+    if (t === 'nis-met-aftimmering') return { verplicht: basis.concat(['nis_diepte_tot_aftimmering', 'diepte_tot_kozijn']), optioneel: ['aftimmer_dikte', 'boven_tot_plafond'] };
+    return { verplicht: basis.concat(['diepte_tot_kozijn']), optioneel: ['boven_tot_plafond'] };
   };
   D.kozijnLabel = function (det, f) {
     const t = det.opening && det.opening.type, aft = t === 'aftimmering-op-wand', wat = aft ? 'de aftimmering' : 'de nis';
@@ -94,6 +95,29 @@
     };
     return t ? (L[f] || (D.VELDEN[f] || {}).label) : (D.VELDEN[f] || {}).label;
   };
+  // Varianten per soort (B37, 18-11): na het invoegen kies je in de werktekening wat het precies is. `plaat` = afdekplaat in mm (b × h) zodat een
+  // stopcontact of schakelaar op schaal in het aanzicht staat (inbouw, raster 71 mm: enkel 81 × 81, elk extra vak + 71 mm). De variant is een eigenschap
+  // van het onderdeel (det.variant), geen maat: wisselen verandert geen meting.
+  D.VARIANTEN = {
+    stopcontact: [{ id: 'enkel', label: 'Enkel', kort: '1×', plaat: [81, 81] }, { id: 'dubbel', label: 'Dubbel', kort: '2×', plaat: [152, 81] }, { id: 'drievoudig', label: 'Drievoudig', kort: '3×', plaat: [223, 81] },
+      { id: 'viervoudig', label: 'Viervoudig', kort: '4×', plaat: [294, 81] }, { id: 'dubbel-staand', label: 'Dubbel staand', kort: '2× staand', plaat: [81, 152] }, { id: 'kracht', label: 'Krachtstroom / perilex', kort: 'kracht', plaat: [100, 100] },
+      { id: 'data', label: 'Data / tv', kort: 'data', plaat: [81, 81] }],
+    schakelaar: [{ id: 'enkel', label: 'Enkel', kort: '1×', plaat: [81, 81] }, { id: 'dubbel', label: 'Dubbel (serie)', kort: '2×', plaat: [81, 81] }, { id: 'dimmer', label: 'Dimmer', kort: 'dimmer', plaat: [81, 81] },
+      { id: 'thermostaat', label: 'Thermostaat', kort: 'thermostaat', plaat: [85, 120] }, { id: 'combinatie', label: 'Combinatie met stopcontact', kort: 'combi', plaat: [152, 81] }],
+    radiator: [{ id: 'paneel', label: 'Paneelradiator', kort: 'paneel' }, { id: 'leden', label: 'Ledenradiator', kort: 'leden' }, { id: 'convector', label: 'Convector', kort: 'convector' }, { id: 'design', label: 'Designradiator', kort: 'design' }],
+    deur: [{ id: 'binnen-links', label: 'Draait de kamer in, scharnier links', kort: '↙ L' }, { id: 'binnen-rechts', label: 'Draait de kamer in, scharnier rechts', kort: '↘ R' },
+      { id: 'buiten-links', label: 'Draait de kamer uit, scharnier links', kort: '↖ L' }, { id: 'buiten-rechts', label: 'Draait de kamer uit, scharnier rechts', kort: '↗ R' }, { id: 'schuif', label: 'Schuifdeur', kort: 'schuif' }, { id: 'open', label: 'Open doorgang', kort: 'open' }],
+    leiding: [{ id: 'cv', label: 'CV', kort: 'cv' }, { id: 'water', label: 'Water', kort: 'water' }, { id: 'gas', label: 'Gas', kort: 'gas' }, { id: 'afvoer', label: 'Afvoer', kort: 'afvoer' }, { id: 'elektra', label: 'Elektra (buis of goot)', kort: 'elektra' }]
+  };
+  D.variantVan = det => (D.VARIANTEN[det.soort] || []).find(v => v.id === det.variant) || null;
+  // Scharnierkant van een draaiend vak van een raam (vanuit de kamer gezien). Niet ingevuld: het linker vak scharniert links, het rechter rechts.
+  D.scharnierVan = (vak, i, n) => vak.scharnier || (n > 1 && i === n - 1 ? 'rechts' : 'links');
+  // Korte naam van een veld voor de knoppen onder de tekening (de volledige naam staat in de invoerbalk).
+  D.VELD_KORT = { afstand_tot_hoek: 'Vanaf hoek', afstand_hart_tot_hoek: 'Hart vanaf hoek', begin_vanaf_hoek: 'Begin', eind_vanaf_hoek: 'Eind', hoogte_hart: 'Hoogte hart', breedte: 'Breedte', hoogte: 'Hoogte',
+    onderkant: 'Onderkant', borstwering: 'Borstwering', diepte: 'Diepte', uitsteek_max: 'Uitsteek', buitendiameter: 'Diameter', hoogte_bovenkant: 'Bovenkant', dikte: 'Dikte', breedte_onder: 'Breedte onder',
+    breedte_midden: 'Breedte midden', breedte_boven: 'Breedte boven', kozijn_breedte: 'Kozijn breed', kozijn_hoogte: 'Kozijn hoog', kozijn_onderkant: 'Onderkant', dag_breedte: 'Dag breed', dag_hoogte: 'Dag hoog',
+    boven_tot_plafond: 'Tot plafond', opening_breedte: 'Breedte', opening_hoogte: 'Hoogte', aftimmer_dikte: 'Paneeldikte', aftimmer_uitsteek: 'Voor de muur', nis_diepte_tot_aftimmering: 'Tot aftimmering',
+    diepte_tot_kozijn: 'Tot kozijn', peilverschil: 'Peilverschil' };
   D.SOORTEN = {
     raam: { groep: 'bouwdeel', label: 'Raam', velden: ['afstand_tot_hoek', 'breedte', 'hoogte', 'borstwering'] },
     kozijn: { groep: 'bouwdeel', label: 'Kozijn', velden: ['afstand_tot_hoek', 'kozijn_breedte', 'kozijn_hoogte', 'kozijn_onderkant', 'dag_breedte', 'dag_hoogte', 'boven_tot_plafond'],
@@ -109,7 +133,7 @@
     schakelaar: { groep: 'installatie', label: 'Schakelaar', velden: ['afstand_hart_tot_hoek', 'hoogte_hart'] },
     plint: { groep: 'afwerking', label: 'Plint', velden: ['begin_vanaf_hoek', 'eind_vanaf_hoek', 'hoogte', 'uitsteek_max'] },
     vensterbank: { groep: 'afwerking', label: 'Vensterbank', velden: ['begin_vanaf_hoek', 'eind_vanaf_hoek', 'hoogte_bovenkant', 'uitsteek_max', 'dikte'] },
-    sierlijst: { groep: 'afwerking', label: 'Sierlijst', velden: ['begin_vanaf_hoek', 'eind_vanaf_hoek', 'hoogte', 'uitsteek_max'] },
+    sierlijst: { groep: 'afwerking', label: 'Sierlijst', velden: ['begin_vanaf_hoek', 'eind_vanaf_hoek', 'hoogte', 'uitsteek_max', 'hoogte_bovenkant'], optioneel: ['hoogte_bovenkant'] },
     meubel: { groep: 'meubilair', label: 'Los meubel', velden: ['breedte', 'diepte', 'hoogte'] },
     afwerking: { groep: 'materiaal', label: 'Afwerking van een vlak', velden: [] },
     opmerking: { groep: 'notitie', label: 'Opmerking', velden: ['peilverschil'] },
@@ -282,7 +306,7 @@
       wand_id: x.wand_id || (x.anker && x.anker.wand_id) || null, anker: x.anker || null,
       anker_status: x.anker && x.anker.xr ? 'ar-geschat' : 'alleen-foto', foto_ids: lijst(x.foto_ids).slice(), foto_punt: x.foto_punt || null,
       referentie_hoek: x.referentie_hoek || null, traject: x.traject || null, profiel_id: x.profiel_id || null, materiaal: x.materiaal || null,
-      meubel: x.meubel || null, opmerking: x.opmerking || '', tijd: isoNu(nu), sessie: x.sessie || null, toestand: x.toestand || 'bestaand', status: 'actief'
+      meubel: x.meubel || null, variant: x.variant || null, opmerking: x.opmerking || '', tijd: isoNu(nu), sessie: x.sessie || null, toestand: x.toestand || 'bestaand', status: 'actief'
     };
     d.details.push(det); d.bijgewerkt = isoNu(nu);
     return det;
@@ -493,15 +517,26 @@
   // ── wandaanzicht ── De wand zoals je hem vanuit de kamer ziet (links/rechts), met de details erop als rechthoek of punt, in mm vanaf de linkerhoek en de vloer.
   // Per maat de status: gemeten, geschat (camera/aangenomen), afgeleid (uit andere maten) of open. voorlopig: { detailId: { veld: mm } } (invoer die nog niet
   // bewaard is: status 'invoer'), voor een live-voorbeeld tijdens het typen. Leest geen beelden; het lijnmodel levert de wandlengte en de hoogte.
-  D.STANDAARD_MAAT = { kozijn: { b: 1000, h: 1200, o: 900 }, raam: { b: 1000, h: 1200, o: 900 }, deur: { b: 900, h: 2100, o: 0 }, radiator: { b: 1000, h: 600, o: 150 }, nis: { b: 800, h: 1000, o: 0 }, kolom: { b: 300, h: null, o: 0 } };
+  D.STANDAARD_MAAT = { kozijn: { b: 1000, h: 1200, o: 900 }, raam: { b: 1000, h: 1200, o: 900 }, deur: { b: 900, h: 2100, o: 0 }, radiator: { b: 1000, h: 600, o: 150 }, nis: { b: 800, h: 1000, o: 0 },
+    kolom: { b: 300, h: null, o: 0 }, balk: { b: 200, h: null, o: 2300 } };
+  // Onderdelen met een begin en eind langs de wand (traject): plaats in hoogte en standaard dikte als er nog niets gemeten is.
+  D.TRAJECT_MAAT = { plint: { h: 70 }, vensterbank: { boven: 900, dikte: 30 }, sierlijst: { h: 60 } };
+  // Welke soorten je op een wand kunt zetten (in het wandaanzicht); meubels, vlakafwerking en losse opmerkingen horen niet op een wand.
+  D.WANDSOORTEN = ['kozijn', 'raam', 'deur', 'nis', 'radiator', 'stopcontact', 'schakelaar', 'leiding', 'vensterbank', 'plint', 'sierlijst', 'kolom', 'balk', 'knik', 'overig'];
+  // Links of rechts vanuit de kamer, zonder AR-kern: de hoeken van het lijnmodel liggen in volgorde H1, H2, …; met de klok mee (oppervlakte < 0, van boven
+  // gezien in X/Y) ligt de kamer rechts van elke wand als je van 'van' naar 'naar' loopt, en sta je in de kamer met je gezicht naar de wand dan is 'van' links.
+  D.vanLinks = function (lm) {
+    const p = lijst(lm && lm.punten), n = p.length; let opp = 0;
+    for (let i = 0; i < n; i++) { const a = p[i], b = p[(i + 1) % n]; opp += a.x * b.y - b.x * a.y; }
+    return opp < 0;
+  };
+  // derde argument: de AR-kern (dan wordt het lijnmodel berekend) of een kant-en-klaar lijnmodel (kijker op kantoor: d.afgeleid.lijnmodel).
   D.wandAanzicht = function (d, wandId, AR, voorlopig) {
-    const lm = D.lijnmodel(d, AR); if (!lm) return null;
-    const wi = lijst(d.wanden).findIndex(w => w.id === wandId), w = lijst(d.wanden)[wi]; if (!w) return null;
-    const seg = lm.segmenten[wi], L = seg.lengte.waarde, H = lm.hoogte.waarde || 2600, basis = D.basisSessie(d) || { xr: {} };
-    // links of rechts: vanuit de kamer kijkend; hoek 'van' ligt links als (nz*ux - nx*uz) > 0 voor de naar binnen wijzende normaal
-    const W3 = AR.wanden3d(lijst(d.hoeken).map(h => ({ x: h.xr.x, z: h.xr.z })), true, basis.xr.vloerY || 0, 2.6), w3 = W3.find(x => x.nr === wi);
-    const vanLinks = w3 ? AR.aLinks(w3) : true, linksId = vanLinks ? w.van : w.naar, rechtsId = vanLinks ? w.naar : w.van, hl = id => (lijst(d.hoeken).find(h => h.id === id) || {}).label;
-    const vl = voorlopig || {};
+    const lm = AR && AR.segmenten ? AR : D.lijnmodel(d, AR); if (!lm) return null;
+    const wi = lijst(d.wanden).findIndex(w => w.id === wandId), w = lijst(d.wanden)[wi], seg = lijst(lm.segmenten).find(s => s.id === wandId) || lijst(lm.segmenten)[wi]; if (!w || !seg) return null;
+    const L = seg.lengte.waarde, H = lm.hoogte && lm.hoogte.waarde || 2600;
+    const vanLinks = D.vanLinks(lm), linksId = vanLinks ? w.van : w.naar, rechtsId = vanLinks ? w.naar : w.van, hl = id => (lijst(d.hoeken).find(h => h.id === id) || {}).label;
+    const vl = voorlopig || {}, hardSt = st2 => st2 === 'gemeten' || st2 === 'invoer', hardOf = st2 => hardSt(st2) || st2 === 'afgeleid';
     const maat = (det, velden) => {
       for (const f of velden) {
         if (vl[det.id] && vl[det.id][f] != null) return { waarde: vl[det.id][f], status: 'invoer', veld: f };
@@ -509,39 +544,116 @@
       }
       return null;
     };
+    // vanaf welke hoek een maat langs de wand telt: de opgeslagen referentie van die meting, anders (live-invoer) de gekozen hoek
+    const refVan = (det, m) => m && m.meting && m.meting.referentie && m.meting.referentie.id ? m.meting.referentie.id : (det.referentie_hoek || linksId);
+    const xLinks = (det, m) => refVan(det, m) === linksId ? m.waarde : L - m.waarde;
+    const samen = (a, b) => hardOf(a) && hardOf(b) ? 'afgeleid' : 'geschat';
     const items = D.actieveDetails(d).filter(det => det.wand_id === w.id).map(det => {
-      const st = D.STANDAARD_MAAT[det.soort], vlak = !!st;
-      const afst = maat(det, D.LANGS_VELDEN), refId = afst && afst.meting && afst.meting.referentie && afst.meting.referentie.id ? afst.meting.referentie.id : (det.referentie_hoek || linksId);
+      const st = D.STANDAARD_MAAT[det.soort], tr = D.TRAJECT_MAAT[det.soort];
+      const afst = maat(det, D.LANGS_VELDEN), refId = refVan(det, afst);
       const camU = det.anker && det.anker.u_m != null ? det.anker.u_m * 1000 : null, camV = det.anker && det.anker.v_m != null ? det.anker.v_m * 1000 : null;
-      if (!vlak) {   // punt: stopcontact, schakelaar, leiding, …
+      // welk veld hoort bij welke maat in de tekening (voor 'tik de maat aan'): het eerste veld van de kandidaten dat deze soort kent
+      const kv0 = det.soort === 'kozijn' ? D.kozijnVelden(det) : null, eigen = kv0 ? kv0.verplicht.concat(kv0.optioneel) : (D.SOORTEN[det.soort] || D.SOORTEN.overig).velden;
+      const rol = kand => kand.find(f => eigen.indexOf(f) >= 0) || null;
+      const vr = D.variantVan(det);
+      const basis = { det, soort: det.soort, label: det.label, opmerking: det.opmerking || '', afstand: afst, vanaf: refId, vanLinks: refId === linksId, variant: vr ? { id: vr.id, label: vr.label, kort: vr.kort } : null };
+      if (tr) {   // traject: plint, vensterbank, sierlijst (begin en eind vanaf een hoek)
+        const bg = maat(det, ['begin_vanaf_hoek']), ei = maat(det, ['eind_vanaf_hoek']);
+        let x1 = bg ? xLinks(det, bg) : (camU != null ? (vanLinks ? camU : L - camU) - 500 : 0), x2 = ei ? xLinks(det, ei) : (camU != null ? x1 + 1000 : L);
+        const x = Math.min(x1, x2), bw = Math.abs(x2 - x1), vanL = bg ? refVan(det, bg) === linksId : true;
+        let y, hh, sy, sh, extra = [];
+        if (det.soort === 'plint') { const hm = maat(det, ['hoogte']); y = 0; hh = hm ? hm.waarde : tr.h; sy = 'gemeten'; sh = hm ? hm.status : 'open'; }
+        else if (det.soort === 'vensterbank') {
+          const bk = maat(det, ['hoogte_bovenkant']), dk = maat(det, ['dikte']), top = bk ? bk.waarde : tr.boven; hh = dk ? dk.waarde : tr.dikte; y = top - hh;
+          sh = dk ? dk.status : 'open'; sy = bk && dk ? samen(bk.status, dk.status) : 'geschat';
+          extra.push({ van: 0, tot: top, waarde: bk ? top : null, status: bk ? bk.status : 'open', label: 'bovenkant', veld: 'hoogte_bovenkant' });
+        } else {   // sierlijst: standaard tegen het plafond
+          const hm = maat(det, ['hoogte']), bk = maat(det, ['hoogte_bovenkant']), top = bk ? bk.waarde : H; hh = hm ? hm.waarde : tr.h; y = top - hh;
+          sh = hm ? hm.status : 'open'; sy = hm ? samen(bk ? bk.status : (lm.hoogte && lm.hoogte.status), hm.status) : 'geschat';
+          if (bk) extra.push({ van: 0, tot: top, waarde: top, status: bk.status, label: 'bovenkant', veld: 'hoogte_bovenkant' });
+        }
+        return Object.assign(basis, { vorm: 'traject', vanLinks: vanL, rect: { x, y, w: bw, h: hh },
+          status: { x: bg ? bg.status : 'open', w: bg && ei ? (refVan(det, bg) === refVan(det, ei) ? samen(bg.status, ei.status) : samen(samen(bg.status, ei.status), seg.lengte.status)) : 'open', y: sy, h: sh, boven: null },
+          velden: { x: 'begin_vanaf_hoek', w: 'eind_vanaf_hoek', h: det.soort === 'vensterbank' ? 'dikte' : 'hoogte' },
+          traject: { begin: bg, eind: ei }, extraV: extra, boven_tot_plafond: null });
+      }
+      if (det.soort === 'knik') {   // knik of afwijking: een verticale lijn over de hele hoogte
+        let x = null, xs = 'open';
+        if (afst) { x = xLinks(det, afst); xs = afst.status; } else if (camU != null) { x = vanLinks ? camU : L - camU; xs = 'geschat'; }
+        return Object.assign(basis, { vorm: 'lijn', lijn: { x, status: xs }, velden: { x: rol(D.LANGS_VELDEN) }, diepte: maat(det, ['diepte']) });
+      }
+      if (!st) {   // punt: stopcontact, schakelaar, leiding, …
         const hv = maat(det, D.HOOGTE_VELDEN);
-        let x = null, xs = 'onbekend';
-        if (afst) { x = refId === linksId ? afst.waarde : L - afst.waarde; xs = afst.status; } else if (camU != null) { x = vanLinks ? camU : L - camU; xs = 'geschat'; }
-        return { det, soort: det.soort, label: det.label, punt: { x, y: hv ? hv.waarde : camV, status: { x: xs, y: hv ? hv.status : (camV != null ? 'geschat' : 'onbekend') } }, afstand: afst, vanaf: refId };
+        let x = null, xs = 'open';
+        if (afst) { x = xLinks(det, afst); xs = afst.status; } else if (camU != null) { x = vanLinks ? camU : L - camU; xs = 'geschat'; }
+        const pl = vr && vr.plaat ? vr.plaat : (det.soort === 'stopcontact' || det.soort === 'schakelaar' ? [81, 81] : null);   // afdekplaat op schaal (zonder variant: enkel)
+        return Object.assign(basis, { vorm: 'punt', plaat: pl ? { w: pl[0], h: pl[1] } : null, velden: { x: rol(D.LANGS_VELDEN), y: rol(D.HOOGTE_VELDEN) }, punt: { x, y: hv ? hv.waarde : camV, status: { x: xs, y: hv ? hv.status : (camV != null ? 'geschat' : 'open') } } });
       }
       const op = det.opening || null, zij = op && op.type === 'aftimmering-op-wand' ? lijst(op.zijden) : [], dk = op ? maat(det, ['aftimmer_dikte']) : null, dik = dk ? dk.waarde : (zij.length ? 12 : 0);
       const ob = op ? maat(det, ['opening_breedte']) : null, oh = op ? maat(det, ['opening_hoogte']) : null;
-      const hardSt = st2 => st2 === 'gemeten' || st2 === 'invoer';
       // buitenmaat op het wandvlak = binnenwerks + paneeldikte aan de zijden met aftimmering (alleen bij een kader op de wand)
       const metDikte = (m, a, z) => m ? { waarde: m.waarde + dik * ((zij.indexOf(a) >= 0) + (zij.indexOf(z) >= 0)),
         status: !zij.length ? m.status : (hardSt(m.status) && dk && hardSt(dk.status) ? 'afgeleid' : 'geschat') } : null;   // dikte niet gemeten: 12 mm aangenomen = geschat
-      const b = metDikte(ob, 'links', 'rechts') || maat(det, ['kozijn_breedte', 'breedte']), h = metDikte(oh, 'boven', 'onder') || maat(det, ['kozijn_hoogte', 'hoogte']);
+      const b = metDikte(ob, 'links', 'rechts') || maat(det, ['kozijn_breedte', 'breedte', 'breedte_midden', 'breedte_onder', 'breedte_boven']);
+      let h = metDikte(oh, 'boven', 'onder') || maat(det, ['kozijn_hoogte', 'hoogte']);
       const o = maat(det, ['kozijn_onderkant', 'borstwering', 'onderkant']);
-      const bw = b ? b.waarde : st.b, hh = h ? h.waarde : (st.h == null ? H : st.h), oo = o ? o.waarde : (det.soort === 'deur' || det.soort === 'nis' || det.soort === 'kolom' ? 0 : (camV != null ? Math.max(0, camV - hh / 2) : st.o));
+      const bw = b ? b.waarde : st.b, vast0 = det.soort === 'deur' || det.soort === 'nis' || det.soort === 'kolom';
+      let hh = h ? h.waarde : (st.h == null ? H : st.h), oo = o ? o.waarde : (vast0 ? 0 : (camV != null ? Math.max(0, camV - hh / 2) : st.o));
+      if (det.soort === 'balk') { hh = H - oo; h = { waarde: hh, status: o ? samen(o.status, lm.hoogte && lm.hoogte.status) : 'geschat' }; }   // balk: van de onderkant tot het plafond
       let x, xs;
-      if (afst) { x = refId === linksId ? afst.waarde : L - afst.waarde - bw; xs = afst.status; }
+      if (afst && afst.bron === 'ar') { x = xLinks(det, afst) - bw / 2; xs = afst.status; }   // camera: het kruisje stond midden op het onderdeel, niet op de zijkant
+      else if (afst) { x = refId === linksId ? afst.waarde : L - afst.waarde - bw; xs = afst.status; }
       else if (camU != null) { x = (vanLinks ? camU : L - camU) - bw / 2; xs = 'geschat'; }
-      else { x = (L - bw) / 2; xs = 'geschat'; }
+      else { x = (L - bw) / 2; xs = 'open'; }
       const btp = maat(det, ['boven_tot_plafond']);
-      return { det, soort: det.soort, label: det.label, rect: { x, y: oo, w: bw, h: hh }, afstand: afst, vanaf: refId, vanLinks: refId === linksId,
-        status: { x: xs, w: b ? b.status : 'geschat', h: h ? h.status : 'geschat', y: o ? o.status : (det.soort === 'deur' ? 'gemeten' : 'geschat'), boven: btp ? btp.status : null },
-        boven_tot_plafond: btp ? btp.waarde : null, dag: { b: maat(det, ['dag_breedte']), h: maat(det, ['dag_hoogte']) },
+      return Object.assign(basis, { vorm: 'vlak', rect: { x, y: oo, w: bw, h: hh },
+        status: { x: xs, w: b ? b.status : 'open', h: h ? h.status : (st.h == null ? (lm.hoogte && lm.hoogte.status) || 'geschat' : 'open'), y: o ? o.status : (vast0 ? 'gemeten' : (camV != null ? 'geschat' : 'open')), boven: btp ? btp.status : null },
+        velden: { x: rol(D.LANGS_VELDEN), w: rol(['opening_breedte', 'kozijn_breedte', 'breedte', 'breedte_midden']), h: det.soort === 'balk' ? null : rol(['opening_hoogte', 'kozijn_hoogte', 'hoogte']),
+          y: rol(['kozijn_onderkant', 'borstwering', 'onderkant']), boven: rol(['boven_tot_plafond']) },
+        boven_tot_plafond: btp ? btp.waarde : null, dag: { b: maat(det, ['dag_breedte']), h: maat(det, ['dag_hoogte']) }, extraV: [],
         opening: op ? { type: op.type, zijden: zij.length ? zij : lijst(op.zijden), dikte: dik, dikte_status: dk ? dk.status : (zij.length ? 'aangenomen' : null),
           binnen: ob && oh ? { x: x + (zij.indexOf('links') >= 0 ? dik : 0), y: oo + (zij.indexOf('onder') >= 0 ? dik : 0), w: ob.waarde, h: oh.waarde, status: { w: ob.status, h: oh.status } } : null,
           uitsteek: maat(det, ['aftimmer_uitsteek']), nis_diepte: maat(det, ['nis_diepte_tot_aftimmering']), kozijn_diepte: maat(det, ['diepte_tot_kozijn']) } : null,
-        raam: det.raam || null };
+        raam: det.raam || null });
     });
-    return { wand_id: w.id, wand: w.label, L, H, status: { L: seg.lengte.status, H: lm.hoogte.waarde ? lm.hoogte.status : 'aangenomen' }, links: { id: linksId, label: hl(linksId) }, rechts: { id: rechtsId, label: hl(rechtsId) }, items };
+    return { wand_id: w.id, wand: w.label, L, H, status: { L: seg.lengte.status, H: lm.hoogte && lm.hoogte.waarde ? lm.hoogte.status : 'aangenomen' }, links: { id: linksId, label: hl(linksId) }, rechts: { id: rechtsId, label: hl(rechtsId) }, items };
+  };
+  // Eén doorlopende maatketen langs de hele wand (voor de uitslag en de wandpagina): alle zijkanten van onderdelen en de punten (hart stopcontact, knik).
+  // Een deel dat precies een gemeten maat is (afstand vanaf de hoek, breedte) heet 'gemeten'; een deel tussen twee harde punten 'afgeleid'; anders 'geschat'.
+  // kies(it): welke onderdelen meedoen. Op een tekening staan openingen (kozijn, deur, nis) in hun eigen keten en de overige onderdelen in een tweede:
+  // anders hakt een radiator onder het raam de raammaat in stukken.
+  D.isOpening = it => it.soort === 'kozijn' || it.soort === 'raam' || it.soort === 'deur' || it.soort === 'nis';
+  D.wandKeten = function (az, kies) {
+    if (!az) return [];
+    const L = az.L, hard = s => s === 'gemeten' || s === 'invoer' || s === 'afgeleid', Lh = hard(az.status.L), pts = [{ x: 0, hard: true }, { x: L, hard: Lh }], direct = [];
+    const zet = (x, h) => { if (x != null && x > -0.5 && x < L + 0.5) pts.push({ x: Math.max(0, Math.min(L, x)), hard: h }); };
+    az.items.forEach(it => {
+      if (kies && !kies(it)) return;
+      const vl = it.vanLinks !== false;
+      if (it.rect) {
+        if (it.status.x === 'open' || it.status.w === 'open') return;   // plek of breedte nog niet bekend: niet in de keten
+        const sx = hard(it.status.x) && (vl || Lh), sw = hard(it.status.w);
+        zet(it.rect.x, sx && (vl || sw)); zet(it.rect.x + it.rect.w, sx && (!vl || sw));
+        if (it.status.w === 'gemeten' || it.status.w === 'invoer') direct.push([it.rect.x, it.rect.x + it.rect.w]);
+        const bin = it.opening && it.opening.binnen;   // kader op de wand: de gemeten binnenmaat hoort in de keten, de panelen als eigen stukje
+        if (bin && bin.w < it.rect.w - 0.5) { zet(bin.x, sx && (vl || sw)); zet(bin.x + bin.w, sx && (!vl || sw)); if (bin.status.w === 'gemeten' || bin.status.w === 'invoer') direct.push([bin.x, bin.x + bin.w]); }
+        if (it.status.x === 'gemeten' || it.status.x === 'invoer') direct.push(vl ? [0, it.rect.x] : [it.rect.x + it.rect.w, L]);
+      } else {
+        const p = it.punt || it.lijn; if (!p || p.x == null) return;
+        const sx = typeof p.status === 'string' ? p.status : p.status.x;
+        zet(p.x, hard(sx) && (vl || Lh));
+        if (sx === 'gemeten' || sx === 'invoer') direct.push(vl ? [0, p.x] : [p.x, L]);
+      }
+    });
+    pts.sort((a, b) => a.x - b.x);
+    const sam = [];
+    pts.forEach(p => { const v = sam[sam.length - 1]; if (v && p.x - v.x < 2) v.hard = v.hard || p.hard; else sam.push({ x: p.x, hard: p.hard }); });
+    const uit = [];
+    for (let i = 1; i < sam.length; i++) {
+      const a = sam[i - 1], b = sam[i], isDirect = direct.some(s => Math.abs(s[0] - a.x) < 2 && Math.abs(s[1] - b.x) < 2);
+      uit.push({ van: a.x, tot: b.x, waarde: rond(b.x - a.x, 1), status: isDirect ? 'gemeten' : (a.hard && b.hard ? 'afgeleid' : 'geschat') });
+    }
+    return uit;
   };
   // Maatketen langs een as: delen [a, b] met status; een restdeel is 'afgeleid' als alle andere delen en het totaal gemeten (of ingevoerd) zijn, anders 'geschat'.
   D.maatketen = function (totaal, totaalStatus, delen) {

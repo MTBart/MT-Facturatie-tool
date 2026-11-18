@@ -25,14 +25,20 @@ alleen op de werkbranch.
    panorama voor. De vakjes op de muur kleuren groen waar beeld is.
 6. De beelden voor het rondkijken worden vanzelf verzameld. Sta je even stil en ontbreekt er rond die plek echt een richting, dan
    verschijnt bijvoorbeeld *"Draai hier even naar links en omhoog"*. Geen aparte panoramaronde nodig.
-7. **Detail** (knop links van de duimknop): richt het kruisje op het onderdeel (bijv. het hart van een cv-leiding) en druk. De telefoon
-   maakt een scherpe foto en koppelt het detail aan de wand en hoogte onder het kruisje. Kies de soort, kies vanaf welke binnenhoek je meet,
-   en vul de maten in. Het **oranje veld** is waar de DISTO X4 (als toetsenbord) zijn maat neerzet; Enter gaat naar het volgende veld.
-   Een veld leeg laten = open vraag. Tik **Klaar**.
+7. **Detail** in fase 2 (de duimknop, of de knop links ervan): richt het kruisje midden op het onderdeel (stopcontact, radiator, kozijn, …) en druk.
+   De telefoon maakt een scherpe foto en vraagt **Wat is dit?** Eén tik op de soort en het onderdeel staat op die plek in de werktekening van de wand
+   (als schatting). Bematen doe je straks in het wandscherm; *Nu meteen bematen* kan ook.
 8. Tik **Klaar** bovenin als de kamer rond is. Vul daarna de wandmaten en de plafondhoogte in, meet een **controlemaat tape tot tape** tussen twee wanden (per tape de afstand tot een hoek, en de afstand tussen de tapes), en controleer desgewenst een paar hoeken met een **driehoeksmeting** (tape op 1000 mm langs elke wand, ±1 m hoog, en de schuine maat ertussen; haaks = 1414 mm). Een diagonaal alleen als die vrij en strak te meten is.
    Onder **Nog open vóór vertrek** staat wat nog ontbreekt.
-9. **Wanden bematen**: kies een wand, tik **+ Kozijn** (of deur, radiator, stopcontact) en vul de maten in. De lijntekening laat de maatketens zien
-   (zwart gemeten, blauw afgeleid, grijs ~ geschat); kies vanaf welke hoek je meet. Met *Foto van dit kozijn* hang je er een foto aan.
+9. **Wanden bematen**: je ziet de kamer opengeklapt; tik een wand aan. Bovenaan staat de lijntekening van die wand, gezien vanuit de kamer.
+   - Tik een onderdeel in de tekening aan (of voeg er een toe met **+ Kozijn**, **+ Deur**, **+ Radiator**, **+ Stopcontact** of *Ander onderdeel*).
+   - Tik een maat aan (oranje **?** = nog meten), typ het getal of meet met de X4 en druk **Enter**: de app bewaart en springt naar de volgende open maat.
+     Een heel kozijn meet je zo achter elkaar door. **Vanaf ◂ H2 / H3 ▸** kiest vanaf welke hoek je de afstand meet.
+   - Kozijn: kies met de drie plaatjes hoe het in de wand zit (kale nis, kader op de wand, kader in de nis), tik de dieptematen aan in de doorsnede,
+     kies het aantal vakken, tik een vak aan en kies wat het doet en waar het scharnier zit.
+   - Stopcontact, schakelaar, radiator, deur, leiding: kies de uitvoering (enkel, dubbel, drievoudig, …).
+   - Onderaan: opmerking, naam (bijv. R1), foto, weghalen. Met **‹ W1** en **W3 ›** ga je naar de vorige of volgende wand.
+   - Kleuren: zwart = gemeten, blauw = berekend uit de andere maten, grijs ~ = geschat, oranje = nog meten.
 9b. **Groothoekfoto per wand** (na de rondgang, bij *Wandfoto's met groothoek*): sta je te dicht op de wand, maak dan met je gewone camera-app
    een foto op 0,6× en tik de vier hoeken van de wand aan (links onder, rechts onder, rechts boven, links boven). De app trekt hem recht.
 10. **Hoeken nakijken**: open per hoek de foto en tik de echte hoek aan (rood = waar je tikte). De app rekent de plek om; de tik blijft bewaard en
@@ -56,6 +62,8 @@ lukt dat niet, kies **Apart**: die rondgang wordt dan apart bewaard en niet same
 6. **Dossier** toont het lijnmodel in mm (oorsprong, assen, wandlengtes met status), de controlematen, alle onderdelen per groep,
    opmerkingen, open vragen en de rondgangen (toestel, beelden, hoe vaak getikt en hoe vaak de camera iets zelf vond, trackingverlies).
    Op stukken wand zonder beeld staat een oranje arcering: dat is een gat, geen kleur van de muur.
+7. **Tekeningen** toont de kameruitslag (plattegrond met de wanden eromheen opengeklapt), de wandafwikkeling (alle wanden naast elkaar) en per wand
+   een pagina met alle maten, de onderdelenlijst en de kozijnen met hun doorsnede. **Afdrukken / PDF**: kies "Opslaan als pdf", liggend A4.
 
 ## LiDAR-iPhone
 

@@ -24,6 +24,8 @@
 8. [Open vragen (voor Bart en voor een reviewer)](#8-open-vragen)
 9. [Wijzigingslog](#9-wijzigingslog)
 10. [Bestanden, links en tests](#10-bestanden-links-en-tests)
+11. [Tekenstandaarden: wat is gebruikelijk en wat doen wij](#11-tekenstandaarden-wat-is-gebruikelijk-en-wat-doen-wij)
+12. [Denkstuk: objecten in de werktekening, leidingwerk, plinten en sierlijsten](#12-denkstuk-objecten-in-de-werktekening-leidingwerk-plinten-en-sierlijsten)
 
 ---
 
@@ -291,6 +293,46 @@ de zijden met een kader (afgeleid; 12 mm aangenomen = geschat zolang de dikte ni
 tekening de binnenmaat (stippel) en de vakken. Kijker: opening en vakken in het detailpaneel.
 *Open vraag aan Bart:* is de 310 mm bij R1 gemeten vanaf de voorkant van de aftimmering (zo nu vastgelegd: 305 mm in de muur) of vanaf de muur?
 
+**B35 · 18-11 · Eén tekenmodule voor telefoon, kantoor en PDF (`mt-ruimte-tekening.js`).** *Waarom:* de wandtekening stond alleen in de telefoonpagina;
+kantoor had geen tekening en een PDF bestond niet. Nu maakt één module het wandaanzicht, de doorsnede van een opening, de kameruitslag en de
+wandafwikkeling. De kantoorpagina heeft een knop **Tekeningen**: kameruitslag, wandafwikkeling, een pagina per wand met onderdelenlijst en kozijnenlijst,
+en **Afdrukken / PDF** (liggend A4). Het lijnmodel komt uit het pakket; op kantoor is geen rekenkern van de telefoon nodig (`D.wandAanzicht` accepteert
+een kant-en-klaar lijnmodel; links/rechts volgt uit de draairichting van het lijnmodel, getoetst tegen de AR-kern).
+*Veiligheid:* de module levert een boom van gewone objecten; de pagina maakt daar SVG-elementen van (geen HTML als tekst). Een naam of opmerking uit het
+dossier kan dus nooit als opmaak worden gelezen. De controle `tools/check-sinks.js` keurde de eerste opzet (tekst aan elkaar plakken) terecht af.
+*Uitslag:* elke wand klapt om zijn vloerlijn naar buiten, zonder spiegelen (getest: determinant +1); tekst die op zijn kop zou staan wordt rechtgezet.
+
+**B36 · 18-11 · De tekening is de invoer: tik de maat aan.** *Aanleiding:* Barts pakket "Test 10" en zijn oordeel "dit werkt echt nog super omslachtig; op
+jouw screenshots staat het veel duidelijker". In het pakket: één kozijn kostte elf velden en ruim twee minuten, de soort opening was verkeerd gekozen
+(nis met aftimmering in plaats van aftimmering op de wand), de 5 mm uitsteek kwam in het verkeerde veld en de buitenmaat 2464 was met de hand uitgerekend.
+*Wat is veranderd:*
+- De tekening staat bovenaan vast in beeld. Een maat van het gekozen onderdeel is een tikbaar vlakje; een oranje **?** betekent: nog meten.
+- Eén invoerbalk onder de tekening. Getal + Enter bewaart en springt naar de volgende open maat: met de X4 meet je een heel kozijn zonder één veld aan te tikken.
+- De soort opening kies je met drie plaatjes (van boven gezien): kale nis, kader op de wand, kader in de nis. De dieptematen tik je in de doorsnede aan.
+- De buitenmaat van het kozijn wordt niet meer gevraagd: die volgt uit binnenwerks + paneeldikte. De keten laat de panelen als eigen stukje zien
+  (334 – 12 – 2440 – 12 – rest), zodat de gemeten binnenmaat in de keten staat en de keten toch sluit.
+- Onder de tekening: de maten als knoppen (oranje = open), opmerking, naam, foto, weghalen (twee keer tikken; het onderdeel blijft in het archief).
+- Elk soort onderdeel is toe te voegen; vensterbank, plint en sierlijst met begin en eind; knik als verticale lijn; balk tot het plafond.
+- In het dossier staat de kamer opengeklapt: tik een wand aan om hem te bematen; in het wandscherm ga je met ‹ › naar de vorige of volgende wand.
+- Lange wanden worden breder getekend dan het scherm (opzij schuiven), zodat de maten leesbaar blijven; het gekozen onderdeel komt vanzelf in beeld.
+*Niet getest op een echt toestel:* of de invoerbalk met het schermtoetsenbord open altijd in beeld blijft, en of de tikvlakjes groot genoeg zijn.
+
+**B37 · 18-11 · Objecten automatisch in de werktekening, met varianten; symbolen naar de gangbare normen.** *Aanleiding:* Bart: "in de tweede fase per detail
+een soort automatisch object in je werktekening invoegen; daarna in de wandtekening het object aanklikken, veranderen van enkel/dubbel/drievoudig en bematen."
+- **Snelkeuze in fase 2:** de knop Detail maakt de foto en vraagt alleen "Wat is dit?" (grote knoppen). Eén tik en het onderdeel staat op de plek van het
+  kruisje in de werktekening van die wand, als schatting (grijs, ~). Bematen doe je daarna in het wandscherm. "Nu meteen bematen" kan nog steeds.
+- **Varianten** (`det.variant`, `D.VARIANTEN`): stopcontact enkel/dubbel/drievoudig/viervoudig/dubbel staand/krachtstroom/data; schakelaar; radiator;
+  deur (draairichting en scharnierkant, schuifdeur, open doorgang); leiding (cv, water, gas, afvoer, elektra). Wisselen verandert geen meting; de wijziging
+  staat in het archief.
+- **Op schaal:** een stopcontact of schakelaar staat als afdekplaat op schaal in het aanzicht (enkel 81 × 81 mm, elk extra vak + 71 mm), met het hart als maatpunt.
+- **Draairichting:** driehoek in raam of deur; de punt wijst naar de scharnierkant, getrokken = draait de kamer in, gestreept = naar buiten. Per vak is de
+  scharnierkant te kiezen. De afspraak staat in de legenda van elke tekening (zie §11: hij verschilt per land).
+- **Camera-plek:** bij een vlak onderdeel (kozijn, radiator) is de camera-schatting het midden van het onderdeel, niet de zijkant.
+- **Kamers met meer vormen:** bij een inspringende hoek (L-vorm, nis) vallen opengeklapte wanden over elkaar. Dan toont pagina 1 alleen de plattegrond met
+  wandlengtes; de **wandafwikkeling** (alle wanden naast elkaar, met de klok mee) werkt voor elke vorm en staat er altijd bij.
+- De voorbeeldkamer voor tests en de voorbeeld-PDF staat op Barts echte maten: R1 334 vanaf links en R2 40 vanaf rechts op W2 (H2–H3), R3 780 vanaf rechts
+  op W3 (H3–H4), onderkanten 945 / 750 / 930.
+
 **Waarneming (geen besluit):** met vier gemeten wandlengtes en haakse hoeken maakt de kaartdrift voor het lijnmodel weinig uit (de richtingen worden
 rechtgezet, de lengtes komen uit de maten). De drift raakt vooral de aansluiting tussen beelden en wanden in het panorama en de camera-plek van details.
 
@@ -319,6 +361,9 @@ rechtgezet, de lengtes komen uit de maten). De drift raakt vooral de aansluiting
 | 18-11 22:45 | "De ruimte staat ±; ik heb bij een ruimte de exacte maten achteraf ingevuld. Wil nu mijn kozijnen bematen: kan er een lijntekening van de wand komen waarin ik het kozijn kan bematen?" | B32. |
 | 18-11 23:00 | "Haaksheid van de hoek etc komt later wel; nu niet belangrijk, op een later punt wel." | B33. |
 | 18-11 23:10 | Foto's en maten van drie kozijnen (R1 aftimmering op de wand, R2 nis, R3 nis met aftimmering; draairichtingen). | B34. |
+| 18-11 23:40 | "Kan ik op dat wandaanzicht een object invoegen (radiator, raam, stopcontact) en dat een maat geven en bematen, plus een opmerking? Ga door tot dit een werkend concept is." | B35, B36. |
+| 19-11 00:20 | Pakket "Test 10" + "dit werkt echt nog super omslachtig; op jouw screenshots staat het veel duidelijker". | B36 (analyse van het pakket in de beslissing). |
+| 19-11 01:00 | Echte plek van de kozijnen (R1 334 vanaf links en R2 40 vanaf rechts op wand H2–H3, onderkant R2 750; R3 op wand H3–H4, 780 vanaf rechts, onderkant 930; deur en R3 stonden op de verkeerde wand). "Zo helder moet de bemating eruitzien." Objecten automatisch invoegen in fase 2, daarna aanklikken en variant kiezen. Goede manier bedenken voor leidingwerk, plinten en sierlijsten. Industriestandaard voor symbolen en maatvoering? Uitslag wordt ingewikkelder bij meer vormen. | B37, §11, §12. Aanname: R3 op W3 en de deur op de wand waar R3 stond (W4); corrigeer als dat anders is. |
 | 18-11 | Ontwikkeldocument waarin alles staat, zodat terug te zien is wat waarom veranderde; Astra moet er licht op kunnen laten schijnen. | Dit document. |
 
 ### 5.1 Meetresultaten echte proeven
@@ -399,6 +444,8 @@ langs de wanden slepen, beide gezichtspunten herkennen, de originele foto en de 
 ontbrekende kijkrichtingen. Uitkomst bepaalt of per kijkpunt een apart panorama nodig is (radiator vóór raam).
 
 ### P1 · Gordijnen-proef: meetprofiel voor kozijnen
+
+*Stand 19-11:* het kozijn met opbouw, vakken, draairichting en doorsnede is gebouwd (B34, B36, B37). Nog niet: gordijn-specifieke maten (rail, overlap, stapelruimte).
 **Waarom:** concrete klus; laat zien of foto + maat per kozijn genoeg is om gordijnen (rail, roede, stof) te bestellen.
 
 **Voorstel (aangepast na review, B26):** geen keuze bij de start. Kies je bij een detail *Raam*, dan biedt de app de gordijnmaten optioneel aan
@@ -423,6 +470,8 @@ De meetvelden komen in het bestaande detailpaneel (X4/hand, open vragen).
 **Klaar als:** in een echte kamer alle ramen met deze maten en foto's in het pakket staan en Ilona ze op kantoor kan uitlezen.
 
 ### P2 · Bemaatde kameruitslag als PDF, rechtstreeks uit het dossier
+
+*Stand 19-11:* als concept gebouwd (B35, B37): knop Tekeningen op kantoor, kameruitslag, wandafwikkeling, wandpagina's, Afdrukken / PDF. Nog niet: schaal 1:20/1:50 met schaalstok, onderhoek, A3.
 **Wat:** een A3- of A4-PDF met de plattegrond in het midden en de wanden eromheen "opengeklapt" (elke wand als aanzicht vanuit de kamer,
 met de vloerlijn tegen de rand van de plattegrond). Bart noemt dit *Europese projectie*; het is een kameruitslag / opengeklapte kamer.
 
@@ -511,6 +560,10 @@ Perspectief-correct plakken (homografie per vak i.p.v. affien), automatisch extr
 2. Kameruitslag: A3 of A4, en wil je de wandfoto als lichte onderlaag?
 3. Oorsprong: liever altijd de hoek bij de toegangsdeur of een gevelhoek?
 4. Een oude Opname-beta (2-11, "Kantoor", 6 wanden, zonder maten) omzetten of opnieuw rondlopen? (Advies: opnieuw rondlopen.)
+5. R1: is de 310 mm gemeten vanaf de voorkant van de aftimmering (zo vastgelegd) of vanaf de muur?
+6. Staat R3 op W3 (H3–H4) en de deur op W4 (H4–H1)? Zo staat het nu in de voorbeeldkamer.
+7. Vensterbank: als eigenschap van het kozijn (voorstel §12.3) of los blijven?
+8. Leidingen: is een "vrij te houden zone" (rechthoek + uitsteek) meestal genoeg, of wil je het tracé zien (§12.2)?
 
 **Voor een reviewer (Astra)**
 1. Klopt de keuze om het beeld (panorama) en het maatmodel strikt te scheiden, of mist er een koppeling die later nodig is voor CAD?
@@ -520,6 +573,9 @@ Perspectief-correct plakken (homografie per vak i.p.v. affien), automatisch extr
 4. Kameruitslag (P2): welke bemaatregels zijn gebruikelijk voor gordijnen- en interieurwerk (maatketens vanaf hoek, hoogtes vanaf afgewerkte vloer)?
 5. Is P2 (PDF uit de app) een goede tussenstap naar P3 (Vectorworks), of beter direct P3?
 6. Ziet u risico's in de privacy (foto's van woningen) en de opslag op de telefoon?
+7. §12: welke aanpak voor leidingwerk, plinten en sierlijsten is in de praktijk het snelst zonder maatfouten? Mist er een categorie?
+8. §11: kent u de precieze tekst van NEN-EN-ISO 7519 (draairichting ramen en deuren in aanzicht) en NEN 5152 (stopcontact/schakelaar)? Klopt onze keuze?
+9. Is de wandafwikkeling de juiste standaardweergave voor kamers met inspringende hoeken, of werkt u liever met losse aanzichten met aanzichtmarkeringen op de plattegrond (zoals de interior elevation viewports van Vectorworks)?
 
 ---
 
@@ -546,7 +602,8 @@ Perspectief-correct plakken (homografie per vak i.p.v. affien), automatisch extr
 | 18-11 | `62d3d14` | Meetresultaat 21:52 | proef Bart |
 | 18-11 | `4809f62` | Wandaanzicht met kozijn bematen | B32 |
 | 18-11 | `f5e9e8c` | Haaksheid ingeklapt onder Later | B33 |
-| 18-11 | (volgende) | Kozijn als opening met opbouw en vakken | B34 |
+| 18-11 | `d6a0124` | Kozijn als opening met opbouw en vakken | B34 |
+| 19-11 | (deze commit) | Tekenmodule, tekening als invoer, snelkeuze en varianten, kameruitslag/wandafwikkeling/PDF op kantoor, tekenstandaarden, denkstuk §12 | B35–B37 |
 
 Meer detail per brok: `VOORTGANG-OPNAME.md`. Volledige diff: draft-PR #5.
 
@@ -557,17 +614,125 @@ Meer detail per brok: `VOORTGANG-OPNAME.md`. Volledige diff: draft-PR #5.
 **Code (branch `ccr-6aed2904-q3dzlo`, repo `mtbart/MT-Facturatie-tool`)**
 - `docs/opname-ar-proef.html` — rondgang op de telefoon; rekenkern tussen `/*KERN-BEGIN*/` en `/*KERN-EINDE*/`
 - `docs/opname-ar-kijk.html` — kantoorkijker
-- `mt-ruimte-dossier.js` — dossier, lijnmodel, pakket
+- `mt-ruimte-dossier.js` — dossier, lijnmodel, wandaanzicht, maatketens, pakket
+- `mt-ruimte-tekening.js` — wandaanzicht, doorsnede, kameruitslag, wandafwikkeling (telefoon, kantoor en PDF)
 - `mt-opname-opslag.js`, `mt-opname-export.js` — bestaande opslag en zip (hergebruikt)
 - `docs/OPNAME-RONDGANG-START.md` — startinstructie
 - `VOORTGANG-OPNAME.md` — voortgang per brok
 
 **Tests**
-- `node test/opname-ar-proef.test.js` — rekenkern (74)
-- `node test/ruimte-dossier.test.js` — dossier en pakket (60)
-- `node test/ruimte-e2e.js <map>` — browser, nagebootste kamer (28); vereist `python3 -m http.server 8123` in de repo
+- `node test/opname-ar-proef.test.js` — rekenkern (77)
+- `node test/ruimte-dossier.test.js` — dossier en pakket (105)
+- `node test/ruimte-tekening.test.js` — tekenmodule met de voorbeeldkamer `test/ruimte-voorbeeldkamer.js` (25)
+- `node test/ruimte-e2e.js <map>` — browser, nagebootste kamer (55); vereist `python3 -m http.server 8123` in de repo
 - Opslagcontrole uit het werkpakket (5 scenario's); `node tools/check-sinks.js`, `node tools/check-verwijzingen.js`
 - Vast proefpakket: `test/fixtures/ruimte-proefpakket.zip` (nagebootste kamer, geen echte beelden)
 
 **Buiten de repo (SharePoint, lokaal)**: `OVERDRACHT-OPNAME-AR.md`, `OPNAME-AR-START-HIER.md`, `OPNAME-AR-REFERENTIE-LATER.md`,
 `opname-ar-controle-vw-export.py`, `opname-ar-controle-opslag.cjs`, `opname-ar.patch`.
+
+---
+
+## 11. Tekenstandaarden: wat is gebruikelijk en wat doen wij
+
+Bart vroeg of de aanzichten en de uitslag met een industriestandaard kunnen werken voor symbolen en maatvoering. Opgezocht op 19-11-2026. **Let op:** de
+normteksten zelf zijn betaald en niet geraadpleegd; hieronder staat wat uit openbare bronnen blijkt en wat gangbare praktijk is. Wat niet bevestigd is, staat erbij.
+
+| Onderwerp | Norm / praktijk | Wat wij doen | Zekerheid |
+|---|---|---|---|
+| Algemene weergave bouwtekeningen (lijndiktes, vereenvoudigde ramen en deuren) | NEN-EN-ISO 7519 (editie 2024 vervangt 1996) | Zichtbare contouren dik, maat- en hulplijnen dun, onderdelen vereenvoudigd als rechthoek met draairichting | Norm bestaat en gaat hierover; details niet nagelezen |
+| Maatvoering | NEN-ISO 129-1 (2018/2019), bouwkundige toleranties ISO 6284 | Maatlijn met schuine streepjes, maatgetal boven de lijn, staande maten leesbaar van rechts, kettingmaten die sluiten op de totaalmaat, alles in mm | Gangbare bouwkundige praktijk; normtekst niet nagelezen |
+| Draairichting raam/deur in aanzicht | Driehoek met de punt naar de scharnierkant; getrokken = naar de kijker toe, gestreept = van de kijker af | Zo getekend, gezien vanuit de kamer; **altijd met legenda** | De punt-naar-scharnier-afspraak geldt in het grootste deel van Europa en de VS, maar is in o.a. het VK en Australië omgekeerd; getrokken/gestreept wordt niet overal gelijk gebruikt. Bronnen raden daarom een legenda aan |
+| Elektra-symbolen | NEN 5152 (elektrotechnische symbolen voor installatietekeningen, afgeleid van IEC 60617) | **Niet** de schemasymbolen, maar de afdekplaat op schaal met het hart als maatpunt en de uitvoering in tekst (1×, 2×, 3×) | Bewuste keuze: voor een meubelmaker telt waar de plaat zit en hoe groot hij is. De precieze NEN 5152-tekens zijn niet gevonden; als ze gewenst zijn, kunnen ze in de plaat getekend worden |
+| Binnenaanzichten van een kamer | Per wand een aanzicht, met aanzichtmarkeringen op de plattegrond (Vectorworks: *interior elevation viewports*; ArchiCAD: *interior elevations*). Voor interieurwerk ook de afwikkeling: alle wanden naast elkaar | Per wand een pagina (W1…), de wandnaam staat in de plattegrond; kameruitslag bij eenvoudige kamers; wandafwikkeling altijd | Gangbare praktijk in CAD-pakketten |
+| "Europese projectie" | Eerste-hoekprojectie (ISO 5456-2 / ISO 128): aanzichten liggen om het hoofdaanzicht heen | De kameruitslag volgt dat idee voor een kamer van binnenuit: elke wand klapt om zijn vloerlijn naar buiten | Onze uitslag is een afgeleide vorm, geen genormeerde projectie |
+
+**Nog niet gedaan (voorstel):** schaal op de tekening (1:20 wand, 1:50 uitslag) met schaalstok; een onderhoek met project, ruimte, datum, opnemer en
+versie (NEN 2574 / ISO 7200); peilmaten ten opzichte van de afgewerkte vloer (P = 0) als alternatief voor hoogteketens; hartlijnen (streep-punt) bij
+stopcontacten en leidingen; lijndiktes volgens de norm.
+
+**Voor Vectorworks (P3):** dezelfde gegevens kunnen daar als interior elevation viewports met de eigen maatvoeringsstandaard van het bureau worden getekend.
+Onze PDF is dan de snelle werktekening uit de opname; de presentatietekening komt uit Vectorworks.
+
+Bronnen: [EN ISO 7519:2024](https://genorma.com/en/standards/en-iso-7519-2024) · [EN ISO 129-1:2019](https://genorma.com/en/standards/en-iso-129-1-2019) ·
+[draairichting-symbolen op aanzichten](https://cadblockdwg.com/blog/window-opening-symbols-on-elevations) ·
+[verschil per land, VisualARQ-forum](https://discourse.mcneel.com/t/opening-elevation-styles/178200) ·
+[NEN 5152](https://wiert.me/2025/06/24/nen-5152-wikipedia-technische-tekeningen-elektrotechnische-symbolen/) ·
+[Vectorworks interior elevation viewports](https://app-help.vectorworks.net/2024/eng/VW2024_Guide/Viewports1/Creating_interior_elevation_viewports.htm) ·
+[wandaanzichten in interieurprojecten](https://planoplan.com/en/blog/instructions/wall-elevations-in-interior-design-projects/)
+
+---
+
+## 12. Denkstuk: objecten in de werktekening, leidingwerk, plinten en sierlijsten
+
+Doel: alles wat een maatwerkmeubel in de weg kan zitten of waar het op moet aansluiten, staat na één rondgang op de goede plek in de werktekening, en
+het bematen kost zo min mogelijk handelingen. Dit hoofdstuk is bedoeld om op te reageren (Bart, Astra).
+
+### 12.1 Vier soorten dingen, elk met een eigen manier van vastleggen
+
+| Vorm | Voorbeelden | Vastleggen in fase 2 | Bematen in de wandtekening | Stand |
+|---|---|---|---|---|
+| **Punt** | stopcontact, schakelaar, thermostaat, doorvoer van een leiding | kruisje erop, Detail, één tik op de soort | hart vanaf de hoek + hoogte hart; uitvoering kiezen | gebouwd (B37) |
+| **Vlak** | kozijn, deur, radiator, nis, ventilatierooster, meterkast | kruisje op het midden, Detail, soort | vanaf hoek, breedte, hoogte, onderkant (+ opbouw bij een kozijn) | gebouwd (B34–B37) |
+| **Lijn langs de wand** | plint, sierlijst, plafondlijst, vensterbank, leiding langs de wand, koof | zie 12.2 en 12.3 | begin, eind, hoogte, uitsteek | deels: begin/eind per wand werkt, maar is omslachtig |
+| **Vorm van de wand zelf** | knik, kolom, balk, schuin dak, verlaagd plafond | knik/kolom/balk als onderdeel | afstand, breedte, diepte | knik/kolom/balk gebouwd; schuin dak nog niet |
+
+### 12.2 Leidingwerk: drie opties
+
+Een leiding is geen punt maar een route, en voor een meubel telt vooral: **waar moet ik vrij blijven en hoeveel**.
+
+1. **Vrij te houden zone (aanbevolen als standaard).** Een rechthoek op de wand (vanaf hoek, breedte, onderkant, hoogte) met één dieptemaat: de grootste
+   uitsteek inclusief beugels en isolatie. In de tekening een gearceerd vlak met "vrij 45". Snel (zelfde invoer als een radiator), en precies wat de
+   werkplaats nodig heeft om een uitsparing of een terugliggende rug te tekenen. Nadeel: je ziet niet hoe de leiding loopt.
+2. **Tracé met knikpunten.** In de rondgang tik je begin, elke bocht en het eind van de leiding aan (zoals de hoeken van de kamer). In de wandtekening een
+   lijn op het hart, met maten naar het hart bij begin, bocht en eind, plus diameter en uitsteek. Goed voor zichtbaar leidingwerk dat je wilt omkasten.
+   Nadeel: meer tikken, en de camera-plek van elk punt is een schatting die je moet nameten.
+3. **Doorvoerpunt (bestaat nu).** Alleen waar de leiding uit vloer, wand of plafond komt: hart, hoogte, diameter, uitsteek. Goed voor een cv-leiding
+   onder een radiator. Onvoldoende voor een leiding die een meter langs de wand loopt.
+
+Voorstel: 1 en 3 naast elkaar aanbieden ("Leiding: punt" en "Leiding: zone"), 2 pas bouwen als een echte klus erom vraagt. Altijd een foto erbij.
+
+### 12.3 Plinten, sierlijsten, plafondlijsten en vensterbanken
+
+Het probleem met de huidige aanpak (per wand begin en eind invullen): een plint loopt bijna altijd de hele kamer rond en stopt bij deuren. Dat per wand
+invoeren is dubbel werk en levert niets op.
+
+- **Plint, sierlijst en plafondlijst als eigenschap van de kamer.** Eén keer vastleggen: hoogte, dikte (uitsteek uit de wand), een foto van het profiel
+  en eventueel de afwerking. Standaard loopt hij over alle wanden; de app onderbreekt hem zelf bij deuren en bij nissen tot de vloer. Per wand kun je hem
+  uitzetten of een stuk uitzonderen (bijvoorbeeld achter een bestaande kast). In elk wandaanzicht wordt hij dan vanzelf getekend.
+  Wat de werkplaats nodig heeft: hoogte en dikte (kast over de plint heen, plint weghalen of uitsparen), en bij een plafondlijst de hoogte en uitsteek
+  (kast tot het plafond: lijst doorzetten of onderbreken).
+- **Het profiel zelf.** Voor het doorzetten van een bestaande sierlijst is de vorm nodig. Drie manieren: (a) foto recht van opzij met een maatlat erin,
+  (b) een profielkam (contourmal) fotograferen op ruitjespapier, (c) kiezen uit een lijst standaardprofielen. Voorstel: (a) nu, (c) later.
+- **Vensterbank als deel van het kozijn.** Bart beschrijft de onderkant van R2 en R3 als "bovenkant vensterbank": de vensterbank hoort bij het kozijn.
+  Voorstel: bij het kozijn een vinkje "vensterbank" met dikte, uitsteek uit de wand en overstek links en rechts; de bovenkant is de onderkant van de
+  opening. Dat scheelt een los onderdeel met vijf maten. De losse vensterbank blijft bestaan voor een doorlopend blad onder meerdere ramen.
+
+### 12.4 Automatisch object in de werktekening: hoe ver kan dat gaan
+
+- **Nu (B37):** jij wijst aan en kiest de soort; de plek komt van de camera (schatting), de maat van jou.
+- **Stap 2, herkennen op de foto (AI):** de detailfoto gaat naar een beeldmodel dat de soort en uitvoering voorstelt ("dubbel stopcontact", "paneelradiator
+  type 22") en bij een stopcontact of radiator ook de omtrek. Jij bevestigt met één tik. De maat blijft van de X4 of de duimstok; een camera-maat blijft grijs.
+  Aandachtspunt: foto's van een woning naar een dienst sturen vraagt een bewuste keuze (privacy) en werkt niet zonder internet.
+- **Stap 3, afmeting uit de foto:** met de bekende plek van de wand en de camerastand is uit de detailfoto een breedte en hoogte te schatten (zoals de
+  hoekcorrectie nu werkt). Bruikbaar als controle op een getypte maat (waarschuwen bij een verschil > 5 %), niet als maat.
+- **Wat de telefoon zelf al kan:** ARCore herkent vlakken, geen stopcontacten. Een iPhone met LiDAR (RoomPlan) herkent wel ramen, deuren en openingen
+  met een grove maat; dat vraagt een eigen iOS-app (P8).
+
+### 12.5 Wat nog ontbreekt voor een maatwerkkast
+
+- **Schuin dak en verlaagd plafond:** een wand die niet rechthoekig is (kniehoogte, dakhelling, koof). Het aanzicht moet een veelhoek kunnen zijn.
+- **Vloer en plafond:** hoogteverschil in de vloer (waterpas), plafond dat afloopt, spots, rookmelder, verdeler van de vloerverwarming. Voorstel: een
+  plafond- en een vlooraanzicht met dezelfde invoer.
+- **Wand niet vlak of niet te lood:** bol/hol en uit het lood per wand (drie hoogtes meten), belangrijk voor een kast die strak tegen de wand moet.
+- **Diepte in de kamer:** hoe ver steekt de radiator of vensterbank uit; staat nu als "uitsteek" bij het onderdeel, maar is niet te zien in een tekening.
+  Voorstel: een bovenaanzicht per wand (strook van 300 mm) met de uitsteek van elk onderdeel.
+
+### 12.6 Vragen om over mee te denken
+
+1. Leidingen: is de vrij te houden zone in de praktijk genoeg, of leidt dat tot te ruime uitsparingen?
+2. Plint/lijst als kamereigenschap: zijn er situaties waarin dat fout gaat (verschillende plinten per wand, plint die om een schouw loopt)?
+3. Welke uitvoeringen ontbreken in de lijsten (§B37)? Bijvoorbeeld opbouw tegenover inbouw bij stopcontacten: opbouw steekt uit en heeft een andere maat.
+4. Is "hart" altijd het juiste maatpunt voor een stopcontact, of wil de werkplaats de zijkanten van de plaat?
+5. Hoe leg je het snelst vast wat achter een toekomstige kast bereikbaar moet blijven (stopcontact, afsluiter, luik)?
+6. Volgorde: eerst alle objecten aanwijzen en dan per wand bematen (nu), of per wand afmaken? Wat geeft de minste fouten?
