@@ -282,3 +282,12 @@ de opslagcontrole uit het pakket (5 scenario's), alle bestaande opname-tests, `c
 in het detailpaneel, toetsenbord in de AR-overlay), opslag op een echt volle telefoon, geweigerde cameratoestemming, de kijker op een echte kantoor-pc met een groot pakket.
 **Niet gebouwd**: iPhone/RoomPlan en Nomad-import (zie startinstructie), een kijkpunt automatisch bijmaken bij een andere zichtlijn (nu: kijkpunten uit de standpunten),
 onscherp beeld vervangen, bolle wand met tussenpunten en zijdelingse afwijking, meethoogte per vrije-breedtemaat, integratie in het Meer-menu van mobiel.html.
+
+**Vervolg 18-11 (feedback Bart na de eerste proef op de S24)**
+- Draadmodel weer centraal: de door ARCore gevonden vlakken staan standaard uit beeld (knop Vlakken), maar worden wel als ruw scanvoorstel bewaard.
+- Na heropenen (tabblad per ongeluk dicht) kan Wanden aan elkaar plakken weer: de beelden komen uit de opslag.
+- Bij elke getikte hoek een scherpe foto met de plek van de tik erop; omhoog richten boven de hoek geeft vanzelf een plafondfoto. Knop Foto voor een hele wand
+  (herkent welke wand en of hij helemaal in beeld is; telt dubbel in het panorama). Hoeken nakijken: de echte hoek op de foto aantikken, `AR.hoekUitFoto` rekent de plek
+  op vloer of plafond uit, `D.corrigeerHoek` bewaart de tik (`xr_ruw`, archief) en kan terug. Kijker: hoekmarkeringen met foto, rood = getikt, groen = gecorrigeerd.
+  Later: dezelfde foto's en standen kunnen een automatische hoekherkenning (AI) voeden; het datamodel heeft daarvoor `correctie.bron = 'ai'`.
+- Tests: AR-kern 74, dossier 60, e2e 28 (o.a. hoek 72 mm naast de echte hoek getikt, na één tik op de foto binnen 2 mm).

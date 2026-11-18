@@ -14,15 +14,21 @@ alleen op de werkbranch.
    - **het draadmodel** (groene vloerlijn, witte staanders, oranje plafondlijn zodra het plafond bekend is): de wanden die jij hebt bevestigd door de hoeken te tikken;
    - **Vlakken** (knop bovenin, standaard uit): toont ook de vlakken die de telefoon zelf herkent als blauwe lijnen. Ze worden altijd als ruw scanvoorstel bewaard;
    - **plattegrondje linksonder**: rode stip = jij, de ring eromheen = richtingen waar al beeld van is (groen) of nog niet (grijs), ▲ ▼ = omhoog en omlaag.
-4. De beelden voor het rondkijken worden vanzelf verzameld. Sta je even stil en ontbreekt er rond die plek echt een richting, dan
+4. **Bij elke hoek gaat er vanzelf een scherpe foto.** Richt daarna even omhoog, recht boven die hoek: dan gaat er ook een foto van de plafondhoek
+   (je voelt een korte tril). Overslaan mag: tik gewoon de volgende hoek.
+5. **Foto** (knop rechts van de duimknop): ga zo staan dat een hele wand in beeld is en druk. Je ziet of de hele wand erop stond; die foto gaat in het
+   panorama voor. De vakjes op de muur kleuren groen waar beeld is.
+6. De beelden voor het rondkijken worden vanzelf verzameld. Sta je even stil en ontbreekt er rond die plek echt een richting, dan
    verschijnt bijvoorbeeld *"Draai hier even naar links en omhoog"*. Geen aparte panoramaronde nodig.
-5. **Detail** (knop links van de duimknop): richt het kruisje op het onderdeel (bijv. het hart van een cv-leiding) en druk. De telefoon
+7. **Detail** (knop links van de duimknop): richt het kruisje op het onderdeel (bijv. het hart van een cv-leiding) en druk. De telefoon
    maakt een scherpe foto en koppelt het detail aan de wand en hoogte onder het kruisje. Kies de soort, kies vanaf welke binnenhoek je meet,
    en vul de maten in. Het **oranje veld** is waar de DISTO X4 (als toetsenbord) zijn maat neerzet; Enter gaat naar het volgende veld.
    Een veld leeg laten = open vraag. Tik **Klaar**.
-6. Tik **Klaar** bovenin als de kamer rond is. Vul daarna de wandmaten, de plafondhoogte en een controlemaat (diagonaal) in.
+8. Tik **Klaar** bovenin als de kamer rond is. Vul daarna de wandmaten, de plafondhoogte en een controlemaat (diagonaal) in.
    Onder **Nog open vóór vertrek** staat wat nog ontbreekt.
-7. **Wanden aan elkaar plakken** maakt de wandbeelden; **Pakket maken (zip)** of **Pakket delen** levert het bestand voor kantoor.
+9. **Hoeken nakijken**: open per hoek de foto en tik de echte hoek aan (rood = waar je tikte). De app rekent de plek om; de tik blijft bewaard en
+   kan terug. Daarna opnieuw **Wanden aan elkaar plakken**.
+10. **Wanden aan elkaar plakken** maakt de wandbeelden; **Pakket maken (zip)** of **Pakket delen** levert het bestand voor kantoor.
 
 Alles wordt tijdens de rondgang al op de telefoon bewaard (je ziet "Veilig bewaard: …"). Gaat er iets mis met opslaan, dan verschijnt
 een rode melding met **Opnieuw proberen**. Pagina dicht of telefoon uit: open de pagina opnieuw, kies de ruimte onder
@@ -34,10 +40,11 @@ lukt dat niet, kies **Apart**: die rondgang wordt dan apart bewaard en niet same
 1. Open de kantoorpagina en kies **Bestand kiezen** → het zip-pakket.
 2. **Slepen** = rondkijken, **scrollen** (of + en −) = zoomen, **pijltjes/WASD** = lopen, **Van boven** = poppenhuis.
 3. **Witte rondjes** in beeld en **blauwe stippen** op de plattegrond zijn kijkpunten: klik om daar te gaan staan.
-4. **Gekleurde labels** zijn details (rood = installatie, blauw = bouwdeel, bruin = afwerking, grijs = meubel, paars = kleur/textuur;
+4. **Groene labels H1, H2, …** zijn de hoeken: klik voor de hoekfoto met de getikte (rood) en gecorrigeerde (groen) plek.
+5. **Gekleurde labels** zijn details (rood = installatie, blauw = bouwdeel, bruin = afwerking, grijs = meubel, paars = kleur/textuur;
    een vraagteken = er staat nog iets open). Klik voor de originele foto, de maten met bron (DISTO X4, handmaat, camera), status en tijd,
    de rode maatlijnen op de wand en de open vragen. Sluiten laat de kijkrichting staan.
-5. **Dossier** toont het lijnmodel in mm (oorsprong, assen, wandlengtes met status), de controlematen, alle onderdelen per groep,
+6. **Dossier** toont het lijnmodel in mm (oorsprong, assen, wandlengtes met status), de controlematen, alle onderdelen per groep,
    opmerkingen, open vragen en de rondgangen (toestel, beelden, hoe vaak getikt en hoe vaak de camera iets zelf vond, trackingverlies).
    Op stukken wand zonder beeld staat een oranje arcering: dat is een gat, geen kleur van de muur.
 

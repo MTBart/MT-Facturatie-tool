@@ -157,6 +157,33 @@
     return d.hoeken;
   };
 
+  // ── hoek corrigeren vanuit een foto ── De getikte plek (uit de hand, met de camera) blijft bewaard in xr_ruw en in het archief; de hoek krijgt de plek die de
+  // opnemer (of later een herkenning) op de foto aanwees. info: { bron: 'foto' | 'ai', beeld_id, punt: {x, y} (fractie van de foto), door }.
+  D.corrigeerHoek = function (d, hoekId, xz, info, nu) {
+    const h = lijst(d.hoeken).find(x => x.id === hoekId); if (!h || !xz) return null;
+    d.archief.push({ soort: 'hoek-correctie', tijd: isoNu(nu), hoek: JSON.parse(JSON.stringify(h)) });
+    if (!h.xr_ruw) h.xr_ruw = { x: h.xr.x, z: h.xr.z };
+    h.xr = { x: Number(xz.x), z: Number(xz.z) };
+    h.status = 'gecorrigeerd'; h.bron = (info && info.bron) || 'foto';
+    h.correctie = { bron: h.bron, beeld_id: info && info.beeld_id || null, punt: info && info.punt || null, door: info && info.door || 'opnemer', tijd: isoNu(nu),
+      verschuiving_mm: Math.round(Math.hypot(h.xr.x - h.xr_ruw.x, h.xr.z - h.xr_ruw.z) * 1000) };
+    d.bijgewerkt = isoNu(nu); return h;
+  };
+  D.herstelHoek = function (d, hoekId, nu) {
+    const h = lijst(d.hoeken).find(x => x.id === hoekId); if (!h || !h.xr_ruw) return null;
+    d.archief.push({ soort: 'hoek-correctie-teruggezet', tijd: isoNu(nu), hoek: JSON.parse(JSON.stringify(h)) });
+    h.xr = { x: h.xr_ruw.x, z: h.xr_ruw.z }; h.status = 'geschat'; h.bron = 'ar'; delete h.correctie; delete h.xr_ruw;
+    d.bijgewerkt = isoNu(nu); return h;
+  };
+  // Foto's die tijdens het tikken bij een hoek zijn gemaakt (hoekfoto en plafondfoto) koppelen aan de hoek-id's zodra de hoeken bestaan.
+  D.koppelHoekfotos = function (d) {
+    lijst(d.beelden).forEach(b => {
+      if ((b.soort !== 'hoek' && b.soort !== 'plafondhoek') || b.hoek_id || b.vervallen || b.hoek_index == null) return;
+      const h = lijst(d.hoeken)[b.hoek_index]; if (!h || (b.sessie && h.sessie && b.sessie !== h.sessie)) return;
+      b.hoek_id = h.id; h.foto_ids = h.foto_ids || []; if (h.foto_ids.indexOf(b.id) < 0) h.foto_ids.push(b.id);
+    });
+  };
+
   // ── metingen ── doel: { soort: 'wand'|'detail'|'ruimte'|'diagonaal', id }. Een nieuwe waarde voor hetzelfde doel en veld vervangt de vorige (die blijft bestaan).
   D.voegMetingToe = function (d, m, nu) {
     const veld = D.VELDEN[m.veld] || {}, vorige = D.huidigeMeting(d, m.doel && m.doel.id, m.veld, m.doel && m.doel.extra);
@@ -223,6 +250,7 @@
       pose: b.pose || null, breedte: b.breedte || null, hoogte: b.hoogte || null, bytes: b.bytes || null, sha256: b.sha256 || null,
       detail_id: b.detail_id || null, wand_id: b.wand_id || null, bewaard: !!b.bewaard
     };
+    ['hoek_index', 'hoek_id', 'punt_xr', 'punt_in_beeld', 'wand_nr', 'heel_in_beeld', 'hoogte_schatting_m'].forEach(k => { if (b[k] != null) rec[k] = b[k]; });
     d.beelden.push(rec); d.bijgewerkt = isoNu(nu); return rec;
   };
 

@@ -100,6 +100,21 @@ const jpg = n => Uint8Array.from([0xFF, 0xD8, 0xFF, 0xE0, n & 255, (n >> 8) & 25
   D.zetHoeken(d, s1.id, P.map(p => ({ x: p.x, z: p.z + 0.02 })), NU);
   check('na correctie van de omtrek: zelfde wand-id en het detail wijst er nog naar', d.wanden[4].id === wids[4] && leiding.wand_id === wids[4] && D.metingenVan(d, leiding.id).length === 3);
 
+  // ── hoekfoto's koppelen en een hoek corrigeren vanuit de foto ──
+  {
+    const e = D.nieuw({}, NU), s = D.startSessie(e, {}, NU);
+    const f1 = D.voegBeeldToe(e, { soort: 'hoek', sessie: s.id, hoek_index: 1, punt_xr: { x: 4, y: 0, z: 0 }, punt_in_beeld: { x: 0.5, y: 0.6 }, bewaard: true }, NU);
+    const f2 = D.voegBeeldToe(e, { soort: 'plafondhoek', sessie: s.id, hoek_index: 1, bewaard: true }, NU);
+    const f3 = D.voegBeeldToe(e, { soort: 'hoek', sessie: s.id, hoek_index: 3, vervallen: true, bewaard: true }, NU); f3.vervallen = true;
+    D.zetHoeken(e, s.id, [{ x: 0, z: 0 }, { x: 4.03, z: 0.02 }, { x: 4, z: 3 }, { x: 0, z: 3 }], NU); D.koppelHoekfotos(e);
+    const h2 = e.hoeken[1];
+    check('hoekfoto en plafondfoto aan H2 gekoppeld; een vervallen tik niet', h2.foto_ids.length === 2 && f1.hoek_id === h2.id && f2.hoek_id === h2.id && !f3.hoek_id && f1.punt_in_beeld.y === 0.6);
+    D.corrigeerHoek(e, h2.id, { x: 4, z: 0 }, { bron: 'foto', beeld_id: f1.id, punt: { x: 0.48, y: 0.61 } }, NU);
+    check('correctie: nieuwe plek, ruwe tik bewaard, verschuiving in mm', h2.status === 'gecorrigeerd' && h2.xr.x === 4 && h2.xr_ruw.x === 4.03 && h2.correctie.verschuiving_mm === 36 && e.archief.some(a => a.soort === 'hoek-correctie'));
+    D.herstelHoek(e, h2.id, NU);
+    check('correctie terugzetten geeft de getikte plek terug', h2.xr.x === 4.03 && !h2.correctie && h2.status === 'geschat');
+  }
+
   // ── pakket heen en terug ──
   const bestanden = {}; bestanden[foto.pad] = jpg(1);
   const ov1 = D.voegBeeldToe(d, { soort: 'overzicht', sessie: s1.id, pose: { pos: [0, 0, 0], dir: [0, 0, -1], pv: new Array(16).fill(0) }, bewaard: true }, NU);

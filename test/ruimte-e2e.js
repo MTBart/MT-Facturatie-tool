@@ -71,7 +71,16 @@ window.renderKamer = function (cam, w, h, fovy) {
     }
     const foto = await R({ x: 2.5, y: 0.9, z: 2.3, yaw: Math.PI, pitch: -0.4 }, 720, 1560, 60 * Math.PI / 180);
     const foto2 = await R({ x: 3.0, y: 1.0, z: 0.8, yaw: 0, pitch: -0.3 }, 720, 1560, 60 * Math.PI / 180);
-    const dets = window.arProef.proefRondgang({ punten: [{ x: 0, z: 0 }, { x: 4, z: 0 }, { x: 4, z: 3 }, { x: 0, z: 3 }], vloerY: 0, plafondY: 2.6, beelden,
+    // bij elke hoek een foto (van 1,3 m binnen de kamer op de vloerhoek gericht); de wandfoto van W3 liggend vanaf de overkant
+    const echt = [[0, 0], [4, 0], [4, 3], [0, 3]], hoekBeelden = [];
+    for (const [X, Z] of echt) {
+      const dx = 2 - X, dz = 1.5 - Z, L = Math.hypot(dx, dz), px = X + dx / L * 1.3, pz = Z + dz / L * 1.3;
+      const ux = X - px, uz = Z - pz, h = Math.hypot(ux, uz);
+      hoekBeelden.push(await R({ x: px, y: 1.45, z: pz, yaw: Math.atan2(ux, -uz), pitch: Math.atan2(-1.45, h) }, 600, 1300, 60 * Math.PI / 180));
+    }
+    const wandBeelden = [await R({ x: 2, y: 1.3, z: 0.2, yaw: Math.PI, pitch: 0 }, 1000, 560, 64 * Math.PI / 180)];
+    // H2 is 'uit de hand' 6 cm en 4 cm naast de echte hoek getikt; de foto's tonen de echte kamer
+    const dets = window.arProef.proefRondgang({ punten: [{ x: 0, z: 0 }, { x: 4.06, z: 0.04 }, { x: 4, z: 3 }, { x: 0, z: 3 }], vloerY: 0, plafondY: 2.6, beelden, hoekBeelden, wandBeelden,
       details: [{ anker: { wand_nr: 2, u: 2.45, v: 0.26 }, soort: 'leiding', foto: foto.blob, pose: { pos: foto.pos, dir: foto.dir, pv: foto.pv }, w: 720, h: 1560 },
         { anker: { wand_nr: 0, u: 1.02, v: 0.29 }, soort: 'stopcontact', foto: foto2.blob, pose: { pos: foto2.pos, dir: foto2.dir, pv: foto2.pv }, w: 720, h: 1560 }] });
     return dets.map(d => d.id);
@@ -118,6 +127,18 @@ window.renderKamer = function (cam, w, h, fovy) {
   await p.click('#dp-klaar');
   const m = await p.evaluate(id => { const D = window.MTRuimteDossier, d = window.arProef.dossier(); return ['hoogte_hart', 'afstand_hart_tot_hoek', 'uitsteek_max'].map(f => { const x = D.huidigeMeting(d, id, f); return x ? [x.bron, x.status, x.waarde_mm] : null; }); }, details[0]);
   check('leiding: X4-maat, handmaat en open maat', m[0][0] === 'disto' && m[0][2] === 262 && m[1][0] === 'hand' && m[1][2] === 1550 && m[2] === null, JSON.stringify(m));
+  // hoekfoto's, wandfoto en hoek nakijken op de foto
+  const hf = await p.evaluate(() => { const d = window.arProef.dossier(); return { hoek: d.beelden.filter(b => b.soort === 'hoek' && b.hoek_id).length, per: d.hoeken.map(h => (h.foto_ids || []).length), wand: d.beelden.filter(b => b.soort === 'wand').map(b => [b.wand_id === d.wanden[2].id, b.heel_in_beeld]) }; });
+  check('bij elke hoek een foto, gekoppeld aan de hoek', hf.hoek === 4 && hf.per.every(n => n === 1), JSON.stringify(hf));
+  check('wandfoto herkend als W3, hele wand in beeld', hf.wand.length === 1 && hf.wand[0][0] && hf.wand[0][1], JSON.stringify(hf.wand));
+  await p.click('#d-hoeken li:nth-child(2) button');
+  await p.waitForFunction(() => { const im = document.querySelector('#d-paneel img'); return im && im.complete && im.naturalWidth > 0; }, null, { timeout: 10000 });
+  await p.screenshot({ path: path.join(UIT, 's24-08-hoek-nakijken.png') });
+  const doel = await p.evaluate(() => { const d = window.arProef.dossier(), h = d.hoeken[1], b = d.beelden.find(x => x.id === h.foto_ids[0]), q = window.arProef.AR.projecteer(b.pose.pv, 4, 0, 0), r = document.querySelector('#d-paneel img').getBoundingClientRect(); return { x: r.left + q.x * r.width, y: r.top + q.y * r.height }; });
+  await p.mouse.click(doel.x, doel.y);
+  await p.click('#d-paneel .knop.hoofd');
+  const hc = await p.evaluate(() => { const h = window.arProef.dossier().hoeken[1]; return { st: h.status, x: h.xr.x, z: h.xr.z, mm: h.correctie && h.correctie.verschuiving_mm, ruw: h.xr_ruw }; });
+  check('hoek op de foto gecorrigeerd naar de echte hoek; tik bewaard', hc.st === 'gecorrigeerd' && Math.abs(hc.x - 4) < 0.02 && Math.abs(hc.z) < 0.02 && hc.ruw.x === 4.06 && Math.abs(hc.mm - 72) < 15, JSON.stringify(hc));
   const wm = await p.evaluate(() => { const D = window.MTRuimteDossier, d = window.arProef.dossier(); return d.wanden.map(w => D.huidigeMeting(d, w.id, 'lengte')).map(x => x && x.bron); });
   check('wandmaten: hand, X4, hand, X4 herkend', JSON.stringify(wm) === JSON.stringify(['hand', 'disto', 'hand', 'disto']), JSON.stringify(wm));
   // panorama plakken (maakt de wandbeelden en bewaart ze)
@@ -204,7 +225,7 @@ window.renderKamer = function (cam, w, h, fovy) {
   check('detail en foto openen en sluiten op dezelfde kijkrichting', camVoor === camNa);
   // ander kijkpunt: achter het obstakel
   const kp = await k.evaluate(() => window.kijkProef.kijkpunten().map(q => [q.x.toFixed(1), q.z.toFixed(1), q.n]));
-  check('drie kijkpunten herkend', kp.length === 3, JSON.stringify(kp));
+  check('vier kijkpunten herkend (drie rondgang, één wandfoto)', kp.length === 4, JSON.stringify(kp));
   await k.evaluate(() => { const c = window.kijkProef.cam; c.x = 2.9; c.z = 1.4; c.yaw = -Math.PI / 2 - 0.3; c.pitch = -0.3; window.kijkProef.teken(); });
   await k.waitForTimeout(150);
   const kpKnop = await k.$('.merk.kijkpunt:not([hidden])');

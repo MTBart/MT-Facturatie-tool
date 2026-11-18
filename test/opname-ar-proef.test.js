@@ -111,6 +111,25 @@ check('afwijking van haaks over de bijna-haakse hoeken', ha && ha.aantal === 3 &
   check('vlakSegment: wandvlak van bovenaf 3 m lang', sg && Math.abs(sg.lengte - 3) < 1e-9 && sg.y1 === 2.4 && Math.abs(sg.a.x) < 1e-9 && Math.abs(sg.b.x - 3) < 1e-9);
 }
 
+// Hoek op de foto aanwijzen: projecteren en terugrekenen geeft hetzelfde punt; wand helemaal in beeld
+{
+  const mulM = (a, b) => { const o = new Array(16); for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + r] * b[c * 4 + k]; o[c * 4 + r] = s; } return o; };
+  const pvVan = (e, yaw, pitch, fov, asp) => {
+    const f = [Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)], x = [Math.cos(yaw), 0, Math.sin(yaw)];
+    const z = [-f[0], -f[1], -f[2]], y = [z[1] * x[2] - z[2] * x[1], z[2] * x[0] - z[0] * x[2], z[0] * x[1] - z[1] * x[0]], d = (p, q) => p[0] * q[0] + p[1] * q[1] + p[2] * q[2];
+    const t = 1 / Math.tan(fov / 2), n = 0.05, fa = 100, P = [t / asp, 0, 0, 0, 0, t, 0, 0, 0, 0, (fa + n) / (n - fa), -1, 0, 0, 2 * fa * n / (n - fa), 0];
+    return mulM(P, [x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -d(x, e), -d(y, e), -d(z, e), 1]);
+  };
+  const pv = pvVan([1.2, 1.4, 1.5], 0.4, -0.5, 1.1, 0.46), hoek = { x: 1.9, y: 0, z: 0.1 }, q = AR.projecteer(pv, hoek.x, hoek.y, hoek.z);
+  const terug = q && AR.hoekUitFoto(pv, q.x, q.y, 0);
+  check('hoek op de foto terug naar de vloer: zelfde punt', terug && Math.abs(terug.x - hoek.x) < 1e-6 && Math.abs(terug.z - hoek.z) < 1e-6, terug && JSON.stringify(terug));
+  const plaf = { x: 2.2, y: 2.6, z: 0.3 }, pv2 = pvVan([1.6, 1.4, 1.2], 0.6, 0.8, 1.1, 0.46), q2 = AR.projecteer(pv2, plaf.x, plaf.y, plaf.z), t2 = q2 && AR.hoekUitFoto(pv2, q2.x, q2.y, 2.6);
+  check('plafondhoek op de foto terug naar het plafond: zelfde punt', t2 && Math.abs(t2.x - plaf.x) < 1e-6 && Math.abs(t2.z - plaf.z) < 1e-6);
+  const W = AR.wanden3d([{ x: 0, z: 0 }, { x: 4, z: 0 }, { x: 4, z: 3 }, { x: 0, z: 3 }], true, 0, 2.6);
+  const ver = pvVan([2, 1.4, 6.5], 0, 0, 1.2, 0.75), dicht = pvVan([2, 1.4, 1.2], 0, 0, 1.2, 0.75);
+  check('wandInBeeld: van ver weg past wand 1 helemaal, van dichtbij niet', AR.wandInBeeld(ver, W[0]) === 1 && AR.wandInBeeld(dicht, W[0]) < 0.8, AR.wandInBeeld(dicht, W[0]).toFixed(2));
+}
+
 // Rechtzetten en de schuine wand op de eigen maten zetten
 {
   // de echte proef van 17-11 (7 hoeken, schuine knik bij H2-H3), met de eigen maten

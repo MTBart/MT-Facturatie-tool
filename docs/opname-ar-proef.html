@@ -126,7 +126,8 @@ dd{margin:0;font-variant-numeric:tabular-nums}
 .bewaard.fout{color:var(--rood)}
 #ar-detail{position:absolute;left:8px;right:8px;top:calc(96px + env(safe-area-inset-top, 0px));bottom:calc(132px + env(safe-area-inset-bottom, 0px));overflow:auto;background:rgba(250,252,250,.97);color:#16211a;border-radius:14px;padding:12px;pointer-events:auto}
 #ar-detail .dpaneel .chips button{color:#16211a}
-#ar-laag .onder button.klein2{width:76px}
+#ar-laag .onder button.klein2{width:64px;font-size:14px;padding:0 4px}
+#ar-laag .onder{gap:6px}
 #ar-bewaard{font-size:13px;opacity:.95}
 #ar-doel{font-size:14px;color:#9ff0c0}
 #ar-kaart{position:absolute;left:10px;bottom:calc(140px + env(safe-area-inset-bottom, 0px));width:136px;height:136px;border-radius:12px;background:rgba(10,20,14,.6);border:1px solid rgba(255,255,255,.4)}
@@ -205,6 +206,9 @@ dd{margin:0;font-variant-numeric:tabular-nums}
     </div>
     <div class="maatrij"><span>Gemeten afstand</span><input id="d-diag" inputmode="decimal" autocomplete="off" aria-label="Controlemaat in mm"></div>
     <div id="d-controle"></div>
+    <h2>Hoeken nakijken</h2>
+    <p class="zacht">Bij elke getikte hoek is een foto gemaakt. Wijs op de foto de echte hoek aan; de getikte plek blijft bewaard.</p>
+    <ul class="lijst" id="d-hoeken"></ul>
     <h2>Details en opmerkingen</h2>
     <ul class="lijst" id="d-details"></ul>
     <div class="rij">
@@ -260,6 +264,7 @@ dd{margin:0;font-variant-numeric:tabular-nums}
     <button id="k-weg" class="klein2" disabled>Terug</button>
     <button id="k-detail" class="klein2" aria-label="Detail vastleggen op het kruisje">Detail</button>
     <button id="k-hoek" class="duim" aria-label="Hoek vastleggen">Hoek</button>
+    <button id="k-wandfoto" class="klein2" aria-label="Foto van de hele wand">Foto</button>
     <button id="k-modus" class="klein2">Plafond</button>
   </div>
 </div>
@@ -478,6 +483,7 @@ var AR = (function () {
       var cs = cellenPerWand[k];
       for (var i = 0; i < cs.length; i++) {
         var sc = AR.celScore(f, wanden[k], cs[i]);
+        if (sc > 0 && f.wandfoto) sc *= 2;   // een bewust gemaakte wandfoto (scherp, hele wand) gaat voor
         if (sc > cs[i].score && !AR.verstopt(f, wanden, k, AR.wandPunt(wanden[k], (cs[i].u0 + cs[i].u1) / 2, 0))) { cs[i].score = sc; cs[i].beste = idx; }
       }
     }
@@ -575,6 +581,58 @@ var AR = (function () {
     cx /= pts.length; cz /= pts.length;
     pts.forEach(function (p) { var t = (p.x - cx) * ux + (p.z - cz) * uz; lo = Math.min(lo, t); hi = Math.max(hi, t); });
     return { a: { x: cx + ux * lo, z: cz + uz * lo }, b: { x: cx + ux * hi, z: cz + uz * hi }, y0: y0, y1: y1, lengte: hi - lo };
+  };
+  // Inverse van een 4x4-matrix (kolom-volgorde). null als hij niet omkeerbaar is.
+  AR.inverse4 = function (m) {
+    var i = new Array(16);
+    i[0] = m[5] * m[10] * m[15] - m[5] * m[11] * m[14] - m[9] * m[6] * m[15] + m[9] * m[7] * m[14] + m[13] * m[6] * m[11] - m[13] * m[7] * m[10];
+    i[4] = -m[4] * m[10] * m[15] + m[4] * m[11] * m[14] + m[8] * m[6] * m[15] - m[8] * m[7] * m[14] - m[12] * m[6] * m[11] + m[12] * m[7] * m[10];
+    i[8] = m[4] * m[9] * m[15] - m[4] * m[11] * m[13] - m[8] * m[5] * m[15] + m[8] * m[7] * m[13] + m[12] * m[5] * m[11] - m[12] * m[7] * m[9];
+    i[12] = -m[4] * m[9] * m[14] + m[4] * m[10] * m[13] + m[8] * m[5] * m[14] - m[8] * m[6] * m[13] - m[12] * m[5] * m[10] + m[12] * m[6] * m[9];
+    i[1] = -m[1] * m[10] * m[15] + m[1] * m[11] * m[14] + m[9] * m[2] * m[15] - m[9] * m[3] * m[14] - m[13] * m[2] * m[11] + m[13] * m[3] * m[10];
+    i[5] = m[0] * m[10] * m[15] - m[0] * m[11] * m[14] - m[8] * m[2] * m[15] + m[8] * m[3] * m[14] + m[12] * m[2] * m[11] - m[12] * m[3] * m[10];
+    i[9] = -m[0] * m[9] * m[15] + m[0] * m[11] * m[13] + m[8] * m[1] * m[15] - m[8] * m[3] * m[13] - m[12] * m[1] * m[11] + m[12] * m[3] * m[9];
+    i[13] = m[0] * m[9] * m[14] - m[0] * m[10] * m[13] - m[8] * m[1] * m[14] + m[8] * m[2] * m[13] + m[12] * m[1] * m[10] - m[12] * m[2] * m[9];
+    i[2] = m[1] * m[6] * m[15] - m[1] * m[7] * m[14] - m[5] * m[2] * m[15] + m[5] * m[3] * m[14] + m[13] * m[2] * m[7] - m[13] * m[3] * m[6];
+    i[6] = -m[0] * m[6] * m[15] + m[0] * m[7] * m[14] + m[4] * m[2] * m[15] - m[4] * m[3] * m[14] - m[12] * m[2] * m[7] + m[12] * m[3] * m[6];
+    i[10] = m[0] * m[5] * m[15] - m[0] * m[7] * m[13] - m[4] * m[1] * m[15] + m[4] * m[3] * m[13] + m[12] * m[1] * m[7] - m[12] * m[3] * m[5];
+    i[14] = -m[0] * m[5] * m[14] + m[0] * m[6] * m[13] + m[4] * m[1] * m[14] - m[4] * m[2] * m[13] - m[12] * m[1] * m[6] + m[12] * m[2] * m[5];
+    i[3] = -m[1] * m[6] * m[11] + m[1] * m[7] * m[10] + m[5] * m[2] * m[11] - m[5] * m[3] * m[10] - m[9] * m[2] * m[7] + m[9] * m[3] * m[6];
+    i[7] = m[0] * m[6] * m[11] - m[0] * m[7] * m[10] - m[4] * m[2] * m[11] + m[4] * m[3] * m[10] + m[8] * m[2] * m[7] - m[8] * m[3] * m[6];
+    i[11] = -m[0] * m[5] * m[11] + m[0] * m[7] * m[9] + m[4] * m[1] * m[11] - m[4] * m[3] * m[9] - m[8] * m[1] * m[7] + m[8] * m[3] * m[5];
+    i[15] = m[0] * m[5] * m[10] - m[0] * m[6] * m[9] - m[4] * m[1] * m[10] + m[4] * m[2] * m[9] + m[8] * m[1] * m[6] - m[8] * m[2] * m[5];
+    var det = m[0] * i[0] + m[1] * i[4] + m[2] * i[8] + m[3] * i[12];
+    if (Math.abs(det) < 1e-12) return null;
+    for (var k = 0; k < 16; k++) i[k] /= det;
+    return i;
+  };
+  // Kijkstraal door een plek op een foto (x, y van 0 tot 1, y omlaag), uit de matrix pv van die foto. Het omgekeerde van AR.projecteer.
+  AR.straal = function (pv, x, y) {
+    var inv = AR.inverse4(pv); if (!inv) return null;
+    var nx = 2 * x - 1, ny = 1 - 2 * y;
+    function terug(z) {
+      var o = [0, 0, 0, 0];
+      for (var r = 0; r < 4; r++) o[r] = inv[r] * nx + inv[4 + r] * ny + inv[8 + r] * z + inv[12 + r];
+      return { x: o[0] / o[3], y: o[1] / o[3], z: o[2] / o[3] };
+    }
+    var a = terug(-1), b = terug(1), dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z, L = Math.hypot(dx, dy, dz);
+    if (!(L > 0)) return null;
+    return { o: a, d: { x: dx / L, y: dy / L, z: dz / L } };
+  };
+  // Hoek op een foto aanwijzen: de kijkstraal door die plek gesneden met de vloer (of het plafond, voor een plafondfoto). Geeft {x, z} of null.
+  AR.hoekUitFoto = function (pv, x, y, vlakY) {
+    var s = AR.straal(pv, x, y); if (!s) return null;
+    var p = AR.snijHorizontaal(s.o, s.d, vlakY, 30);
+    return p ? { x: p.x, z: p.z } : null;
+  };
+  // Staat een hele wand (vloer tot plafond, hoek tot hoek) in dit beeld? Geeft het aandeel van de wand dat binnen het beeld valt (0..1, in 10 x 10 proefpunten).
+  AR.wandInBeeld = function (pv, w) {
+    var binnen = 0, tot = 0;
+    for (var i = 0; i <= 10; i++) for (var j = 0; j <= 10; j++) {
+      tot++; var p = AR.wandPunt(w, w.L * i / 10, w.H * j / 10), q = AR.projecteer(pv, p.x, p.y, p.z);
+      if (q && q.x >= 0 && q.x <= 1 && q.y >= 0 && q.y <= 1) binnen++;
+    }
+    return binnen / tot;
   };
   // Voorbeeld: de proefkamer met de knik, aangetikt met wat onnauwkeurigheid (in meters, AR-ruimte gedraaid).
   AR.voorbeeld = function () {
@@ -921,10 +979,10 @@ if (typeof module !== 'undefined') module.exports = AR;
       if (dk !== detailWanden.sleutel) { detailWanden.sleutel = dk; detailWanden.lijst = AR.wanden3d(punten, !!aanvul, vloerY, Hw, oog); }
       wandDoel = AR.snijWand(oog, rich, detailWanden.lijst);
     }
-    if (detailVang && binding) {
+    if (vangRij.length && binding) {
       var dv = null; pose.views.forEach(function (v) { if (!dv && v.camera) dv = v; });
       if (dv) {
-        var opdracht = detailVang; detailVang = null;
+        var opdracht = vangRij.shift();
         try { vangBeeld(dv, mul(dv.projectionMatrix, dv.transform.inverse.matrix), oog, rich, { breed: 4096, kwaliteit: 0.88, detail: true, klaar: opdracht }); }
         catch (e) { opdracht(null, e); }
         gl.bindFramebuffer(gl.FRAMEBUFFER, laag.framebuffer);
@@ -977,11 +1035,25 @@ if (typeof module !== 'undefined') module.exports = AR;
     var nu = performance.now();
     spoor.push({ t: nu, p: richtpunt ? { x: richtpunt.x, z: richtpunt.z, plafond: !!richtpunt.plafond } : null, h: plafondKandidaat,
       w: wandDoel ? { nr: wandDoel.nr, u: wandDoel.u, v: wandDoel.v } : null, o: { x: oog.x, y: oog.y, z: oog.z } });
+    if (plafondFoto) {
+      var pf = punten[plafondFoto.idx];
+      if (!pf || nu > plafondFoto.tot || vloerY == null) plafondFoto = null;
+      else {
+        var hb2 = AR.hoogteBoven(oog, rich, pf);
+        if (hb2 && hb2.naast < 0.25 && rich.y > 0.3 && hb2.y - vloerY > 1.8 && hb2.y - vloerY < 6) {
+          var pidx = plafondFoto.idx; plafondFoto = null;
+          hoekFoto(pidx, 'plafondhoek', hb2.y, { hoogte_schatting_m: hb2.y - vloerY });
+          zegFlits('Plafondfoto boven H' + (pidx + 1) + ' bewaard');
+          try { if (navigator.vibrate) navigator.vibrate([15, 30, 15]); } catch (e) {}
+        }
+      }
+    }
     var doelTekst = '';
     if (wandDoel) {
       var wl = aanvul ? 'W' + (wandDoel.nr + 1) : 'wand ' + (wandDoel.nr + 1);
       doelTekst = 'Detail-kruisje: ' + wl + ' · ' + meter(wandDoel.u) + ' m van H' + (wandDoel.nr + 1) + ' · ' + meter(wandDoel.v) + ' m hoog';
     } else if (punten.length >= 2) doelTekst = 'Detail-kruisje raakt geen wand: de foto wordt dan op de vloerplek bewaard.';
+    if (plafondFoto) doelTekst = 'Tip: richt even omhoog naar de plafondhoek boven H' + (plafondFoto.idx + 1) + ', de foto gaat vanzelf.';
     el('ar-doel').textContent = doelTekst;
     while (spoor.length && spoor[0].t < nu - 1500) spoor.shift();
     var ver = !!(richtpunt && richtpunt.afstand > VER);
@@ -1076,6 +1148,9 @@ if (typeof module !== 'undefined') module.exports = AR;
     punten.push(viaPlafond ? { x: p.x, z: p.z, bron: 'plafond' } : { x: p.x, z: p.z });
     try { if (navigator.vibrate) navigator.vibrate(25); } catch (e) {}
     telWaarneming('getikt'); bewaarLive();
+    var hi = punten.length - 1;
+    hoekFoto(hi, viaPlafond ? 'plafondhoek' : 'hoek', viaPlafond && plafondY != null ? plafondY : vloerY);
+    plafondFoto = viaPlafond ? null : { idx: hi, tot: performance.now() + 12000 };
     knoppen();
   }
   function afronden() {
@@ -1112,7 +1187,7 @@ if (typeof module !== 'undefined') module.exports = AR;
   function startAr(aanvullen) {
     if (sessie) return;
     punten = []; vloerMonsters = []; vloerY = null; richtpunt = null; modus = 'vloer'; plafondY = null; plafondMonsters = []; plafondKandidaat = null; spoor = [];
-    aanvul = null; paneelOpen = false; detailVang = null; wandDoel = null; trackingKwijt = false; detailWanden = { sleutel: '', lijst: [] };
+    aanvul = null; paneelOpen = false; vangRij = []; plafondFoto = null; flits = null; wandDoel = null; trackingKwijt = false; detailWanden = { sleutel: '', lijst: [] };
     if (DS && OS) {
       if (aanvullen && rec) {
         var d0 = dossier();
@@ -1152,7 +1227,9 @@ if (typeof module !== 'undefined') module.exports = AR;
   }
   // knoppen en invoervelden in de AR-laag tellen niet als tik op een hoek
   el('ar-laag').addEventListener('beforexrselect', function (e) { if (e.target && e.target.closest && e.target.closest('button, input, select, textarea, label, #ar-detail')) e.preventDefault(); });
-  el('k-weg').addEventListener('click', function () { punten.pop(); bewaarLive(); knoppen(); });
+  el('k-weg').addEventListener('click', function () { var weg = punten.length - 1; punten.pop(); vervalHoekfotos(weg); plafondFoto = null; bewaarLive(); knoppen(); });
+  el('k-wandfoto').addEventListener('pointerdown', function (e) { e.preventDefault(); wandFoto(); });
+  el('k-wandfoto').addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); wandFoto(); } });
   el('k-detail').addEventListener('pointerdown', function (e) { e.preventDefault(); doeDetail(performance.now()); });
   el('k-detail').addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); doeDetail(performance.now()); } });
   // De duimknop reageert al bij het neerzetten van de duim (niet pas bij loslaten), met het punt van vlak daarvoor.
@@ -1296,7 +1373,7 @@ if (typeof module !== 'undefined') module.exports = AR;
   // Zonder die twee modules (losse proef) werkt de pagina zoals voorheen.
   // =====================================================================================================================
   var DS = window.MTRuimteDossier || null, OS = window.MTOpnameOpslag || null;
-  var rec = null, ses = null, aanvul = null, paneelOpen = false, detailVang = null, wandDoel = null, trackingKwijt = false, huidigPaneel = null, laatsteSoort = 'leiding';
+  var rec = null, ses = null, aanvul = null, paneelOpen = false, vangRij = [], plafondFoto = null, flits = null, wandDoel = null, trackingKwijt = false, huidigPaneel = null, laatsteSoort = 'leiding';
   var detailWanden = { sleutel: '', lijst: [] }, keten = Promise.resolve(), bewaarTimer = null, wachtrij = [], laatstePakket = null;
   var VOLGORDE = ['leiding', 'stopcontact', 'schakelaar', 'radiator', 'raam', 'deur', 'nis', 'knik', 'kolom', 'balk', 'plint', 'vensterbank', 'sierlijst', 'meubel', 'afwerking', 'opmerking', 'overig'];
   function dossier() { return rec ? rec.opname : null; }
@@ -1334,7 +1411,7 @@ if (typeof module !== 'undefined') module.exports = AR;
     var nu = nuMs(), yaw = Math.atan2(rich.x, -rich.z);
     if (!stil || Math.hypot(oog.x - stil.x, oog.z - stil.z) > 0.3) stil = { x: oog.x, z: oog.z, t: nu };
     var r = pano.aan ? AR.richtingen(pano.beelden, oog, 0.6) : null, hint = r && nu - stil.t > 2500 ? AR.draaiHint(r, yaw) : null;
-    el('ar-hint').textContent = hint ? hint.tekst : '';
+    el('ar-hint').textContent = flits && nu < flits.tot ? flits.tekst : (hint ? hint.tekst : '');
     if (hint && ses && !hintPlekken.some(function (q) { return Math.hypot(q.x - oog.x, q.z - oog.z) < 0.6; })) {
       hintPlekken.push({ x: oog.x, z: oog.z });
       (ses.draai_aanwijzingen = ses.draai_aanwijzingen || []).push({ x: oog.x, z: oog.z, tekst: hint.tekst, tijd: new Date().toISOString() }); planBewaar();
@@ -1447,6 +1524,8 @@ if (typeof module !== 'undefined') module.exports = AR;
         d.metingen.forEach(function (m) { if (m.doel.id === det.id && m.referentie && m.referentie.soort === 'hoek' && !m.referentie.id) m.referentie.id = w.van; });
       }
     });
+    DS.koppelHoekfotos(d);
+    d.beelden.forEach(function (b) { if (b.soort === 'wand' && b.wand_nr != null && !b.wand_id && d.wanden[b.wand_nr]) b.wand_id = d.wanden[b.wand_nr].id; });
   }
   function uitkomstUitDossier(d) {
     if (d.hoeken.length < 3) return null;
@@ -1479,10 +1558,10 @@ if (typeof module !== 'undefined') module.exports = AR;
       var opPad = {}; fotos.forEach(function (f) { if (f.pad) opPad[f.pad] = f; });
       var bl = [];
       d.beelden.forEach(function (b) {
-        if (b.soort !== 'overzicht') return;
+        if (b.soort !== 'overzicht' && b.soort !== 'wand') return;
         var s = d.sessies.find(function (x) { return x.id === b.sessie; }), pose = s && s.uitlijning && s.uitlijning.status === 'basis' ? b.pose : b.pose_basis, f = opPad[b.pad];
         if (!pose || !f || !f.blob) return;
-        bl.push({ pos: pose.pos, dir: pose.dir, pv: pose.pv, w: b.breedte, h: b.hoogte, blob: f.blob, gereed: Promise.resolve(), beeldId: b.id, tijd: b.tijd });
+        bl.push({ pos: pose.pos, dir: pose.dir, pv: pose.pv, w: b.breedte, h: b.hoogte, blob: f.blob, gereed: Promise.resolve(), beeldId: b.id, tijd: b.tijd, wandfoto: b.soort === 'wand' });
       });
       if (!bl.length) return;
       pano.beelden = bl;
@@ -1577,10 +1656,10 @@ if (typeof module !== 'undefined') module.exports = AR;
   function detailFoto(det) {
     if (!binding) { det.foto_status = 'geen-camera-toegang'; return; }
     det.foto_status = 'bezig';
-    detailVang = function (r) {
+    vangRij.push(function (r) {
       if (!r || !r.blob) { det.foto_status = 'mislukt'; planBewaar(); verversPaneel(); return; }
       koppelDetailFoto(det, r.blob, { pos: r.pos, dir: r.dir, pv: r.pv }, r.w, r.h, r.tijd);
-    };
+    });
   }
   function koppelDetailFoto(det, blob, pose, w, h, tijd) {
     var d = dossier(), b = DS.voegBeeldToe(d, { soort: 'detail', sessie: ses ? ses.id : null, pose: pose, breedte: w, hoogte: h, tijd: tijd, detail_id: det.id, wand_id: det.wand_id, type: blob.type || 'image/jpeg' });
@@ -1589,6 +1668,104 @@ if (typeof module !== 'undefined') module.exports = AR;
     if (pose) det.foto_punt = { beeld_id: b.id, x: 0.5, y: 0.5, uitleg: 'het kruisje zat midden in de foto' };
     det.foto_status = 'opslaan'; verversPaneel();
     return bewaarBeeld(b, blob).then(function () { det.foto_status = b.bewaard ? 'bewaard' : 'mislukt'; planBewaar(true); verversPaneel(); if (!paneelOpen) toonDossier(); });
+  }
+
+  // ---------- foto's bij hoeken en wanden ----------
+  function zegFlits(t) { flits = { tekst: t, tot: nuMs() + 3000 }; }
+  // Bij elke getikte hoek een scherpe foto (volle camera-resolutie) met de camerastand en de plek van de tik op de foto. Zo is de hoek later na te kijken en
+  // te corrigeren naar de echte hoek op de foto (door de opnemer, of later door herkenning). soort: 'hoek' (vloer) of 'plafondhoek'.
+  function hoekFoto(idx, soort, y, extra) {
+    if (!rec || !DS || !binding) return;
+    var p = punten[idx], sesId = ses ? ses.id : null; if (!p) return;
+    vangRij.push(function (r) {
+      if (!r || !r.blob || !rec) return;
+      var pose = { pos: r.pos, dir: r.dir, pv: r.pv }, q = AR.projecteer(r.pv, p.x, y, p.z);
+      var b = DS.voegBeeldToe(dossier(), Object.assign({ soort: soort, sessie: sesId, pose: pose, breedte: r.w, hoogte: r.h, tijd: r.tijd, type: 'image/jpeg',
+        hoek_index: idx, punt_xr: { x: p.x, y: y, z: p.z }, punt_in_beeld: q ? { x: q.x, y: q.y } : null }, extra || {}));
+      if (punten[idx] !== p) { b.vervallen = true; b.hoek_index = null; }   // de hoek is intussen weggehaald met Terug
+      bewaarBeeld(b, r.blob);
+    });
+  }
+  function vervalHoekfotos(idx) {
+    var d = dossier(); if (!d || !ses) return;
+    d.beelden.forEach(function (b) { if ((b.soort === 'hoek' || b.soort === 'plafondhoek') && b.sessie === ses.id && b.hoek_index === idx && !b.hoek_id) { b.vervallen = true; b.hoek_index = null; } });
+    planBewaar();
+  }
+  // Knop Foto: ga zo staan dat een hele wand in beeld is. De foto komt met zijn stand in het panorama en gaat daar voor de gewone rondgangbeelden.
+  function wandFoto() {
+    if (!sessie || paneelOpen) return;
+    if (!rec || !DS || !binding) { zegFlits('Foto kan hier niet: geen camerabeeld in AR op dit toestel.'); return; }
+    vangRij.push(verwerkWandfoto);
+  }
+  function verwerkWandfoto(r) {
+      if (!r || !r.blob || !rec) { zegFlits('Foto mislukt, probeer opnieuw.'); return; }
+      var sesId = ses ? ses.id : null, best = null;
+      detailWanden.lijst.forEach(function (w) { var a = AR.wandInBeeld(r.pv, w); if (!best || a > best.a) best = { w: w, a: a }; });
+      var d = dossier(), pose = { pos: r.pos, dir: r.dir, pv: r.pv }, nr = best && best.a > 0.3 ? best.w.nr : null;
+      var b = DS.voegBeeldToe(d, { soort: 'wand', sessie: sesId, pose: pose, breedte: r.w, hoogte: r.h, tijd: r.tijd, type: 'image/jpeg', wand_nr: nr,
+        heel_in_beeld: !!(best && best.a >= 0.97), wand_id: nr != null && aanvul && d.wanden[nr] ? d.wanden[nr].id : null });
+      if (aanvul && aanvul.transform) b.pose_basis = DS.poseNaarBasis(aanvul.transform, pose);
+      r.wandfoto = true; r.beeldId = b.id;
+      if (!aanvul || aanvul.transform) { pano.beelden.push(r); if (pano.wanden.length) AR.dekBij(pano.cellen, pano.wanden, r, pano.beelden.length - 1); }
+      telWaarneming('wandfoto');
+      bewaarBeeld(b, r.blob);
+      zegFlits(nr == null ? 'Foto bewaard. Tik eerst twee hoeken, dan weet de app welke wand dit is.'
+        : b.heel_in_beeld ? 'Wandfoto W' + (nr + 1) + ': hele wand in beeld ✓' : 'Wandfoto W' + (nr + 1) + ' bewaard, maar niet de hele wand (' + Math.round(best.a * 100) + '%). Stap achteruit en neem er nog een.');
+      return b;
+  }
+
+  // ---------- hoeken nakijken op de foto ----------
+  function poseVan(d, b) { var s = d.sessies.find(function (x) { return x.id === b.sessie; }); return s && s.uitlijning && s.uitlijning.status === 'basis' ? b.pose : b.pose_basis; }
+  function toonHoeken() {
+    var ul = el('d-hoeken'), d = dossier(); if (!ul || !d) return; ul.textContent = '';
+    d.hoeken.forEach(function (h) {
+      var li = maak('li'), fotos = d.beelden.filter(function (b) { return b.hoek_id === h.id && b.pose && !b.vervallen; });
+      li.appendChild(maak('span', h.label + (h.via === 'plafond' ? ' (via plafond)' : ''), 'titel'));
+      li.appendChild(maak('span', h.status === 'gecorrigeerd' ? 'Gecorrigeerd op de foto: ' + h.correctie.verschuiving_mm + ' mm verschoven t.o.v. de tik.' : (fotos.length ? 'Getikt; nog niet nagekeken.' : 'Getikt; geen foto bij deze hoek.'), 'zacht'));
+      var kn = maak('div', null, 'rij');
+      fotos.forEach(function (b) {
+        var k = maak('button', b.soort === 'plafondhoek' ? 'Nakijken (plafondfoto)' : 'Nakijken op foto', 'knop'); k.type = 'button';
+        k.addEventListener('click', function () { nakijken(h, b); }); kn.appendChild(k);
+      });
+      if (h.status === 'gecorrigeerd') { var t = maak('button', 'Terug naar de tik', 'knop'); t.type = 'button'; t.addEventListener('click', function () { DS.herstelHoek(d, h.id); naHoekWijziging(); }); kn.appendChild(t); }
+      li.appendChild(kn); ul.appendChild(li);
+    });
+    if (!d.hoeken.length) ul.appendChild(maak('li', 'Nog geen hoeken.', 'zacht'));
+  }
+  function naHoekWijziging() {
+    var d = dossier(); planBewaar(true); uitkomst = uitkomstUitDossier(d); if (uitkomst) toonUitkomst(); toonDossier();
+    if (pano.klaar) { pano.klaar.punten = d.hoeken.map(function (h) { return { x: h.xr.x, z: h.xr.z }; }); toonPano(); el('pano-tekst').textContent += ' Een hoek is verschoven: plak de wanden opnieuw.'; }
+  }
+  // De foto groot, met het getikte punt (rood) en eventueel de correctie (groen). Tik op de echte hoek; de app rekent de plek op de vloer (of het plafond) uit.
+  function nakijken(h, b) {
+    var d = dossier(), basis = DS.basisSessie(d) || { xr: {} }, pose = poseVan(d, b), c = el('d-paneel');
+    if (!pose) { zegKan('Deze foto komt uit een rondgang die niet is uitgelijnd.'); return; }
+    var y = b.soort === 'plafondhoek' ? (basis.xr.plafondY != null ? basis.xr.plafondY : (b.punt_xr ? b.punt_xr.y : null)) : basis.xr.vloerY;
+    if (y == null) return;
+    huidigPaneel = null; c.hidden = false; c.textContent = '';
+    var w = maak('div', null, 'dpaneel'); c.appendChild(w);
+    w.appendChild(maak('h2', 'Hoek ' + h.label + ' nakijken'));
+    w.appendChild(maak('p', b.soort === 'plafondhoek' ? 'Tik op de foto precies waar de twee wanden en het plafond samenkomen.' : 'Tik op de foto precies waar de twee wanden en de vloer samenkomen. Staat er iets voor: tik zo goed mogelijk op de lijn erachter.', 'zacht'));
+    var vak = maak('div'); vak.style.position = 'relative'; vak.style.touchAction = 'manipulation';
+    var im = maak('img'); im.alt = 'Foto bij hoek ' + h.label; im.style.width = '100%'; im.style.display = 'block'; im.style.borderRadius = '8px';
+    vak.appendChild(im); w.appendChild(vak);
+    function stip(kleur, q) { var s = maak('div'); s.style.cssText = 'position:absolute;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;border:3px solid ' + kleur + ';pointer-events:none'; s.style.left = (q.x * 100) + '%'; s.style.top = (q.y * 100) + '%'; vak.appendChild(s); return s; }
+    var ruw = h.xr_ruw || h.xr, qr = AR.projecteer(pose.pv, ruw.x, y, ruw.z); if (qr) stip('#e8322a', qr);
+    if (h.xr_ruw) { var qg = AR.projecteer(pose.pv, h.xr.x, y, h.xr.z); if (qg) stip('#2fbf71', qg); }
+    var info = maak('p', 'Rood = waar je tikte' + (h.xr_ruw ? ', groen = huidige correctie.' : '.'), 'zacht'); w.appendChild(info);
+    var nieuw = null, nieuwStip = null, rij = maak('div', null, 'rij'), ok = maak('button', 'Bewaar correctie', 'knop hoofd'), terug = maak('button', 'Annuleer', 'knop');
+    ok.type = 'button'; terug.type = 'button'; ok.disabled = true; rij.appendChild(ok); rij.appendChild(terug); w.appendChild(rij);
+    im.addEventListener('click', function (e) {
+      var r = im.getBoundingClientRect(), fx = (e.clientX - r.left) / r.width, fy = (e.clientY - r.top) / r.height, p = AR.hoekUitFoto(pose.pv, fx, fy, y);
+      if (!p) { info.textContent = 'Daar kan de hoek niet liggen (geen snijpunt met de ' + (b.soort === 'plafondhoek' ? 'plafond' : 'vloer') + '). Tik op de hoek zelf.'; return; }
+      nieuw = { x: p.x, z: p.z, punt: { x: fx, y: fy } };
+      if (nieuwStip) nieuwStip.remove(); nieuwStip = stip('#2fbf71', { x: fx, y: fy });
+      info.textContent = 'Nieuwe plek: ' + Math.round(Math.hypot(p.x - ruw.x, p.z - ruw.z) * 1000) + ' mm van de tik.'; ok.disabled = false;
+    });
+    ok.addEventListener('click', function () { if (!nieuw) return; DS.corrigeerHoek(d, h.id, nieuw, { bron: 'foto', beeld_id: b.id, punt: nieuw.punt }); c.hidden = true; c.textContent = ''; naHoekWijziging(); });
+    terug.addEventListener('click', function () { c.hidden = true; c.textContent = ''; });
+    OS.leesFoto(rec.id + ':' + b.id).then(function (f) { if (f && f.blob) im.src = URL.createObjectURL(f.blob); else info.textContent = 'Deze foto staat niet (meer) in de opslag.'; });
+    c.scrollIntoView({ block: 'start' });
   }
 
   // ---------- maten invoeren: DISTO X4 als toetsenbord (snelle reeks + Enter) of met de hand ----------
@@ -1806,6 +1983,7 @@ if (typeof module !== 'undefined') module.exports = AR;
     var vragen = DS.openVragen(d, AR, { dekking: dekkingPerWand() });
     vragen.forEach(function (v) { var li = maak('li'); li.appendChild(pil(v.ernst === 'blokkeert' ? 'blokkeert' : v.ernst === 'open' ? 'open' : 'let op', v.ernst === 'blokkeert' || v.ernst === 'open' ? 'open' : '')); li.appendChild(maak('span', v.tekst)); ov.appendChild(li); });
     if (!vragen.length) ov.appendChild(maak('li', 'Niets open. Alles wat gevraagd is, is gemeten.', 'zacht'));
+    toonHoeken();
     el('k-afsluiten').textContent = d.ruimte.afgesloten ? 'Ruimte heropenen' : 'Ruimte afsluiten';
     el('k-aanvullen').disabled = d.hoeken.length < 3 || !navigator.xr;
   }
@@ -1858,7 +2036,7 @@ if (typeof module !== 'undefined') module.exports = AR;
   function veiligeNaam(t) { return String(t || '').replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40); }
   function pakketMaken() {
     if (!rec) return Promise.resolve(null);
-    var d = dossier(), t0 = nuMs(), grootte = { overzicht: 0, detail: 0, panorama: 0 };
+    var d = dossier(), t0 = nuMs(), grootte = { overzicht: 0, detail: 0, panorama: 0, hoek: 0, plafondhoek: 0, wand: 0 };
     el('d-pakket-info').textContent = 'Pakket wordt gemaakt…';
     return schrijfNu().then(function () { return OS.fotosVan(rec.id); }).then(function (fotos) {
       return Promise.all(fotos.map(function (f) { return f.blob.arrayBuffer().then(function (ab) { return { pad: f.pad, soort: f.soort, data: new Uint8Array(ab) }; }); }));
@@ -1868,9 +2046,9 @@ if (typeof module !== 'undefined') module.exports = AR;
     }).then(function (pk) {
       var blob = new Blob([pk.bytes], { type: 'application/zip' }), naam = ['ruimte', veiligeNaam(d.project.code), veiligeNaam(d.ruimte.naam), new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')].filter(Boolean).join('-') + '.zip';
       laatstePakket = { blob: blob, naam: naam };
-      d.pakket_metingen = (d.pakket_metingen || []).concat([{ tijd: new Date().toISOString(), bytes: blob.size, overzicht: grootte.overzicht, detail: grootte.detail, panorama: grootte.panorama, beelden: d.beelden.length, ms: Math.round(nuMs() - t0) }]);
+      d.pakket_metingen = (d.pakket_metingen || []).concat([{ tijd: new Date().toISOString(), bytes: blob.size, overzicht: grootte.overzicht, detail: grootte.detail, panorama: grootte.panorama, hoek_wand: grootte.hoek + grootte.plafondhoek + grootte.wand, beelden: d.beelden.length, ms: Math.round(nuMs() - t0) }]);
       planBewaar();
-      el('d-pakket-info').textContent = 'Pakket ' + mb(blob.size) + ' (overzicht ' + mb(grootte.overzicht) + ', details ' + mb(grootte.detail) + ', panorama ' + mb(grootte.panorama) + '), ' +
+      el('d-pakket-info').textContent = 'Pakket ' + mb(blob.size) + ' (overzicht ' + mb(grootte.overzicht) + ', details ' + mb(grootte.detail) + ', hoek- en wandfoto\'s ' + mb(grootte.hoek + grootte.plafondhoek + grootte.wand) + ', panorama ' + mb(grootte.panorama) + '), ' +
         d.beelden.length + ' beelden, gemaakt in ' + ((nuMs() - t0) / 1000).toFixed(1).replace('.', ',') + ' s.' + (pk.ontbreekt.length ? ' Let op: ' + pk.ontbreekt.length + ' beelden ontbraken in de opslag.' : '');
       return laatstePakket;
     }, function (e) { el('d-pakket-info').textContent = 'Pakket maken mislukt: ' + String(e && e.message || e).slice(0, 140); return null; });
@@ -1882,19 +2060,24 @@ if (typeof module !== 'undefined') module.exports = AR;
     proefRondgang: function (o) {
       maakRuimte(); punten = o.punten.slice(); vloerY = o.vloerY; plafondY = o.plafondY; detailWanden = { sleutel: '', lijst: AR.wanden3d(punten, false, vloerY, plafondY - vloerY, null) };
       bewaarLive();
+      // hoekfoto's en wandfoto's via dezelfde verwerking als in AR (de camera zelf is nagebootst)
+      if (o.hoekBeelden) { var echteBinding = binding; binding = binding || { nep: true }; punten.forEach(function (p, i) { if (!o.hoekBeelden[i]) return; hoekFoto(i, 'hoek', vloerY); vangRij.shift()(o.hoekBeelden[i]); }); binding = echteBinding; }
       (o.beelden || []).forEach(function (b) { var r = { pos: b.pos, dir: b.dir, pv: b.pv, w: b.w, h: b.h, blob: b.blob, tijd: new Date().toISOString() }; r.gereed = Promise.resolve(); pano.beelden.push(r); bewaarOverzicht(r); });
       var details = (o.details || []).map(function (x) { var det = maakDetail(x.anker, x.soort); if (x.foto) koppelDetailFoto(det, x.foto, x.pose || null, x.w, x.h, new Date().toISOString()); return det; });
       uitkomst = { punten: punten.slice(), hoogte: 1.4, plafond: plafondY - vloerY, tijd: new Date().toLocaleString('nl-NL'), voorbeeld: false, hand: {} };
       bewaar();
       pano.klaar = pano.beelden.length ? { beelden: pano.beelden.slice(), punten: punten.slice(), vloerY: vloerY, hoogte: plafondY - vloerY, plafondBekend: true, tijd: uitkomst.tijd } : null;
       var d = dossier(); DS.zetHoeken(d, ses.id, punten); ses.xr.vloerY = vloerY; ses.xr.plafondY = plafondY; ses.live_punten = null; koppelWanden(d); DS.sluitSessie(d, ses.id, {});
+      (o.wandBeelden || []).forEach(function (r) { r.gereed = Promise.resolve(); r.tijd = new Date().toISOString(); verwerkWandfoto(r); });
+      if (pano.klaar) pano.klaar.beelden = pano.beelden.slice();
+      d = dossier(); koppelWanden(d);
       el('s-start').hidden = true; toonUitkomst(); toonPano(); toonDossier(); planBewaar(true);
       return details;
     },
     openPaneel: function (det) { openPaneel(det, false); },
     // proefhaak: gevonden vlakken en een standpunt nabootsen, dan plattegrondje en aanwijzing tekenen (zonder AR)
     liveProef: function (o) {
-      if (o.nieuw) { scanVlakken = new Map(); hintPlekken = []; stil = null; }
+      if (o.nieuw) { scanVlakken = new Map(); hintPlekken = []; stil = null; flits = null; }
       (o.vlakken || []).forEach(function (v) { noteerVlak(v.pl, v.pts, v.as); });
       if (o.punten) punten = o.punten.slice();
       if (o.beelden) { pano.aan = true; pano.beelden = o.beelden; }
