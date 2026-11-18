@@ -996,8 +996,8 @@ if (typeof module !== 'undefined') module.exports = AR;
     trackingKwijt = false;
     var M = pose.transform.matrix, oog = { x: M[12], y: M[13], z: M[14] }, rich = { x: -M[8], y: -M[9], z: -M[10] };
     oogY = oog.y;
-    // ARCore-ankers: een getikte hoek schuift mee als ARCore zijn kaart bijstelt, zodat draadmodel en vakjes op de echte wand blijven.
-    // De tik zelf blijft in p.tik (en in het dossier als xr_tik). Grote sprongen (> 50 cm) worden genegeerd.
+    // ARCore-ankers: alleen meeschrijven, niet verplaatsen (proef 21:14: na het verplaatsen klopte de vorm niet meer). Waar ARCore de hoek nu
+    // ziet staat in p.ankerPos (in het dossier xr_anker), naast de tik zelf; zo kunnen we vergelijken zonder dat de meting eronder lijdt.
     if (ankerRij.length && f.createAnchor && ref) {
       var aOp = ankerRij.shift();
       try { f.createAnchor(new XRRigidTransform({ x: aOp.p.x, y: aOp.y, z: aOp.p.z }), ref).then(function (a) { aOp.p.anker = a; }, function () {}); } catch (e) {}
@@ -1008,9 +1008,9 @@ if (typeof module !== 'undefined') module.exports = AR;
         if (!q.anker || !f.trackedAnchors.has(q.anker)) return;
         var ap = f.getPose(q.anker.anchorSpace, ref); if (!ap) return;
         var am = ap.transform.matrix, dA = Math.hypot(am[12] - q.x, am[14] - q.z);
-        if (dA > 0.002 && dA < 0.5) { q.x = am[12]; q.z = am[14]; verschoven = Math.max(verschoven, dA); }
+        q.ankerPos = { x: am[12], z: am[14], afstand_m: dA }; verschoven = Math.max(verschoven, dA);
       });
-      if (verschoven > 0.01 && performance.now() - ankerTijd > 2000) { ankerTijd = performance.now(); detailWanden.sleutel = ''; pano.sleutel = ''; telWaarneming('anker_bijgesteld'); }
+      if (verschoven > 0.05 && performance.now() - ankerTijd > 5000) { ankerTijd = performance.now(); telWaarneming('anker_wijkt_af', Math.round(verschoven * 1000) + ' mm'); bewaarLive(); }
     }
     // Detail: het punt op de wand onder het kruisje (zodra er twee hoeken zijn) en, als erom gevraagd is, één scherpe foto op volle resolutie.
     wandDoel = null;
@@ -1555,7 +1555,7 @@ if (typeof module !== 'undefined') module.exports = AR;
   }
   function bewaarLive() {
     if (!ses || aanvul) return;
-    ses.live_punten = punten.map(function (p) { return { x: p.x, z: p.z, bron: p.bron || 'vloer', tik: p.tik || null }; });
+    ses.live_punten = punten.map(function (p) { return { x: p.x, z: p.z, bron: p.bron || 'vloer', anker: p.ankerPos || null }; });
     ses.xr.vloerY = vloerY; ses.xr.plafondY = plafondY; planBewaar();
   }
   // Details die tijdens de eerste rondgang zijn vastgelegd kennen alleen het wandnummer: na Klaar krijgen ze het wand-id en de beginhoek als referentie.
@@ -1855,6 +1855,14 @@ if (typeof module !== 'undefined') module.exports = AR;
         k.addEventListener('click', function () { nakijken(h, b); }); kn.appendChild(k);
       });
       if (h.status === 'gecorrigeerd') { var t = maak('button', 'Terug naar de tik', 'knop'); t.type = 'button'; t.addEventListener('click', function () { DS.herstelHoek(d, h.id); naHoekWijziging(); }); kn.appendChild(t); }
+      if (d.hoeken.length > 3) {
+        var wg = maak('button', 'Hoek weghalen', 'knop'); wg.type = 'button';
+        wg.addEventListener('click', function () {
+          if (!window.confirm('Hoek ' + h.label + ' weghalen? De twee wanden ernaast worden één wand; de lengte daarvan moet je opnieuw meten. De hoek blijft in het archief.')) return;
+          DS.verwijderHoek(d, h.id, 'door de opnemer weggehaald'); naHoekWijziging();
+        });
+        kn.appendChild(wg);
+      }
       li.appendChild(kn); ul.appendChild(li);
     });
     if (!d.hoeken.length) ul.appendChild(maak('li', 'Nog geen hoeken.', 'zacht'));

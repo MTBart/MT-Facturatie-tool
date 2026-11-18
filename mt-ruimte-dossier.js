@@ -147,8 +147,8 @@
     d.hoeken = punten.map((p, i) => ({
       id: (oud[i] && oud[i].id) || D.nieuwId('hk'), label: 'H' + (i + 1), sessie: sessieId,
       xr: { x: Number(p.x), z: Number(p.z) }, via: p.bron === 'plafond' ? 'plafond' : 'vloer', status: 'geschat', bron: 'ar', tijd: p.tijd || isoNu(nu),
-      // de oorspronkelijke tik, als de hoek daarna door een ARCore-anker is bijgesteld
-      xr_tik: p.tik && (p.tik.x !== Number(p.x) || p.tik.z !== Number(p.z)) ? { x: Number(p.tik.x), z: Number(p.tik.z) } : undefined
+      // waar het ARCore-anker de hoek op het laatst zag (alleen ter vergelijking; de tik is leidend)
+      xr_anker: p.anker && isFinite(p.anker.x) ? { x: Number(p.anker.x), z: Number(p.anker.z), afstand_mm: Math.round((p.anker.afstand_m || 0) * 1000) } : undefined
     }));
     const n = d.hoeken.length;
     d.wanden = d.hoeken.map((h, i) => {
@@ -170,6 +170,22 @@
     h.correctie = { bron: h.bron, beeld_id: info && info.beeld_id || null, punt: info && info.punt || null, door: info && info.door || 'opnemer', tijd: isoNu(nu),
       verschuiving_mm: Math.round(Math.hypot(h.xr.x - h.xr_ruw.x, h.xr.z - h.xr_ruw.z) * 1000) };
     d.bijgewerkt = isoNu(nu); return h;
+  };
+  // Een hoek weghalen (dubbel of verkeerd getikt). De wand ervoor en de wand erna worden één wand (id van de wand ervoor); de lengte daarvan staat
+  // weer open. Details op de weggevallen wand verhuizen naar de samengevoegde wand, met hun plek langs de wand als onbekend (de camera-plek blijft).
+  D.verwijderHoek = function (d, hoekId, reden, nu) {
+    const H = lijst(d.hoeken), k = H.findIndex(h => h.id === hoekId); if (k < 0 || H.length <= 3) return null;
+    d.archief.push({ soort: 'hoek-weggehaald', tijd: isoNu(nu), reden: reden || '', hoeken: JSON.parse(JSON.stringify(H)), wanden: JSON.parse(JSON.stringify(d.wanden)) });
+    const n = H.length, voor = d.wanden[(k - 1 + n) % n], na = d.wanden[k];
+    H.splice(k, 1);
+    voor.naar = na.naar;
+    d.wanden = d.wanden.filter(x => x !== na);
+    lijst(d.details).forEach(det => { if (det.wand_id === na.id || det.wand_id === voor.id) { if (det.wand_id === na.id) det.wand_id = voor.id; if (det.anker) { det.anker.wand_id = voor.id; det.anker.u_m = null; } if (det.referentie_hoek === hoekId) det.referentie_hoek = voor.van; } });
+    lijst(d.beelden).forEach(b => { if (b.hoek_id === hoekId) b.vervallen = true; if (b.wand_id === na.id) b.wand_id = voor.id; });
+    D.voegMetingToe(d, { doel: { soort: 'wand', id: voor.id }, veld: 'lengte', waarde_mm: null, status: 'open', opmerking: 'wand samengevoegd na weghalen van een hoek' }, nu);
+    d.hoeken.forEach((h, i) => { h.label = 'H' + (i + 1); });
+    d.wanden.forEach((x, i) => { x.label = 'W' + (i + 1); });
+    d.bijgewerkt = isoNu(nu); return d.hoeken;
   };
   D.herstelHoek = function (d, hoekId, nu) {
     const h = lijst(d.hoeken).find(x => x.id === hoekId); if (!h || !h.xr_ruw) return null;
@@ -397,6 +413,11 @@
       if (lm.schuin.length && !lijst(d.metingen).some(m => m.veld === 'diagonaal' && m.status === 'gemeten'))
         uit.push({ soort: 'vorm', ernst: 'let-op', tekst: 'Schuine wand(en) ' + lm.schuin.map(id => (lijst(d.wanden).find(w => w.id === id) || {}).label).join(', ') + ' zonder controlemaat: meet een diagonaal.' });
       if (lm.sluitfout_mm != null && lm.sluitfout_mm > 20) uit.push({ soort: 'vorm', ernst: 'let-op', tekst: 'De kamer sluit met de wandmaten op ' + Math.round(lm.sluitfout_mm) + ' mm: een maat of een haaks gezette hoek klopt niet. Meet een diagonaal.' });
+      lm.punten.forEach((p, i) => {
+        const q = lm.punten[(i + 1) % lm.punten.length], h = p.binnenhoek_graden;
+        if (h < 30 || h > 330) uit.push({ soort: 'vorm', ernst: 'let-op', doel: p.id, tekst: 'Hoek ' + p.label + ' is erg scherp (' + Math.round(h) + '°): waarschijnlijk dubbel of verkeerd getikt. Kijk de hoekfoto na of haal de hoek weg.' });
+        if (Math.hypot(q.x - p.x, q.y - p.y) < 200) uit.push({ soort: 'vorm', ernst: 'let-op', doel: p.id, tekst: p.label + ' en ' + q.label + ' liggen minder dan 20 cm uit elkaar: mogelijk dezelfde hoek twee keer getikt.' });
+      });
       if (lm.hoogte.status !== 'gemeten') uit.push({ soort: 'maat', ernst: 'open', doel: d.ruimte.id, tekst: 'Plafondhoogte nog niet gemeten' + (lm.hoogte.waarde ? ' (camera ~' + lm.hoogte.waarde + ' mm).' : '.') });
       lijst(d.wanden).forEach(w => { if (!w.dikte || w.dikte.status === 'onbekend') { /* een onbekende dikte blijft onbekend: dat is geen open vraag voor de opname zelf */ } });
     }

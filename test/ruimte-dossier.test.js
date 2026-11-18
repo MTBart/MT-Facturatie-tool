@@ -115,6 +115,21 @@ const jpg = n => Uint8Array.from([0xFF, 0xD8, 0xFF, 0xE0, n & 255, (n >> 8) & 25
     check('correctie terugzetten geeft de getikte plek terug', h2.xr.x === 4.03 && !h2.correctie && h2.status === 'geschat');
   }
 
+  // ── proef 18-11 21:14: een sluittik die 0,9 m naast H1 landde gaf een vijfde hoek (spie van ~2°); waarschuwen en weghalen ──
+  {
+    const e = D.nieuw({}, NU), s = D.startSessie(e, {}, NU); s.xr.vloerY = 0;
+    const P5 = '-1.214;-2.928 1.380;-3.107 1.844;2.254 -1.758;1.379 -1.329;-3.847'.split(' ').map(t => { const [a, b] = t.split(';').map(Number); return { x: a, z: b }; });
+    D.zetHoeken(e, s.id, P5, NU);
+    const det = D.voegDetailToe(e, { soort: 'stopcontact', wand_id: e.wanden[4].id, anker: { xr: { x: -1.3, y: 0.3, z: -3.5 }, wand_id: e.wanden[4].id, u_m: 0.4, v_m: 0.3 } }, NU);
+    const ov = D.openVragen(e, AR), h5 = e.hoeken[4].id;
+    check('21:14: spie-hoek H5 gemeld', ov.some(v => v.doel === h5 && /scherp/.test(v.tekst)), ov.filter(v => v.soort === 'vorm').map(v => v.tekst).join(' | '));
+    const w4 = e.wanden[3].id, w5 = e.wanden[4].id;
+    D.verwijderHoek(e, h5, 'dubbele sluittik', NU);
+    check('hoek weghalen: 4 hoeken, W4 loopt nu van H4 naar H1, labels opnieuw', e.hoeken.length === 4 && e.wanden.length === 4 && e.wanden[3].id === w4 && e.wanden[3].naar === e.hoeken[0].id && e.hoeken[3].label === 'H4' && e.archief.some(a => a.soort === 'hoek-weggehaald'));
+    check('hoek weghalen: lengte van de samengevoegde wand weer open, detail verhuisd zonder plek langs de wand', D.huidigeMeting(e, w4, 'lengte').status === 'open' && det.wand_id === w4 && det.anker.u_m === null && !e.wanden.some(w => w.id === w5));
+    check('hoek weghalen: geen spie meer', !D.openVragen(e, AR).some(v => /scherp/.test(v.tekst)));
+  }
+
   // ── pakket heen en terug ──
   const bestanden = {}; bestanden[foto.pad] = jpg(1);
   const ov1 = D.voegBeeldToe(d, { soort: 'overzicht', sessie: s1.id, pose: { pos: [0, 0, 0], dir: [0, 0, -1], pv: new Array(16).fill(0) }, bewaard: true }, NU);

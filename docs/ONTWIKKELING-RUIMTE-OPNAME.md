@@ -191,6 +191,15 @@ originele foto en de aangetikte hoeken worden bewaard. Lensvertekening: de Samsu
 **B19 · 18-11 · Knop Foto: een deel van de wand is ook goed.** De melding zegt niet meer "stap achteruit": het panorama voegt stukken samen; voor een
 volledig wandbeeld in een kleine ruimte is er de groothoekfoto (B18).
 
+**B20 · 18-11 · Herziet B17: ARCore-ankers alleen meeschrijven, niet meer verplaatsen.** *Waarom:* de eerste rondgang mét verplaatsende ankers (21:14)
+gaf in dezelfde kamer een veel slechtere vorm dan de rondgang zonder (20:27: sluiting 7 mm). Niet bewezen dat de ankers de oorzaak zijn, maar de meting
+mag er niet onder lijden. De ankerpositie wordt bewaard als `xr_anker` (met afstand tot de tik) en geteld als `anker_wijkt_af`, zodat we het kunnen
+vergelijken. De tik is weer leidend; de vakjes kunnen dus weer iets schuiven.
+
+**B21 · 18-11 · Hoek weghalen en waarschuwen bij een spie of dubbele hoek.** *Waarom:* 21:14 kwam een sluittik 0,9 m naast H1 terecht en werd een vijfde
+hoek (binnenhoek ~2°). Waarschuwing bij een binnenhoek < 30° of > 330° en bij twee hoeken < 20 cm uit elkaar; *Hoek weghalen* voegt de twee wanden
+samen (lengte weer open, details verhuizen zonder plek langs de wand, alles in het archief).
+
 ---
 
 ## 5. Input en feedback van Bart
@@ -205,6 +214,7 @@ volledig wandbeeld in een kleine ruimte is er de groothoekfoto (B18).
 | 18-11 | Test: gordijnen inmeten in deze ruimte → goede foto's van de kozijnen en de maatvoering ervan. Via VW een presentatielaag-PDF: "Europese projectie" van de kamer met de wanden eromheen, volledig bemaat? | Voorstel P1 (gordijnenprofiel) en P2 (kameruitslag-PDF), P3 (VW-route). |
 | 18-11 20:27 | Echte proef, rechthoekige kamer ~2,9 × 5,8 m (zie §5.1). | Waarneming schaalfout camera → voorstel P10; diagonaal gevraagd. |
 | 18-11 20:53 | Screenshots: "de velden verschuiven ten opzichte van de wanden"; "kan ik mijn groothoekcamera gebruiken? Ik sta zo dicht op de wanden dat ik geen volledig beeld krijg". | B17, B18, B19. |
+| 18-11 21:14 | Tweede proef met ankers: 5 hoeken, vorm scheef (zie §5.1). | B20, B21; pakket gevraagd voor diagnose. |
 | 18-11 | Ontwikkeldocument waarin alles staat, zodat terug te zien is wat waarom veranderde; Astra moet er licht op kunnen laten schijnen. | Dit document. |
 
 ### 5.1 Meetresultaten echte proeven
@@ -223,6 +233,23 @@ Sluiting met eigen maten 7 mm (zonder rechtzetten 33 mm). Punten (m, AR): -0.092
 *Waarnemingen:* hoeken tikken ruim binnen 1° van haaks; rechtzetten verbetert de sluiting van 33 naar 7 mm. De camera schat **systematisch 1–2 % te lang**
 (schaal, geen ruis). De resterende 7 mm zit in de eigen maten (lange wanden 5774/5781, korte 2900/2902): kamer licht scheef of een maat net anders genomen.
 Verwachte diagonaal bij een haakse kamer ≈ 6465 mm; beide diagonalen meten beslist het.
+
+**18-11-2026 21:14 · S24 · vermoedelijk dezelfde kamer · versie met verplaatsende ARCore-ankers (B17)**
+
+| Wand | Camera | Hoek gemeten → gezet |
+|---|---|---|
+| W1 | 2965 | H1 266,9° → 270° |
+| W2 | 5154 | H2 91,0° → 90° |
+| W3 | 3248 (schuin) | H3 71,4° → 77,9° |
+| W4 | 5270 | H4 99,0° → 99,8° |
+| W5 | 790 | H5 11,8° → 2,3° |
+
+Punten (m): -1.214;-2.928 1.380;-3.107 1.844;2.254 -1.758;1.379 -1.329;-3.847. Geen eigen maten ingevuld.
+
+*Waarnemingen:* vijf hoeken voor een rechthoekige kamer; H5 ligt 0,9 m naast H1 (sluittik niet herkend → spie). Ook zonder H5 is de vorm scheef
+(korte wanden 2,6 en 3,7 m, lange 5,4 en 5,2 m) tegen 2,93/5,89 om 20:27. Mogelijke oorzaken: tracking-drift tijdens deze rondgang, of de nieuwe
+verplaatsende ankers. Gevolg: B20 en B21. Voor de diagnose is het pakket (zip) van deze rondgang nodig: daarin staan per hoek de tik, de ankerpositie,
+de camerastanden van alle beelden (looppad) en hoe vaak de tracking kwijt was.
 
 ---
 
@@ -354,7 +381,8 @@ Perspectief-correct plakken (homografie per vak i.p.v. affien), automatisch extr
 | 18-11 | `5ba09b4` | Hoekfoto, plafondfoto, knop Foto, hoeken nakijken | B8–B10, feedback |
 | 18-11 | `ba0f17e` | Ontwikkeldocument | verzoek Bart |
 | 18-11 | `ddeedbf` | Meetresultaat echte proef 20:27, voorstel P10 | proef Bart |
-| 18-11 | (volgende) | ARCore-ankers, groothoekfoto per wand rechtgetrokken, melding Foto | B17–B19 |
+| 18-11 | `efae8d2` | ARCore-ankers, groothoekfoto per wand rechtgetrokken, melding Foto | B17–B19 |
+| 18-11 | (volgende) | Ankers alleen meeschrijven, hoek weghalen, spie-waarschuwing | B20, B21 |
 
 Meer detail per brok: `VOORTGANG-OPNAME.md`. Volledige diff: draft-PR #5.
 
