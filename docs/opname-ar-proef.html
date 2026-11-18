@@ -200,6 +200,18 @@ dd{margin:0;font-variant-numeric:tabular-nums}
     <p class="bewaard" id="d-bewaard" aria-live="polite"></p>
     <h2>Extra maten</h2>
     <div class="maatrij" id="d-plafond-rij"><span>Plafondhoogte</span><input id="d-plafond" inputmode="decimal" autocomplete="off" aria-label="Plafondhoogte in mm"><span class="info" id="d-plafond-info"></span></div>
+    <h2>Is de hoek haaks? (driehoeksmeting)</h2>
+    <p class="zacht">Zet vanuit de hoek op beide wanden een streepje of stukje tape, bijv. op 1000 mm en ±1 m hoogte (boven plint en meubels). Meet de schuine maat tussen de twee tekens: haaks = 1414 mm.</p>
+    <div class="velden">
+      <div class="veld"><label for="d-dh-hoek">Hoek</label><select id="d-dh-hoek"></select></div>
+      <div class="veld"><label for="d-dh-a">Langs de wand ervoor (mm)</label><input id="d-dh-a" inputmode="decimal" autocomplete="off" value="1000"></div>
+      <div class="veld"><label for="d-dh-b">Langs de wand erna (mm)</label><input id="d-dh-b" inputmode="decimal" autocomplete="off" value="1000"></div>
+      <div class="veld"><label for="d-dh-c">Schuine maat (mm)</label><input id="d-dh-c" inputmode="decimal" autocomplete="off"></div>
+    </div>
+    <div class="rij"><button class="knop" id="k-dh">Hoek bewaren</button></div>
+    <div id="d-dh-uit"></div>
+    <h2>Controlemaat tussen twee hoeken</h2>
+    <p class="zacht">Alleen als het vrij en strak te meten is; anders liever de driehoeksmeting hierboven.</p>
     <div class="velden">
       <div class="veld"><label for="d-diag-van">Controlemaat van</label><select id="d-diag-van"></select></div>
       <div class="veld"><label for="d-diag-naar">naar</label><select id="d-diag-naar"></select></div>
@@ -806,7 +818,7 @@ if (typeof module !== 'undefined') module.exports = AR;
       M.rz.schuin.forEach(function (w) { [w, (w + 1) % n].forEach(function (c) { var t = 'H' + (c + 1) + ' ' + graden(M.teken.hoeken[c]); if (hk.indexOf(t) < 0) hk.push(t); }); });
       vak.appendChild(maak('p', 'De schuine ' + (M.rz.schuin.length > 1 ? 'wanden zijn' : 'wand is') + ' op jouw maten gedraaid: ' + hk.join(', ') + '.'));
     }
-    if (gat > 20) vak.appendChild(maak('p', 'Er blijft ' + Math.round(gat) + ' mm over. Een maat klopt niet helemaal, of een hoek die haaks is gezet is het niet. Meet een diagonaal na om te zien welke.', 'zacht'));
+    if (gat > 20) vak.appendChild(maak('p', 'Er blijft ' + Math.round(gat) + ' mm over. Een maat klopt niet helemaal, of een hoek die haaks is gezet is het niet. Controleer een paar hoeken met een driehoeksmeting (1000 mm langs elke wand en de schuine maat) om te zien welke.', 'zacht'));
     vak.appendChild(maak('p', 'Ter vergelijking, met de hoeken zoals de camera ze gaf: ' + Math.round(ruwGat) + ' mm.', 'zacht'));
   }
   function uitkomstTekst() {
@@ -2137,6 +2149,15 @@ if (typeof module !== 'undefined') module.exports = AR;
       d.hoeken.forEach(function (h) { var o = maak('option', h.label); o.value = h.id; s.appendChild(o); });
       s.value = oud || (d.hoeken[j * 2] ? d.hoeken[j * 2].id : '');
     });
+    var dhs = el('d-dh-hoek'), dhOud = dhs.value; dhs.textContent = '';
+    d.hoeken.forEach(function (h) { var o = maak('option', h.label); o.value = h.id; dhs.appendChild(o); });
+    if (dhOud) dhs.value = dhOud;
+    var dhu = el('d-dh-uit'); dhu.textContent = '';
+    DS.controleHoeken(d, lm).forEach(function (c) {
+      dhu.appendChild(maak('p', c.label + ': gemeten ' + String(c.gemeten_graden).replace('.', ',') + '° (' + c.driehoek.a_mm + ' / ' + c.driehoek.b_mm + ' / ' + c.driehoek.c_mm + ' mm), model ' + String(c.model_graden).replace('.', ',') + '°' +
+        (c.verschil_graden != null ? ' → ' + (c.verschil_graden > 0 ? '+' : '') + String(c.verschil_graden).replace('.', ',') + '°' : '') + ' · 1 mm in de schuine maat ≈ ' + String(c.graden_per_mm).replace('.', ',') + '°',
+        Math.abs(c.verschil_graden || 0) > 0.5 ? 'melding' : 'melding goed'));
+    });
     var cv = el('d-controle'); cv.textContent = '';
     DS.controleMaten(d, lm).forEach(function (c) {
       cv.appendChild(maak('p', c.van + '–' + c.naar + ': gemeten ' + c.gemeten + ' mm, het model verwacht ' + c.verwacht + ' mm (' + (c.verschil > 0 ? '+' : '') + c.verschil + ' mm' + (c.model_status === 'geschat' ? ', model nog uit de camera' : '') + ').', Math.abs(c.verschil) > 20 ? 'melding' : 'melding goed'));
@@ -2181,6 +2202,16 @@ if (typeof module !== 'undefined') module.exports = AR;
       var d = dossier(), l = DS.leesMaat(el('d-plafond').value); if (!d || !l) return;
       DS.voegMetingToe(d, { doel: { soort: 'ruimte', id: d.ruimte.id }, veld: 'plafondhoogte', waarde_mm: l.mm, invoer: el('d-plafond').value, eenheid_invoer: l.eenheid, bron: bronVan(el('d-plafond')), sessie: ses && ses.id });
       planBewaar(); toonDossier();
+    });
+    ['d-dh-a', 'd-dh-b', 'd-dh-c'].forEach(function (id) { volgToetsen(el(id)); });
+    el('d-dh-c').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); el('k-dh').click(); } });
+    el('k-dh').addEventListener('click', function () {
+      var d = dossier(); if (!d) return;
+      var a = DS.leesMaat(el('d-dh-a').value), b = DS.leesMaat(el('d-dh-b').value), c = DS.leesMaat(el('d-dh-c').value), bron = bronVan(el('d-dh-c'));
+      if (!a || !b || !c) { el('d-dh-uit').textContent = 'Vul alle drie de maten in (mm).'; return; }
+      var m = DS.voegDriehoekToe(d, el('d-dh-hoek').value, a.mm, b.mm, c.mm, { bron: bron, sessie: ses && ses.id, invoer: el('d-dh-a').value + ' / ' + el('d-dh-b').value + ' / ' + el('d-dh-c').value });
+      if (!m) { el('d-dh-uit').textContent = 'Met deze drie maten bestaat geen driehoek. Meet de schuine maat opnieuw.'; return; }
+      el('d-dh-c').value = ''; planBewaar(); toonDossier();
     });
     volgToetsen(el('d-diag'));
     el('d-diag').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); el('d-diag').blur(); } });

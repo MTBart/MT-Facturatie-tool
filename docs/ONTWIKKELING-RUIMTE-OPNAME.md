@@ -248,6 +248,13 @@ per tik; geen vakjes, geen draai-aanwijzing, geen plafondtip. *Klaar* (of de slu
 fase 2 (scannen): de kamer is gesloten, vakjes op alle wanden, aanwijzingen aan, plafondfoto bij elke hoek waar je omhoog richt (zet ook de plafondhoogte),
 duimknop = Detail. *Klaar* sluit af. Geen nieuwe uitlijning nodig, omdat het dezelfde AR-sessie is. Vervangt het eerdere plafondtip-na-elke-tik (B9).
 
+**B30 · 18-11 · Haaksheid controleren met een driehoeksmeting, niet met een diagonaal.** *Waarom:* Bart: "die diagonale meting is onbetrouwbaar, je kan
+met die lasermeter niet strak in de hoeken meten" (plinten, meubels, 6,5 m lang). Herziet het advies uit B26/§5.1 om beide diagonalen te meten.
+Nu: per hoek a mm langs de wand ervoor en b mm langs de wand erna een merkteken (standaard 1000/1000 op ±1 m hoogte) en de schuine maat c;
+`D.hoekUitDriehoek` (cosinusregel), `D.voegDriehoekToe` (met gevoeligheid: op 1000/1000 is 1 mm ≈ 0,08°), `D.controleHoeken` (gemeten naast het model;
+> 0,5° verschil = open vraag "niet haaks"). De diagonaal blijft mogelijk, maar alleen "als het vrij en strak te meten is". Alternatieven voor later:
+controlemaat tussen twee wandpunten met afstand tot de hoek, of DISTO met DST 360 (P2P).
+
 **Waarneming (geen besluit):** met vier gemeten wandlengtes en haakse hoeken maakt de kaartdrift voor het lijnmodel weinig uit (de richtingen worden
 rechtgezet, de lengtes komen uit de maten). De drift raakt vooral de aansluiting tussen beelden en wanden in het panorama en de camera-plek van details.
 
@@ -270,6 +277,7 @@ rechtgezet, de lengtes komen uit de maten). De drift raakt vooral de aansluiting
 | 18-11 21:45 | Review van GPT (`OPNAME-AR-REVIEW-2026-11-18.md`, op stand `ddeedbf`). | B23–B26; acceptatieproef §6 P0. |
 | 18-11 21:50 | Pakket van de proef van 21:26 gedeeld (`ruimte-Test-8-Joe-…zip`), niet in de repo bewaard. | Analyse §5.1, B27. |
 | 18-11 22:00 | "Lijnen trekken gaat het best in één vloeiende beweging langs de vloer; de tekst zegt steeds kijk opzij en omhoog. Eerst een rondje plattegrond, daarna scannen. Kunnen we groothoekfoto's vanuit de app halen als het een echte app wordt?" | B29; P11. |
+| 18-11 22:10 | "Die diagonale meting is onbetrouwbaar: met de lasermeter kom je niet strak in de hoeken." | B30. |
 | 18-11 | Ontwikkeldocument waarin alles staat, zodat terug te zien is wat waarom veranderde; Astra moet er licht op kunnen laten schijnen. | Dit document. |
 
 ### 5.1 Meetresultaten echte proeven
@@ -476,7 +484,8 @@ Perspectief-correct plakken (homografie per vak i.p.v. affien), automatisch extr
 | 18-11 | `8556c20` | Review GPT verwerkt: referentie per meting, maatlijnen op de meting, modellengte | B23–B25 |
 | 18-11 | `4ea9756` | Ankerposities bewaren en vergelijken, plafond uit plafondfoto | B27 |
 | 18-11 | `33f5f0c` | Sneller opslaan, wegschrijven bij sluiten | B28 |
-| 18-11 | (volgende) | Twee fases: plattegrond tikken, dan scannen | B29, P11 |
+| 18-11 | `483a1fb` | Twee fases: plattegrond tikken, dan scannen | B29, P11 |
+| 18-11 | (volgende) | Driehoeksmeting voor haaksheid i.p.v. diagonaal | B30 |
 
 Meer detail per brok: `VOORTGANG-OPNAME.md`. Volledige diff: draft-PR #5.
 

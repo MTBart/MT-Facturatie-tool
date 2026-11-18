@@ -113,6 +113,10 @@ window.renderKamer = function (cam, w, h, fovy) {
   await p.click('#d-plafond'); await p.keyboard.type('2600', { delay: 15 }); await p.keyboard.press('Enter');
   await p.selectOption('#d-diag-van', { index: 0 }); await p.selectOption('#d-diag-naar', { index: 2 }); await p.click('#d-diag'); await p.keyboard.type('5000', { delay: 220 }); await p.keyboard.press('Enter');
   await p.waitForTimeout(300);
+  // haaksheid met een driehoeksmeting (1000 / 1000 / 1414 = 90°)
+  await p.selectOption('#d-dh-hoek', { index: 0 }); await p.fill('#d-dh-c', '1414'); await p.click('#k-dh');
+  const dh = await p.textContent('#d-dh-uit');
+  check('driehoeksmeting: H1 gemeten 89,98° naast het model', /H1: gemeten 89,98°/.test(dh) && /model 90°/.test(dh), dh);
   // leiding: hart, vanaf welke hoek, X4 voor hoogte, hand voor de afstand, uitsteek open
   await p.evaluate(id => window.arProef.openPaneel(window.arProef.dossier().details.find(d => d.id === id)), details[0]);
   await p.selectOption('#dp-ref', { index: 1 });

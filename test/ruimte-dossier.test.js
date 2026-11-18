@@ -157,6 +157,19 @@ const jpg = n => Uint8Array.from([0xFF, 0xD8, 0xFF, 0xE0, n & 255, (n >> 8) & 25
     check('lijnmodel: modellengte en verschil met het gemeten label staan per wand', lk.segmenten.every(x => typeof x.lengte_model_mm === 'number') && lk.segmenten.some(x => x.verschil_model_mm !== 0), lk.segmenten.map(x => x.lengte.waarde + '/' + x.lengte_model_mm).join(' '));
   }
 
+  // ── haaksheid met een driehoeksmeting i.p.v. een diagonaal (feedback 18-11: laser komt niet strak in de hoek) ──
+  {
+    check('driehoek 1000/1000/1414,2 = 90°', Math.abs(D.hoekUitDriehoek(1000, 1000, 1414.2) - 90) < 0.01);
+    check('driehoek 1000/1000/1400 ≈ 88,85°', Math.abs(D.hoekUitDriehoek(1000, 1000, 1400) - 88.85) < 0.02);
+    check('onmogelijke driehoek wordt geweigerd', D.hoekUitDriehoek(1000, 1000, 2100) === null && D.hoekUitDriehoek(0, 1000, 1000) === null);
+    const e = D.nieuw({}, NU), s = D.startSessie(e, {}, NU); s.xr.vloerY = 0;
+    D.zetHoeken(e, s.id, [{ x: 0, z: 0 }, { x: 3, z: 0 }, { x: 3, z: 2 }, { x: 0, z: 2 }], NU);
+    const m = D.voegDriehoekToe(e, e.hoeken[1].id, 1000, 1000, 1400, { bron: 'disto' }, NU);
+    const ch = D.controleHoeken(e, D.lijnmodel(e, AR));
+    check('driehoeksmeting naast de hoek in het model, met gevoeligheid per mm', m.waarde_graden === 88.85 && ch.length === 1 && ch[0].model_graden === 90 && Math.abs(ch[0].verschil_graden + 1.15) < 0.01 && m.graden_per_mm > 0.05 && m.graden_per_mm < 0.1, JSON.stringify(ch[0]));
+    check('niet-haakse hoek staat bij de open vragen, zonder het woord diagonaal', D.openVragen(e, AR).some(v => v.doel === e.hoeken[1].id && /driehoeksmeting/.test(v.tekst)) && !D.openVragen(e, AR).some(v => /diagonaal/.test(v.tekst)));
+  }
+
   // ── pakket heen en terug ──
   const bestanden = {}; bestanden[foto.pad] = jpg(1);
   const ov1 = D.voegBeeldToe(d, { soort: 'overzicht', sessie: s1.id, pose: { pos: [0, 0, 0], dir: [0, 0, -1], pv: new Array(16).fill(0) }, bewaard: true }, NU);

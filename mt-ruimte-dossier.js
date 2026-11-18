@@ -420,6 +420,34 @@
     if (det.anker && det.anker.xr) { const r = D.naarRuimte(lm._t, det.anker.xr); return { x: r.x, y: r.y, z: r.z, status: { langs_wand: ml ? 'onzeker' : 'geschat', hoogte: vbron }, wand_id: null, reden: reden }; }
     return null;
   };
+  // ── haaksheid van een hoek: driehoeksmeting ── Vanuit de hoek a mm langs de wand ervoor en b mm langs de wand erna een merkteken (bijv. 1000/1000 op
+  // ±1 m hoogte, boven plint en meubels), dan de schuine maat c tussen de twee tekens. Hoek = cosinusregel. Praktischer en betrouwbaarder dan een
+  // diagonaal van hoek tot hoek (feedback 18-11: met een laser kom je niet strak in de hoek). Op 1000/1000 is 3 mm in c ongeveer 0,2°.
+  D.hoekUitDriehoek = function (a, b, c) {
+    a = Number(a); b = Number(b); c = Number(c);
+    if (!(a > 0 && b > 0 && c > 0) || a + b <= c || a + c <= b || b + c <= a) return null;
+    return Math.acos(Math.max(-1, Math.min(1, (a * a + b * b - c * c) / (2 * a * b)))) * 180 / Math.PI;
+  };
+  D.voegDriehoekToe = function (d, hoekId, a, b, c, info, nu) {
+    const g = D.hoekUitDriehoek(a, b, c); if (g == null) return null;
+    info = info || {};
+    const m = D.voegMetingToe(d, { doel: { soort: 'hoek', id: hoekId }, veld: 'hoek_driehoek', waarde_mm: null, bron: info.bron || 'hand', status: 'gemeten',
+      invoer: info.invoer || (a + ' / ' + b + ' / ' + c), opmerking: info.opmerking || null, sessie: info.sessie || null }, nu);
+    m.grootheid = 'hoek'; m.waarde_graden = rond(g, 2); m.driehoek = { a_mm: Number(a), b_mm: Number(b), c_mm: Number(c), a_langs: 'wand ervoor', b_langs: 'wand erna', hoogte: info.hoogte_mm || null };
+    // gevoeligheid: hoeveel graden scheelt 1 mm in c
+    const g1 = D.hoekUitDriehoek(a, b, Number(c) + 1); m.graden_per_mm = g1 == null ? null : rond(Math.abs(g1 - g), 3);
+    return m;
+  };
+  // Gemeten hoeken naast de hoek in het model (binnenhoek). De driehoek meet de kleinste hoek tussen de wanden: bij een binnenhoek > 180° is het 360 − hoek.
+  D.controleHoeken = function (d, lm) {
+    if (!lm) return [];
+    return lijst(d.hoeken).map(h => {
+      const m = D.huidigeMeting(d, h.id, 'hoek_driehoek'); if (!m || m.waarde_graden == null) return null;
+      const p = lm.punten.find(x => x.id === h.id), model = p ? p.binnenhoek_graden : null, modelKlein = model == null ? null : (model > 180 ? 360 - model : model);
+      return { hoek_id: h.id, label: h.label, gemeten_graden: m.waarde_graden, model_graden: modelKlein, verschil_graden: modelKlein == null ? null : rond(m.waarde_graden - modelKlein, 2),
+        driehoek: m.driehoek, graden_per_mm: m.graden_per_mm, meting_id: m.id, model_status: lm.status };
+    }).filter(Boolean);
+  };
   // Controlematen (bijv. diagonaal H4-H6) naast de waarde die het model verwacht.
   D.controleMaten = function (d, lm) {
     if (!lm) return [];
@@ -441,8 +469,9 @@
         if (s.kort) uit.push({ soort: 'vorm', ernst: 'let-op', doel: s.id, tekst: s.label + ' is kort (' + (s.lengte.waarde) + ' mm): de richting uit de camera is onzeker. Meet een controlemaat.' });
       });
       if (lm.schuin.length && !lijst(d.metingen).some(m => m.veld === 'diagonaal' && m.status === 'gemeten'))
-        uit.push({ soort: 'vorm', ernst: 'let-op', tekst: 'Schuine wand(en) ' + lm.schuin.map(id => (lijst(d.wanden).find(w => w.id === id) || {}).label).join(', ') + ' zonder controlemaat: meet een diagonaal.' });
-      if (lm.sluitfout_mm != null && lm.sluitfout_mm > 20) uit.push({ soort: 'vorm', ernst: 'let-op', tekst: 'De kamer sluit met de wandmaten op ' + Math.round(lm.sluitfout_mm) + ' mm: een maat of een haaks gezette hoek klopt niet. Meet een diagonaal.' });
+        uit.push({ soort: 'vorm', ernst: 'let-op', tekst: 'Schuine wand(en) ' + lm.schuin.map(id => (lijst(d.wanden).find(w => w.id === id) || {}).label).join(', ') + ' zonder controlemaat: controleer de hoeken ervan met een driehoeksmeting (1000 mm langs elke wand en de schuine maat ertussen).' });
+      if (lm.sluitfout_mm != null && lm.sluitfout_mm > 20) uit.push({ soort: 'vorm', ernst: 'let-op', tekst: 'De kamer sluit met de wandmaten op ' + Math.round(lm.sluitfout_mm) + ' mm: een maat of een haaks gezette hoek klopt niet. Controleer een paar hoeken met een driehoeksmeting.' });
+      D.controleHoeken(d, lm).forEach(c => { if (c.verschil_graden != null && Math.abs(c.verschil_graden) > 0.5) uit.push({ soort: 'vorm', ernst: 'let-op', doel: c.hoek_id, tekst: 'Hoek ' + c.label + ' is volgens de driehoeksmeting ' + String(c.gemeten_graden).replace('.', ',') + '°, het model rekent met ' + String(c.model_graden).replace('.', ',') + '°: de kamer is daar niet haaks.' }); });
       lm.punten.forEach((p, i) => {
         const q = lm.punten[(i + 1) % lm.punten.length], h = p.binnenhoek_graden;
         if (h < 30 || h > 330) uit.push({ soort: 'vorm', ernst: 'let-op', doel: p.id, tekst: 'Hoek ' + p.label + ' is erg scherp (' + Math.round(h) + '°): waarschijnlijk dubbel of verkeerd getikt. Kijk de hoekfoto na of haal de hoek weg.' });
@@ -482,7 +511,7 @@
     kopie.afgeleid = {
       gemaakt: isoNu(opties.nu), lijnmodel: lm,
       detail_plekken: lmVol ? D.actieveDetails(d).map(det => ({ detail_id: det.id, groep: det.groep, plek: D.detailPlek(d, det, lmVol) })) : [],
-      controlematen: lm ? D.controleMaten(d, lm) : [], open_vragen: opties.AR ? D.openVragen(d, opties.AR, opties).filter(v => v.soort !== 'opslag') : [],
+      controlematen: lm ? D.controleMaten(d, lm) : [], controlehoeken: lmVol ? D.controleHoeken(d, lmVol) : [], open_vragen: opties.AR ? D.openVragen(d, opties.AR, opties).filter(v => v.soort !== 'opslag') : [],
       panorama: Object.keys(bestanden || {}).filter(p => p.indexOf('panorama/') === 0),
       ontbrekende_beelden: ontbreekt
     };

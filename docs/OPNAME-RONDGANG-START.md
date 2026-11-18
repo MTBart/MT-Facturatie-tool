@@ -29,7 +29,7 @@ alleen op de werkbranch.
    maakt een scherpe foto en koppelt het detail aan de wand en hoogte onder het kruisje. Kies de soort, kies vanaf welke binnenhoek je meet,
    en vul de maten in. Het **oranje veld** is waar de DISTO X4 (als toetsenbord) zijn maat neerzet; Enter gaat naar het volgende veld.
    Een veld leeg laten = open vraag. Tik **Klaar**.
-8. Tik **Klaar** bovenin als de kamer rond is. Vul daarna de wandmaten, de plafondhoogte en een controlemaat (diagonaal) in.
+8. Tik **Klaar** bovenin als de kamer rond is. Vul daarna de wandmaten en de plafondhoogte in, en controleer een paar hoeken met een **driehoeksmeting** (tape op 1000 mm langs elke wand, ±1 m hoog, en de schuine maat ertussen; haaks = 1414 mm). Een diagonaal alleen als die vrij en strak te meten is.
    Onder **Nog open vóór vertrek** staat wat nog ontbreekt.
 9. **Groothoekfoto per wand** (na de rondgang, bij *Wandfoto's met groothoek*): sta je te dicht op de wand, maak dan met je gewone camera-app
    een foto op 0,6× en tik de vier hoeken van de wand aan (links onder, rechts onder, rechts boven, links boven). De app trekt hem recht.
