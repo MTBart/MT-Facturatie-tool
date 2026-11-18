@@ -242,6 +242,12 @@ ingevoerd verloren kon gaan (opslaan wachtte 1,2 s). Nu 0,4 s, en bij `visibilit
 meteen weggeschreven. Een tabblad dat binnen een fractie van een seconde na de invoer wordt gesloten blijft een (kleine) restkans; daarom toont de pagina
 "Veilig bewaard".
 
+**B29 · 18-11 · Twee fases in één AR-sessie: eerst de plattegrond, dan scannen.** *Waarom:* Bart: "het lijnen trekken gaat het best als je in een vloeiende
+beweging van onder alle punten pakt, terwijl de tekst steeds zegt kijk opzij en omhoog". Fase 1 (plattegrond): alleen hoeken tikken, met stil een hoekfoto
+per tik; geen vakjes, geen draai-aanwijzing, geen plafondtip. *Klaar* (of de sluittik) zet de hoeken in het dossier en gaat in dezelfde sessie door naar
+fase 2 (scannen): de kamer is gesloten, vakjes op alle wanden, aanwijzingen aan, plafondfoto bij elke hoek waar je omhoog richt (zet ook de plafondhoogte),
+duimknop = Detail. *Klaar* sluit af. Geen nieuwe uitlijning nodig, omdat het dezelfde AR-sessie is. Vervangt het eerdere plafondtip-na-elke-tik (B9).
+
 **Waarneming (geen besluit):** met vier gemeten wandlengtes en haakse hoeken maakt de kaartdrift voor het lijnmodel weinig uit (de richtingen worden
 rechtgezet, de lengtes komen uit de maten). De drift raakt vooral de aansluiting tussen beelden en wanden in het panorama en de camera-plek van details.
 
@@ -263,6 +269,7 @@ rechtgezet, de lengtes komen uit de maten). De drift raakt vooral de aansluiting
 | 18-11 21:30 | "Weer verschuiven de wanden." | B22. |
 | 18-11 21:45 | Review van GPT (`OPNAME-AR-REVIEW-2026-11-18.md`, op stand `ddeedbf`). | B23–B26; acceptatieproef §6 P0. |
 | 18-11 21:50 | Pakket van de proef van 21:26 gedeeld (`ruimte-Test-8-Joe-…zip`), niet in de repo bewaard. | Analyse §5.1, B27. |
+| 18-11 22:00 | "Lijnen trekken gaat het best in één vloeiende beweging langs de vloer; de tekst zegt steeds kijk opzij en omhoog. Eerst een rondje plattegrond, daarna scannen. Kunnen we groothoekfoto's vanuit de app halen als het een echte app wordt?" | B29; P11. |
 | 18-11 | Ontwikkeldocument waarin alles staat, zodat terug te zien is wat waarom veranderde; Astra moet er licht op kunnen laten schijnen. | Dit document. |
 
 ### 5.1 Meetresultaten echte proeven
@@ -400,6 +407,18 @@ iOS-onderdeel met RoomPlan (vraagt Mac + Xcode, Apple-ontwikkelaarsaccount, iPho
 status *geschat* (bron `ar`, met `schaal_gecorrigeerd: true` en de bronmaat), en een echte meting gaat altijd voor. Ook als hint in het detailpaneel tonen.
 **Te toetsen:** in meer kamers kijken of de factor per wand of per sessie stabiel is. **Na review (B26): nog niet toepassen**; eerst onafhankelijke tussenmaten en beide diagonalen.
 
+### P11 · Groothoekfoto rechtstreeks vanuit een eigen app
+**Vraag Bart (18-11):** kunnen we de groothoekfoto's vanuit de app erbij halen als we er echt een app van maken? **Ja, met een kanttekening.**
+- In de **webapp** (nu) gaat het via de camera-app van de telefoon (0,6× kiezen) en vier hoeken aantikken (B18). Chrome kan in een webpagina niet zelf
+  de groothoeklens kiezen terwijl AR loopt.
+- In een **eigen Android-app** (ARCore + CameraX/Camera2) kan één knop *Groothoekfoto* de groothoeklens direct openen en de foto meteen aan de wand
+  koppelen. Ook daar kan de groothoeklens niet tegelijk met de AR-tracking draaien: ARCore volgt met de hoofdcamera. De app pauzeert de AR-sessie, maakt de
+  foto en hervat; daarna moet de tracking zich herpakken. Op de iPhone (ARKit) geldt hetzelfde.
+- De camerastand van zo'n foto is te berekenen uit de vier aangetikte wandhoeken en de bekende 3D-hoeken (PnP, met de brandpuntsafstand uit de EXIF).
+  Dan telt de groothoekfoto ook mee voor *Foto hier* en het panorama. Dat kan al in de webapp en is een logische volgende stap.
+- *Afweging eigen app:* installatie via Play Store of los APK-bestand, Android Studio, onderhoud naast de webtool. Pas zinvol als de webroute op het toestel
+  aantoonbaar tekortschiet.
+
 ### P9 · Kwaliteit panorama en prestaties
 Perspectief-correct plakken (homografie per vak i.p.v. affien), automatisch extra kijkpunt bij een andere zichtlijn (radiator vóór raam),
 `readPixels` asynchroon (PBO/OffscreenCanvas) als de AR gaat haperen, meten van geheugen bij lange rondgangen.
@@ -456,7 +475,8 @@ Perspectief-correct plakken (homografie per vak i.p.v. affien), automatisch extr
 | 18-11 | `66b01d8` | Tekenen volgt het anker, meting blijft de tik | B22 |
 | 18-11 | `8556c20` | Review GPT verwerkt: referentie per meting, maatlijnen op de meting, modellengte | B23–B25 |
 | 18-11 | `4ea9756` | Ankerposities bewaren en vergelijken, plafond uit plafondfoto | B27 |
-| 18-11 | (volgende) | Sneller opslaan, wegschrijven bij sluiten | B28 |
+| 18-11 | `33f5f0c` | Sneller opslaan, wegschrijven bij sluiten | B28 |
+| 18-11 | (volgende) | Twee fases: plattegrond tikken, dan scannen | B29, P11 |
 
 Meer detail per brok: `VOORTGANG-OPNAME.md`. Volledige diff: draft-PR #5.
 
