@@ -489,25 +489,31 @@ button:focus-visible{outline:3px solid var(--kies);outline-offset:2px}
     if (!(cw > 1e-6)) return null; return { x: (cx / cw + 1) / 2, y: (1 - cy / cw) / 2 };
   }
 
-  // maatlijnen van het gekozen detail, op de wand: langs de wand vanaf de gekozen binnenhoek en loodrecht omhoog vanaf de vloer
-  var rood = null;
+  // Waarop de maatlijnen van een detail berusten (review 18-11): de gemeten maat vanaf de hoek van díe meting gaat voor; anders de camera-aanwijzing.
+  function maatBasis(det) {
+    var wi = dos.wanden.findIndex(function (w) { return w.id === det.wand_id; }), wand = dos.wanden[wi], ml = DS ? DS.maatLangsWand(dos, det) : null, mh = DS ? DS.maatHoogte(dos, det) : null, b = { wi: wi, wand: wand };
+    if (ml && wand && !(ml.onzeker && ml.reden === 'gemeten vanaf een hoek van een andere wand')) { b.u = ml.u_mm / 1000; b.vanEind = ml.vanaf === wand.naar; b.bronU = ml.onzeker ? 'onzeker' : 'gemeten'; b.ml = ml; }
+    else if (det.anker && det.anker.u_m != null) { b.u = det.anker.u_m; b.vanEind = false; b.bronU = 'camera'; if (ml) b.ml = ml; }
+    if (mh) { b.v = mh.v_mm / 1000; b.bronV = 'gemeten'; b.mh = mh; } else if (det.anker && det.anker.v_m != null) { b.v = det.anker.v_m; b.bronV = 'camera'; }
+    return b;
+  }
+  var rood = null, oranje = null;
+  function kleurTex(css) { var c = document.createElement('canvas'); c.width = c.height = 2; var x = c.getContext('2d'); x.fillStyle = css; x.fillRect(0, 0, 2, 2); return maakTextuur(c); }
   function tekenMaatlijnen(vorm) {
-    if (!gekozen || !dos || !gekozen.anker || gekozen.anker.u_m == null || !gekozen.wand_id) return;
-    var wi = dos.wanden.findIndex(function (w) { return w.id === gekozen.wand_id; }); if (wi < 0) return;
-    var P = data.punten, n = P.length, a = P[wi], b = P[(wi + 1) % n], L = Math.hypot(b.x - a.x, b.z - a.z), ux = (b.x - a.x) / L, uz = (b.z - a.z) / L, wd = wanden[wi];
-    if (!wd) return;
-    if (!rood) { var c = document.createElement('canvas'); c.width = c.height = 2; var x = c.getContext('2d'); x.fillStyle = '#e8322a'; x.fillRect(0, 0, 2, 2); rood = maakTextuur(c); }
-    var y0 = Number(data.vloerY) || 0, u = gekozen.anker.u_m, v = gekozen.anker.v_m || 0, nx = wd.normaal[0] * 0.012, nz = wd.normaal[2] * 0.012, dik = 0.012;
-    var vanEind = gekozen.referentie_hoek && gekozen.referentie_hoek === dos.wanden[wi].naar;
-    var s0 = vanEind ? L : 0, p = { x: a.x + ux * u, z: a.z + uz * u };
-    function quad(p0, p1, zij) {
+    if (!gekozen || !dos || !gekozen.wand_id) return;
+    var mb = maatBasis(gekozen); if (mb.wi < 0 || mb.u == null || !wanden[mb.wi]) return;
+    var P = data.punten, n = P.length, a = P[mb.wi], b = P[(mb.wi + 1) % n], L = Math.hypot(b.x - a.x, b.z - a.z), ux = (b.x - a.x) / L, uz = (b.z - a.z) / L, wd = wanden[mb.wi];
+    if (!rood) { rood = kleurTex('#e8322a'); oranje = kleurTex('#f0a020'); }
+    var y0 = Number(data.vloerY) || 0, v = mb.v || 0, nx = wd.normaal[0] * 0.012, nz = wd.normaal[2] * 0.012, dik = 0.012;
+    var s0 = mb.vanEind ? L : 0, uu = mb.vanEind ? L - mb.u : mb.u, p = { x: a.x + ux * uu, z: a.z + uz * uu };
+    function quad(p0, p1, zij, tex) {
       var q = [p0[0] - zij[0], p0[1] - zij[1], p0[2] - zij[2], p1[0] - zij[0], p1[1] - zij[1], p1[2] - zij[2], p1[0] + zij[0], p1[1] + zij[1], p1[2] + zij[2],
         p0[0] - zij[0], p0[1] - zij[1], p0[2] - zij[2], p1[0] + zij[0], p1[1] + zij[1], p1[2] + zij[2], p0[0] + zij[0], p0[1] + zij[1], p0[2] + zij[2]];
-      var v1 = { pb: buffer(q), tb: buffer([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]), n: 6 }; vorm(v1, rood, 1); gl.deleteBuffer(v1.pb); gl.deleteBuffer(v1.tb);
+      var v1 = { pb: buffer(q), tb: buffer([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]), n: 6 }; vorm(v1, tex, 1); gl.deleteBuffer(v1.pb); gl.deleteBuffer(v1.tb);
     }
     var yl = y0 + Math.max(0.05, Math.min(v, 0.3));
-    quad([a.x + ux * s0 + nx, yl, a.z + uz * s0 + nz], [p.x + nx, yl, p.z + nz], [0, dik, 0]);                 // afstand vanaf de hoek
-    quad([p.x + nx, y0, p.z + nz], [p.x + nx, y0 + v, p.z + nz], [ux * dik, 0, uz * dik]);                       // hoogte vanaf de vloer
+    quad([a.x + ux * s0 + nx, yl, a.z + uz * s0 + nz], [p.x + nx, yl, p.z + nz], [0, dik, 0], mb.bronU === 'gemeten' ? rood : oranje);   // afstand vanaf de hoek van de meting
+    if (mb.v != null) quad([p.x + nx, y0, p.z + nz], [p.x + nx, y0 + v, p.z + nz], [ux * dik, 0, uz * dik], mb.bronV === 'gemeten' ? rood : oranje);   // hoogte vanaf de vloer
   }
 
   // ---------- panelen ----------
@@ -532,6 +538,13 @@ button:focus-visible{outline:3px solid var(--kies);outline-offset:2px}
     else if (det.anker_status === 'alleen-foto') p.appendChild(maak('p', 'Alleen op de foto aangewezen: de plek in de ruimte is nog niet bepaald.'));
     else if (det.anker && det.anker.u_m != null) p.appendChild(maak('p', 'Camera: ' + Math.round(det.anker.u_m * 1000) + ' mm langs de wand, ' + Math.round(det.anker.v_m * 1000) + ' mm boven de vloer (schatting).'));
     if (det.anker_status === 'sessie-niet-uitgelijnd') p.appendChild(maak('p', 'Vastgelegd in een aanvulronde die niet is uitgelijnd.', 'melding'));
+    if (det.wand_id) {
+      var mb = maatBasis(det), hl = function (id) { return (dos.hoeken.find(function (h) { return h.id === id; }) || {}).label || '?'; };
+      var tl = mb.bronU === 'gemeten' ? 'gemeten (' + (DS.BRONNEN[mb.ml.bron] || mb.ml.bron) + ') vanaf ' + hl(mb.ml.vanaf) : mb.bronU === 'onzeker' ? 'onzeker: ' + mb.ml.reden : mb.bronU === 'camera' ? 'camera-schatting vanaf ' + (mb.wand ? hl(mb.wand.van) : '?') + (mb.ml ? ' (de gemeten maat is onzeker: ' + mb.ml.reden + ')' : '') : 'onbekend';
+      var th = mb.bronV === 'gemeten' ? 'gemeten (' + (DS.BRONNEN[mb.mh.bron] || mb.mh.bron) + ')' : mb.bronV === 'camera' ? 'camera-schatting' : 'onbekend';
+      p.appendChild(maak('p', 'Maatlijnen in beeld (rood = gemeten, oranje = schatting of onzeker): langs de wand ' + tl + '; hoogte ' + th + '.' +
+        (det.anker && det.anker.u_m != null ? ' Camera-aanwijzing: ' + Math.round(det.anker.u_m * 1000) + ' mm vanaf ' + (mb.wand ? hl(mb.wand.van) : '?') + ', ' + Math.round((det.anker.v_m || 0) * 1000) + ' mm hoog.' : ''), 'zacht'));
+    }
     // foto's (op aanvraag geladen)
     (det.foto_ids || []).forEach(function (fid) {
       var b = dos.beelden.find(function (x) { return x.id === fid; }); if (!b) return;
@@ -577,8 +590,8 @@ button:focus-visible{outline:3px solid var(--kies);outline-offset:2px}
     p.appendChild(maak('p', 'Pakket ' + mbs(dos._grootte || 0) + ': overzicht ' + mbs(bytes.overzicht) + ', details ' + mbs(bytes.detail) + ', hoek- en wandfoto\'s ' + mbs(bytes.hoekwand) + ', panorama ' + mbs(bytes.panorama) + ' · ' + kijkpunten.length + ' kijkpunten · ' + data.beelden.length + ' beelden in 3D' + (opentijd != null ? ' · geopend in ' + opentijd.toFixed(1).replace('.', ',') + ' s' : '') + '.', 'zacht'));
     if (lm) {
       p.appendChild(maak('h3', 'Lijnmodel (mm, oorsprong ' + lm.oorsprong.label + ', X naar ' + lm.x_as.naar + ', Z omhoog)'));
-      var t = maak('table'), kop = maak('tr'); ['Wand', 'Lengte', 'Status', 'Richting'].forEach(function (x) { kop.appendChild(maak('th', x)); }); t.appendChild(kop);
-      lm.segmenten.forEach(function (s) { var tr = maak('tr'), td = maak('td'); td.appendChild(pil(s.lengte.status)); [maak('td', s.label + (s.kort ? ' (kort)' : '')), maak('td', String(s.lengte.waarde)), td, maak('td', s.richting.status)].forEach(function (x) { tr.appendChild(x); }); t.appendChild(tr); });
+      var t = maak('table'), kop = maak('tr'); ['Wand', 'Lengte', 'Status', 'In het model', 'Richting'].forEach(function (x) { kop.appendChild(maak('th', x)); }); t.appendChild(kop);
+      lm.segmenten.forEach(function (s) { var tr = maak('tr'), td = maak('td'); td.appendChild(pil(s.lengte.status)); var md = s.lengte_model_mm != null ? s.lengte_model_mm + (s.verschil_model_mm ? ' (' + (s.verschil_model_mm > 0 ? '+' : '') + s.verschil_model_mm + ')' : '') : '—'; [maak('td', s.label + (s.kort ? ' (kort)' : '')), maak('td', String(s.lengte.waarde)), td, maak('td', md), maak('td', s.richting.status)].forEach(function (x) { tr.appendChild(x); }); t.appendChild(tr); });
       p.appendChild(t);
       p.appendChild(maak('p', 'Plafond: ' + (lm.hoogte.waarde != null ? lm.hoogte.waarde + ' mm (' + lm.hoogte.status + ')' : 'onbekend') + (lm.sluitfout_mm != null ? ' · sluitfout ' + lm.sluitfout_mm + ' mm' : '')));
       (dos.afgeleid.controlematen || []).forEach(function (c) { p.appendChild(maak('p', 'Controlemaat ' + c.van + '–' + c.naar + ': gemeten ' + c.gemeten + ', verwacht ' + c.verwacht + ' (' + (c.verschil > 0 ? '+' : '') + c.verschil + ' mm)')); });

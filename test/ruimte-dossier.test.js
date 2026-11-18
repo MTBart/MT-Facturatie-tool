@@ -84,7 +84,7 @@ const jpg = n => Uint8Array.from([0xFF, 0xD8, 0xFF, 0xE0, n & 255, (n >> 8) & 25
   const leiding = D.voegDetailToe(d, { soort: 'leiding', label: 'CV-leiding onder raam', wand_id: wids[4], anker: { xr: { x: 0.5, y: -1.1, z: 3.0 }, wand_id: wids[4], u_m: 0.8, v_m: 0.3 }, foto_ids: [foto.id], referentie_hoek: ids[4], sessie: s1.id }, NU);
   foto.detail_id = leiding.id;
   D.voegMetingToe(d, { doel: { soort: 'detail', id: leiding.id }, veld: 'hoogte_hart', waarde_mm: 312, invoer: '312', bron: 'disto', sessie: s1.id }, NU);
-  D.voegMetingToe(d, { doel: { soort: 'detail', id: leiding.id }, veld: 'afstand_hart_tot_hoek', waarde_mm: 845, invoer: '84,5 cm', bron: 'hand' }, NU);
+  D.voegMetingToe(d, { doel: { soort: 'detail', id: leiding.id }, veld: 'afstand_hart_tot_hoek', waarde_mm: 845, invoer: '84,5 cm', bron: 'hand', referentie: { soort: 'hoek', id: ids[4], label: 'H5' } }, NU);
   D.voegMetingToe(d, { doel: { soort: 'detail', id: leiding.id }, veld: 'uitsteek_max', waarde_mm: null, bron: null }, NU);
   const mv = D.metingenVan(d, leiding.id);
   check('detail heeft drie metingen: X4, hand en open', mv.length === 3 && mv.some(m => m.bron === 'disto' && m.status === 'gemeten') && mv.some(m => m.bron === 'hand') && mv.some(m => m.status === 'open'));
@@ -128,6 +128,33 @@ const jpg = n => Uint8Array.from([0xFF, 0xD8, 0xFF, 0xE0, n & 255, (n >> 8) & 25
     check('hoek weghalen: 4 hoeken, W4 loopt nu van H4 naar H1, labels opnieuw', e.hoeken.length === 4 && e.wanden.length === 4 && e.wanden[3].id === w4 && e.wanden[3].naar === e.hoeken[0].id && e.hoeken[3].label === 'H4' && e.archief.some(a => a.soort === 'hoek-weggehaald'));
     check('hoek weghalen: lengte van de samengevoegde wand weer open, detail verhuisd zonder plek langs de wand', D.huidigeMeting(e, w4, 'lengte').status === 'open' && det.wand_id === w4 && det.anker.u_m === null && !e.wanden.some(w => w.id === w5));
     check('hoek weghalen: geen spie meer', !D.openVragen(e, AR).some(v => /scherp/.test(v.tekst)));
+  }
+
+  // ── review 18-11 (GPT): een opgeslagen maat houdt haar eigen referentie ──
+  {
+    const e = D.nieuw({}, NU), s = D.startSessie(e, {}, NU); s.xr.vloerY = 0;
+    D.zetHoeken(e, s.id, [{ x: 0, z: 0 }, { x: 3, z: 0 }, { x: 3, z: 2 }, { x: 0, z: 2 }], NU);
+    [3000, 2000, 3000, 2000].forEach((v, i) => D.voegMetingToe(e, { doel: { soort: 'wand', id: e.wanden[i].id }, veld: 'lengte', waarde_mm: v, bron: 'hand' }, NU));
+    const A = e.hoeken[0].id, B = e.hoeken[1].id, wand = e.wanden[0];
+    const sc = D.voegDetailToe(e, { soort: 'stopcontact', wand_id: wand.id, referentie_hoek: A, anker: { xr: { x: 0.9, y: 0.3, z: 0 }, wand_id: wand.id, u_m: 0.9, v_m: 0.3 } }, NU);
+    D.voegMetingToe(e, { doel: { soort: 'detail', id: sc.id }, veld: 'afstand_hart_tot_hoek', waarde_mm: 800, invoer: '800', bron: 'disto', wand_id: wand.id, referentie: { soort: 'hoek', id: A, label: 'H1' } }, NU);
+    const lm = D.lijnmodel(e, AR), afst = p => Math.round(Math.hypot(p.x - lm.punten[0].x, p.y - lm.punten[0].y));
+    check('review: 800 mm vanaf A ligt op 800 van A', afst(D.detailPlek(e, sc, lm)) === 800);
+    sc.referentie_hoek = B;   // alleen de keuzelijst
+    check('review: alleen de keuzelijst wisselen laat de plek op 800 van A', afst(D.detailPlek(e, sc, lm)) === 800 && D.historie(e, sc.id, 'afstand_hart_tot_hoek').length === 1);
+    D.voegMetingToe(e, { doel: { soort: 'detail', id: sc.id }, veld: 'afstand_hart_tot_hoek', waarde_mm: 800, invoer: '800', bron: 'disto', wand_id: wand.id, referentie: { soort: 'hoek', id: B, label: 'H2' } }, NU);
+    const pl = D.detailPlek(e, sc, lm), hist = D.historie(e, sc.id, 'afstand_hart_tot_hoek');
+    check('review: bewust 800 vanaf B meten geeft een nieuwe meting en 2200 van A; de vorige referentie blijft in de historie', afst(pl) === 2200 && pl.vanaf_hoek === B && hist.length === 2 && hist[0].referentie.id === A && hist[1].vervangt === hist[0].id);
+    const zonder = D.voegDetailToe(e, { soort: 'stopcontact', wand_id: wand.id, anker: { xr: { x: 1, y: 0.3, z: 0 }, wand_id: wand.id, u_m: 1, v_m: 0.3 } }, NU);
+    D.voegMetingToe(e, { doel: { soort: 'detail', id: zonder.id }, veld: 'afstand_hart_tot_hoek', waarde_mm: 1000, bron: 'hand' }, NU);
+    check('review: maat zonder referentie geeft een onzekere plek', D.detailPlek(e, zonder, lm).status.langs_wand === 'onzeker');
+    sc.wand_id = e.wanden[1].id;
+    check('review: na een wandwissel is de plek onzeker (maat hoort bij een hoek van een andere wand)', D.detailPlek(e, sc, lm).status.langs_wand === 'onzeker');
+    const sk = D.nieuw({}, NU), ss = D.startSessie(sk, {}, NU); ss.xr.vloerY = 0;
+    D.zetHoeken(sk, ss.id, [{ x: 0, z: 0 }, { x: 3, z: 0 }, { x: 3, z: 2 }, { x: 0, z: 2 }], NU);
+    [3000, 2000, 3000, 2100].forEach((v, i) => D.voegMetingToe(sk, { doel: { soort: 'wand', id: sk.wanden[i].id }, veld: 'lengte', waarde_mm: v, bron: 'hand' }, NU));
+    const lk = D.lijnmodel(sk, AR);
+    check('lijnmodel: modellengte en verschil met het gemeten label staan per wand', lk.segmenten.every(x => typeof x.lengte_model_mm === 'number') && lk.segmenten.some(x => x.verschil_model_mm !== 0), lk.segmenten.map(x => x.lengte.waarde + '/' + x.lengte_model_mm).join(' '));
   }
 
   // ── pakket heen en terug ──
@@ -182,7 +209,7 @@ const jpg = n => Uint8Array.from([0xFF, 0xD8, 0xFF, 0xE0, n & 255, (n >> 8) & 25
   D.zetHoeken(k, ks.id, [{ x: 0, z: 0 }, { x: 4, z: 0 }, { x: 4, z: 3 }, { x: 0, z: 3 }], NU);
   [4000, 3000, 4000, 3000].forEach((v, i) => D.voegMetingToe(k, { doel: { soort: 'wand', id: k.wanden[i].id }, veld: 'lengte', waarde_mm: v, bron: 'disto' }, NU));
   const raam = D.voegDetailToe(k, { soort: 'raam', wand_id: k.wanden[2].id, referentie_hoek: k.hoeken[2].id, anker: { xr: { x: 2, y: 1.4, z: 3 }, wand_id: k.wanden[2].id, u_m: 1.4, v_m: 0.9 } }, NU);
-  [['afstand_tot_hoek', 700], ['breedte', 1500], ['hoogte', 1400], ['borstwering', 900]].forEach(([f, v]) => D.voegMetingToe(k, { doel: { soort: 'detail', id: raam.id }, veld: f, waarde_mm: v, bron: 'disto' }, NU));
+  [['afstand_tot_hoek', 700], ['breedte', 1500], ['hoogte', 1400], ['borstwering', 900]].forEach(([f, v]) => D.voegMetingToe(k, { doel: { soort: 'detail', id: raam.id }, veld: f, waarde_mm: v, bron: 'disto', referentie: f === 'afstand_tot_hoek' ? { soort: 'hoek', id: k.hoeken[2].id, label: 'H3' } : null }, NU));
   const cv = D.voegDetailToe(k, { soort: 'leiding', label: 'CV-leiding met bocht', wand_id: k.wanden[2].id, anker: { xr: { x: 2.5, y: 0.25, z: 2.95 }, wand_id: k.wanden[2].id, u_m: 1.5, v_m: 0.25 },
     traject: { punten_mm: [{ x: 1200, y: 2950, z: 250 }, { x: 2800, y: 2950, z: 250 }, { x: 2800, y: 2950, z: 0 }], zichtbaar_tot: 'vloer bij het eindpunt', status: 'geschat' } }, NU);
   D.voegMetingToe(k, { doel: { soort: 'detail', id: cv.id }, veld: 'hoogte_hart', waarde_mm: 250, bron: 'hand' }, NU);

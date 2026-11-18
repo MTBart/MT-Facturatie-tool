@@ -153,6 +153,20 @@ window.renderKamer = function (cam, w, h, fovy) {
   });
   check('groothoekfoto: rechtgetrokken wandbeeld bewaard als bron groothoek', gh.bron === 'groothoek' && gh.w === 600 && gh.h === 390, JSON.stringify(gh));
   check('groothoekfoto: raam, radiator en muur op de goede plek', gh.raam[2] > gh.raam[0] + 50 && gh.radiator.every(c => c > 200) && gh.muur[1] > gh.muur[2], JSON.stringify(gh));
+  // review 18-11 (GPT): een opgeslagen maat houdt haar eigen referentie; alleen de keuzelijst wisselen verandert niets
+  const plekNu = id => p.evaluate(id => { const D = window.MTRuimteDossier, d = window.arProef.dossier(), det = d.details.find(x => x.id === id), lm = D.lijnmodel(d, window.arProef.AR), pl = D.detailPlek(d, det, lm); return { x: pl.x, y: pl.y, vanaf: pl.vanaf_hoek, n: D.historie(d, id, 'afstand_hart_tot_hoek').length, st: pl.status.langs_wand }; }, id);
+  const voor = await plekNu(details[0]);
+  await p.evaluate(id => window.arProef.openPaneel(window.arProef.dossier().details.find(d => d.id === id)), details[0]);
+  await p.selectOption('#dp-ref', { index: 0 }); await p.click('#dp-klaar');
+  const naKeuze = await plekNu(details[0]);
+  check('review: alleen de referentiehoek wisselen laat plek en metingen staan', naKeuze.x === voor.x && naKeuze.y === voor.y && naKeuze.n === voor.n && naKeuze.st === 'gemeten', JSON.stringify([voor, naKeuze]));
+  await p.evaluate(id => window.arProef.openPaneel(window.arProef.dossier().details.find(d => d.id === id)), details[0]);
+  await p.click('#dp-afstand_hart_tot_hoek'); await p.keyboard.type('1550', { delay: 220 }); await p.keyboard.press('Enter'); await p.click('#dp-klaar');
+  const naMeting = await plekNu(details[0]);
+  check('review: dezelfde 1550 bewust vanaf de andere hoek meten geeft een nieuwe meting en een andere plek', naMeting.n === voor.n + 1 && naMeting.vanaf !== voor.vanaf && (naMeting.x !== voor.x || naMeting.y !== voor.y), JSON.stringify(naMeting));
+  await p.reload(); await p.waitForSelector('#r-lijst li'); await p.click('#r-lijst li button');
+  const naHeropenen = await plekNu(details[0]);
+  check('review: na heropenen dezelfde plek en historie', naHeropenen.x === naMeting.x && naHeropenen.n === naMeting.n && naHeropenen.vanaf === naMeting.vanaf);
   const wm = await p.evaluate(() => { const D = window.MTRuimteDossier, d = window.arProef.dossier(); return d.wanden.map(w => D.huidigeMeting(d, w.id, 'lengte')).map(x => x && x.bron); });
   check('wandmaten: hand, X4, hand, X4 herkend', JSON.stringify(wm) === JSON.stringify(['hand', 'disto', 'hand', 'disto']), JSON.stringify(wm));
   // panorama plakken (maakt de wandbeelden en bewaart ze)

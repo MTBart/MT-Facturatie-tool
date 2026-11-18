@@ -211,7 +211,8 @@
       betekenis: m.betekenis || veld.betekenis || null, referentie: m.referentie || (veld.referentie ? { soort: 'tekst', naam: veld.referentie } : null),
       waarde_mm: m.waarde_mm == null ? null : rond(Number(m.waarde_mm), 1), invoer: m.invoer == null ? null : String(m.invoer), eenheid_invoer: m.eenheid_invoer || null,
       bron: m.bron || null, status, meethoogte_mm: m.meethoogte_mm == null ? null : Number(m.meethoogte_mm), richting: m.richting || null,
-      punten: m.punten || null, tijd: isoNu(nu), sessie: m.sessie || null, vervangt: vorige ? vorige.id : null, opmerking: m.opmerking || null
+      punten: m.punten || null, tijd: isoNu(nu), sessie: m.sessie || null, vervangt: vorige ? vorige.id : null, opmerking: m.opmerking || null,
+      wand_id: m.wand_id || null   // bij een detailmaat: de wand waarlangs gemeten is (een latere wandwissel maakt de plek onzeker)
     };
     if (m.doel.extra) rec.doel.extra = m.doel.extra;
     d.metingen.push(rec); d.bijgewerkt = isoNu(nu);
@@ -361,6 +362,8 @@
         kort: (m ? m.waarde_mm : camera) < D.KORTE_WAND_MM, dikte: w.dikte
       };
     });
+    // Voor de tekenaar: de lengte tussen de eindpunten in het model naast het gemeten label. Sluit de kamer niet precies, dan verschillen die.
+    segmenten.forEach((sg, i) => { const a = punten[i], b = punten[(i + 1) % n], ml = rond(Math.hypot(b.x - a.x, b.y - a.y), 0); sg.lengte_model_mm = ml; sg.verschil_model_mm = sg.lengte.status === 'gemeten' ? rond(ml - sg.lengte.waarde, 0) : null; });
     const hm = D.huidigeMeting(d, d.ruimte.id, 'plafondhoogte');
     const hoogte = hm && hm.status === 'gemeten' ? { waarde: hm.waarde_mm, status: 'gemeten', bron: hm.bron, meting_id: hm.id }
       : (basis.xr && basis.xr.plafondY != null ? { waarde: rond((basis.xr.plafondY - vloerY) * 1000, 0), status: 'geschat', bron: 'ar' } : { waarde: null, status: 'onbekend', bron: null });
@@ -374,20 +377,44 @@
     };
   };
   // Plek van een detail in het lijnmodel: langs zijn wand (gemeten afstand gaat voor de camera), anders de camera-plek omgerekend.
-  D.detailPlek = function (d, det, lm) {
-    if (!lm || !det.anker) return null;
-    const wi = lijst(d.wanden).findIndex(w => w.id === det.wand_id), velden = ['afstand_tot_hoek', 'afstand_hart_tot_hoek', 'begin_vanaf_hoek'];
-    let u = det.anker.u_m != null ? det.anker.u_m * 1000 : null, ubron = 'geschat', v = det.anker.v_m != null ? det.anker.v_m * 1000 : null, vbron = 'geschat';
-    for (const f of velden) { const m = D.huidigeMeting(d, det.id, f); if (m && m.status === 'gemeten') { u = m.waarde_mm; ubron = 'gemeten'; break; } }
-    const hv = D.huidigeMeting(d, det.id, 'hoogte_hart') || D.huidigeMeting(d, det.id, 'onderkant') || D.huidigeMeting(d, det.id, 'borstwering');
-    if (hv && hv.status === 'gemeten') { v = hv.waarde_mm; vbron = 'gemeten'; }
-    if (wi >= 0 && u != null) {
-      const n = lm.punten.length, a = lm.punten[wi], b = lm.punten[(wi + 1) % n], L = Math.hypot(b.x - a.x, b.y - a.y) || 1;
-      let uu = u;
-      if (ubron === 'gemeten' && det.referentie_hoek && det.referentie_hoek === lijst(d.wanden)[wi].naar) uu = L - u;
-      return { x: rond(a.x + (b.x - a.x) / L * uu, 1), y: rond(a.y + (b.y - a.y) / L * uu, 1), z: v == null ? null : rond(v, 1), status: { langs_wand: ubron, hoogte: v == null ? 'onbekend' : vbron }, wand_id: det.wand_id };
+  // Welke maat bepaalt de plek langs de wand, en vanaf welke hoek? Review 18-11 (GPT): een opgeslagen maat houdt haar eigen referentie. Het wisselen van
+  // det.referentie_hoek (de keuzelijst) geldt alleen voor de vólgende invoer en verschuift een bestaande maat nooit. Ontbreekt de referentie (oude
+  // invoer) of hoort hij niet bij de huidige wand (wand gewisseld), dan is de plek 'onzeker'. Geeft { u_mm, vanaf (hoek-id), bron, meting_id, onzeker, reden } of null.
+  D.LANGS_VELDEN = ['afstand_tot_hoek', 'afstand_hart_tot_hoek', 'begin_vanaf_hoek'];
+  D.HOOGTE_VELDEN = ['hoogte_hart', 'onderkant', 'borstwering', 'hoogte_bovenkant'];
+  D.maatLangsWand = function (d, det) {
+    const wand = lijst(d.wanden).find(w => w.id === det.wand_id);
+    for (const f of D.LANGS_VELDEN) {
+      const m = D.huidigeMeting(d, det.id, f); if (!m || m.status !== 'gemeten' || m.waarde_mm == null) continue;
+      const ref = m.referentie && m.referentie.soort === 'hoek' ? m.referentie.id : null;
+      if (!wand) return { u_mm: m.waarde_mm, vanaf: ref, bron: m.bron, meting_id: m.id, veld: f, onzeker: true, reden: 'geen wand gekoppeld' };
+      if (m.wand_id && m.wand_id !== wand.id) return { u_mm: m.waarde_mm, vanaf: ref, bron: m.bron, meting_id: m.id, veld: f, onzeker: true, reden: 'gemeten vanaf een hoek van een andere wand' };
+      if (!ref) return { u_mm: m.waarde_mm, vanaf: wand.van, bron: m.bron, meting_id: m.id, veld: f, onzeker: true, reden: 'onbekend vanaf welke hoek gemeten' };
+      if (ref !== wand.van && ref !== wand.naar) return { u_mm: m.waarde_mm, vanaf: ref, bron: m.bron, meting_id: m.id, veld: f, onzeker: true, reden: 'gemeten vanaf een hoek van een andere wand' };
+      return { u_mm: m.waarde_mm, vanaf: ref, bron: m.bron, meting_id: m.id, veld: f, onzeker: false, reden: null };
     }
-    if (det.anker.xr) { const r = D.naarRuimte(lm._t, det.anker.xr); return { x: r.x, y: r.y, z: r.z, status: { langs_wand: 'geschat', hoogte: vbron === 'gemeten' ? 'gemeten' : 'geschat' }, wand_id: null }; }
+    return null;
+  };
+  D.maatHoogte = function (d, det) {
+    for (const f of D.HOOGTE_VELDEN) { const m = D.huidigeMeting(d, det.id, f); if (m && m.status === 'gemeten' && m.waarde_mm != null) return { v_mm: m.waarde_mm, bron: m.bron, meting_id: m.id, veld: f }; }
+    return null;
+  };
+  // Plek van een detail in het lijnmodel: langs zijn wand vanaf de hoek van de meting (een gemeten maat gaat voor de camera), anders de camera-plek omgerekend.
+  D.detailPlek = function (d, det, lm) {
+    if (!lm || (!det.anker && !det.wand_id)) return null;
+    const wi = lijst(d.wanden).findIndex(w => w.id === det.wand_id), wand = lijst(d.wanden)[wi], ml = D.maatLangsWand(d, det), mh = D.maatHoogte(d, det);
+    let v = det.anker && det.anker.v_m != null ? det.anker.v_m * 1000 : null, vbron = v == null ? 'onbekend' : 'geschat';
+    if (mh) { v = mh.v_mm; vbron = 'gemeten'; }
+    let u = null, vanaf = wand ? wand.van : null, ubron = 'geschat', reden = null, metingId = null;
+    if (det.anker && det.anker.u_m != null) u = det.anker.u_m * 1000;   // de camera meet langs de wand vanaf de beginhoek
+    if (ml && wand && !(ml.onzeker && ml.reden === 'gemeten vanaf een hoek van een andere wand')) { u = ml.u_mm; vanaf = ml.vanaf; ubron = ml.onzeker ? 'onzeker' : 'gemeten'; reden = ml.reden; metingId = ml.meting_id; }
+    else if (ml) { ubron = 'onzeker'; reden = ml.reden; }
+    if (wi >= 0 && u != null) {
+      const n = lm.punten.length, a = lm.punten[wi], b = lm.punten[(wi + 1) % n], L = Math.hypot(b.x - a.x, b.y - a.y) || 1, uu = vanaf === wand.naar ? L - u : u;
+      return { x: rond(a.x + (b.x - a.x) / L * uu, 1), y: rond(a.y + (b.y - a.y) / L * uu, 1), z: v == null ? null : rond(v, 1),
+        status: { langs_wand: ubron, hoogte: vbron }, wand_id: det.wand_id, vanaf_hoek: vanaf, meting_id: metingId, hoogte_meting_id: mh ? mh.meting_id : null, reden: reden };
+    }
+    if (det.anker && det.anker.xr) { const r = D.naarRuimte(lm._t, det.anker.xr); return { x: r.x, y: r.y, z: r.z, status: { langs_wand: ml ? 'onzeker' : 'geschat', hoogte: vbron }, wand_id: null, reden: reden }; }
     return null;
   };
   // Controlematen (bijv. diagonaal H4-H6) naast de waarde die het model verwacht.

@@ -205,6 +205,32 @@ de herkenning van de sluittik gebruiken nu de positie waar ARCore de hoek op dat
 (`xr_anker`). Zo blijft het beeld op de echte wand zonder dat de meting verschuift, en wordt een sluittik op H1 ook herkend als de kaart onderweg is
 bijgesteld (21:14: 0,9 m). Sluitafstand 20 → 25 cm. *Te toetsen op het toestel.*
 
+**B23 · 18-11 · Een opgeslagen maat houdt haar eigen referentie (review GPT, fout hersteld).** *Was:* de plek langs de wand werd gerekend vanaf
+`det.referentie_hoek`, de keuzelijst in het paneel. Die wisselen verschoof een bestaande maat (800 vanaf A werd 2200 vanaf A), en dezelfde waarde vanaf de
+andere hoek werd als "ongewijzigd" overgeslagen. *Nu:* `D.maatLangsWand` gebruikt de referentiehoek en de wand (`meting.wand_id`, nieuw) van de meting
+zelf; de keuzelijst geldt alleen voor de volgende invoer. Geen referentie (oude invoer) of een wand die niet meer klopt → plek *onzeker* met reden.
+Een meting komt er alleen bij echte nieuwe invoer (Enter en change tellen één keer); dezelfde waarde met een andere hoek, bron of status is wél nieuw.
+Getest in de dossierkern (reproductie van de review), in de browser en na heropenen.
+
+**B24 · 18-11 · Maatlijnen in de kijker volgen de gemeten maat (review GPT).** Rood = gemeten (vanaf de hoek van de meting), oranje = camera of onzeker;
+het paneel zegt waarop beide lijnen berusten en geeft de camera-aanwijzing apart. Het label in beeld blijft op de camera-plek, zodat foto-aanwijzing
+en gemeten eindpunt afzonderlijk terug te vinden zijn.
+
+**B25 · 18-11 · Modellengte naast het gemeten label (review GPT).** Per wandsegment `lengte_model_mm` en `verschil_model_mm`: sluit de kamer niet,
+dan ziet de tekenaar het verschil expliciet (ook in het dossierpaneel van de kijker).
+
+**B26 · 18-11 · Besluiten uit de review bij de open vragen.**
+- *Schaalcorrectie (P10):* nog niet toepassen. Eerst ruwe tegenover rechtgezette lengtes, beide diagonalen en per richting een tussenliggend detail
+  onafhankelijk meten; fout voor en na correctie op een tussenmaat vergelijken. Een gecorrigeerde schatting naast de ongewijzigde bron bewaren.
+- *Hoekfoto:* één scherpe foto waar hoek en vloerpeil goed zichtbaar zijn; een tweede aanzicht vragen bij een afgedekte hoek, plint of twijfel over het peil.
+  De < 2 mm uit de simulatie is geen toestelmeting; toetsen tegen echte onafhankelijke maten.
+- *Kameruitslag (P2):* eerst als leescontrole door kantoor. Per wand referentiehoek en kijkrichting; horizontaal bematen vanaf die afgewerkte hoek,
+  verticaal vanaf de afgewerkte vloer; maatbetekenis en bron per waarde; dagkant, kozijnzijde en hart apart herkenbaar; wanddikte of negge *onbekend*
+  als niet gemeten; voor leidingen ook het verloop in de ruimte.
+- *Gordijnen (P1):* geen startstap. Vrije vooropname blijft; gordijnmaten optioneel aanbieden zodra de opnemer een raam kiest.
+- *Overdracht:* onderbreken en teruglezen op de kantoor-pc testen voordat de telefoon de enige kopie opgeeft. Echte woningbeelden blijven binnen het
+  project met de bestaande toegangsrechten; openbare testlinks alleen met fictieve beelden.
+
 ---
 
 ## 5. Input en feedback van Bart
@@ -221,6 +247,7 @@ bijgesteld (21:14: 0,9 m). Sluitafstand 20 → 25 cm. *Te toetsen op het toestel
 | 18-11 20:53 | Screenshots: "de velden verschuiven ten opzichte van de wanden"; "kan ik mijn groothoekcamera gebruiken? Ik sta zo dicht op de wanden dat ik geen volledig beeld krijg". | B17, B18, B19. |
 | 18-11 21:14 | Tweede proef met ankers: 5 hoeken, vorm scheef (zie §5.1). | B20, B21; pakket gevraagd voor diagnose. |
 | 18-11 21:30 | "Weer verschuiven de wanden." | B22. |
+| 18-11 21:45 | Review van GPT (`OPNAME-AR-REVIEW-2026-11-18.md`, op stand `ddeedbf`). | B23–B26; acceptatieproef §6 P0. |
 | 18-11 | Ontwikkeldocument waarin alles staat, zodat terug te zien is wat waarom veranderde; Astra moet er licht op kunnen laten schijnen. | Dit document. |
 
 ### 5.1 Meetresultaten echte proeven
@@ -263,11 +290,17 @@ de camerastanden van alle beelden (looppad) en hoe vaak de tracking kwijt was.
 
 Volgorde = voorgestelde prioriteit. Status: **voorstel** (nog niet gebouwd) tenzij anders vermeld.
 
+### P0 · Eerste acceptatie op echte toestellen (uit de review, eerst doen)
+Eén S24-rondgang met een raam en een radiator of leiding ervoor, vloer en plafond. Beelden bij de deur én schuin bij het raam. Een X4-maat met twee
+duidelijke referenties en één open vraag. Telefoonpagina sluiten, heropenen, pakket maken; Ilona opent het op haar eigen pc. Kan zij zonder uitleg
+langs de wanden slepen, beide gezichtspunten herkennen, de originele foto en de werkelijke maat aanwijzen? Noteren: MB, tijd tot eerste beeld,
+ontbrekende kijkrichtingen. Uitkomst bepaalt of per kijkpunt een apart panorama nodig is (radiator vóór raam).
+
 ### P1 · Gordijnen-proef: meetprofiel voor kozijnen
 **Waarom:** concrete klus; laat zien of foto + maat per kozijn genoeg is om gordijnen (rail, roede, stof) te bestellen.
 
-**Voorstel:** bij de start kies je een **meetdoel** (bijv. *Gordijnen*). Dat bepaalt welke maten de app per raam vraagt; de rest blijft
-gewoon mogelijk. Per raam (detail soort *raam*, op een wand):
+**Voorstel (aangepast na review, B26):** geen keuze bij de start. Kies je bij een detail *Raam*, dan biedt de app de gordijnmaten optioneel aan
+(knop *Gordijnmaten erbij*). Per raam (detail soort *raam*, op een wand):
 
 | Maat | Betekenis (vastleggen!) | Waarom voor gordijnen |
 |---|---|---|
@@ -334,7 +367,7 @@ iOS-onderdeel met RoomPlan (vraagt Mac + Xcode, Apple-ontwikkelaarsaccount, iPho
 (bijv. een stopcontact op 0,82 m van de hoek) erft die fout.
 **Voorstel:** zodra een wand gemeten is, schaal de camera-afstanden langs die wand met `gemeten / camera` (bijv. 2900/2934). Het resultaat blijft
 status *geschat* (bron `ar`, met `schaal_gecorrigeerd: true` en de bronmaat), en een echte meting gaat altijd voor. Ook als hint in het detailpaneel tonen.
-**Te toetsen:** in meer kamers kijken of de factor per wand of per sessie stabiel is.
+**Te toetsen:** in meer kamers kijken of de factor per wand of per sessie stabiel is. **Na review (B26): nog niet toepassen**; eerst onafhankelijke tussenmaten en beide diagonalen.
 
 ### P9 · Kwaliteit panorama en prestaties
 Perspectief-correct plakken (homografie per vak i.p.v. affien), automatisch extra kijkpunt bij een andere zichtlijn (radiator vóór raam),
@@ -389,7 +422,8 @@ Perspectief-correct plakken (homografie per vak i.p.v. affien), automatisch extr
 | 18-11 | `ddeedbf` | Meetresultaat echte proef 20:27, voorstel P10 | proef Bart |
 | 18-11 | `efae8d2` | ARCore-ankers, groothoekfoto per wand rechtgetrokken, melding Foto | B17–B19 |
 | 18-11 | `19b578c` | Ankers alleen meeschrijven, hoek weghalen, spie-waarschuwing | B20, B21 |
-| 18-11 | (volgende) | Tekenen volgt het anker, meting blijft de tik | B22 |
+| 18-11 | `66b01d8` | Tekenen volgt het anker, meting blijft de tik | B22 |
+| 18-11 | (volgende) | Review GPT verwerkt: referentie per meting, maatlijnen op de meting, modellengte | B23–B25 |
 
 Meer detail per brok: `VOORTGANG-OPNAME.md`. Volledige diff: draft-PR #5.
 

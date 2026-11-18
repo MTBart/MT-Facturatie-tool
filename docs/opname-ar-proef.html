@@ -1568,7 +1568,7 @@ if (typeof module !== 'undefined') module.exports = AR;
     DS.actieveDetails(d).forEach(function (det) {
       if (det.anker && det.anker.wand_nr != null && !det.wand_id && d.wanden[det.anker.wand_nr]) {
         var w = d.wanden[det.anker.wand_nr]; det.wand_id = w.id; det.anker.wand_id = w.id; if (!det.referentie_hoek) det.referentie_hoek = w.van;
-        d.metingen.forEach(function (m) { if (m.doel.id === det.id && m.referentie && m.referentie.soort === 'hoek' && !m.referentie.id) m.referentie.id = w.van; });
+        d.metingen.forEach(function (m) { if (m.doel.id === det.id) { if (m.referentie && m.referentie.soort === 'hoek' && !m.referentie.id) m.referentie.id = w.van; if (!m.wand_id) m.wand_id = w.id; } });
       }
     });
     DS.koppelHoekfotos(d);
@@ -1697,7 +1697,7 @@ if (typeof module !== 'undefined') module.exports = AR;
     var fu = ['afstand_hart_tot_hoek', 'afstand_tot_hoek', 'begin_vanaf_hoek'].find(function (f) { return velden.indexOf(f) >= 0; });
     var fv = ['hoogte_hart', 'onderkant', 'borstwering', 'hoogte_bovenkant'].find(function (f) { return velden.indexOf(f) >= 0; });
     var ref = { soort: 'hoek', label: 'H' + (a.wand_nr + 1), id: det.wand_id ? (d.wanden.find(function (w) { return w.id === det.wand_id; }) || {}).van : null };
-    if (fu && !DS.huidigeMeting(d, det.id, fu)) DS.voegMetingToe(d, { doel: { soort: 'detail', id: det.id }, veld: fu, waarde_mm: Math.round(a.u_m * 1000), bron: 'ar', status: 'geschat', referentie: ref, sessie: ses ? ses.id : null });
+    if (fu && !DS.huidigeMeting(d, det.id, fu)) DS.voegMetingToe(d, { doel: { soort: 'detail', id: det.id }, veld: fu, waarde_mm: Math.round(a.u_m * 1000), bron: 'ar', status: 'geschat', referentie: ref, wand_id: det.wand_id || null, sessie: ses ? ses.id : null });
     if (fv && !DS.huidigeMeting(d, det.id, fv)) DS.voegMetingToe(d, { doel: { soort: 'detail', id: det.id }, veld: fv, waarde_mm: Math.round(a.v_m * 1000), bron: 'ar', status: 'geschat', referentie: { soort: 'vlak', naam: 'afgewerkte vloer (camera)' }, sessie: ses ? ses.id : null });
   }
   function detailFoto(det) {
@@ -1915,10 +1915,11 @@ if (typeof module !== 'undefined') module.exports = AR;
       if (e.key === 'Enter') { inp._enter = nuMs(); return; }
       if (e.key && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
         if (!inp.value || (inp.selectionStart === 0 && inp.selectionEnd === String(inp.value).length)) inp._tikken = [];
-        inp._tikken.push(nuMs());
+        inp._tikken.push(nuMs()); inp._gewijzigd = true;
       } else if (e.key !== 'Shift') inp._tikken = [];
     });
     inp.addEventListener('focus', function () { inp._tikken = []; inp._enter = null; try { inp.select(); } catch (e) {} });
+    inp.addEventListener('input', function () { inp._gewijzigd = true; });
   }
   function bronVan(inp) {
     var ok = DS && DS.isDistoReeks(inp._tikken || [], inp._enter || 0, String(inp.value).trim().length);
@@ -1995,6 +1996,7 @@ if (typeof module !== 'undefined') module.exports = AR;
     if (wand) {
       var rv = maak('div', null, 'veld'), rl = maak('label', 'Afstand gemeten vanaf welke binnenhoek?'), rs = maak('select'); rs.id = 'dp-ref'; rl.htmlFor = rs.id;
       [wand.van, wand.naar].forEach(function (hid) { var h = d.hoeken.find(function (x) { return x.id === hid; }); var op = maak('option', h ? h.label : hid); op.value = hid; rs.appendChild(op); });
+      rl.textContent = 'Volgende maat meten vanaf welke binnenhoek? (een opgeslagen maat houdt haar eigen hoek)';
       rs.value = det.referentie_hoek || wand.van;
       rs.addEventListener('change', function () { det.referentie_hoek = rs.value; planBewaar(); verversPaneel(); });
       rv.appendChild(rl); rv.appendChild(rs); w.appendChild(rv);
@@ -2027,10 +2029,17 @@ if (typeof module !== 'undefined') module.exports = AR;
       function opslaan() {
         var l = DS.leesMaat(inp.value);
         if (!l) { if (String(inp.value).trim()) info.textContent = 'Geen maat herkend: typ bijv. 312 of 0,312 m'; return; }
-        var huidig = DS.huidigeMeting(d, det.id, f);
-        if (huidig && huidig.status !== 'open' && huidig.bron !== 'ar' && huidig.waarde_mm === l.mm) return;
-        var bron = bronVan(inp), geschat = !!(schat && schat.checked), ref = V.referentie === 'gekozen binnenhoek' && det.referentie_hoek ? { soort: 'hoek', id: det.referentie_hoek, label: (d.hoeken.find(function (h) { return h.id === det.referentie_hoek; }) || {}).label } : null;
-        var nieuw = DS.voegMetingToe(d, { doel: { soort: 'detail', id: det.id }, veld: f, waarde_mm: l.mm, invoer: inp.value, eenheid_invoer: l.eenheid, bron: bron, status: geschat ? 'geschat' : 'gemeten', referentie: ref, sessie: ses && ses.id });
+        // Alleen echte nieuwe invoer maakt een meting (review 18-11): Enter én change op dezelfde invoer tellen één keer, en een keuzelijst wisselen zonder
+        // nieuwe invoer verandert niets. Dezelfde waarde vanaf een andere hoek, met een andere bron of status is wél een nieuwe meting.
+        if (!inp._gewijzigd) return;
+        var huidig = DS.huidigeMeting(d, det.id, f), wandNu = wandVan(det), refId = det.referentie_hoek || (wandNu ? wandNu.van : null);
+        var bron = bronVan(inp), geschat = !!(schat && schat.checked), ref = V.referentie === 'gekozen binnenhoek' && refId ? { soort: 'hoek', id: refId, label: (d.hoeken.find(function (h) { return h.id === refId; }) || {}).label } : null;
+        // eerste rondgang: de wand bestaat nog niet in het dossier; de maat geldt vanaf de beginhoek (id volgt bij Klaar, zie koppelWanden)
+        if (!ref && V.referentie === 'gekozen binnenhoek' && det.anker && det.anker.wand_nr != null) ref = { soort: 'hoek', id: null, label: 'H' + (det.anker.wand_nr + 1) };
+        var status = geschat ? 'geschat' : 'gemeten';
+        if (huidig && huidig.bron !== 'ar' && huidig.waarde_mm === l.mm && huidig.bron === bron && huidig.status === status && (huidig.referentie && huidig.referentie.id || null) === (ref ? ref.id : null) && (huidig.wand_id || null) === (det.wand_id || null)) { inp._gewijzigd = false; return; }
+        inp._gewijzigd = false;
+        var nieuw = DS.voegMetingToe(d, { doel: { soort: 'detail', id: det.id }, veld: f, waarde_mm: l.mm, invoer: inp.value, eenheid_invoer: l.eenheid, bron: bron, status: status, referentie: ref, wand_id: det.wand_id || null, sessie: ses && ses.id });
         info.textContent = (bron === 'disto' ? 'X4: ' : '') + l.mm + ' mm bewaard bij ' + V.label.toLowerCase() + ' · ' + infoTekst(nieuw);
         planBewaar();
       }
