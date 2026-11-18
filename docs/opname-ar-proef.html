@@ -967,7 +967,7 @@ if (typeof module !== 'undefined') module.exports = AR;
     var H = plafondY != null ? plafondY - vloerY : HOOGTE_STANDAARD, sleutel = punten.length + '|' + H.toFixed(3);
     if (sleutel === pano.sleutel) return;
     pano.sleutel = sleutel;
-    pano.wanden = punten.length >= 2 ? AR.wanden3d(punten, !!(aanvul && aanvul.stap >= 2), vloerY, H, oog) : [];
+    pano.wanden = punten.length >= 2 ? AR.wanden3d(zicht.length === punten.length ? zicht : punten, !!(aanvul && aanvul.stap >= 2), vloerY, H, oog) : [];
     pano.cellen = pano.wanden.map(function (w) { return AR.cellen(w, 0.3); });
     pano.beelden.forEach(function (f, i) { AR.dekBij(pano.cellen, pano.wanden, f, i); });
   }
@@ -1010,13 +1010,18 @@ if (typeof module !== 'undefined') module.exports = AR;
         var am = ap.transform.matrix, dA = Math.hypot(am[12] - q.x, am[14] - q.z);
         q.ankerPos = { x: am[12], z: am[14], afstand_m: dA }; verschoven = Math.max(verschoven, dA);
       });
-      if (verschoven > 0.05 && performance.now() - ankerTijd > 5000) { ankerTijd = performance.now(); telWaarneming('anker_wijkt_af', Math.round(verschoven * 1000) + ' mm'); bewaarLive(); }
+      if (verschoven > 0.02 && performance.now() - ankerTijd > 3000) {
+        ankerTijd = performance.now(); detailWanden.sleutel = ''; pano.sleutel = '';
+        if (verschoven > 0.05) { telWaarneming('anker_wijkt_af', Math.round(verschoven * 1000) + ' mm'); bewaarLive(); }
+      }
     }
+    // Tekenen, vakjes, detailwanden en de sluittik gebruiken waar ARCore de hoeken nú ziet (anker); bewaard wordt de tik.
+    zicht = punten.map(function (q) { return q.ankerPos ? { x: q.ankerPos.x, z: q.ankerPos.z, bron: q.bron } : q; });
     // Detail: het punt op de wand onder het kruisje (zodra er twee hoeken zijn) en, als erom gevraagd is, één scherpe foto op volle resolutie.
     wandDoel = null;
     if (vloerY != null && punten.length >= 2) {
       var Hw = plafondY != null ? plafondY - vloerY : HOOGTE_STANDAARD, dk = punten.length + '|' + Hw.toFixed(3) + '|' + (aanvul ? 1 : 0);
-      if (dk !== detailWanden.sleutel) { detailWanden.sleutel = dk; detailWanden.lijst = AR.wanden3d(punten, !!aanvul, vloerY, Hw, oog); }
+      if (dk !== detailWanden.sleutel) { detailWanden.sleutel = dk; detailWanden.lijst = AR.wanden3d(zicht, !!aanvul, vloerY, Hw, oog); }
       wandDoel = AR.snijWand(oog, rich, detailWanden.lijst);
     }
     if (vangRij.length && binding) {
@@ -1070,13 +1075,13 @@ if (typeof module !== 'undefined') module.exports = AR;
       richtpunt = sp && rich.y > 0 ? { x: sp.x, y: vloerY, z: sp.z, plafond: true } : null;
     } else {
       richtpunt = null;
-      if (punten.length) { var hb = AR.hoogteBoven(oog, rich, punten[punten.length - 1]); if (hb && hb.y - vloerY > 1.8 && hb.y - vloerY < 6 && hb.naast < 0.5) plafondKandidaat = hb.y; }
+      if (punten.length) { var hb = AR.hoogteBoven(oog, rich, zicht[punten.length - 1]); if (hb && hb.y - vloerY > 1.8 && hb.y - vloerY < 6 && hb.naast < 0.5) plafondKandidaat = hb.y; }
     }
     var nu = performance.now();
     spoor.push({ t: nu, p: richtpunt ? { x: richtpunt.x, z: richtpunt.z, plafond: !!richtpunt.plafond } : null, h: plafondKandidaat,
       w: wandDoel ? { nr: wandDoel.nr, u: wandDoel.u, v: wandDoel.v } : null, o: { x: oog.x, y: oog.y, z: oog.z } });
     if (plafondFoto) {
-      var pf = punten[plafondFoto.idx];
+      var pf = zicht[plafondFoto.idx];
       if (!pf || nu > plafondFoto.tot || vloerY == null) plafondFoto = null;
       else {
         var hb2 = AR.hoogteBoven(oog, rich, pf);
@@ -1098,7 +1103,7 @@ if (typeof module !== 'undefined') module.exports = AR;
     while (spoor.length && spoor[0].t < nu - 1500) spoor.shift();
     var ver = !!(richtpunt && richtpunt.afstand > VER);
     el('ar-laag').classList.toggle('ver', ver);
-    var dichtBijStart = punten.length >= 3 && richtpunt && AR.afstand(richtpunt, punten[0]) < 0.2;
+    var dichtBijStart = punten.length >= 3 && richtpunt && AR.afstand(richtpunt, zicht[0]) < 0.2;
     // statusregel
     var pl = plafondY != null ? ' · plafond ' + meter(plafondY - vloerY) + ' m' : '';
     if (vloerY == null) status('Vloer zoeken…', 'Richt op een vrij stuk vloer en beweeg de telefoon rustig heen en weer.');
@@ -1110,18 +1115,18 @@ if (typeof module !== 'undefined') module.exports = AR;
     else if (!punten.length) status('Tik de eerste hoek aan', 'Kruisje precies op de plek waar de wanden en de vloer samenkomen. Telefoon op ' + meter(oog.y - vloerY) + ' m.');
     else if (dichtBijStart) status('Tik om de kamer te sluiten', punten.length + ' hoeken' + pl, '');
     else {
-      var laatste = punten[punten.length - 1], sub = (modus === 'plafond' ? 'Via het plafond · ' : '') + 'wand ' + punten.length;
-      if (punten.length >= 2) sub += ' · hoek H' + punten.length + ' ' + graden(AR.knik(punten[punten.length - 2], laatste, richtpunt));
+      var laatste = zicht[punten.length - 1], sub = (modus === 'plafond' ? 'Via het plafond · ' : '') + 'wand ' + punten.length;
+      if (punten.length >= 2) sub += ' · hoek H' + punten.length + ' ' + graden(AR.knik(zicht[punten.length - 2], laatste, richtpunt));
       status('Tik hoek ' + (punten.length + 1) + ' aan', sub + pl, '~' + meter(AR.afstand(laatste, richtpunt)) + ' m');
     }
     if (ver) el('ar-sub').textContent = 'Ver weg (' + meter(richtpunt.afstand) + ' m): loop dichterbij voor een preciezere hoek.';
     // tekenen: de vloerlijn, en zodra het plafond bekend is ook de plafondlijn en staande lijnen op elke hoek (het draadmodel)
     var y = (vloerY == null ? 0 : vloerY) + 0.003, yp = plafondY == null ? null : plafondY - 0.003, vast = [], los = [], richt = [], palen = [], plaf = [];
-    for (var i = 0; i + 1 < punten.length; i++) { strook(vast, punten[i], punten[i + 1], 0.018, y); if (yp != null) strook(plaf, punten[i], punten[i + 1], 0.018, yp); }
-    if (aanvul && punten.length >= 3) { strook(vast, punten[punten.length - 1], punten[0], 0.018, y); if (yp != null) strook(plaf, punten[punten.length - 1], punten[0], 0.018, yp); }
+    for (var i = 0; i + 1 < punten.length; i++) { strook(vast, zicht[i], zicht[i + 1], 0.018, y); if (yp != null) strook(plaf, zicht[i], zicht[i + 1], 0.018, yp); }
+    if (aanvul && punten.length >= 3) { strook(vast, zicht[punten.length - 1], zicht[0], 0.018, y); if (yp != null) strook(plaf, zicht[punten.length - 1], zicht[0], 0.018, yp); }
     if (aanvul) aanvul.getikt.forEach(function (p) { ring(richt, p, 0.05, 0.07, y); });
-    if (punten.length && richtpunt) { strook(los, punten[punten.length - 1], dichtBijStart ? punten[0] : richtpunt, 0.012, y); if (yp != null) strook(los, punten[punten.length - 1], dichtBijStart ? punten[0] : richtpunt, 0.012, yp); }
-    punten.forEach(function (p) {
+    if (punten.length && richtpunt) { strook(los, zicht[punten.length - 1], dichtBijStart ? zicht[0] : richtpunt, 0.012, y); if (yp != null) strook(los, zicht[punten.length - 1], dichtBijStart ? zicht[0] : richtpunt, 0.012, yp); }
+    zicht.forEach(function (p) {
       paal(p.bron === 'plafond' ? plaf : palen, { x: p.x, y: y, z: p.z }, oog, yp != null ? yp - y : 0.35, 0.012);
       ring(p.bron === 'plafond' ? plaf : palen, p, 0, 0.03, y);
       if (yp != null) ring(plaf, p, 0, 0.03, yp);
@@ -1130,7 +1135,7 @@ if (typeof module !== 'undefined') module.exports = AR;
       ring(richt, richtpunt, 0.045, 0.06, richtpunt.plafond ? yp : y);
       if (richtpunt.plafond) { ring(richt, richtpunt, 0.03, 0.04, y); paal(los, { x: richtpunt.x, y: y, z: richtpunt.z }, oog, yp - y, 0.008); }
     }
-    if (plafondKandidaat != null && punten.length) { var lp = punten[punten.length - 1]; ring(richt, lp, 0.045, 0.06, plafondKandidaat); paal(los, { x: lp.x, y: y, z: lp.z }, oog, plafondKandidaat - y, 0.008); }
+    if (plafondKandidaat != null && punten.length) { var lp = zicht[punten.length - 1]; ring(richt, lp, 0.045, 0.06, plafondKandidaat); paal(los, { x: lp.x, y: y, z: lp.z }, oog, plafondKandidaat - y, 0.008); }
     var gedekt = [], open = [];
     if (pano.aan) pano.wanden.forEach(function (w, k) {
       pano.cellen[k].forEach(function (c) {
@@ -1184,7 +1189,7 @@ if (typeof module !== 'undefined') module.exports = AR;
     var ps = rij.map(function (e) { return e.p; }).filter(Boolean), p = ps.length >= 3 ? AR.stabiel(ps) : (richtpunt ? { x: richtpunt.x, z: richtpunt.z } : null);
     if (!p) return;
     var viaPlafond = ps.length >= 3 ? ps[ps.length - 1].plafond : !!(richtpunt && richtpunt.plafond);
-    if (punten.length >= 3 && AR.afstand(p, punten[0]) < 0.2) { afronden(); return; }
+    if (punten.length >= 3 && AR.afstand(p, (zicht[0] || punten[0])) < 0.25) { afronden(); return; }
     punten.push(viaPlafond ? { x: p.x, z: p.z, bron: 'plafond' } : { x: p.x, z: p.z });
     var nieuwP = punten[punten.length - 1]; nieuwP.tik = { x: p.x, z: p.z }; ankerRij.push({ p: nieuwP, y: vloerY });
     try { if (navigator.vibrate) navigator.vibrate(25); } catch (e) {}
@@ -1228,7 +1233,7 @@ if (typeof module !== 'undefined') module.exports = AR;
   function startAr(aanvullen) {
     if (sessie) return;
     punten = []; vloerMonsters = []; vloerY = null; richtpunt = null; modus = 'vloer'; plafondY = null; plafondMonsters = []; plafondKandidaat = null; spoor = [];
-    aanvul = null; paneelOpen = false; vangRij = []; ankerRij = []; plafondFoto = null; flits = null; wandDoel = null; trackingKwijt = false; detailWanden = { sleutel: '', lijst: [] };
+    aanvul = null; paneelOpen = false; vangRij = []; ankerRij = []; zicht = []; plafondFoto = null; flits = null; wandDoel = null; trackingKwijt = false; detailWanden = { sleutel: '', lijst: [] };
     if (DS && OS) {
       if (aanvullen && rec) {
         var d0 = dossier();
@@ -1430,7 +1435,7 @@ if (typeof module !== 'undefined') module.exports = AR;
   }
 
   // ---------- live: gevonden wandvlakken, plattegrondje en richtingskaart ----------
-  var scanVlakken = new Map(), stil = null, hintPlekken = [], kaartTeller = 0, scanBewaard = 0, toonVlakken = false, ankerRij = [], ankerTijd = 0;
+  var scanVlakken = new Map(), stil = null, hintPlekken = [], kaartTeller = 0, scanBewaard = 0, toonVlakken = false, ankerRij = [], ankerTijd = 0, zicht = [];
   try { toonVlakken = localStorage.getItem('mt_ar_vlakken') === '1'; } catch (e) {}
   function zetVlakkenKnop() { var b = el('k-vlakken'); b.setAttribute('aria-pressed', toonVlakken ? 'true' : 'false'); b.textContent = toonVlakken ? 'Vlakken aan' : 'Vlakken'; }
   zetVlakkenKnop();

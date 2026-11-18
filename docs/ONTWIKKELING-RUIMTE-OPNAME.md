@@ -200,6 +200,11 @@ vergelijken. De tik is weer leidend; de vakjes kunnen dus weer iets schuiven.
 hoek (binnenhoek ~2°). Waarschuwing bij een binnenhoek < 30° of > 330° en bij twee hoeken < 20 cm uit elkaar; *Hoek weghalen* voegt de twee wanden
 samen (lengte weer open, details verhuizen zonder plek langs de wand, alles in het archief).
 
+**B22 · 18-11 · Tekenen volgt het anker, de meting blijft de tik.** *Waarom:* na B20 schoven de wanden weer (Bart, 21:30). Draadmodel, vakjes, detailwanden en
+de herkenning van de sluittik gebruiken nu de positie waar ARCore de hoek op dat moment ziet (anker); bewaard wordt de tik, met de ankerpositie ernaast
+(`xr_anker`). Zo blijft het beeld op de echte wand zonder dat de meting verschuift, en wordt een sluittik op H1 ook herkend als de kaart onderweg is
+bijgesteld (21:14: 0,9 m). Sluitafstand 20 → 25 cm. *Te toetsen op het toestel.*
+
 ---
 
 ## 5. Input en feedback van Bart
@@ -215,6 +220,7 @@ samen (lengte weer open, details verhuizen zonder plek langs de wand, alles in h
 | 18-11 20:27 | Echte proef, rechthoekige kamer ~2,9 × 5,8 m (zie §5.1). | Waarneming schaalfout camera → voorstel P10; diagonaal gevraagd. |
 | 18-11 20:53 | Screenshots: "de velden verschuiven ten opzichte van de wanden"; "kan ik mijn groothoekcamera gebruiken? Ik sta zo dicht op de wanden dat ik geen volledig beeld krijg". | B17, B18, B19. |
 | 18-11 21:14 | Tweede proef met ankers: 5 hoeken, vorm scheef (zie §5.1). | B20, B21; pakket gevraagd voor diagnose. |
+| 18-11 21:30 | "Weer verschuiven de wanden." | B22. |
 | 18-11 | Ontwikkeldocument waarin alles staat, zodat terug te zien is wat waarom veranderde; Astra moet er licht op kunnen laten schijnen. | Dit document. |
 
 ### 5.1 Meetresultaten echte proeven
@@ -382,7 +388,8 @@ Perspectief-correct plakken (homografie per vak i.p.v. affien), automatisch extr
 | 18-11 | `ba0f17e` | Ontwikkeldocument | verzoek Bart |
 | 18-11 | `ddeedbf` | Meetresultaat echte proef 20:27, voorstel P10 | proef Bart |
 | 18-11 | `efae8d2` | ARCore-ankers, groothoekfoto per wand rechtgetrokken, melding Foto | B17–B19 |
-| 18-11 | (volgende) | Ankers alleen meeschrijven, hoek weghalen, spie-waarschuwing | B20, B21 |
+| 18-11 | `19b578c` | Ankers alleen meeschrijven, hoek weghalen, spie-waarschuwing | B20, B21 |
+| 18-11 | (volgende) | Tekenen volgt het anker, meting blijft de tik | B22 |
 
 Meer detail per brok: `VOORTGANG-OPNAME.md`. Volledige diff: draft-PR #5.
 
