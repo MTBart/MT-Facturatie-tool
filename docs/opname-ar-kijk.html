@@ -572,6 +572,8 @@ button:focus-visible{outline:3px solid var(--kies);outline-offset:2px}
       });
       p.appendChild(t);
     }
+    if (det.opening && DS) p.appendChild(maak('p', 'Opening: ' + ((DS.OPENING_TYPES[det.opening.type] || {}).label || det.opening.type) + (det.opening.zijden && det.opening.zijden.length ? ' · aftimmering aan ' + det.opening.zijden.join(', ') : '') + '.'));
+    if (det.raam && det.raam.vakken) p.appendChild(maak('p', 'Raam (vanuit de kamer, links naar rechts): ' + det.raam.vakken.map(function (v, i) { return 'vak ' + (i + 1) + ' ' + v.functie; }).join(', ') + '.'));
     if (det.traject) p.appendChild(maak('p', 'Traject: ' + JSON.stringify(det.traject)));
     if (det.materiaal) p.appendChild(maak('p', 'Materiaal: ' + ['type', 'kleur', 'glans', 'nerfrichting'].map(function (k) { return det.materiaal[k]; }).filter(Boolean).join(', ') + ' · code ' + (det.materiaal.code || 'onbekend') + ' (' + det.materiaal.status + ')'));
     var opm = dos.opmerkingen.filter(function (o) { return o.locatie && o.locatie.id === det.id; });

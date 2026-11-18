@@ -277,6 +277,20 @@ De driehoeksmeting (B30) en de controlemaat tussen hoeken staan ingeklapt onder 
 De controlemaat tape tot tape (B31) blijft gewoon zichtbaar. Opnieuw oppakken als de vorm van de kamer voor een project kritisch wordt (inbouwkast
 wand-tot-wand, keuken).
 
+**B34 · 18-11 · Kozijn = opening met opbouw, en een raam met vakken.** *Waarom:* Barts drie kozijnen in de proefkamer:
+R1 aftimmering op de wand (12 mm panelen, 5 mm voor de muur, binnenwerks 2440 × 1084, 310 mm tot het kozijn; vakken draai naar buiten / vast / draai naar buiten),
+R2 nis zonder aftimmering (535 × 1352, 115 mm tot het kozijn; vast), R3 nis met aftimmering erin links/rechts/boven (1218 × 1200, 120 mm tot de aftimmering,
+dan 80 mm tot het kozijn; draai-kiep naar binnen). Positie: vanaf de hoek tot de buitenkant van aftimmering of nis, onderkant tot de vloer, bovenkant tot het
+plafond (afgeleid of gemeten).
+*Datamodel:* `det.opening = { type: 'aftimmering-op-wand' | 'nis' | 'nis-met-aftimmering', zijden: [...] }`, `det.raam = { vakken: [{ functie }] }` (functies in
+`D.RAAM_FUNCTIES`), maten als metingen: `opening_breedte`, `opening_hoogte` (binnenwerks aftimmering of nismaat), `aftimmer_dikte`, `aftimmer_uitsteek`,
+`nis_diepte_tot_aftimmering`, `diepte_tot_kozijn` (betekenis per soort: vanaf voorkant aftimmering, wandvlak of aftimmering; staat bij elke meting in
+`betekenis`). `D.kozijnVelden` bepaalt per soort wat verplicht en optioneel is; `D.kozijnLabel` de namen. Buitenmaat op de wand = binnenwerks + paneeldikte aan
+de zijden met een kader (afgeleid; 12 mm aangenomen = geschat zolang de dikte niet gemeten is). Restmaten tellen een afgeleid deel als hard mee.
+*Scherm:* soort opening kiezen, zijden aanvinken, maten met de juiste namen, vakken van links naar rechts, dieptelijn (wand → aftimmering → kozijn) en in de
+tekening de binnenmaat (stippel) en de vakken. Kijker: opening en vakken in het detailpaneel.
+*Open vraag aan Bart:* is de 310 mm bij R1 gemeten vanaf de voorkant van de aftimmering (zo nu vastgelegd: 305 mm in de muur) of vanaf de muur?
+
 **Waarneming (geen besluit):** met vier gemeten wandlengtes en haakse hoeken maakt de kaartdrift voor het lijnmodel weinig uit (de richtingen worden
 rechtgezet, de lengtes komen uit de maten). De drift raakt vooral de aansluiting tussen beelden en wanden in het panorama en de camera-plek van details.
 
@@ -304,6 +318,7 @@ rechtgezet, de lengtes komen uit de maten). De drift raakt vooral de aansluiting
 | 18-11 22:30 | Proef 21:52 met twee fases: camera binnen ±13 mm van de handmaten. | §5.1. |
 | 18-11 22:45 | "De ruimte staat ±; ik heb bij een ruimte de exacte maten achteraf ingevuld. Wil nu mijn kozijnen bematen: kan er een lijntekening van de wand komen waarin ik het kozijn kan bematen?" | B32. |
 | 18-11 23:00 | "Haaksheid van de hoek etc komt later wel; nu niet belangrijk, op een later punt wel." | B33. |
+| 18-11 23:10 | Foto's en maten van drie kozijnen (R1 aftimmering op de wand, R2 nis, R3 nis met aftimmering; draairichtingen). | B34. |
 | 18-11 | Ontwikkeldocument waarin alles staat, zodat terug te zien is wat waarom veranderde; Astra moet er licht op kunnen laten schijnen. | Dit document. |
 
 ### 5.1 Meetresultaten echte proeven
@@ -530,7 +545,8 @@ Perspectief-correct plakken (homografie per vak i.p.v. affien), automatisch extr
 | 18-11 | `b8bdb4a` | Controlemaat tape tot tape tussen twee wanden | B31 |
 | 18-11 | `62d3d14` | Meetresultaat 21:52 | proef Bart |
 | 18-11 | `4809f62` | Wandaanzicht met kozijn bematen | B32 |
-| 18-11 | (volgende) | Haaksheid ingeklapt onder Later | B33 |
+| 18-11 | `f5e9e8c` | Haaksheid ingeklapt onder Later | B33 |
+| 18-11 | (volgende) | Kozijn als opening met opbouw en vakken | B34 |
 
 Meer detail per brok: `VOORTGANG-OPNAME.md`. Volledige diff: draft-PR #5.
 

@@ -58,7 +58,41 @@
     kozijn_onderkant: { label: 'Onderkant kozijn boven vloer', grootheid: 'hoogte', vorm: 'punt-vlak', referentie: 'afgewerkte vloer', betekenis: 'onderkant kozijn' },
     dag_breedte: { label: 'Dagmaat breedte', grootheid: 'breedte', vorm: 'afstand', referentie: 'binnenkant tot binnenkant', betekenis: 'dagmaat' },
     dag_hoogte: { label: 'Dagmaat hoogte', grootheid: 'hoogte', vorm: 'afstand', referentie: 'binnenkant tot binnenkant', betekenis: 'dagmaat' },
-    boven_tot_plafond: { label: 'Bovenkant kozijn tot plafond', grootheid: 'hoogte', vorm: 'afstand', referentie: 'bovenkant kozijn tot plafond', betekenis: 'vrije hoogte' }
+    boven_tot_plafond: { label: 'Bovenkant opening tot plafond', grootheid: 'hoogte', vorm: 'afstand', referentie: 'bovenkant opening (buitenkant aftimmering of nis) tot plafond', betekenis: 'vrije hoogte' },
+    opening_breedte: { label: 'Opening breedte (binnenwerks)', grootheid: 'breedte', vorm: 'afstand', referentie: 'binnenkant tot binnenkant', betekenis: 'binnenwerks aftimmering of nismaat' },
+    opening_hoogte: { label: 'Opening hoogte (binnenwerks)', grootheid: 'hoogte', vorm: 'afstand', referentie: 'binnenkant tot binnenkant', betekenis: 'binnenwerks aftimmering of nismaat' },
+    aftimmer_dikte: { label: 'Dikte aftimmering (paneel)', grootheid: 'dikte', vorm: 'afstand', referentie: 'voorkant tot achterkant paneel', betekenis: 'plaatdikte' },
+    aftimmer_uitsteek: { label: 'Aftimmering steekt uit de muur', grootheid: 'uitsteek', vorm: 'punt-vlak', referentie: 'afgewerkt wandvlak', betekenis: 'voorkant aftimmering' },
+    nis_diepte_tot_aftimmering: { label: 'Diepte: wand tot aftimmering', grootheid: 'diepte', vorm: 'punt-vlak', referentie: 'afgewerkt wandvlak', betekenis: 'voorkant aftimmering in de nis' },
+    diepte_tot_kozijn: { label: 'Diepte tot het kozijn', grootheid: 'diepte', vorm: 'punt-vlak', referentie: 'zie betekenis (wandvlak, voorkant aftimmering of aftimmering)', betekenis: 'tot kozijn' }
+  };
+  // ── kozijn: soort opening, opbouw de wand in en de vakken van het raam ── (Bart 18-11: R1 aftimmering op de wand, R2 nis, R3 nis met aftimmering erin)
+  D.OPENING_TYPES = {
+    'aftimmering-op-wand': { label: 'Aftimmering op de wand (kader rondom)', zijden: ['links', 'rechts', 'boven', 'onder'] },
+    'nis': { label: 'Nis zonder aftimmering', zijden: [] },
+    'nis-met-aftimmering': { label: 'Nis met aftimmering erin', zijden: ['links', 'rechts', 'boven'] }
+  };
+  D.RAAM_FUNCTIES = ['vast', 'draai naar binnen', 'draai naar buiten', 'draai-kiep naar binnen', 'klep naar binnen', 'klep naar buiten', 'schuif'];
+  // Welke maten een kozijn vraagt, afhankelijk van de soort opening; en hoe ze heten (zodat de betekenis bij de meting klopt).
+  D.kozijnVelden = function (det) {
+    const t = det.opening && det.opening.type;
+    if (!t) return { verplicht: ['afstand_tot_hoek', 'kozijn_breedte', 'kozijn_hoogte', 'kozijn_onderkant'], optioneel: ['dag_breedte', 'dag_hoogte', 'boven_tot_plafond'] };   // oud kozijn (B32)
+    const basis = ['afstand_tot_hoek', 'opening_breedte', 'opening_hoogte', 'kozijn_onderkant'];
+    if (t === 'aftimmering-op-wand') return { verplicht: basis.concat(['aftimmer_dikte', 'aftimmer_uitsteek', 'diepte_tot_kozijn']), optioneel: ['boven_tot_plafond', 'kozijn_breedte', 'kozijn_hoogte'] };
+    if (t === 'nis-met-aftimmering') return { verplicht: basis.concat(['nis_diepte_tot_aftimmering', 'diepte_tot_kozijn']), optioneel: ['aftimmer_dikte', 'boven_tot_plafond', 'kozijn_breedte', 'kozijn_hoogte'] };
+    return { verplicht: basis.concat(['diepte_tot_kozijn']), optioneel: ['boven_tot_plafond', 'kozijn_breedte', 'kozijn_hoogte'] };
+  };
+  D.kozijnLabel = function (det, f) {
+    const t = det.opening && det.opening.type, aft = t === 'aftimmering-op-wand', wat = aft ? 'de aftimmering' : 'de nis';
+    const L = {
+      afstand_tot_hoek: 'Vanaf de hoek tot ' + wat + ' (buitenkant)',
+      opening_breedte: aft ? 'Binnenwerks aftimmering, breedte' : 'Nismaat breedte', opening_hoogte: aft ? 'Binnenwerks aftimmering, hoogte' : 'Nismaat hoogte',
+      kozijn_onderkant: 'Onderkant ' + (aft ? 'aftimmering' : 'nis') + ' boven de vloer',
+      boven_tot_plafond: 'Bovenkant ' + (aft ? 'aftimmering' : 'nis') + ' tot plafond',
+      diepte_tot_kozijn: aft ? 'Diepte: voorkant aftimmering tot kozijn' : t === 'nis-met-aftimmering' ? 'Diepte: aftimmering tot kozijn' : 'Diepte: wand tot kozijn',
+      kozijn_breedte: 'Kozijn zelf, breedte (buitenmaat)', kozijn_hoogte: 'Kozijn zelf, hoogte (buitenmaat)'
+    };
+    return t ? (L[f] || (D.VELDEN[f] || {}).label) : (D.VELDEN[f] || {}).label;
   };
   D.SOORTEN = {
     raam: { groep: 'bouwdeel', label: 'Raam', velden: ['afstand_tot_hoek', 'breedte', 'hoogte', 'borstwering'] },
@@ -485,7 +519,14 @@
         if (afst) { x = refId === linksId ? afst.waarde : L - afst.waarde; xs = afst.status; } else if (camU != null) { x = vanLinks ? camU : L - camU; xs = 'geschat'; }
         return { det, soort: det.soort, label: det.label, punt: { x, y: hv ? hv.waarde : camV, status: { x: xs, y: hv ? hv.status : (camV != null ? 'geschat' : 'onbekend') } }, afstand: afst, vanaf: refId };
       }
-      const b = maat(det, ['kozijn_breedte', 'breedte']), h = maat(det, ['kozijn_hoogte', 'hoogte']), o = maat(det, ['kozijn_onderkant', 'borstwering', 'onderkant']);
+      const op = det.opening || null, zij = op && op.type === 'aftimmering-op-wand' ? lijst(op.zijden) : [], dk = op ? maat(det, ['aftimmer_dikte']) : null, dik = dk ? dk.waarde : (zij.length ? 12 : 0);
+      const ob = op ? maat(det, ['opening_breedte']) : null, oh = op ? maat(det, ['opening_hoogte']) : null;
+      const hardSt = st2 => st2 === 'gemeten' || st2 === 'invoer';
+      // buitenmaat op het wandvlak = binnenwerks + paneeldikte aan de zijden met aftimmering (alleen bij een kader op de wand)
+      const metDikte = (m, a, z) => m ? { waarde: m.waarde + dik * ((zij.indexOf(a) >= 0) + (zij.indexOf(z) >= 0)),
+        status: !zij.length ? m.status : (hardSt(m.status) && dk && hardSt(dk.status) ? 'afgeleid' : 'geschat') } : null;   // dikte niet gemeten: 12 mm aangenomen = geschat
+      const b = metDikte(ob, 'links', 'rechts') || maat(det, ['kozijn_breedte', 'breedte']), h = metDikte(oh, 'boven', 'onder') || maat(det, ['kozijn_hoogte', 'hoogte']);
+      const o = maat(det, ['kozijn_onderkant', 'borstwering', 'onderkant']);
       const bw = b ? b.waarde : st.b, hh = h ? h.waarde : (st.h == null ? H : st.h), oo = o ? o.waarde : (det.soort === 'deur' || det.soort === 'nis' || det.soort === 'kolom' ? 0 : (camV != null ? Math.max(0, camV - hh / 2) : st.o));
       let x, xs;
       if (afst) { x = refId === linksId ? afst.waarde : L - afst.waarde - bw; xs = afst.status; }
@@ -494,13 +535,17 @@
       const btp = maat(det, ['boven_tot_plafond']);
       return { det, soort: det.soort, label: det.label, rect: { x, y: oo, w: bw, h: hh }, afstand: afst, vanaf: refId, vanLinks: refId === linksId,
         status: { x: xs, w: b ? b.status : 'geschat', h: h ? h.status : 'geschat', y: o ? o.status : (det.soort === 'deur' ? 'gemeten' : 'geschat'), boven: btp ? btp.status : null },
-        boven_tot_plafond: btp ? btp.waarde : null, dag: { b: maat(det, ['dag_breedte']), h: maat(det, ['dag_hoogte']) } };
+        boven_tot_plafond: btp ? btp.waarde : null, dag: { b: maat(det, ['dag_breedte']), h: maat(det, ['dag_hoogte']) },
+        opening: op ? { type: op.type, zijden: zij.length ? zij : lijst(op.zijden), dikte: dik, dikte_status: dk ? dk.status : (zij.length ? 'aangenomen' : null),
+          binnen: ob && oh ? { x: x + (zij.indexOf('links') >= 0 ? dik : 0), y: oo + (zij.indexOf('onder') >= 0 ? dik : 0), w: ob.waarde, h: oh.waarde, status: { w: ob.status, h: oh.status } } : null,
+          uitsteek: maat(det, ['aftimmer_uitsteek']), nis_diepte: maat(det, ['nis_diepte_tot_aftimmering']), kozijn_diepte: maat(det, ['diepte_tot_kozijn']) } : null,
+        raam: det.raam || null };
     });
     return { wand_id: w.id, wand: w.label, L, H, status: { L: seg.lengte.status, H: lm.hoogte.waarde ? lm.hoogte.status : 'aangenomen' }, links: { id: linksId, label: hl(linksId) }, rechts: { id: rechtsId, label: hl(rechtsId) }, items };
   };
   // Maatketen langs een as: delen [a, b] met status; een restdeel is 'afgeleid' als alle andere delen en het totaal gemeten (of ingevoerd) zijn, anders 'geschat'.
   D.maatketen = function (totaal, totaalStatus, delen) {
-    const hard = st => st === 'gemeten' || st === 'invoer';
+    const hard = st => st === 'gemeten' || st === 'invoer' || st === 'afgeleid';   // afgeleid = uit gemeten maten berekend, dus ook hard
     const uit = [], som = delen.reduce((s, x) => s + x.waarde, 0), rest = totaal - som, allesHard = hard(totaalStatus) && delen.every(x => hard(x.status));
     let pos = 0;
     delen.forEach(x => { uit.push({ van: pos, tot: pos + x.waarde, waarde: x.waarde, status: x.status }); pos += x.waarde; });
@@ -562,8 +607,9 @@
     }
     D.actieveDetails(d).forEach(det => {
       const s = D.SOORTEN[det.soort] || D.SOORTEN.overig;
-      s.velden.forEach(f => {
-        if (lijst(s.optioneel).indexOf(f) >= 0) return;   // optionele maat: geen open vraag
+      const vel = det.soort === 'kozijn' ? D.kozijnVelden(det) : { verplicht: s.velden, optioneel: lijst(s.optioneel) };
+      vel.verplicht.forEach(f => {
+        if (lijst(vel.optioneel).indexOf(f) >= 0) return;   // optionele maat: geen open vraag
         const m = D.huidigeMeting(d, det.id, f), geschatMag = det.groep === 'meubilair';
         if (!m || m.status === 'open' || (m.status === 'geschat' && !geschatMag)) uit.push({ soort: 'maat', ernst: 'open', doel: det.id, veld: f, tekst: det.label + ': ' + D.VELDEN[f].label.toLowerCase() + ' nog niet gemeten.' });
       });

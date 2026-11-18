@@ -194,6 +194,24 @@ window.renderKamer = function (cam, w, h, fovy) {
   const azM = await p.evaluate(() => { const D = window.MTRuimteDossier, d = window.arProef.dossier(), k = d.details.find(x => x.soort === 'kozijn'); return D.metingenVan(d, k.id).map(m => m.veld + ':' + m.bron + ':' + m.waarde_mm); });
   check('wandaanzicht: kozijnmaten als X4-metingen in het dossier', azM.length === 4 && azM.every(x => /:disto:/.test(x)), azM.join(' '));
   await p.click('#d-paneel button:has-text("Sluiten")');
+  // R1 uit Barts voorbeeld op W1: aftimmering op de wand, 2440 × 1084 binnenwerks, 12 mm panelen, 5 mm voor de muur, 310 mm tot het kozijn, 3 vakken
+  await p.evaluate(() => window.arProef.openAanzicht(window.arProef.dossier().wanden[0].id, null));
+  await p.click('#d-paneel button:has-text("+ Kozijn")');
+  await p.selectOption('#az-opening', 'aftimmering-op-wand');
+  for (const [f, val] of [['afstand_tot_hoek', '1200'], ['opening_breedte', '2440'], ['opening_hoogte', '1084'], ['kozijn_onderkant', '1000'], ['aftimmer_dikte', '12'], ['aftimmer_uitsteek', '5'], ['diepte_tot_kozijn', '310']]) {
+    await p.click('#az-' + f); await p.keyboard.type(val, { delay: 15 }); await p.keyboard.press('Enter');
+  }
+  await p.selectOption('#az-vakken', '3');
+  await p.selectOption('#az-vak-0', 'draai naar buiten'); await p.selectOption('#az-vak-2', 'draai naar buiten');
+  await p.waitForTimeout(300);
+  const r1 = await p.evaluate(() => ({ t: Array.from(document.querySelectorAll('#d-paneel svg text')).map(t => (t.getAttribute('class') || '') + ':' + t.textContent), zin: Array.from(document.querySelectorAll('#d-paneel p.zacht')).map(x => x.textContent).join(' | ') }));
+  check('R1 in het wandaanzicht: buitenmaat 2464 (afgeleid), binnenwerks 2440 × 1084, drie vakken', ['t-afgeleid:2464', 't-gemeten:2440', 't-gemeten:1084', 't-gemeten:1200', 't-gemeten:1000'].every(x => r1.t.indexOf(x) >= 0) && r1.t.filter(x => /↗ buiten/.test(x)).length === 2 && r1.t.indexOf('t-afgeleid:336') >= 0 && r1.t.indexOf('t-afgeleid:492') >= 0 && r1.t.some(x => /:vast$/.test(x)), r1.t.join(' '));
+  check('R1 dieptelijn: 12 mm, 5 mm voor de muur, 310 tot kozijn = 305 mm in de muur', /Aftimmering 12 mm, 5 mm voor de muur, 310 mm van de voorkant tot het kozijn \(305 mm in de muur\)/.test(r1.zin), r1.zin);
+  await p.evaluate(() => document.querySelector('#d-paneel svg').scrollIntoView({ block: 'start' }));
+  await p.screenshot({ path: path.join(UIT, 's24-10-kozijn-R1.png') });
+  await p.evaluate(() => document.querySelector('#az-vakken').scrollIntoView({ block: 'start' }));
+  await p.screenshot({ path: path.join(UIT, 's24-10b-kozijn-R1-opbouw.png') });
+  await p.click('#d-paneel button:has-text("Sluiten")');
   const wm = await p.evaluate(() => { const D = window.MTRuimteDossier, d = window.arProef.dossier(); return d.wanden.map(w => D.huidigeMeting(d, w.id, 'lengte')).map(x => x && x.bron); });
   check('wandmaten: hand, X4, hand, X4 herkend', JSON.stringify(wm) === JSON.stringify(['hand', 'disto', 'hand', 'disto']), JSON.stringify(wm));
   // panorama plakken (maakt de wandbeelden en bewaart ze)

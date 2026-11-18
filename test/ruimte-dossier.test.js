@@ -202,6 +202,7 @@ const jpg = n => Uint8Array.from([0xFF, 0xD8, 0xFF, 0xE0, n & 255, (n >> 8) & 25
     check('kozijn bemeten vanaf links: x 700, 1500 × 1400 op 900', a.rect.x === 700 && a.rect.w === 1500 && a.rect.h === 1400 && a.rect.y === 900 && a.status.x === 'gemeten');
     const kh = D.maatketen(4000, 'gemeten', [{ waarde: 700, status: 'gemeten' }, { waarde: 1500, status: 'gemeten' }]), kv = D.maatketen(2600, 'gemeten', [{ waarde: 900, status: 'gemeten' }, { waarde: 1400, status: 'gemeten' }]);
     check('maatketen: restmaat rechts 1800 en bovenkant tot plafond 300, beide afgeleid', kh[2].waarde === 1800 && kh[2].status === 'afgeleid' && kv[2].waarde === 300 && kv[2].status === 'afgeleid');
+    check('maatketen met een afgeleid deel (bijv. buitenmaat uit binnenwerks + paneeldikte): rest is afgeleid', D.maatketen(4000, 'gemeten', [{ waarde: 1200, status: 'gemeten' }, { waarde: 2464, status: 'afgeleid' }])[2].status === 'afgeleid');
     check('maatketen met een geschat deel: rest is geschat', D.maatketen(4000, 'gemeten', [{ waarde: 700, status: 'geschat' }])[1].status === 'geschat');
     const v2 = D.wandAanzicht(e, w.id, AR, { [k.id]: { kozijn_breedte: 1600 } }).items[0];
     check('voorlopige invoer (live-voorbeeld) zonder op te slaan', v2.rect.w === 1600 && v2.status.w === 'invoer' && D.huidigeMeting(e, k.id, 'kozijn_breedte').waarde_mm === 1500);
@@ -209,6 +210,34 @@ const jpg = n => Uint8Array.from([0xFF, 0xD8, 0xFF, 0xE0, n & 255, (n >> 8) & 25
     D.voegMetingToe(e, { doel: { soort: 'detail', id: k.id }, veld: 'afstand_tot_hoek', waarde_mm: 700, bron: 'hand', wand_id: w.id, referentie: { soort: 'hoek', id: leeg.rechts.id } }, NU);
     a = D.wandAanzicht(e, w.id, AR).items[0];
     check('700 vanaf de rechterhoek: kozijn eindigt 700 van rechts', a.rect.x === 4000 - 700 - 1500 && !a.vanLinks);
+  }
+
+  // ── kozijn als opening met opbouw (Bart 18-11: R1 aftimmering op de wand, R2 nis, R3 nis met aftimmering erin) ──
+  {
+    const e = D.nieuw({}, NU), s = D.startSessie(e, {}, NU); s.xr.vloerY = 0;
+    D.zetHoeken(e, s.id, [{ x: 0, z: 0 }, { x: 5, z: 0 }, { x: 5, z: 3 }, { x: 0, z: 3 }], NU);
+    [5000, 3000, 5000, 3000].forEach((v, i) => D.voegMetingToe(e, { doel: { soort: 'wand', id: e.wanden[i].id }, veld: 'lengte', waarde_mm: v, bron: 'hand' }, NU));
+    D.voegMetingToe(e, { doel: { soort: 'ruimte', id: e.ruimte.id }, veld: 'plafondhoogte', waarde_mm: 2600, bron: 'disto' }, NU);
+    const w = e.wanden[0], az0 = D.wandAanzicht(e, w.id, AR), links = az0.links.id;
+    const r1 = D.voegDetailToe(e, { soort: 'kozijn', label: 'R1', wand_id: w.id, referentie_hoek: links }, NU);
+    r1.opening = { type: 'aftimmering-op-wand', zijden: ['links', 'rechts', 'boven', 'onder'] };
+    r1.raam = { vakken: [{ functie: 'draai naar buiten' }, { functie: 'vast' }, { functie: 'draai naar buiten' }] };
+    const zet = (det, f, v) => D.voegMetingToe(e, { doel: { soort: 'detail', id: det.id }, veld: f, waarde_mm: v, bron: 'hand', wand_id: w.id, referentie: f === 'afstand_tot_hoek' ? { soort: 'hoek', id: links } : null }, NU);
+    zet(r1, 'afstand_tot_hoek', 1200); zet(r1, 'opening_breedte', 2440); zet(r1, 'opening_hoogte', 1084); zet(r1, 'kozijn_onderkant', 1000);
+    check('R1: nog open zijn dikte, uitsteek en diepte tot kozijn', ['aftimmer_dikte', 'aftimmer_uitsteek', 'diepte_tot_kozijn'].every(f => D.openVragen(e, AR).some(q => q.doel === r1.id && q.veld === f)) && !D.openVragen(e, AR).some(q => q.doel === r1.id && q.veld === 'boven_tot_plafond'));
+    zet(r1, 'aftimmer_dikte', 12); zet(r1, 'aftimmer_uitsteek', 5); zet(r1, 'diepte_tot_kozijn', 310);
+    const a = D.wandAanzicht(e, w.id, AR).items.find(x => x.det.id === r1.id);
+    check('R1: buitenmaat 2464 × 1108 (binnenwerks + 2 × 12 mm), binnen 2440 × 1084 op 12 mm', a.rect.w === 2464 && a.rect.h === 1108 && a.status.w === 'afgeleid' && a.opening.binnen.w === 2440 && a.opening.binnen.x === 1212 && a.opening.binnen.y === 1012, JSON.stringify(a.rect));
+    check('R1: opbouw en vakken mee in het aanzicht', a.opening.uitsteek.waarde === 5 && a.opening.kozijn_diepte.waarde === 310 && a.raam.vakken.length === 3 && !D.openVragen(e, AR).some(q => q.doel === r1.id));
+    check('R1: labels volgen de soort opening', D.kozijnLabel(r1, 'opening_breedte') === 'Binnenwerks aftimmering, breedte' && /voorkant aftimmering tot kozijn/.test(D.kozijnLabel(r1, 'diepte_tot_kozijn')));
+    const r2 = D.voegDetailToe(e, { soort: 'kozijn', label: 'R2', wand_id: w.id, referentie_hoek: links }, NU); r2.opening = { type: 'nis', zijden: [] }; r2.raam = { vakken: [{ functie: 'vast' }] };
+    zet(r2, 'opening_breedte', 535); zet(r2, 'opening_hoogte', 1352);
+    const a2 = D.wandAanzicht(e, w.id, AR).items.find(x => x.det.id === r2.id);
+    check('R2: nis 535 × 1352 is ook de buitenmaat op de wand (geen aftimmering)', a2.rect.w === 535 && a2.rect.h === 1352 && a2.status.w === 'gemeten' && D.kozijnLabel(r2, 'diepte_tot_kozijn') === 'Diepte: wand tot kozijn');
+    const r3 = D.voegDetailToe(e, { soort: 'kozijn', label: 'R3', wand_id: w.id, referentie_hoek: links }, NU); r3.opening = { type: 'nis-met-aftimmering', zijden: ['links', 'rechts', 'boven'] }; r3.raam = { vakken: [{ functie: 'draai-kiep naar binnen' }] };
+    zet(r3, 'opening_breedte', 1218); zet(r3, 'opening_hoogte', 1200); zet(r3, 'nis_diepte_tot_aftimmering', 120); zet(r3, 'diepte_tot_kozijn', 80);
+    const a3 = D.wandAanzicht(e, w.id, AR).items.find(x => x.det.id === r3.id);
+    check('R3: nismaat 1218 × 1200 op de wand, aftimmering in de nis (120 + 80 tot kozijn)', a3.rect.w === 1218 && a3.opening.nis_diepte.waarde === 120 && a3.opening.kozijn_diepte.waarde === 80 && a3.raam.vakken[0].functie === 'draai-kiep naar binnen');
   }
 
   // ── pakket heen en terug ──

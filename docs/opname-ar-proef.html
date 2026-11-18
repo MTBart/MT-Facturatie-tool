@@ -1976,7 +1976,18 @@ if (typeof module !== 'undefined') module.exports = AR;
       if (it.rect) {
         var hard = it.status.x !== 'geschat' && it.status.w !== 'geschat';
         svg.appendChild(svgEl('rect', { x: X(it.rect.x), y: Y(it.rect.y + it.rect.h), width: it.rect.w * s, height: it.rect.h * s, 'class': 'item' + (gekozen ? ' gekozen' : '') + (hard ? '' : ' geschat') }));
-        svg.appendChild(svgEl('text', { x: X(it.rect.x + it.rect.w / 2), y: Y(it.rect.y + it.rect.h / 2) + 9, 'text-anchor': 'middle', 'class': 't-geschat' }, it.label));
+        var bin = it.opening && it.opening.binnen ? it.opening.binnen : null, vakR = bin || it.rect;
+        if (bin) svg.appendChild(svgEl('rect', { x: X(bin.x), y: Y(bin.y + bin.h), width: bin.w * s, height: bin.h * s, fill: 'none', stroke: 'var(--zacht)', 'stroke-width': 2, 'stroke-dasharray': '8 6' }));
+        if (it.raam && it.raam.vakken && it.raam.vakken.length) {
+          var nv = it.raam.vakken.length, vb2 = vakR.w / nv;
+          it.raam.vakken.forEach(function (vk, i) {
+            if (i) svg.appendChild(svgEl('line', { x1: X(vakR.x + vb2 * i), y1: Y(vakR.y), x2: X(vakR.x + vb2 * i), y2: Y(vakR.y + vakR.h), stroke: 'var(--zacht)', 'stroke-width': 3 }));
+            var kort = { 'vast': 'vast', 'draai naar binnen': '↙ binnen', 'draai naar buiten': '↗ buiten', 'draai-kiep naar binnen': 'kiep', 'klep naar binnen': 'klep in', 'klep naar buiten': 'klep uit', 'schuif': 'schuif' }[vk.functie] || vk.functie;
+            var fs = Math.max(14, Math.min(26, vb2 * s / 5.5));   // past in het vak
+            svg.appendChild(svgEl('text', { x: X(vakR.x + vb2 * (i + 0.5)), y: Y(vakR.y + vakR.h * 0.5) + fs / 3, 'text-anchor': 'middle', 'class': 't-geschat', style: 'font-size:' + fs.toFixed(0) + 'px' }, kort));
+          });
+        }
+        svg.appendChild(svgEl('text', { x: X(it.rect.x + it.rect.w / 2), y: Y(it.rect.y + it.rect.h) - 10, 'text-anchor': 'middle', 'class': 't-geschat', style: 'font-size:22px' }, it.label));
         if (gekozen || (!azGekozen && !sel)) sel = it;
       } else if (it.punt && it.punt.x != null) {
         svg.appendChild(svgEl('circle', { cx: X(it.punt.x), cy: Y(it.punt.y || 300), r: gekozen ? 14 : 10, 'class': 'punt' }));
@@ -1993,12 +2004,35 @@ if (typeof module !== 'undefined') module.exports = AR;
       var xv = Math.min(X(r.x + r.w) + 45, VB - 70), kv = DS.maatketen(az.H, az.status.H, [{ waarde: r.y, status: st.y }, { waarde: r.h, status: st.h }]);
       if (sel.boven_tot_plafond != null) kv[2] = { van: kv[2].van, tot: kv[2].tot, waarde: sel.boven_tot_plafond, status: st.boven };
       kv.forEach(function (k) { maatlijn(g, xv, Y(k.van), xv, Y(k.tot), k.waarde, k.status, true); });
+      if (sel.opening && sel.opening.binnen) { var bn = sel.opening.binnen; maatlijn(g, X(bn.x), Y(bn.y + bn.h) + 40, X(bn.x + bn.w), Y(bn.y + bn.h) + 40, bn.w, bn.status.w); maatlijn(g, X(sel.rect.x) - 70, Y(bn.y), X(sel.rect.x) - 70, Y(bn.y + bn.h), bn.h, bn.status.h, true); }
     } else if (sel && sel.punt) {
       maatlijn(g, X(0), Y(sel.punt.y || 0), X(sel.punt.x), Y(sel.punt.y || 0), sel.punt.x, sel.punt.status.x);
       if (sel.punt.y != null) maatlijn(g, X(sel.punt.x) + 25, Y(0), X(sel.punt.x) + 25, Y(sel.punt.y), sel.punt.y, sel.punt.status.y, true);
     }
     vak.appendChild(svg);
     return az;
+  }
+  // Dieptelijn: de opbouw van wandvlak naar kozijn, als balk met maten (bovenaanzicht, kamer links, muur rechts).
+  function tekenDiepte(vak, det) {
+    vak.textContent = ''; var d = dossier(), t = det.opening && det.opening.type; if (!t) { vak.appendChild(maak('p', 'Kies eerst de soort opening.', 'zacht')); return; }
+    var mm = function (f) { var m = DS.huidigeMeting(d, det.id, f); return m && m.status === 'gemeten' ? m.waarde_mm : null; };
+    var uit = mm('aftimmer_uitsteek') || 0, dikte = mm('aftimmer_dikte'), nd = mm('nis_diepte_tot_aftimmering'), kd = mm('diepte_tot_kozijn'), stukken = [], totaal = null;
+    if (t === 'aftimmering-op-wand') { stukken = [{ van: -uit, tot: 0, label: uit ? uit + ' voor de muur' : 'voorkant aftimmering' }, { van: 0, tot: kd != null ? kd - uit : null, label: kd != null ? kd + ' tot kozijn' : 'diepte?' }]; totaal = kd != null ? kd - uit : null; }
+    else if (t === 'nis') { stukken = [{ van: 0, tot: kd, label: kd != null ? kd + ' tot kozijn' : 'diepte?' }]; totaal = kd; }
+    else { stukken = [{ van: 0, tot: nd, label: nd != null ? nd + ' tot aftimmering' : 'diepte?' }, { van: nd, tot: nd != null && kd != null ? nd + kd : null, label: kd != null ? kd + ' tot kozijn' : 'diepte?' }]; totaal = nd != null && kd != null ? nd + kd : null; }
+    var max = Math.max(150, (totaal || 0) + uit + 40), VB = 1000, s2 = (VB - 160) / max, X = function (v) { return 100 + (v + uit) * s2; };
+    var svg = svgEl('svg', { viewBox: '0 0 ' + VB + ' 210', 'class': 'aanzicht', role: 'img', 'aria-label': 'Opbouw van wand naar kozijn' });
+    svg.appendChild(svgEl('rect', { x: X(0), y: 40, width: VB - X(0) - 20, height: 100, fill: 'rgba(120,120,120,.18)' }));
+    svg.appendChild(svgEl('line', { x1: X(0), y1: 25, x2: X(0), y2: 155, 'class': 'wandlijn' }));
+    svg.appendChild(svgEl('text', { x: X(0) + 6, y: 30, 'class': 't-geschat' }, 'wand'));
+    if (t !== 'nis') { var ax = t === 'aftimmering-op-wand' ? X(-uit) : X(nd || 0); svg.appendChild(svgEl('rect', { x: ax, y: 40, width: Math.max(6, (dikte || 12) * s2), height: 100, fill: 'rgba(28,95,196,.35)' })); }
+    if (totaal != null) { svg.appendChild(svgEl('line', { x1: X(totaal), y1: 30, x2: X(totaal), y2: 150, stroke: 'var(--primair)', 'stroke-width': 10 })); svg.appendChild(svgEl('text', { x: X(totaal) + 10, y: 30, 'class': 't-gemeten' }, 'kozijn')); }
+    var g = svgEl('g', {}); svg.appendChild(g);
+    stukken.forEach(function (k, i) { if (k.tot == null || k.van == null) return; maatlijn(g, X(k.van), 185 - i * 0, X(k.tot), 185, k.tot - k.van, 'gemeten'); });
+    vak.appendChild(svg);
+    var zin = t === 'aftimmering-op-wand' ? 'Aftimmering ' + (dikte ? dikte + ' mm' : '(dikte?)') + ', ' + (uit ? uit + ' mm voor de muur' : 'uitsteek?') + ', ' + (kd != null ? kd + ' mm van de voorkant tot het kozijn (' + (kd - uit) + ' mm in de muur)' : 'diepte tot kozijn?')
+      : t === 'nis' ? 'Nis ' + (kd != null ? kd + ' mm diep tot het kozijn' : '(diepte?)') : 'Nis ' + (nd != null ? nd + ' mm tot de aftimmering' : '(diepte tot aftimmering?)') + ', dan ' + (kd != null ? kd + ' mm tot het kozijn' : '(diepte tot kozijn?)') + (nd != null && kd != null ? ' = ' + (nd + kd) + ' mm in de muur' : '');
+    vak.appendChild(maak('p', zin + '. Aftimmering aan: ' + ((det.opening.zijden || []).join(', ') || 'geen') + '.', 'zacht'));
   }
   function openAanzicht(wandId, detailId) {
     var d = dossier(), c = el('d-paneel'); azWand = wandId; azGekozen = detailId; azVoorlopig = {};
@@ -2023,8 +2057,27 @@ if (typeof module !== 'undefined') module.exports = AR;
     }
     function velden_() {
       velden.textContent = ''; var det = d.details.find(function (x) { return x.id === azGekozen; }); if (!det) return;
-      var az = DS.wandAanzicht(d, wandId, AR, azVoorlopig), soort = DS.SOORTEN[det.soort] || DS.SOORTEN.overig, opt = soort.optioneel || [];
+      var az = DS.wandAanzicht(d, wandId, AR, azVoorlopig), soort = DS.SOORTEN[det.soort] || DS.SOORTEN.overig, isKozijn = det.soort === 'kozijn';
+      var kv = isKozijn ? DS.kozijnVelden(det) : { verplicht: soort.velden, optioneel: soort.optioneel || [] }, veldenLijst = kv.verplicht.concat(kv.optioneel.filter(function (f) { return kv.verplicht.indexOf(f) < 0; })), opt = kv.optioneel;
+      var naamVan = function (f) { return isKozijn ? DS.kozijnLabel(det, f) : DS.VELDEN[f].label; };
       velden.appendChild(maak('h2', det.label));
+      if (isKozijn) {
+        // soort opening en de zijden met aftimmering
+        var tv = maak('div', null, 'veld'), tl = maak('label', 'Soort opening'), ts = maak('select'); ts.id = 'az-opening'; tl.htmlFor = ts.id;
+        [['', 'kies…']].concat(Object.keys(DS.OPENING_TYPES).map(function (k) { return [k, DS.OPENING_TYPES[k].label]; })).forEach(function (o) { var op = maak('option', o[1]); op.value = o[0]; ts.appendChild(op); });
+        ts.value = det.opening && det.opening.type || '';
+        ts.addEventListener('change', function () { if (!ts.value) return; var oud = det.opening && det.opening.type; det.opening = { type: ts.value, zijden: oud === ts.value ? det.opening.zijden : DS.OPENING_TYPES[ts.value].zijden.slice() }; planBewaar(); tekenAanzicht(vak); velden_(); });
+        tv.appendChild(tl); tv.appendChild(ts); velden.appendChild(tv);
+        if (det.opening && det.opening.type !== 'nis') {
+          var zr = maak('div', null, 'rij'); zr.appendChild(maak('span', 'Aftimmering aan:', 'zacht'));
+          ['links', 'rechts', 'boven', 'onder'].forEach(function (z) {
+            var lb = maak('label'), cb = maak('input'); cb.type = 'checkbox'; cb.id = 'az-zijde-' + z; cb.checked = (det.opening.zijden || []).indexOf(z) >= 0;
+            cb.addEventListener('change', function () { var zz = (det.opening.zijden || []).filter(function (x) { return x !== z; }); if (cb.checked) zz.push(z); det.opening.zijden = zz; planBewaar(); tekenAanzicht(vak); });
+            lb.appendChild(cb); lb.appendChild(document.createTextNode(' ' + z)); zr.appendChild(lb);
+          });
+          velden.appendChild(zr);
+        }
+      }
       if (DS.LANGS_VELDEN.some(function (f) { return soort.velden.indexOf(f) >= 0; })) {
         var rv = maak('div', null, 'veld'), rl = maak('label', 'Volgende afstand meten vanaf'), rs = maak('select'); rs.id = 'az-ref'; rl.htmlFor = rs.id;
         [[az.links.id, az.links.label + ' (links)'], [az.rechts.id, az.rechts.label + ' (rechts)']].forEach(function (o) { var op = maak('option', o[1]); op.value = o[0]; rs.appendChild(op); });
@@ -2032,8 +2085,8 @@ if (typeof module !== 'undefined') module.exports = AR;
         rv.appendChild(rl); rv.appendChild(rs); velden.appendChild(rv);
       }
       var invoer = [];
-      soort.velden.forEach(function (f, idx) {
-        var V = DS.VELDEN[f], m = DS.huidigeMeting(d, det.id, f), rij = maak('div', null, 'maatrij'), lab = maak('label', V.label + (opt.indexOf(f) >= 0 ? ' (optioneel)' : '')), inp = maak('input'), info = maak('span', infoTekst(m), 'info');
+      veldenLijst.forEach(function (f, idx) {
+        var V = DS.VELDEN[f], m = DS.huidigeMeting(d, det.id, f), rij = maak('div', null, 'maatrij'), lab = maak('label', naamVan(f) + (opt.indexOf(f) >= 0 ? ' (optioneel)' : '')), inp = maak('input'), info = maak('span', infoTekst(m), 'info');
         inp.id = 'az-' + f; lab.htmlFor = inp.id; inp.inputMode = 'decimal'; inp.autocomplete = 'off';
         if (m && m.status !== 'open' && m.bron !== 'ar' && m.waarde_mm != null) inp.value = String(m.waarde_mm);
         rij.appendChild(lab); rij.appendChild(inp); rij.appendChild(info); velden.appendChild(rij); volgToetsen(inp);
@@ -2045,14 +2098,34 @@ if (typeof module !== 'undefined') module.exports = AR;
           var ref = V.referentie === 'gekozen binnenhoek' ? { soort: 'hoek', id: refId, label: (d.hoeken.find(function (h) { return h.id === refId; }) || {}).label } : null;
           inp._gewijzigd = false;
           if (huidig && huidig.waarde_mm === l.mm && huidig.bron === bron && (huidig.referentie && huidig.referentie.id || null) === (ref ? ref.id : null)) return;
-          var nieuw = DS.voegMetingToe(d, { doel: { soort: 'detail', id: det.id }, veld: f, waarde_mm: l.mm, invoer: inp.value, eenheid_invoer: l.eenheid, bron: bron, status: 'gemeten', referentie: ref, wand_id: wandId, sessie: ses && ses.id });
+          var nieuw = DS.voegMetingToe(d, { doel: { soort: 'detail', id: det.id }, veld: f, waarde_mm: l.mm, invoer: inp.value, eenheid_invoer: l.eenheid, bron: bron, status: 'gemeten', referentie: ref, wand_id: wandId, sessie: ses && ses.id, betekenis: naamVan(f) });
           if (azVoorlopig[det.id]) delete azVoorlopig[det.id][f];
+          if (isKozijn) tekenDiepte(diepteVak, det);
           info.textContent = (bron === 'disto' ? 'X4: ' : '') + l.mm + ' mm bewaard · ' + infoTekst(nieuw); planBewaar(); tekenAanzicht(vak);
         }
         inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); opslaan(); var nx = invoer[idx + 1]; if (nx) nx.focus(); else inp.blur(); } });
         inp.addEventListener('change', opslaan);
         invoer.push(inp);
       });
+      var diepteVak = maak('div');
+      if (isKozijn) {
+        // het raam: vakken van links naar rechts (vanuit de kamer) met hun functie
+        var rv2 = maak('div', null, 'veld'), rl2 = maak('label', 'Raam: aantal vakken (van links naar rechts)'), rs2 = maak('select'); rs2.id = 'az-vakken'; rl2.htmlFor = rs2.id;
+        [1, 2, 3, 4, 5].forEach(function (n) { var op = maak('option', String(n)); op.value = String(n); rs2.appendChild(op); });
+        det.raam = det.raam || { vakken: [{ functie: 'vast' }] }; rs2.value = String(det.raam.vakken.length);
+        rs2.addEventListener('change', function () { var n = Number(rs2.value), vk = det.raam.vakken.slice(0, n); while (vk.length < n) vk.push({ functie: 'vast' }); det.raam = { vakken: vk }; planBewaar(); tekenAanzicht(vak); velden_(); });
+        rv2.appendChild(rl2); rv2.appendChild(rs2); velden.appendChild(rv2);
+        var vr = maak('div', null, 'velden');
+        det.raam.vakken.forEach(function (vkk, i) {
+          var vv = maak('div', null, 'veld'), vl = maak('label', 'Vak ' + (i + 1)), vs = maak('select'); vs.id = 'az-vak-' + i; vl.htmlFor = vs.id;
+          DS.RAAM_FUNCTIES.forEach(function (fn) { var op = maak('option', fn); op.value = fn; vs.appendChild(op); });
+          vs.value = vkk.functie; vs.addEventListener('change', function () { det.raam.vakken[i] = { functie: vs.value }; planBewaar(); tekenAanzicht(vak); });
+          vv.appendChild(vl); vv.appendChild(vs); vr.appendChild(vv);
+        });
+        velden.appendChild(vr);
+        velden.appendChild(maak('h2', 'Opbouw de wand in'));
+        velden.appendChild(diepteVak); tekenDiepte(diepteVak, det);
+      }
       var fr = maak('div', null, 'rij'), fk = maak('button', det.foto_ids.length ? 'Nog een foto van dit ' + det.label.toLowerCase() : 'Foto van dit ' + det.label.toLowerCase(), 'knop');
       fk.type = 'button'; fk.addEventListener('click', function () { azFotoDetail = det; el('d-az-foto').value = ''; el('d-az-foto').click(); });
       fr.appendChild(fk); if (det.foto_ids.length) fr.appendChild(maak('span', det.foto_ids.length + ' foto(\'s) ✓', 'bewaard')); velden.appendChild(fr);
