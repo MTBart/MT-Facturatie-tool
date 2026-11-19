@@ -360,6 +360,13 @@ groen als de wand klaar is. Aantikken opent het wandaanzicht direct eronder. Daa
 volledige lijst met open punten staan in inklapbare blokken, standaard dicht. *Niet gedaan:* het draadmodel draaien met de vinger; de voorste wanden zijn
 alleen via hun rondje aan te tikken. *Getest:* node en testbrowser, niet op de S24.
 
+**B41 · 19-11 · De hoeken tik je standaard op het plafond aan.** *Aanleiding:* Bart na proeven op de S24: "voor het vloerplan is het veel praktischer
+om de hoeken van het plafond te scannen, er staan bijna altijd spullen op de vloer". *Besluit:* de opname start in de plafondstand; de vloerstand blijft
+achter de knop Vloer (schuin of verlaagd plafond, of een hoek die op de vloer beter te zien is). De plafondhoogte komt vanzelf als de telefoon het plafond
+herkent. Lukt dat niet, dan tikt de opnemer een steunpunt aan: een vrije plek waar een wand de vloer raakt (geen hoek nodig), en meet recht erboven het
+plafond. Een vrij stuk vloer blijft nodig om de vloerhoogte te vinden. *Niet gedaan:* aanvullen (tweede rondgang) lijnt nog uit op de vloer.
+*Getest:* alleen de rekentests en de testbrowser; de AR-stand zelf is niet op de S24 geprobeerd.
+
 **Waarneming (geen besluit):** met vier gemeten wandlengtes en haakse hoeken maakt de kaartdrift voor het lijnmodel weinig uit (de richtingen worden
 rechtgezet, de lengtes komen uit de maten). De drift raakt vooral de aansluiting tussen beelden en wanden in het panorama en de camera-plek van details.
 
