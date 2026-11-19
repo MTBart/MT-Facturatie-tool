@@ -309,3 +309,52 @@ onscherp beeld vervangen, bolle wand met tussenpunten en zijdelingse afwijking, 
 - 19-11 later (B38): op de telefoon alleen de maten van het aangetikte onderdeel; scharnierblokjes bij ramen en deuren; stopcontact/schakelaar met
   contacten of wip op de afdekplaat, leiding als doorsnede op schaal met KW/WW/CV/GAS/AFV/E; knop Tekeningen / PDF op de telefoon (rapport nu in de
   tekenmodule, één bron voor telefoon en kantoor). Tests: tekenmodule 25, e2e 59.
+
+## Oppakken in een andere sessie (stand 19-11-2026)
+
+Voor een sessie die dit werk overneemt (lokaal of in de cloud). Alles wat nodig is staat in deze branch; het volledige waarom staat in
+`docs/ONTWIKKELING-RUIMTE-OPNAME.md` (beslissingen B1–B38, proeven §5.1, plannen §6, tekenstandaarden §11, denkstuk §12).
+
+**Waar het staat**
+- Branch `ccr-6aed2904-q3dzlo`, laatste code-commit `893bf97`, concept-PR #5 naar `main`. Niet gemerged, niet uitgebracht: dat wacht op akkoord van Bart.
+- Ophalen in een bestaande clone: `git fetch origin ccr-6aed2904-q3dzlo` en dan `git switch ccr-6aed2904-q3dzlo` (of een worktree op die branch).
+- Proefpagina's per commit: `https://raw.githack.com/MTBart/MT-Facturatie-tool/<commit>/docs/opname-ar-proef.html` (telefoon) en `…/docs/opname-ar-kijk.html`
+  (kantoor). De opslag op de telefoon hoort bij het adres: een nieuwe commit-link begint met een lege lijst.
+
+**Bestanden**
+- `docs/opname-ar-proef.html`: rondgang op de S24 (twee fases), snelkeuze, dossier, wandscherm, Tekeningen / PDF. Rekenkern tussen `/*KERN-BEGIN*/` en `/*KERN-EINDE*/`.
+- `docs/opname-ar-kijk.html`: kantoor: rondkijken, dossier, Tekeningen / PDF.
+- `mt-ruimte-dossier.js`: dossier, metingen met historie, lijnmodel, wandaanzicht, maatketens, varianten, pakket.
+- `mt-ruimte-tekening.js`: wandaanzicht, doorsnede, kameruitslag, wandafwikkeling en het rapport (één bron voor telefoon, kantoor en PDF).
+- `docs/OPNAME-RONDGANG-START.md`: gebruiksinstructie. `test/ruimte-voorbeeldkamer.js`: voorbeeldkamer op de maten van de proef.
+
+**Tests draaien**
+- `node test/opname-ar-proef.test.js` (77), `node test/ruimte-dossier.test.js` (105), `node test/ruimte-tekening.test.js` (25), de overige `test/opname-*.test.js`.
+- Browsertest (59 controles, vraagt Playwright met Chromium): in de repo `python -m http.server 8123 --bind 127.0.0.1`, daarna `node test/ruimte-e2e.js <lege uitmap>`.
+  Het script blijft hangen na een mislukte stap: draai het met een tijdslimiet.
+- Vóór elke commit: `bash githooks/pre-commit` (secret-guard, privacy-scan, `tools/check-sinks.js`) en `node tools/check-verwijzingen.js`.
+  In een verse clone staat de hook niet als uitvoerbaar gemarkeerd; dan met de hand draaien.
+
+**Wat werkt (getest in node en een testbrowser)**
+- Rondgang: fase 1 plattegrond tikken, fase 2 scannen met hoek-, plafond- en wandfoto's; alles stapsgewijs bewaard; heropenen en aanvullen.
+- Fase 2 Detail = foto + snelkeuze; het onderdeel staat geschat in de werktekening van de wand.
+- Wandscherm: onderdeel aantikken, maat aantikken, getal + Enter (X4 achter elkaar), kozijn met opbouw en vakken, uitvoering per onderdeel, opmerking.
+- Tekeningen: kameruitslag of plattegrond, wandafwikkeling, pagina per wand, kozijnenlijst; Afdrukken / PDF op telefoon en kantoor.
+
+**Niet op een echt toestel getest**
+Het wandscherm met schermtoetsenbord en X4, de snelkeuze in de AR-laag, Tekeningen / PDF op de telefoon, afdrukken vanaf een kantoor-pc.
+De rondgang zelf is door Bart op de S24 geprobeerd tot en met de stand van 18-11 21:52 (zie §5.1 van het ontwikkeldocument).
+
+**Open vragen aan Bart** (ontwikkeldocument §8)
+1. R1: is de 310 mm gemeten vanaf de voorkant van de aftimmering (zo vastgelegd) of vanaf de muur?
+2. Staat de deur van de proefkamer op W4 (H4–H1)? R3 staat op W3 volgens zijn opgave.
+3. Tekent MT de draairichting met de punt naar het scharnier (zo gebouwd) of naar de kruk?
+4. PDF-download met één tik (vraagt een pdf-bibliotheek, ± 400 kB) of volstaat Afdrukken → Opslaan als pdf?
+
+**Logische volgende stappen** (voorstel, niets is toegezegd)
+1. Uitkomst van Barts proef op de S24 met de laatste link verwerken (vooral: blijft de invoerbalk in beeld met het toetsenbord open).
+2. Vensterbank als eigenschap van het kozijn; plint en sierlijst als eigenschap van de kamer; leiding als vrij te houden zone (§12).
+3. Schaal en onderhoek op de tekeningen; schuin dak en verlaagd plafond (wand als veelhoek).
+4. Beschrijving van PR #5 bijwerken (die noemt nog de eerste versie).
+5. Daarna pas: inbouwen in de app en publiceren (P6), opslag buiten de telefoon (P7), Vectorworks (P3).
+
