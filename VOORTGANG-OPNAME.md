@@ -316,7 +316,7 @@ Voor een sessie die dit werk overneemt (lokaal of in de cloud). Alles wat nodig 
 `docs/ONTWIKKELING-RUIMTE-OPNAME.md` (beslissingen B1–B38, proeven §5.1, plannen §6, tekenstandaarden §11, denkstuk §12).
 
 **Waar het staat**
-- Branch `ccr-6aed2904-q3dzlo`, laatste code-commit `893bf97`, concept-PR #5 naar `main`. Niet gemerged, niet uitgebracht: dat wacht op akkoord van Bart.
+- Branch `ccr-6aed2904-q3dzlo`, laatste code-commit `893bf97` (daarna alleen overdrachtstekst en het script voor de voorbeeld-PDF), concept-PR #5 naar `main`. Niet gemerged, niet uitgebracht: dat wacht op akkoord van Bart.
 - Ophalen in een bestaande clone: `git fetch origin ccr-6aed2904-q3dzlo` en dan `git switch ccr-6aed2904-q3dzlo` (of een worktree op die branch).
 - Proefpagina's per commit: `https://raw.githack.com/MTBart/MT-Facturatie-tool/<commit>/docs/opname-ar-proef.html` (telefoon) en `…/docs/opname-ar-kijk.html`
   (kantoor). De opslag op de telefoon hoort bij het adres: een nieuwe commit-link begint met een lege lijst.
@@ -357,4 +357,56 @@ De rondgang zelf is door Bart op de S24 geprobeerd tot en met de stand van 18-11
 3. Schaal en onderhoek op de tekeningen; schuin dak en verlaagd plafond (wand als veelhoek).
 4. Beschrijving van PR #5 bijwerken (die noemt nog de eerste versie).
 5. Daarna pas: inbouwen in de app en publiceren (P6), opslag buiten de telefoon (P7), Vectorworks (P3).
+
+### Aanvulling bij het afsluiten van de cloudsessie (19-11-2026)
+
+De cloudsessie waarin dit werk is gemaakt stopt hier; het werk gaat lokaal verder. Hieronder staat wat in het gesprek is afgesproken of geopperd en nog
+niet elders in de branch stond. Een los overdrachtsbestand voor de lokale map is wel geschreven, maar daar niet geplaatst (Bart was onderweg en de
+cloudsessie had alleen leesrechten op SharePoint): alles wat daarin stond en in een publieke repo mag, staat nu hier.
+
+**Laatste afspraken en antwoorden van Bart**
+- "Zo helder moet de bemating eruitzien": de wandpagina uit de voorbeeld-PDF is de maat voor hoe het straks moet.
+- De plattegrond tikken en daarna scannen (twee fases) "lijkt te werken". Haaksheid van hoeken komt later, nu niet belangrijk.
+- Per ruimte vult Bart de exacte wandmaten achteraf in; in proeven doet hij dat niet elke keer opnieuw.
+- Plek van de kozijnen in de proefkamer: R1 334 vanaf links en R2 40 vanaf rechts op W2 (H2–H3), onderkant R2 750 (= bovenkant vensterbank);
+  R3 op W3 (H3–H4), 780 vanaf rechts, onderkant 930 (= bovenkant vensterbank). De deur en R3 stonden in de eerste voorbeeldkamer op de verkeerde wand.
+  Aanname die nog bevestigd moet worden: de deur staat op W4.
+- Scharnieren van R1 zitten aan de buitenkant (linker vak links, rechter vak rechts), draait naar buiten, middenvak vast. R2 vast. R3 draai-kiep naar binnen.
+- Op de telefoon de maten per onderdeel pas tonen als je het aantikt: gebouwd (B38).
+- Standaardtekens ook voor stopcontacten en waterleidingen: gebouwd als herkenbare plaatjes op schaal (B38); de officiële schemasymbolen zijn niet nagelezen.
+- PDF rechtstreeks uit de opnametool: gebouwd via Afdrukken → Opslaan als pdf (B38).
+- Bart wil dat een reviewer (GPT Astra) kan meedenken over leidingwerk, plinten en sierlijsten: het denkstuk staat in het ontwikkeldocument §12.
+
+**Halve plannen (geopperd, niet gebouwd, niet toegezegd)**
+- PDF-download met één tik zonder afdrukvenster: vraagt een pdf-bibliotheek (bijvoorbeeld jsPDF met svg2pdf) in `vendor/`, ongeveer 400 kB.
+- Instelling om de draairichting-driehoek om te draaien (punt naar de kruk) als MT dat zo tekent; de scharnierblokjes blijven dan kloppen.
+- Vensterbank als eigenschap van het kozijn (dikte, uitsteek, overstek links en rechts; bovenkant = onderkant opening).
+- Plint, sierlijst en plafondlijst één keer per kamer vastleggen; de app onderbreekt ze zelf bij deuren.
+- Leiding als vrij te houden zone (rechthoek + grootste uitsteek); het tracé met knikpunten alleen als een klus erom vraagt.
+- Herkenning van soort en uitvoering op de detailfoto (AI) met bevestiging door de opnemer; afmeting uit de foto alleen als controle.
+- Schaal (1:20 wand, 1:50 uitslag) met schaalstok, een onderhoek met project, ruimte, datum en versie, en A3.
+- Wand als veelhoek (schuin dak, verlaagd plafond), plafond- en vlooraanzicht, wand uit het lood, bovenaanzicht per wand voor de uitsteek.
+- Schaalcorrectie van camera-schattingen per gemeten wand (P10) en de groothoekfoto rechtstreeks vanuit een eigen app (P11).
+
+**Bekende beperkingen van de huidige stand**
+- Het wandscherm tekent een lange wand tot 1,7 keer de schermbreedte en laat je opzij schuiven. Of dat prettig werkt en of de invoerbalk met het
+  toetsenbord open in beeld blijft, is alleen in een testbrowser bekeken.
+- De kantoorpagina kan de tekeningen alleen maken uit een pakket (zip): daarin staat het lijnmodel. Een opname die via `#ruimte=` rechtstreeks uit de
+  opslag van het toestel wordt geopend, heeft dat niet; gebruik daar de knop Tekeningen / PDF van de telefoonpagina.
+- In de kameruitslag en bij veel kleine onderdelen kunnen maatgetallen elkaar raken; de wandpagina's zijn leidend.
+- De tabel "Kozijnen op deze wand" schuift bij een volle wandpagina naar de volgende pagina.
+- Een wandbeeld als ondergrond in het wandscherm wordt gespiegeld als de beginhoek van de wand rechts ligt; dat is met nagebootste beelden bekeken, niet met echte.
+- `test/ruimte-e2e.js` eindigt niet vanzelf na een mislukte stap.
+
+**Losse punten**
+- Voorbeeld-PDF opnieuw maken: `node test/ruimte-voorbeeld-pdf.js <uitmap>` (voorbeeldkamer) of met een eigen pakket als tweede argument. De PDF zelf staat niet in de repo.
+- De echte opnamepakketten van de proeven zijn alleen in de cloudsessie gebruikt en nergens bewaard. Voor een nieuwe analyse opnieuw Pakket maken of Delen op de telefoon.
+- Een collega had toegang tot de tool maar zag niets: rechten stel je in de cockpit in onder Admin → Beheer. Dat kan een sessie niet zelf doen.
+- De beschrijving van PR #5 noemt nog de eerste versie (testaantallen en functies). Bijwerken is alleen tekst; er is niet om gevraagd, dus niet gedaan.
+- De periodieke check-ins op PR #5 zijn gestopt na drie keer zonder verandering (geen CI, geen commentaar, geen conflicten). De cloudsessie volgt de PR niet meer.
+- Een video die Bart stuurde (https://youtu.be/IyuUR51Mu4I, "This Experimental Feature Is Claude Code's BIGGEST Upgrade of 2026") kon vanuit de cloud niet
+  gelezen worden: YouTube geeft cloudservers een robotcontrole. Lokaal: `python Agents/video_analyse.py <url>`. Vermoeden, niet bevestigd: het gaat om
+  Code Mode van Claude Code (experimenteel, aan te zetten in de persoonlijke instellingen, niet via de projectinstellingen). Eerst de video lezen, dan pas iets aanzetten.
+- Voor die poging is een persoonlijke cloudomgeving "MT-Facturatie-tool" aangemaakt waarin `www.youtube.com` is toegestaan. Mag blijven of weg.
+- Een reviewer geef je geen toegang tot de hele lokale werkmap (daar staat meer dan dit project): deel losse bestanden of laat de publieke branch lezen.
 

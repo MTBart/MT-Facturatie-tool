@@ -621,7 +621,8 @@ Perspectief-correct plakken (homografie per vak i.p.v. affien), automatisch extr
 | 18-11 | `f5e9e8c` | Haaksheid ingeklapt onder Later | B33 |
 | 18-11 | `d6a0124` | Kozijn als opening met opbouw en vakken | B34 |
 | 19-11 | `b4e2c6b` | Tekenmodule, tekening als invoer, snelkeuze en varianten, kameruitslag/wandafwikkeling/PDF op kantoor, tekenstandaarden, denkstuk §12 | B35–B37 |
-| 19-11 | (deze commit) | Maten alleen bij het gekozen onderdeel, scharnierblokjes, tekens op afdekplaat en leiding, Tekeningen / PDF op de telefoon | B38 |
+| 19-11 | `893bf97` | Maten alleen bij het gekozen onderdeel, scharnierblokjes, tekens op afdekplaat en leiding, Tekeningen / PDF op de telefoon | B38 |
+| 19-11 | `ffcb83d` en volgende | Overdracht voor een volgende sessie in `VOORTGANG-OPNAME.md`, script voor de voorbeeld-PDF | afsluiten cloudsessie |
 
 Meer detail per brok: `VOORTGANG-OPNAME.md`. Volledige diff: draft-PR #5.
 
