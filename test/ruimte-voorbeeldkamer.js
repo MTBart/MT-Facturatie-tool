@@ -30,7 +30,7 @@ module.exports = function voorbeeldkamer(D, AR, NU) {
   // korte wand W3 (H3–H4): R3 als nis met aftimmering erin (links, rechts, boven), 780 vanaf rechts, onderkant op 930 (bovenkant vensterbank), draai-kiep
   const W3 = e.wanden[2], k3 = kant(W3);
   const r3 = voeg('kozijn', W3, { label: 'R3', opmerking: 'Gordijnrails op de aftimmering, niet in het plafond' }); r3.opening = { type: 'nis-met-aftimmering', zijden: ['links', 'rechts', 'boven'] };
-  r3.raam = { vakken: [{ functie: 'draai-kiep naar binnen', scharnier: 'links' }] }; r3.referentie_hoek = k3.rechts;
+  r3.raam = { vakken: [{ functie: 'draai-kiep naar binnen', scharnier: 'rechts' }] }; r3.referentie_hoek = k3.rechts;
   [['afstand_tot_hoek', 780], ['opening_breedte', 1218], ['opening_hoogte', 1200], ['kozijn_onderkant', 930], ['nis_diepte_tot_aftimmering', 120], ['diepte_tot_kozijn', 80], ['aftimmer_dikte', 18]].forEach(([f, v]) => zet(r3, f, v, k3.rechts));
   const vb = voeg('vensterbank', W3, { label: 'Vensterbank R3' }); [['begin_vanaf_hoek', 760], ['eind_vanaf_hoek', 2018], ['hoogte_bovenkant', 930], ['dikte', 22], ['uitsteek_max', 60]].forEach(([f, v]) => zet(vb, f, v, k3.rechts));
   const sch = voeg('schakelaar', W3, { variant: 'enkel' }); [['afstand_hart_tot_hoek', 250], ['hoogte_hart', 1050]].forEach(([f, v]) => zet(sch, f, v, k3.rechts));

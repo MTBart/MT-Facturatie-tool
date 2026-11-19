@@ -16,7 +16,8 @@
 // Tekenafspraken naar de gangbare normen (B37; de normteksten zelf zijn niet geraadpleegd, zie docs/ONTWIKKELING-RUIMTE-OPNAME.md §11):
 // - Maatvoering bouwkundig (NEN-ISO 129-1): maatlijn met schuine streepjes, maatgetal boven de lijn, staande maten leesbaar van rechts, kettingmaten die sluiten.
 // - Weergave (NEN-EN-ISO 7519): zichtbare contouren dik, maat- en hulplijnen dun; ramen en deuren vereenvoudigd met een draairichting-driehoek.
-// - Draairichting: de punt van de driehoek wijst naar de scharnierkant. Getrokken = draait naar de kijker toe (de kamer in), gestreept = van de kijker af
+// - Draairichting (afspraak MT, 19-11): de punt van de driehoek wijst naar de kruk (de sluitkant), de scharnierblokjes staan aan de andere kant; bij kiep en
+//   klep wijst de punt naar de scharnierkant. Getrokken = draait naar de kijker toe (de kamer in), gestreept = van de kijker af
 //   (naar buiten). Omdat deze afspraak per land verschilt, staat hij altijd in de legenda van de tekening.
 // - Stopcontacten en schakelaars staan als afdekplaat op schaal in het aanzicht (enkel 81 × 81 mm, dubbel 152 × 81, …), met het hart als maatpunt.
 (function (root) {
@@ -90,10 +91,10 @@
     return el('text', a, str);
   }
 
-  // Draairichting van een vak (raam of deur) in het aanzicht: driehoek met de punt naar de scharnierkant. x, y = linksonder in px (y omlaag positief),
+  // Draairichting van een vak (raam of deur) in het aanzicht: bij links/rechts de punt naar de kruk (tegenover het scharnier), bij onder/boven de punt naar de scharnierkant. x, y = linksonder in px (y omlaag positief),
   // b, h = breedte en hoogte in px. kant: 'links' | 'rechts' | 'onder' (kiep) | 'boven' (klep). weg = draait van de kijker af (gestreept).
   function driehoek(x, yBoven, b, h, kant, weg) {
-    const P = kant === 'links' ? [[x + b, yBoven], [x, yBoven + h / 2], [x + b, yBoven + h]] : kant === 'rechts' ? [[x, yBoven], [x + b, yBoven + h / 2], [x, yBoven + h]]
+    const P = kant === 'rechts' ? [[x + b, yBoven], [x, yBoven + h / 2], [x + b, yBoven + h]] : kant === 'links' ? [[x, yBoven], [x + b, yBoven + h / 2], [x, yBoven + h]]
       : kant === 'onder' ? [[x, yBoven], [x + b / 2, yBoven + h], [x + b, yBoven]] : [[x, yBoven + h], [x + b / 2, yBoven], [x + b, yBoven + h]];
     return el('polyline', { points: P.map(q => getal(q[0]) + ',' + getal(q[1])).join(' '), 'class': 'draai' + (weg ? ' weg' : '') });
   }
@@ -497,7 +498,7 @@
       rijen.forEach(r => { const tr = maak('tr'); r.forEach(c => tr.appendChild(maak('td', c == null || c === '' ? '—' : String(c)))); t.appendChild(tr); }); return t; };
     const uit = maak('div', null, 'rp-rapport'), naam = dos.ruimte.naam + (dos.project && (dos.project.code || dos.project.naam) ? ' · ' + (dos.project.code || dos.project.naam) : '');
     const legenda = 'Maten in mm. Zwart = gemeten · blauw = berekend uit gemeten maten · grijs ~ = geschat (camera of aanname), niet om op te bestellen · ? = nog meten. Aanzichten gezien vanuit de kamer. ' +
-      'Raam of deur: de punt van de driehoek en de twee zwarte blokjes staan aan de scharnierkant; getrokken = draait de kamer in, gestreept = draait naar buiten. ' +
+      'Raam of deur: de twee zwarte blokjes staan aan de scharnierkant, de punt van de driehoek wijst naar de kruk (bij kiep en klep naar het scharnier); getrokken = draait de kamer in, gestreept = draait naar buiten. ' +
       'Stopcontacten en schakelaars: afdekplaat op schaal met het aantal contacten, maat op het hart. Leiding: doorsnede op schaal met KW (koud water), WW (warm water), CV, GAS, AFV (afvoer) of E (elektra).';
     const kop = (titel, sub) => { const h = maak('header', null, 'rp-kop'); h.appendChild(maak('h2', titel)); h.appendChild(maak('span', naam + (g.datum ? ' · opname ' + g.datum : '') + (sub ? ' · ' + sub : ''))); return h; };
     const eenvoudig = T.eenvoudig(lm);

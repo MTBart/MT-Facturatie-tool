@@ -2170,7 +2170,7 @@ if (typeof module !== 'undefined') module.exports = AR;
         fr.appendChild(b);
       });
       kozijnVak.appendChild(fr);
-      if (/^draai/.test(det.raam.vakken[azVak].functie)) {   // scharnierkant: de punt van de driehoek in de tekening wijst ernaar
+      if (/^draai/.test(det.raam.vakken[azVak].functie)) {   // scharnierkant: daar staan de blokjes; de punt van de driehoek wijst naar de kruk
         var sr = maak('div', null, 'chips'), nu = DS.scharnierVan(det.raam.vakken[azVak], azVak, det.raam.vakken.length); sr.appendChild(maak('span', 'Scharnier:', 'zacht'));
         ['links', 'rechts'].forEach(function (k) {
           var b = maak('button', k, nu === k ? 'aan' : ''); b.type = 'button'; b.id = 'az-scharnier-' + k;
