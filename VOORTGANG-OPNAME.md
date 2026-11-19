@@ -249,3 +249,164 @@ Aanleiding: Bart testte de opname op de Windows-tablet met de DISTO X4 en wil ee
 
 Nog niet (volgende stappen, in deze volgorde besproken met Bart): de opname op kantoor terugkijken (vraagt opslag buiten het toestel), een export waarmee de ruimte in Vectorworks
 is na te bouwen, en de DISTO-koppeling in app-modus (helling per meting) zodra de proef laat zien wat de X4 stuurt.
+
+## Ruimte-opname: rondgang, details en kantoorkijker (18-11-2026)
+
+Werkpakket "Bouw de ruimtelijke opname" (START-HIER / OPNAME-AR-START-HIER.md). Eerste proef volgens Bart: één kamer rondlopen met live contourlijnen en tijdens
+dezelfde rondgang de beelden verzamelen om op kantoor interactief rond te kijken. Startinstructie: `docs/OPNAME-RONDGANG-START.md`.
+
+**Gedaan**
+- Reparatie uit het pakket (`opname-ar.patch`) toegepast: robuust haaks-raster (onafhankelijk van de starthoek), foutafhandeling panorama en opslag.
+- `mt-ruimte-dossier.js` (nieuw, pure functies): dossier met stabiele ID's (project, ruimte, sessie, hoek, wand, beeld, detail, meting, opmerking), metingen met
+  bron (DISTO X4 / hand / camera), status (gemeten / geschat / afgeleid / open), oorspronkelijke invoer en historie (`vervangt`), details per groep (bouwdeel, installatie,
+  afwerking, meubilair, materiaal, notitie), XR-naar-ruimte (mm, oorsprong in een binnenhoek, X langs de eerste wand, Y de kamer in, Z omhoog, rechtsdraaiend),
+  lijnmodel (punten, segmenten, hoogte, sluitfout, met status per waarde), controlematen (bijv. H4-H6 naast de verwachte waarde), open vragen, uitlijnen van een
+  aanvulsessie op twee bekende hoeken, pakket (zip via `mt-opname-export.js`, relatieve paden, sha256) en het lezen van oude panoramabestanden.
+- `docs/opname-ar-proef.html` (S24): Nieuwe ruimte → Start rondgang; live contouren van de door ARCore gevonden vlakken (blauw) naast de getikte wanden (groen),
+  plattegrondje met positie en richtingsring, draai-aanwijzing alleen bij een echte leemte (en vastgelegd waar), Detail-knop (punt op de wand onder het kruisje,
+  scherpe foto op volle camera-resolutie, maten met X4-herkenning, referentiehoek kiezen), wandmaten/plafond/diagonaal naar het dossier, stapsgewijs bewaren in
+  `mt-opname-opslag.js` (records `soort: 'ruimte'`, revisiecontrole) met zichtbare fout en Opnieuw proberen, heropenen na onderbreking (ook hoeken van een rondgang
+  zonder Klaar), aanvulronde met uitlijnen of Apart, afsluiten/heropenen, gaten in het panorama gearceerd, pakket maken/delen met MB per soort.
+- `docs/opname-ar-kijk.html` (kantoor): zip openen (oude JSON blijft werken), opname op het toestel zelf (`#ruimte=`), zoomen met scroll/knijpen/+−, kijkpunten in
+  beeld en op de plattegrond, detailmarkeringen per groep met paneel (originele foto, maten met bron/status/tijd/invoer/historie, plek in mm, opmerkingen, open vragen),
+  rode maatlijnen op de wand, dossierpaneel (lijnmodel, controlematen, groepen, open vragen, rondgangen met tellers), opentijd en MB per soort.
+- `mt-opname.js`: de beta-lijst toont geen ruimte-records.
+
+**Getest**: `node test/ruimte-dossier.test.js` (57, o.a. de zevenhoek bij alle 14 starts met ~42,3 mm, korte wand 155 mm apart, H4-H6, proef 5 fictieve kamer,
+zip heen en terug, beschadigd/ontbrekend beeld, uitlijnen), `node test/opname-ar-proef.test.js` (71, nieuw: snijWand, richtingen, draaiHint, vlakSegment),
+de opslagcontrole uit het pakket (5 scenario's), alle bestaande opname-tests, `check-sinks`, `check-verwijzingen`. Browser (headless Chromium, nagebootste kamer
+4 x 3 m met raam, radiator, cv-leiding, stopcontact en een kastje als obstakel): `test/ruimte-e2e.js`, 24 controles groen. Vast proefpakket:
+`test/fixtures/ruimte-proefpakket.zip` (0,6 MB, alleen gerenderde beelden).
+
+**Niet op hardware getest (alleen gesimuleerd)**: de hele AR-kant op de S24 met de nieuwe functies (plane-detection, Detail-foto via de AR-camera, X4 via Bluetooth
+in het detailpaneel, toetsenbord in de AR-overlay), opslag op een echt volle telefoon, geweigerde cameratoestemming, de kijker op een echte kantoor-pc met een groot pakket.
+**Niet gebouwd**: iPhone/RoomPlan en Nomad-import (zie startinstructie), een kijkpunt automatisch bijmaken bij een andere zichtlijn (nu: kijkpunten uit de standpunten),
+onscherp beeld vervangen, bolle wand met tussenpunten en zijdelingse afwijking, meethoogte per vrije-breedtemaat, integratie in het Meer-menu van mobiel.html.
+
+**Vervolg 18-11 (feedback Bart na de eerste proef op de S24)**
+- Draadmodel weer centraal: de door ARCore gevonden vlakken staan standaard uit beeld (knop Vlakken), maar worden wel als ruw scanvoorstel bewaard.
+- Na heropenen (tabblad per ongeluk dicht) kan Wanden aan elkaar plakken weer: de beelden komen uit de opslag.
+- Bij elke getikte hoek een scherpe foto met de plek van de tik erop; omhoog richten boven de hoek geeft vanzelf een plafondfoto. Knop Foto voor een hele wand
+  (herkent welke wand en of hij helemaal in beeld is; telt dubbel in het panorama). Hoeken nakijken: de echte hoek op de foto aantikken, `AR.hoekUitFoto` rekent de plek
+  op vloer of plafond uit, `D.corrigeerHoek` bewaart de tik (`xr_ruw`, archief) en kan terug. Kijker: hoekmarkeringen met foto, rood = getikt, groen = gecorrigeerd.
+  Later: dezelfde foto's en standen kunnen een automatische hoekherkenning (AI) voeden; het datamodel heeft daarvoor `correctie.bron = 'ai'`.
+- Tests: AR-kern 74, dossier 60, e2e 28 (o.a. hoek 72 mm naast de echte hoek getikt, na één tik op de foto binnen 2 mm).
+
+**Vervolg 19-11 (werkend concept wandtekening, feedback op pakket "Test 10")**
+- `mt-ruimte-tekening.js` (nieuw): wandaanzicht, doorsnede van een opening, kameruitslag en wandafwikkeling als boom van objecten; de pagina maakt er
+  SVG-elementen van (geen HTML als tekst). Zelfde tekening op de telefoon, op kantoor en in de PDF.
+- Telefoon: de tekening is de invoer. Maat aantikken, getal + Enter, door naar de volgende open maat (X4 achter elkaar). Soort opening met drie plaatjes,
+  dieptematen in de doorsnede, vakken met draairichting en scharnierkant, uitvoering per onderdeel (enkel/dubbel/drievoudig …), opmerking, naam, foto,
+  weghalen naar het archief. Elk soort onderdeel toe te voegen (ook vensterbank, plint, sierlijst, knik, balk). Kamer opengeklapt als wandkiezer.
+- Fase 2: Detail = foto + "Wat is dit?"; één tik en het onderdeel staat (geschat) in de werktekening van de wand.
+- Kantoor: knop Tekeningen met kameruitslag (of plattegrond bij een inspringende hoek), wandafwikkeling, pagina per wand met onderdelen- en kozijnenlijst,
+  Afdrukken / PDF.
+- Dossier: `D.wandAanzicht` zonder AR-kern (lijnmodel uit het pakket), `D.wandKeten` (doorlopende maatketen, openingen en overige onderdelen apart),
+  `D.VARIANTEN`, `D.WANDSOORTEN`, status `open` voor een maat die nog niet gemeten is, de buitenmaat van een kozijn wordt niet meer gevraagd.
+- Tests: AR-kern 77, dossier 105, tekenmodule 25 (voorbeeldkamer op de echte maten van de proef), e2e 55. Opslagcontrole en `check-sinks` schoon.
+- **Niet op een echt toestel getest:** het nieuwe wandscherm met schermtoetsenbord en X4, de snelkeuze in de AR-laag, afdrukken vanaf een kantoor-pc.
+- Beslissingen B35–B37, tekenstandaarden §11 en het denkstuk over leidingwerk, plinten en sierlijsten §12 staan in `docs/ONTWIKKELING-RUIMTE-OPNAME.md`.
+- 19-11 later (B38): op de telefoon alleen de maten van het aangetikte onderdeel; scharnierblokjes bij ramen en deuren; stopcontact/schakelaar met
+  contacten of wip op de afdekplaat, leiding als doorsnede op schaal met KW/WW/CV/GAS/AFV/E; knop Tekeningen / PDF op de telefoon (rapport nu in de
+  tekenmodule, één bron voor telefoon en kantoor). Tests: tekenmodule 25, e2e 59.
+
+## Oppakken in een andere sessie (stand 19-11-2026)
+
+Voor een sessie die dit werk overneemt (lokaal of in de cloud). Alles wat nodig is staat in deze branch; het volledige waarom staat in
+`docs/ONTWIKKELING-RUIMTE-OPNAME.md` (beslissingen B1–B38, proeven §5.1, plannen §6, tekenstandaarden §11, denkstuk §12).
+
+**Waar het staat**
+- Branch `ccr-6aed2904-q3dzlo`, laatste code-commit `893bf97` (daarna alleen overdrachtstekst en het script voor de voorbeeld-PDF), concept-PR #5 naar `main`. Niet gemerged, niet uitgebracht: dat wacht op akkoord van Bart.
+- Ophalen in een bestaande clone: `git fetch origin ccr-6aed2904-q3dzlo` en dan `git switch ccr-6aed2904-q3dzlo` (of een worktree op die branch).
+- Proefpagina's per commit: `https://raw.githack.com/MTBart/MT-Facturatie-tool/<commit>/docs/opname-ar-proef.html` (telefoon) en `…/docs/opname-ar-kijk.html`
+  (kantoor). De opslag op de telefoon hoort bij het adres: een nieuwe commit-link begint met een lege lijst.
+
+**Bestanden**
+- `docs/opname-ar-proef.html`: rondgang op de S24 (twee fases), snelkeuze, dossier, wandscherm, Tekeningen / PDF. Rekenkern tussen `/*KERN-BEGIN*/` en `/*KERN-EINDE*/`.
+- `docs/opname-ar-kijk.html`: kantoor: rondkijken, dossier, Tekeningen / PDF.
+- `mt-ruimte-dossier.js`: dossier, metingen met historie, lijnmodel, wandaanzicht, maatketens, varianten, pakket.
+- `mt-ruimte-tekening.js`: wandaanzicht, doorsnede, kameruitslag, wandafwikkeling en het rapport (één bron voor telefoon, kantoor en PDF).
+- `docs/OPNAME-RONDGANG-START.md`: gebruiksinstructie. `test/ruimte-voorbeeldkamer.js`: voorbeeldkamer op de maten van de proef.
+
+**Tests draaien**
+- `node test/opname-ar-proef.test.js` (77), `node test/ruimte-dossier.test.js` (105), `node test/ruimte-tekening.test.js` (25), de overige `test/opname-*.test.js`.
+- Browsertest (59 controles, vraagt Playwright met Chromium): in de repo `python -m http.server 8123 --bind 127.0.0.1`, daarna `node test/ruimte-e2e.js <lege uitmap>`.
+  Het script blijft hangen na een mislukte stap: draai het met een tijdslimiet.
+- Vóór elke commit: `bash githooks/pre-commit` (secret-guard, privacy-scan, `tools/check-sinks.js`) en `node tools/check-verwijzingen.js`.
+  In een verse clone staat de hook niet als uitvoerbaar gemarkeerd; dan met de hand draaien.
+
+**Wat werkt (getest in node en een testbrowser)**
+- Rondgang: fase 1 plattegrond tikken, fase 2 scannen met hoek-, plafond- en wandfoto's; alles stapsgewijs bewaard; heropenen en aanvullen.
+- Fase 2 Detail = foto + snelkeuze; het onderdeel staat geschat in de werktekening van de wand.
+- Wandscherm: onderdeel aantikken, maat aantikken, getal + Enter (X4 achter elkaar), kozijn met opbouw en vakken, uitvoering per onderdeel, opmerking.
+- Tekeningen: kameruitslag of plattegrond, wandafwikkeling, pagina per wand, kozijnenlijst; Afdrukken / PDF op telefoon en kantoor.
+
+**Niet op een echt toestel getest**
+Het wandscherm met schermtoetsenbord en X4, de snelkeuze in de AR-laag, Tekeningen / PDF op de telefoon, afdrukken vanaf een kantoor-pc.
+De rondgang zelf is door Bart op de S24 geprobeerd tot en met de stand van 18-11 21:52 (zie §5.1 van het ontwikkeldocument).
+
+**Open vragen aan Bart** (ontwikkeldocument §8)
+1. R1: is de 310 mm gemeten vanaf de voorkant van de aftimmering (zo vastgelegd) of vanaf de muur?
+2. Staat de deur van de proefkamer op W4 (H4–H1)? R3 staat op W3 volgens zijn opgave.
+3. Tekent MT de draairichting met de punt naar het scharnier (zo gebouwd) of naar de kruk?
+4. PDF-download met één tik (vraagt een pdf-bibliotheek, ± 400 kB) of volstaat Afdrukken → Opslaan als pdf?
+
+**Logische volgende stappen** (voorstel, niets is toegezegd)
+1. Uitkomst van Barts proef op de S24 met de laatste link verwerken (vooral: blijft de invoerbalk in beeld met het toetsenbord open).
+2. Vensterbank als eigenschap van het kozijn; plint en sierlijst als eigenschap van de kamer; leiding als vrij te houden zone (§12).
+3. Schaal en onderhoek op de tekeningen; schuin dak en verlaagd plafond (wand als veelhoek).
+4. Beschrijving van PR #5 bijwerken (die noemt nog de eerste versie).
+5. Daarna pas: inbouwen in de app en publiceren (P6), opslag buiten de telefoon (P7), Vectorworks (P3).
+
+### Aanvulling bij het afsluiten van de cloudsessie (19-11-2026)
+
+De cloudsessie waarin dit werk is gemaakt stopt hier; het werk gaat lokaal verder. Hieronder staat wat in het gesprek is afgesproken of geopperd en nog
+niet elders in de branch stond. Een los overdrachtsbestand voor de lokale map is wel geschreven, maar daar niet geplaatst (Bart was onderweg en de
+cloudsessie had alleen leesrechten op SharePoint): alles wat daarin stond en in een publieke repo mag, staat nu hier.
+
+**Laatste afspraken en antwoorden van Bart**
+- "Zo helder moet de bemating eruitzien": de wandpagina uit de voorbeeld-PDF is de maat voor hoe het straks moet.
+- De plattegrond tikken en daarna scannen (twee fases) "lijkt te werken". Haaksheid van hoeken komt later, nu niet belangrijk.
+- Per ruimte vult Bart de exacte wandmaten achteraf in; in proeven doet hij dat niet elke keer opnieuw.
+- Plek van de kozijnen in de proefkamer: R1 334 vanaf links en R2 40 vanaf rechts op W2 (H2–H3), onderkant R2 750 (= bovenkant vensterbank);
+  R3 op W3 (H3–H4), 780 vanaf rechts, onderkant 930 (= bovenkant vensterbank). De deur en R3 stonden in de eerste voorbeeldkamer op de verkeerde wand.
+  Aanname die nog bevestigd moet worden: de deur staat op W4.
+- Scharnieren van R1 zitten aan de buitenkant (linker vak links, rechter vak rechts), draait naar buiten, middenvak vast. R2 vast. R3 draai-kiep naar binnen.
+- Op de telefoon de maten per onderdeel pas tonen als je het aantikt: gebouwd (B38).
+- Standaardtekens ook voor stopcontacten en waterleidingen: gebouwd als herkenbare plaatjes op schaal (B38); de officiële schemasymbolen zijn niet nagelezen.
+- PDF rechtstreeks uit de opnametool: gebouwd via Afdrukken → Opslaan als pdf (B38).
+- Bart wil dat een reviewer (GPT Astra) kan meedenken over leidingwerk, plinten en sierlijsten: het denkstuk staat in het ontwikkeldocument §12.
+
+**Halve plannen (geopperd, niet gebouwd, niet toegezegd)**
+- PDF-download met één tik zonder afdrukvenster: vraagt een pdf-bibliotheek (bijvoorbeeld jsPDF met svg2pdf) in `vendor/`, ongeveer 400 kB.
+- Instelling om de draairichting-driehoek om te draaien (punt naar de kruk) als MT dat zo tekent; de scharnierblokjes blijven dan kloppen.
+- Vensterbank als eigenschap van het kozijn (dikte, uitsteek, overstek links en rechts; bovenkant = onderkant opening).
+- Plint, sierlijst en plafondlijst één keer per kamer vastleggen; de app onderbreekt ze zelf bij deuren.
+- Leiding als vrij te houden zone (rechthoek + grootste uitsteek); het tracé met knikpunten alleen als een klus erom vraagt.
+- Herkenning van soort en uitvoering op de detailfoto (AI) met bevestiging door de opnemer; afmeting uit de foto alleen als controle.
+- Schaal (1:20 wand, 1:50 uitslag) met schaalstok, een onderhoek met project, ruimte, datum en versie, en A3.
+- Wand als veelhoek (schuin dak, verlaagd plafond), plafond- en vlooraanzicht, wand uit het lood, bovenaanzicht per wand voor de uitsteek.
+- Schaalcorrectie van camera-schattingen per gemeten wand (P10) en de groothoekfoto rechtstreeks vanuit een eigen app (P11).
+
+**Bekende beperkingen van de huidige stand**
+- Het wandscherm tekent een lange wand tot 1,7 keer de schermbreedte en laat je opzij schuiven. Of dat prettig werkt en of de invoerbalk met het
+  toetsenbord open in beeld blijft, is alleen in een testbrowser bekeken.
+- De kantoorpagina kan de tekeningen alleen maken uit een pakket (zip): daarin staat het lijnmodel. Een opname die via `#ruimte=` rechtstreeks uit de
+  opslag van het toestel wordt geopend, heeft dat niet; gebruik daar de knop Tekeningen / PDF van de telefoonpagina.
+- In de kameruitslag en bij veel kleine onderdelen kunnen maatgetallen elkaar raken; de wandpagina's zijn leidend.
+- De tabel "Kozijnen op deze wand" schuift bij een volle wandpagina naar de volgende pagina.
+- Een wandbeeld als ondergrond in het wandscherm wordt gespiegeld als de beginhoek van de wand rechts ligt; dat is met nagebootste beelden bekeken, niet met echte.
+- `test/ruimte-e2e.js` eindigt niet vanzelf na een mislukte stap.
+
+**Losse punten**
+- Voorbeeld-PDF opnieuw maken: `node test/ruimte-voorbeeld-pdf.js <uitmap>` (voorbeeldkamer) of met een eigen pakket als tweede argument. De PDF zelf staat niet in de repo.
+- De echte opnamepakketten van de proeven zijn alleen in de cloudsessie gebruikt en nergens bewaard. Voor een nieuwe analyse opnieuw Pakket maken of Delen op de telefoon.
+- Een collega had toegang tot de tool maar zag niets: rechten stel je in de cockpit in onder Admin → Beheer. Dat kan een sessie niet zelf doen.
+- De beschrijving van PR #5 noemt nog de eerste versie (testaantallen en functies). Bijwerken is alleen tekst; er is niet om gevraagd, dus niet gedaan.
+- De periodieke check-ins op PR #5 zijn gestopt na drie keer zonder verandering (geen CI, geen commentaar, geen conflicten). De cloudsessie volgt de PR niet meer.
+- Een video die Bart stuurde (https://youtu.be/IyuUR51Mu4I, "This Experimental Feature Is Claude Code's BIGGEST Upgrade of 2026") kon vanuit de cloud niet
+  gelezen worden: YouTube geeft cloudservers een robotcontrole. Lokaal: `python Agents/video_analyse.py <url>`. Vermoeden, niet bevestigd: het gaat om
+  Code Mode van Claude Code (experimenteel, aan te zetten in de persoonlijke instellingen, niet via de projectinstellingen). Eerst de video lezen, dan pas iets aanzetten.
+- Voor die poging is een persoonlijke cloudomgeving "MT-Facturatie-tool" aangemaakt waarin `www.youtube.com` is toegestaan. Mag blijven of weg.
+- Een reviewer geef je geen toegang tot de hele lokale werkmap (daar staat meer dan dit project): deel losse bestanden of laat de publieke branch lezen.
+

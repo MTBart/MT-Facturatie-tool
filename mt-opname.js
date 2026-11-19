@@ -175,7 +175,8 @@
     X.ga(naar, naar === 'model' ? { wandKlaar: false } : {}); return true;
   };
   X.naarLijst = async function () {
-    try { S.opnames = await O.lijst(); S.opslagFout = null; } catch (e) { S.opnames = []; S.opslagFout = e.message; }
+    // ruimte-dossiers van de rondgang (docs/opname-ar-proef.html) delen deze opslag maar zijn geen kern-opname: die staan in hun eigen lijst
+    try { S.opnames = (await O.lijst()).filter(r => !r || r.soort !== 'ruimte'); S.opslagFout = null; } catch (e) { S.opnames = []; S.opslagFout = e.message; }
     S.rec = null; S.conflict = false; S.onbewaard = false; X.ga('lijst'); X.foutBalk();
   };
   X.kop = function (titel, sub, opties) {
