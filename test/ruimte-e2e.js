@@ -110,6 +110,10 @@ window.renderKamer = function (cam, w, h, fovy) {
   for (const [i, v, snel] of [[0, '4000', false], [1, '3000', true], [2, '4000', false], [3, '3000', true]]) {
     await p.click('#hand-' + i); await p.keyboard.type(v, { delay: snel ? 15 : 220 }); await p.keyboard.press('Enter'); await p.waitForTimeout(150);
   }
+  // het dossier begint met het overzicht; de rest staat in inklapbare blokken. Voor de test alles open.
+  const openBlokken = () => p.evaluate(() => document.querySelectorAll('#s-dossier details.blok').forEach(x => { x.open = true; }));
+  const ingeklapt = await p.evaluate(() => Array.from(document.querySelectorAll('#s-dossier details.blok')).every(x => !x.open) && document.querySelectorAll('#s-dossier details.blok').length >= 5);
+  await openBlokken();
   await p.click('#d-plafond'); await p.keyboard.type('2600', { delay: 15 }); await p.keyboard.press('Enter');
   await p.click('details.later summary');   // haaksheid en diagonaal staan ingeklapt onder 'Later'
   await p.selectOption('#d-diag-van', { index: 0 }); await p.selectOption('#d-diag-naar', { index: 2 }); await p.click('#d-diag'); await p.keyboard.type('5000', { delay: 220 }); await p.keyboard.press('Enter');
@@ -176,7 +180,7 @@ window.renderKamer = function (cam, w, h, fovy) {
   const naMeting = await plekNu(details[0]);
   check('review: dezelfde 1550 bewust vanaf de andere hoek meten geeft een nieuwe meting en een andere plek', naMeting.n === voor.n + 1 && naMeting.vanaf !== voor.vanaf && (naMeting.x !== voor.x || naMeting.y !== voor.y), JSON.stringify(naMeting));
   await p.waitForTimeout(700);   // zoals een gebruiker die 'Veilig bewaard' ziet en dan pas sluit
-  await p.reload(); await p.waitForSelector('#r-lijst li'); await p.click('#r-lijst li button');
+  await p.reload(); await p.waitForSelector('#r-lijst li'); await p.click('#r-lijst li button'); await openBlokken();
   const naHeropenen = await plekNu(details[0]);
   check('review: na heropenen dezelfde plek en historie', naHeropenen.x === naMeting.x && naHeropenen.n === naMeting.n && naHeropenen.vanaf === naMeting.vanaf);
   // wandaanzicht (B36): de tekening is de invoer. Kozijn toevoegen en met de X4 achter elkaar door meten: alleen getal + Enter, zonder een veld aan te tikken.
@@ -240,6 +244,16 @@ window.renderKamer = function (cam, w, h, fovy) {
   await p.screenshot({ path: path.join(UIT, 's24-10-kozijn-R1.png') });
   await p.evaluate(() => document.querySelector('.aztypes').scrollIntoView({ block: 'center' }));
   await p.screenshot({ path: path.join(UIT, 's24-10b-kozijn-R1-opbouw.png') });
+  await p.click('#az-sluit');
+  // het overzicht: draadmodel met een rondje per wand; aantikken opent het wandaanzicht van die wand
+  await p.evaluate(() => document.querySelector('#d-draad').scrollIntoView({ block: 'start' }));
+  await p.screenshot({ path: path.join(UIT, 's24-10b-overzicht-draadmodel.png') });
+  const w3id = await p.evaluate(() => window.arProef.dossier().wanden[2].id);
+  const ovz = await p.evaluate(() => ({ bollen: document.querySelectorAll('#d-draad g.dmknop[data-wand]').length, wanden: window.arProef.dossier().wanden.length,
+    knoppen: Array.from(document.querySelectorAll('#d-aanzichten button')).map(b => b.textContent).join(' | ') }));
+  await p.click('#d-draad g.dmknop[data-wand="' + w3id + '"] circle.dmbol');
+  const kopDm = await p.evaluate(() => document.querySelector('#d-paneel .azkop h2').textContent);
+  check('overzicht: draadmodel met een rondje per wand en per wand wat open staat; aantikken opent die wand; de rest was ingeklapt', ingeklapt && ovz.bollen === ovz.wanden && /W1/.test(ovz.knoppen) && /Kamer/.test(ovz.knoppen) && /^W3 /.test(kopDm), JSON.stringify(ovz) + ' | ' + kopDm);
   await p.click('#az-sluit');
   // de kamer opengeklapt in het dossier: een wand aantikken opent die wand; in het wandscherm door naar de volgende wand
   await p.evaluate(() => document.querySelector('#d-uitslag').scrollIntoView({ block: 'center' }));
@@ -318,7 +332,7 @@ window.renderKamer = function (cam, w, h, fovy) {
   // onderbreking: pagina opnieuw laden, de ruimte staat in de lijst en opent met alles erin
   await p.reload(); await p.waitForSelector('#r-lijst li');
   await p.screenshot({ path: path.join(UIT, 's24-06-na-herladen.png') });
-  await p.click('#r-lijst li button');
+  await p.click('#r-lijst li button'); await openBlokken();
   const terug = await p.evaluate(() => { const d = window.arProef.dossier(); return { hoeken: d.hoeken.length, det: d.details.length, mt: d.metingen.length, open: !document.querySelector('#s-dossier').hidden }; });
   check('na herladen: ruimte opent met hoeken, details en maten', terug.hoeken === 4 && terug.det >= 2 && terug.mt > 8 && terug.open, JSON.stringify(terug));
   // tabblad per ongeluk gesloten: na heropenen kan het plakken van de wanden opnieuw (beelden komen uit de opslag)

@@ -735,6 +735,20 @@
     return uit;
   };
 
+  // Open vragen per wand (voor het overzicht na de opname): een vraag over een wand, of over een onderdeel op die wand, hoort bij die wand; de rest
+  // (plafondhoogte, vorm, opslag, een onderdeel zonder wand) bij de kamer. Geeft { wanden: { wandId: [vragen] }, kamer: [vragen] }.
+  D.openPerWand = function (d, vragen) {
+    const uit = { wanden: {}, kamer: [] };
+    lijst(d.wanden).forEach(w => { uit.wanden[w.id] = []; });
+    lijst(vragen).forEach(v => {
+      let wid = null;
+      if (v.doel && uit.wanden[v.doel]) wid = v.doel;
+      else if (v.doel) { const det = lijst(d.details).find(x => x.id === v.doel); if (det && det.wand_id && uit.wanden[det.wand_id]) wid = det.wand_id; }
+      (wid ? uit.wanden[wid] : uit.kamer).push(v);
+    });
+    return uit;
+  };
+
   // ── het pakket ── dossier.json, LEESMIJ.txt en de beelden onder hun pad. bestanden: { pad: Uint8Array }. Het dossier krijgt een momentopname van het lijnmodel en de
   // open vragen mee, zodat een lezer zonder de rekenkern alles kan uitlezen. sha256 per beeld.
   D.maakPakket = async function (d, bestanden, opties) {

@@ -50,6 +50,14 @@
     '.mtt .plaat{fill:var(--vlak,#fff);stroke:var(--inkt,#16211a);stroke-width:calc(var(--mtt-lijn,3) * .8)} .mtt .plaat.gekozen{stroke:var(--kies,#1c5fc4);stroke-width:calc(var(--mtt-lijn,3) * 1.7)}',
     '.mtt [data-id],.mtt [data-veld],.mtt [data-vak],.mtt [data-wand]{cursor:pointer}',
     '.mtt .wandraak{fill:rgba(28,95,196,.04)} .mtt .wandraak.gekozen{fill:rgba(28,95,196,.2)}',
+    '.mtt .dmvloer{fill:rgba(120,120,120,.12);stroke:none}',
+    '.mtt .dmwand{fill:rgba(28,95,196,.03);stroke:var(--inkt,#16211a);stroke-width:var(--mtt-lijn,3);stroke-linejoin:round}',
+    '.mtt .dmwand.open{fill:rgba(168,101,4,.08)} .mtt .dmwand.klaar{fill:rgba(23,100,63,.09)}',
+    '.mtt .dmwand.voor{fill:none;pointer-events:none}',
+    '.mtt .dmitem{fill:rgba(28,95,196,.10);stroke:var(--zacht,#5d6b62);stroke-width:calc(var(--mtt-lijn,3) * .6);stroke-linejoin:round;pointer-events:none}',
+    '.mtt .dmbol{stroke:var(--vlak,#fff);stroke-width:3} .mtt .dmbol.open{fill:var(--oranje,#a86504)} .mtt .dmbol.klaar{fill:var(--primair,#17643f)}',
+    '.mtt .dmboltekst{fill:var(--op-primair,#fff);pointer-events:none}',
+    '.mtt .dmstatus{pointer-events:none;paint-order:stroke;stroke:var(--vlak,#fff);stroke-width:5px;stroke-linejoin:round} .mtt .dmstatus.open{fill:var(--oranje,#a86504)} .mtt .dmstatus.klaar{fill:var(--primair,#17643f)}',
     '.mtt .tikvlak{fill:var(--vlak,#fff);fill-opacity:.82;stroke:var(--rand,#cfd6d0);stroke-width:1.5}',
     '.mtt .tikvlak.actief{stroke:var(--oranje,#a86504);stroke-width:5;fill-opacity:1}',
     '.mtt .maat{stroke:var(--zacht,#5d6b62);stroke-width:calc(var(--mtt-lijn,3) * .8)}',
@@ -425,6 +433,46 @@
     });
     const boom = el('svg', { 'class': 'mtt uitslag', viewBox: '0 0 ' + Math.round(breedte) + ' ' + Math.round(hoogte), style: '--mtt-lijn:' + (o.lijn || 1.4), role: 'img', 'aria-label': 'Kameruitslag' }, null, out);
     return { boom, s, breedte, hoogte, gedraaid: staand };
+  };
+
+  // Draadmodel: de kamer schuin van boven gezien (evenwijdige projectie), als overzicht na de opname. Elke wand heeft een rondje met zijn naam dat je kunt
+  // aantikken (data-wand); de achterste wanden zijn ook als vlak aantikbaar, de voorste alleen via het rondje (anders vangen ze elke tik af).
+  // o.open = { wandId: aantal open maten }: oranje rondje met het aantal, anders groen met 'klaar'. Onderdelen met een plek staan als omtrek op hun wand.
+  T.draadmodel = function (lm, aanzichten, o) {
+    o = Object.assign({ breedte: 700, fs: 20, draai: 32, kantel: 30 }, o || {});
+    const fs = o.fs, P = lm.punten, n = P.length, H = (lm.hoogte && lm.hoogte.waarde) || 2600, open = o.open || {};
+    const th = o.draai * Math.PI / 180, ph = o.kantel * Math.PI / 180, ct = Math.cos(th), st = Math.sin(th), cp = Math.cos(ph), sp = Math.sin(ph);
+    const pr = (x, y, z) => { const xr = x * ct - y * st, yr = x * st + y * ct; return { x: xr, y: -z * cp - yr * sp, d: yr }; };
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    P.forEach(p => [0, H].forEach(z => { const q = pr(p.x, p.y, z); x0 = Math.min(x0, q.x); x1 = Math.max(x1, q.x); y0 = Math.min(y0, q.y); y1 = Math.max(y1, q.y); }));
+    const rand = fs * 2.6, s = (o.breedte - 2 * rand) / Math.max(1, x1 - x0), breedte = o.breedte, hoogte = (y1 - y0) * s + 2 * rand + fs * 1.2;
+    const S = q => ({ x: rand + (q.x - x0) * s, y: rand + (q.y - y0) * s, d: q.d });
+    const pad = Q => Q.map((q, i) => (i ? 'L' : 'M') + getal(q.x) + ' ' + getal(q.y)).join(' ') + ' Z';
+    const out = [el('path', { d: pad(P.map(p => S(pr(p.x, p.y, 0)))), 'class': 'dmvloer' })];
+    const dMid = P.reduce((t, p) => t + pr(p.x, p.y, 0).d, 0) / n;
+    const wanden = (aanzichten || []).filter(Boolean).map(az => {
+      const A = P.find(p => p.id === az.links.id), B = P.find(p => p.id === az.rechts.id); if (!A || !B) return null;
+      const op = (u, z) => S(pr(A.x + (B.x - A.x) * u / az.L, A.y + (B.y - A.y) * u / az.L, z));
+      return { az, op, d: (pr(A.x, A.y, 0).d + pr(B.x, B.y, 0).d) / 2 };
+    }).filter(Boolean).sort((a, b) => b.d - a.d);   // achterste eerst
+    const bollen = [];
+    wanden.forEach(w => {
+      const az = w.az, nOpen = open[az.wand_id] || 0, voor = w.d < dMid, kl = nOpen ? 'open' : 'klaar';
+      const a = { d: pad([w.op(0, 0), w.op(az.L, 0), w.op(az.L, H), w.op(0, H)]), 'class': 'dmwand ' + kl + (voor ? ' voor' : '') }; if (!voor) a['data-wand'] = az.wand_id;
+      out.push(el('path', a));
+      az.items.forEach(it => {
+        if (it.rect && it.vorm !== 'traject') { const r = it.rect, u1 = Math.max(0, r.x), u2 = Math.min(az.L, r.x + r.w); if (u2 > u1) out.push(el('path', { d: pad([w.op(u1, r.y), w.op(u2, r.y), w.op(u2, r.y + r.h), w.op(u1, r.y + r.h)]), 'class': 'dmitem' })); }
+        else if (it.punt && it.punt.x != null && it.punt.y != null) { const c = w.op(it.punt.x, it.punt.y); out.push(el('circle', { cx: c.x, cy: c.y, r: fs * 0.22, 'class': 'dmitem' })); }
+      });
+      const m = w.op(az.L / 2, H / 2), r = fs * 1.25;
+      bollen.push(el('g', { 'data-wand': az.wand_id, 'class': 'dmknop', role: 'button', 'aria-label': az.wand + (nOpen ? ', ' + nOpen + ' open' : ', klaar') }, null, [
+        el('circle', { cx: m.x, cy: m.y, r: r * 1.5, 'class': 'raak' }), el('circle', { cx: m.x, cy: m.y, r, 'class': 'dmbol ' + kl }),
+        tekst(m.x, m.y + fs * 0.34, az.wand, 'dmboltekst', fs * 0.95), tekst(m.x, m.y + r + fs * 0.95, nOpen ? nOpen + ' open' : 'klaar', 'dmstatus ' + kl, fs * 0.8)]));
+    });
+    const cx = P.reduce((t, p) => t + p.x, 0) / n, cy = P.reduce((t, p) => t + p.y, 0) / n;
+    P.forEach(p => { const dl = Math.hypot(p.x - cx, p.y - cy) || 1, q = S(pr(p.x + (p.x - cx) / dl * 260, p.y + (p.y - cy) / dl * 260, 0)); out.push(tekst(q.x, q.y + fs * 0.3, p.label || '', 'hoeklabel', fs * 0.75)); });
+    const boom = el('svg', { 'class': 'mtt draadmodel', viewBox: '0 0 ' + Math.round(breedte) + ' ' + Math.round(hoogte), style: '--mtt-lijn:' + (o.lijn || 2), role: 'img', 'aria-label': 'Draadmodel van de kamer' }, null, out.concat(bollen));
+    return { boom, s, breedte, hoogte };
   };
 
   // Lijst van alle onderdelen met hun maten (voor de tabellen in het rapport). Per onderdeel: wand, naam, plek, maten en opmerking.

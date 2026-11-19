@@ -91,6 +91,11 @@ const jpg = n => Uint8Array.from([0xFF, 0xD8, 0xFF, 0xE0, n & 255, (n >> 8) & 25
   const plek = D.detailPlek(d, leiding, lm);
   check('plek van de leiding volgt de gemeten maten', plek && plek.z === 312 && plek.status.langs_wand === 'gemeten' && plek.status.hoogte === 'gemeten');
   const ov = D.openVragen(d, AR);
+  {
+    const pw = D.openPerWand(d, ov), totaal = Object.keys(pw.wanden).reduce((t, k) => t + pw.wanden[k].length, 0) + pw.kamer.length;
+    check('open vragen per wand: elke vraag staat precies één keer, bij een wand of bij de kamer', totaal === ov.length && Object.keys(pw.wanden).length === d.wanden.length &&
+      ov.filter(v => d.wanden.some(w => w.id === v.doel)).every(v => pw.wanden[v.doel].indexOf(v) >= 0) && pw.kamer.every(v => !d.wanden.some(w => w.id === v.doel)));
+  }
   check('open vragen noemen de open uitsteekmaat en de diameter van de leiding', ov.some(v => v.doel === leiding.id && v.veld === 'uitsteek_max') && ov.some(v => v.doel === leiding.id && v.veld === 'buitendiameter'));
   check('open vragen noemen de korte wand', ov.some(v => v.doel === wids[2] && /kort/.test(v.tekst)));
   D.voegOpmerkingToe(d, { tekst: 'Nieuwe vloer komt 12 mm hoger', locatie: { soort: 'ruimte', id: d.ruimte.id }, bron: 'opnemer', sessie: s1.id }, NU);

@@ -70,6 +70,18 @@ check('afwikkeling: wanden naast elkaar, elke volgende wand begint in de hoek wa
 // ── tabelrijen ──
 const rijen = T.onderdeelRijen(azs), r1 = rijen.find(x => x.id === K.details.r1.id), sc = rijen.find(x => x.id === K.details.sc1.id);
 check('onderdeelrijen: R1 met opening, binnenwerks en vakken; stopcontact met uitvoering en hart', r1.binnenwerks === '2440 × 1082' && /Aftimmering op de wand/.test(r1.opening) && /310/.test(r1.diepte) && r1.vakken.split(' | ').length === 3 && sc.variant === 'Dubbel' && /hart 300/.test(sc.hoogte) && /1400 vanaf/.test(sc.plek));
+// ── draadmodel: het overzicht na de opname ──
+{
+  const ov = D.openPerWand(d, D.openVragen(d, AR)), tel = {}; d.wanden.forEach(w => { tel[w.id] = ov.wanden[w.id].length; });
+  const w2 = d.wanden[1].id; tel[w2] = 3;
+  const dm = T.draadmodel(lm, azs, { open: tel }), kn = T.knopen(dm.boom);
+  const knoppen = kn.filter(k => k.t === 'g' && k.a['data-wand']), vlakken = kn.filter(k => k.t === 'path' && /dmwand/.test(k.a['class']));
+  check('draadmodel: een aantikbaar rondje per wand en een vlak per wand', knoppen.length === d.wanden.length && vlakken.length === d.wanden.length && new Set(knoppen.map(k => k.a['data-wand'])).size === d.wanden.length);
+  const kW2 = knoppen.find(k => k.a['data-wand'] === w2), tW2 = kW2.k.map(c => c.x).filter(Boolean);
+  check('draadmodel: wand met open maten is oranje met het aantal, een wand zonder is klaar', tW2.indexOf('W2') >= 0 && tW2.indexOf('3 open') >= 0 && kW2.k.some(c => /dmbol open/.test(c.a['class'] || '')) && knoppen.some(k => k.k.some(c => c.x === 'klaar')), JSON.stringify(tW2));
+  check('draadmodel: alleen de achterste wanden zijn als vlak aantikbaar, de voorste niet', vlakken.some(k => k.a['data-wand']) && vlakken.some(k => !k.a['data-wand'] && / voor/.test(k.a['class'])));
+  check('draadmodel: onderdelen staan als omtrek op hun wand, alles binnen het beeld', kn.filter(k => /dmitem/.test(k.a['class'] || '')).length >= 5 && kn.filter(k => k.t === 'circle' && k.a.cx).every(k => Number(k.a.cx) >= 0 && Number(k.a.cx) <= dm.breedte && Number(k.a.cy) >= 0 && Number(k.a.cy) <= dm.hoogte));
+}
 // ── naarDom met een nagebootst document ──
 {
   const gemaakt = [], doc = { createElementNS: (ns, t) => { const e = { ns, t, at: {}, kids: [], setAttribute(k, v) { this.at[k] = v; }, appendChild(c) { this.kids.push(c); } }; gemaakt.push(e); return e; } };

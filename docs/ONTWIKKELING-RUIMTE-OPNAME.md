@@ -349,6 +349,17 @@ aan de buitenkant", "ook (standaard) voor stopcontacten, waterleidingen etc." en
 - **PDF vanaf de telefoon:** knop **Tekeningen / PDF** in het dossier op de telefoon. Zelfde pagina's als op kantoor (`TK.rapport`, één bron). Afdrukken →
   "Opslaan als pdf". Een download met één tik, zonder afdrukvenster, vraagt een pdf-bibliotheek in de app; dat is een bewuste vervolgstap (zie P2).
 
+**B39 · 19-11 · Draairichting: de punt van de driehoek wijst naar de kruk.** *Aanleiding:* Bart las de wand-PDF's andersom dan getekend. *Besluit:* bij een
+draaiend vak (raam of deur) wijst de punt naar de sluitkant; de twee scharnierblokjes staan aan de scharnierkant. Bij kiep en klep blijft de punt naar het
+scharnier wijzen (dat las Bart op W3 goed). De legenda zegt het zo. R3 in de voorbeeldkamer heeft het scharnier rechts. Hiermee is open vraag 3 beantwoord.
+
+**B40 · 19-11 · Overzicht na de opname: draadmodel met aantikbare wanden.** *Aanleiding:* het dossier was één lange lijst; niet te zien wat nog moest.
+*Besluit:* het dossier begint met een draadmodel van de kamer (`T.draadmodel`, schuin van boven) met per wand een rondje: oranje met het aantal open maten,
+groen als de wand klaar is. Aantikken opent het wandaanzicht direct eronder. Daaronder per wand en voor de kamer een knop met hetzelfde aantal
+(`D.openPerWand` verdeelt de open vragen over de wanden). De kameruitslag, kamermaten en controle, hoeken nakijken, wandfoto's, de detaillijst en de
+volledige lijst met open punten staan in inklapbare blokken, standaard dicht. *Niet gedaan:* het draadmodel draaien met de vinger; de voorste wanden zijn
+alleen via hun rondje aan te tikken. *Getest:* node en testbrowser, niet op de S24.
+
 **Waarneming (geen besluit):** met vier gemeten wandlengtes en haakse hoeken maakt de kaartdrift voor het lijnmodel weinig uit (de richtingen worden
 rechtgezet, de lengtes komen uit de maten). De drift raakt vooral de aansluiting tussen beelden en wanden in het panorama en de camera-plek van details.
 
@@ -381,6 +392,7 @@ rechtgezet, de lengtes komen uit de maten). De drift raakt vooral de aansluiting
 | 19-11 00:20 | Pakket "Test 10" + "dit werkt echt nog super omslachtig; op jouw screenshots staat het veel duidelijker". | B36 (analyse van het pakket in de beslissing). |
 | 19-11 01:00 | Echte plek van de kozijnen (R1 334 vanaf links en R2 40 vanaf rechts op wand H2–H3, onderkant R2 750; R3 op wand H3–H4, 780 vanaf rechts, onderkant 930; deur en R3 stonden op de verkeerde wand). "Zo helder moet de bemating eruitzien." Objecten automatisch invoegen in fase 2, daarna aanklikken en variant kiezen. Goede manier bedenken voor leidingwerk, plinten en sierlijsten. Industriestandaard voor symbolen en maatvoering? Uitslag wordt ingewikkelder bij meer vormen. | B37, §11, §12. Aanname: R3 op W3 en de deur op de wand waar R3 stond (W4); corrigeer als dat anders is. |
 | 19-11 02:00 | Standaardtekens ook voor stopcontacten en waterleidingen; draairichting R1 andersom (scharnieren buiten); de mobiele versie loopt door elkaar: maten pas actief bij aanklikken; PDF direct vanuit de opnametool? | B38. |
+| 19-11 09:00 | Op de wand-PDF's: "scharnieren W2 goed, de driehoek staat verkeerd om; bij W3 zit het scharnier aan de verkeerde kant, de draailijnen staan goed". En: "na de opname wil ik een helderder overzicht van wat nog ingevuld moet worden, nu is het een eindeloze lijst met vakjes; ik wil het draadmodel zien en op wand 1, 2, 3 klikken om het 2D-aanzicht te openen". | B39, B40. |
 | 18-11 | Ontwikkeldocument waarin alles staat, zodat terug te zien is wat waarom veranderde; Astra moet er licht op kunnen laten schijnen. | Dit document. |
 
 ### 5.1 Meetresultaten echte proeven
@@ -623,6 +635,7 @@ Perspectief-correct plakken (homografie per vak i.p.v. affien), automatisch extr
 | 19-11 | `b4e2c6b` | Tekenmodule, tekening als invoer, snelkeuze en varianten, kameruitslag/wandafwikkeling/PDF op kantoor, tekenstandaarden, denkstuk §12 | B35–B37 |
 | 19-11 | `893bf97` | Maten alleen bij het gekozen onderdeel, scharnierblokjes, tekens op afdekplaat en leiding, Tekeningen / PDF op de telefoon | B38 |
 | 19-11 | `ffcb83d` en volgende | Overdracht voor een volgende sessie in `VOORTGANG-OPNAME.md`, script voor de voorbeeld-PDF | afsluiten cloudsessie |
+| 19-11 | `82aeeab` en volgende | Driehoek van de draairichting wijst naar de kruk (scharnier R3 rechts); overzicht na de opname met draadmodel en aantikbare wanden, de rest van het dossier in inklapbare blokken | B39, B40 |
 
 Meer detail per brok: `VOORTGANG-OPNAME.md`. Volledige diff: draft-PR #5.
 

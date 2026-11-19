@@ -171,6 +171,16 @@ dd{margin:0;font-variant-numeric:tabular-nums}
 details.later{border:1px dashed var(--rand);border-radius:12px;padding:8px 12px}
 details.later summary{cursor:pointer;color:var(--zacht);font-weight:600;min-height:32px}
 details.later[open]{display:flex;flex-direction:column;gap:10px}
+details.blok{border:1px solid var(--rand);border-radius:12px;padding:6px 12px}
+details.blok>summary{cursor:pointer;font-weight:650;min-height:40px;display:flex;align-items:center;gap:8px}
+details.blok[open]{display:flex;flex-direction:column;gap:10px;padding-bottom:12px}
+details.blok h3{margin:6px 0 0;font-size:15px}
+.tel{font-weight:650;font-size:13px;border-radius:20px;padding:2px 9px;background:var(--primair-zacht);color:var(--primair)}
+.tel.open{background:var(--oranje-zacht);color:var(--oranje)} .tel:empty{display:none}
+#d-draad svg{max-height:56vh}
+.ovrij{display:flex;flex-wrap:wrap;gap:8px}
+.ovrij button{min-height:44px;padding:0 14px;border-radius:22px;border:2px solid var(--primair);background:var(--primair-zacht);color:var(--primair);font-weight:650;font-size:15px}
+.ovrij button.open{border-color:var(--oranje);background:var(--oranje-zacht);color:var(--oranje)}
 #ar-hint{position:absolute;left:12px;right:12px;top:calc(50% - 80px);text-align:center;font-weight:700;font-size:18px;text-shadow:0 1px 4px rgba(0,0,0,.8)}
 </style>
 </head>
@@ -238,14 +248,20 @@ details.later[open]{display:flex;flex-direction:column;gap:10px}
     <div class="rij" id="d-fout-knoppen" hidden><button class="knop" id="k-opnieuw-bewaren">Opnieuw proberen te bewaren</button></div>
     <h2 id="d-kop">Ruimte</h2>
     <p class="bewaard" id="d-bewaard" aria-live="polite"></p>
-    <h2>Wanden bematen</h2>
-    <p class="zacht">Een lijntekening per wand, zoals je hem vanuit de kamer ziet. Zet er een kozijn (of deur, radiator) in en vul de maten in: de tekening bemaat zichzelf.</p>
-    <div class="aztek" id="d-uitslag"></div>
-    <ul class="lijst" id="d-aanzichten"></ul>
+    <h2>Overzicht</h2>
+    <p class="zacht" id="d-ov-tekst">Tik een wand aan om hem te bematen. Oranje = er moet nog iets ingevuld worden, groen = klaar.</p>
+    <div class="aztek" id="d-draad"></div>
+    <div class="ovrij" id="d-aanzichten"></div>
     <input type="file" id="d-az-foto" accept="image/*" hidden>
-    <h2>Extra maten</h2>
+    <div id="d-paneel" hidden></div>
+    <details class="blok" id="d-blok-uitslag">
+    <summary>Kamer opengeklapt (alle wanden naast elkaar)</summary>
+    <div class="aztek" id="d-uitslag"></div>
+    </details>
+    <details class="blok" id="d-blok-kamer">
+    <summary>Kamermaten en controle <span class="tel" id="d-n-kamer"></span></summary>
     <div class="maatrij" id="d-plafond-rij"><span>Plafondhoogte</span><input id="d-plafond" inputmode="decimal" autocomplete="off" aria-label="Plafondhoogte in mm"><span class="info" id="d-plafond-info"></span></div>
-    <h2>Controlemaat tussen twee wanden (tape tot tape)</h2>
+    <h3>Controlemaat tussen twee wanden (tape tot tape)</h3>
     <p class="zacht">Plak op twee wanden een stukje tape op dezelfde hoogte (bijv. ±1 m, vrij van meubels). Meet per tape de afstand tot een hoek, en dan de afstand tussen de twee tapes. De app rekent uit wat het model verwacht.</p>
     <div class="velden">
       <div class="veld"><label for="d-cp-wa">Tape 1 op wand</label><select id="d-cp-wa"></select></div>
@@ -279,22 +295,30 @@ details.later[open]{display:flex;flex-direction:column;gap:10px}
     <div class="maatrij"><span>Gemeten afstand</span><input id="d-diag" inputmode="decimal" autocomplete="off" aria-label="Controlemaat in mm"></div>
     </details>
     <div id="d-controle"></div>
-    <h2>Hoeken nakijken</h2>
+    </details>
+    <details class="blok" id="d-blok-hoeken">
+    <summary>Hoeken nakijken <span class="tel" id="d-n-hoeken"></span></summary>
     <p class="zacht">Bij elke getikte hoek is een foto gemaakt. Wijs op de foto de echte hoek aan; de getikte plek blijft bewaard.</p>
     <ul class="lijst" id="d-hoeken"></ul>
-    <h2>Wandfoto's met groothoek</h2>
+    </details>
+    <details class="blok" id="d-blok-wandfotos">
+    <summary>Wandfoto's met groothoek</summary>
     <p class="zacht">Te dicht op de wand voor één beeld? Maak na de rondgang een foto met je gewone camera-app op 0,6× (groothoek) en tik op de foto de vier hoeken van de wand aan. De app trekt hem recht en gebruikt hem als wandbeeld in de kijker.</p>
     <ul class="lijst" id="d-wandfotos"></ul>
     <input type="file" id="d-groothoek" accept="image/*" hidden>
-    <h2>Details en opmerkingen</h2>
+    </details>
+    <details class="blok" id="d-blok-details">
+    <summary>Details en opmerkingen <span class="tel" id="d-n-details"></span></summary>
     <ul class="lijst" id="d-details"></ul>
+    </details>
     <div class="rij">
       <label class="knop" id="k-detail-foto">Detail met foto toevoegen<input type="file" id="d-foto" accept="image/*" capture="environment" hidden></label>
       <button class="knop" id="k-opmerking">Opmerking</button>
     </div>
-    <div id="d-paneel" hidden></div>
-    <h2>Nog open vóór vertrek</h2>
+    <details class="blok" id="d-blok-open">
+    <summary>Alles wat nog open is <span class="tel" id="d-n-open"></span></summary>
     <ul class="lijst" id="d-open"></ul>
+    </details>
     <div class="rij">
       <button class="knop hoofd" id="k-pakket">Pakket maken (zip)</button>
       <button class="knop" id="k-pakket-deel">Pakket delen</button>
@@ -1969,7 +1993,8 @@ if (typeof module !== 'undefined') module.exports = AR;
   // niet gemeten) en vul hem in de ene invoerbalk in; Enter (of de X4) bewaart en springt naar de volgende open maat. De tekening komt uit
   // mt-ruimte-tekening.js, dezelfde module als op kantoor.
   var azVoorlopig = {}, azGekozen = null, azWand = null, azFotoDetail = null, azTex = {}, azVeld = null, azVak = 0;
-  if (el('d-uitslag')) el('d-uitslag').addEventListener('click', function (e) { var g = e.target.closest && e.target.closest('[data-wand]'); if (g) openAanzicht(g.getAttribute('data-wand'), e.target.getAttribute('data-id') || null); });
+  if (el('d-draad')) el('d-draad').addEventListener('click', function (e) { var g = e.target.closest && e.target.closest('[data-wand]'); if (g) openAanzicht(g.getAttribute('data-wand'), null); });
+  if (el('d-uitslag')) el('d-uitslag').addEventListener('click',function (e) { var g = e.target.closest && e.target.closest('[data-wand]'); if (g) openAanzicht(g.getAttribute('data-wand'), e.target.getAttribute('data-id') || null); });
   // hoogte van het zichtbare deel van het scherm (zonder toetsenbord): de tekening krimpt mee zodat de invoerbalk in beeld blijft
   if (window.visualViewport) { var zetVvh = function () { document.documentElement.style.setProperty('--vvh', window.visualViewport.height + 'px'); }; window.visualViewport.addEventListener('resize', zetVvh); zetVvh(); }
   if (TK && !document.getElementById('mtt-stijl')) { var stl = document.createElement('style'); stl.id = 'mtt-stijl'; stl.textContent = TK.STIJL + '\n' + TK.RAPPORT_STIJL; document.head.appendChild(stl); }
@@ -1991,11 +2016,24 @@ if (typeof module !== 'undefined') module.exports = AR;
     // de kamer opengeklapt: tik een wand aan om hem te bematen
     var uv = el('d-uitslag'), lm0 = TK ? DS.lijnmodel(d, AR) : null;
     if (uv) { uv.textContent = ''; if (lm0) { var u0 = TK.uitslag(lm0, d.wanden.map(function (w) { return DS.wandAanzicht(d, w.id, lm0); }), { breedte: 700, fs: 20, ketens: 'geen', lijn: 2 }); uv.appendChild(TK.naarDom(document, u0.boom)); } }
+    // het overzicht (19-11): draadmodel met een aantikbaar rondje per wand, en eronder per wand wat er nog open staat
+    var vragen = DS.openVragen(d, AR, { dekking: dekkingPerWand() }), pw = DS.openPerWand(d, vragen), telOpen = {};
+    var echtOpen = function (l) { return l.filter(function (v) { return v.ernst === 'open' || v.ernst === 'blokkeert'; }).length; };
+    d.wanden.forEach(function (w) { telOpen[w.id] = echtOpen(pw.wanden[w.id] || []); });
+    var dv = el('d-draad');
+    if (dv) { dv.textContent = ''; if (lm0 && TK.draadmodel) { var dm = TK.draadmodel(lm0, d.wanden.map(function (w) { return DS.wandAanzicht(d, w.id, lm0); }), { breedte: 700, fs: 22, open: telOpen }); dv.appendChild(TK.naarDom(document, dm.boom)); } }
     d.wanden.forEach(function (w) {
-      var li = maak('li'), n = DS.actieveDetails(d).filter(function (x) { return x.wand_id === w.id; }).length, k = maak('button', w.label + ' bematen', 'knop');
-      li.appendChild(maak('span', w.label + (n ? ' · ' + n + ' onderdeel' + (n > 1 ? 'en' : '') : ''), 'titel'));
-      k.type = 'button'; k.addEventListener('click', function () { openAanzicht(w.id, null); }); li.appendChild(k); ul.appendChild(li);
+      var n = DS.actieveDetails(d).filter(function (x) { return x.wand_id === w.id; }).length, no = telOpen[w.id];
+      var k = maak('button', w.label + (no ? ' · ' + no + ' open' : ' ✓') + (n ? ' · ' + n + (n > 1 ? ' onderdelen' : ' onderdeel') : ''), no ? 'open' : '');
+      k.type = 'button'; k.setAttribute('data-wand', w.id); k.addEventListener('click', function () { openAanzicht(w.id, null); }); ul.appendChild(k);
     });
+    var nk = echtOpen(pw.kamer), kk = maak('button', 'Kamer' + (nk ? ' · ' + nk + ' open' : ' ✓'), nk ? 'open' : '');
+    kk.type = 'button'; kk.id = 'k-ov-kamer'; kk.addEventListener('click', function () { var b = el(nk ? 'd-blok-open' : 'd-blok-kamer'); b.open = true; el('d-blok-kamer').open = true; b.scrollIntoView({ block: 'start' }); }); ul.appendChild(kk);
+    var zetTel = function (id, n, tekstKlaar) { var s = el(id); if (!s) return; s.textContent = n ? n + ' open' : (tekstKlaar || ''); s.className = 'tel' + (n ? ' open' : ''); };
+    zetTel('d-n-kamer', nk, '✓');
+    zetTel('d-n-open', vragen.length, '✓');
+    var sh = el('d-n-hoeken'); if (sh) { sh.textContent = d.hoeken.length ? String(d.hoeken.length) : ''; sh.className = 'tel'; }
+    var sd = el('d-n-details'), nd = DS.actieveDetails(d).length; if (sd) { sd.textContent = nd ? String(nd) : ''; sd.className = 'tel'; }
   }
   function azVeldenVan(det) {   // de maten van dit onderdeel, in de volgorde waarin je ze invult
     var soort = DS.SOORTEN[det.soort] || DS.SOORTEN.overig, kv = det.soort === 'kozijn' ? DS.kozijnVelden(det) : { verplicht: soort.velden.filter(function (f) { return (soort.optioneel || []).indexOf(f) < 0; }), optioneel: soort.optioneel || [] };
@@ -2086,7 +2124,7 @@ if (typeof module !== 'undefined') module.exports = AR;
       inp._gewijzigd = false; if (azVoorlopig[det.id]) delete azVoorlopig[det.id][f];
       if (huidig && huidig.status === 'gemeten' && huidig.waarde_mm === l.mm && huidig.bron === bron && (huidig.referentie && huidig.referentie.id || null) === (ref ? ref.id : null)) return false;
       DS.voegMetingToe(d, { doel: { soort: 'detail', id: det.id }, veld: f, waarde_mm: l.mm, invoer: inp.value, eenheid_invoer: l.eenheid, bron: bron, status: 'gemeten', referentie: ref, wand_id: wandId, sessie: ses && ses.id, betekenis: azNaam(det, f) });
-      planBewaar(); return true;
+      planBewaar(); toonAanzichten(); return true;
     }
     function verder(stap) {
       var det = det_(); if (!det) return; bewaar();
